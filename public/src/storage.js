@@ -26,7 +26,7 @@ export async function deleteDocument(id) {
 }
 export async function writeInternalHTML(id, html) {
   if (!navigator.storage?.getDirectory) return;
-  const root = await navigator.storage.getDirectory();
+  let root;try{root=await navigator.storage.getDirectory();}catch(error){if(['SecurityError','NotAllowedError','NotSupportedError'].includes(error.name))return;throw error;}
   const handle = await root.getFileHandle(id + '.html', {create: true});
   const writer = await handle.createWritable();
   try { await writer.write(html); await writer.close(); } catch (error) { await writer.abort().catch(() => {}); throw error; }

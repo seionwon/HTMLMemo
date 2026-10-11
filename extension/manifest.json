@@ -1,15 +1,15 @@
 {
   "manifest_version": 3,
   "name": "HTMLMemo · Chrome 연결",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "실제 Chrome 탭을 HTML 한 파일로 저장하고 HTMLMemo 주석 탭에서 엽니다.",
   "permissions": ["activeTab", "scripting", "tabs", "storage", "unlimitedStorage"],
-  "host_permissions": ["http://*/*", "https://*/*"],
+  "host_permissions": ["http://*/*", "https://*/*", "file:///*"],
   "background": { "service_worker": "background.js", "type": "module" },
   "action": { "default_popup": "popup.html", "default_title": "HTMLMemo에 페이지 저장" },
   "options_page": "options.html",
   "content_scripts": [{
-    "matches": ["http://localhost/*", "http://127.0.0.1/*"],
+    "matches": ["http://localhost/*", "http://127.0.0.1/*", "file:///*"],
     "js": ["bridge.js"],
     "run_at": "document_idle"
   }]

@@ -5,5 +5,8 @@ node_modules/
 dist/
 test-results/
 extension/capture.js
+extension/app/
+public/HTMLMemo.html
+public/distribution.json
 public/downloads/
 .DS_Store

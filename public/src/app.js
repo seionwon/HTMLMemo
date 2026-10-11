@@ -5,8 +5,14 @@ import { Reader } from './reader.js';
 import { listDocuments, putDocument, deleteDocument, getSetting, setSetting, writeInternalHTML, writeExternalHTML, permission } from './storage.js';
 import { bridge, bridgeAvailable, discoverBridge } from './bridge.js';
 import { readLocalHTML, droppedHTMLFiles } from './local-files.js';
+import { normalizePreferences, loadPreferences, storePreferences, serializeSettings, readSettingsFile } from './preferences.js';
+import { distributionAssets, portableZIP, bundledExample } from './distribution.js';
+import { standaloneHTML } from './bundler.js';
 
 let records = []; const tabs = []; let activeId = 'library'; let folder = null; let installing = null; let popoverName = ''; let sidebarMode = ''; let receiving = false;
+let preferences=normalizePreferences(), settingsFileHandle=null, settingsFolderHint='';
+let exportingApp=false;
+const appAddress=()=>{const url=new URL(location.href);url.search='';url.hash='';return url.href;};
 const active = () => tabs.find(tab => tab.id === activeId);
 const reader = () => active()?.reader;
 const savePicker = () => typeof window.showSaveFilePicker === 'function';
@@ -33,20 +39,40 @@ function confirmDialog(title, description, label = '확인') {
   }));
 }
 function connectionDialog() {
-  modal(`<div class="dialog-heading"><h2>Chrome과 연결하기</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><p class="dialog-description">실제 Chrome 탭에서 웹을 탐색하고, 보고 있는 페이지를 HTMLMemo로 저장할 수 있어요. 로그인된 페이지도 현재 화면을 기준으로 저장합니다.</p><ol class="setup-steps"><li><a href="./downloads/htmlmemo-chrome.zip" download>Chrome 연결 확장 기능 다운로드 ${icon('download',15)}</a> 후 압축을 풉니다.</li><li>Chrome의 <code>chrome://extensions</code>에서 개발자 모드를 켜고, <strong>압축해제된 확장 프로그램 로드</strong>로 해당 폴더를 선택합니다.</li><li>확장 기능의 <strong>설정</strong>에서 HTMLMemo 주소를 아래 주소로 지정합니다.</li></ol><div class="copy-url"><input readonly value="${esc(location.origin+location.pathname)}" aria-label="HTMLMemo 주소"><button class="secondary-button" id="copy-app-url">복사</button></div><p class="dialog-description small">웹 페이지에서 확장 기능의 「페이지 저장」을 누르면 이 앱의 새 탭에서 열립니다. 외부 폴더에 자동 저장하려면 저장 폴더를 한 번 연결해주세요.</p><div class="dialog-actions"><button class="secondary-button" id="check-connection">연결 확인</button><button class="primary-button" data-dialog-close>완료</button></div>`,()=>{
-    $('#copy-app-url').onclick=safely(async()=>{await navigator.clipboard.writeText(location.origin+location.pathname);toast('앱 주소를 복사했습니다.');});
+  modal(`<div class="dialog-heading"><h2>웹 페이지도 저장하기</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><p class="dialog-description">Chrome 연결 기능에는 서버 없이 실행되는 HTMLMemo 앱이 함께 들어 있습니다. 처음 한 번만 아래 순서대로 설치해주세요.</p><ol class="setup-steps"><li>전달받은 압축 파일의 <strong>extension</strong> 폴더를 준비합니다. 없다면 실행 탭에서 앱 전달 파일을 저장하고 압축을 풉니다.</li><li>Chrome 주소창에 <code>chrome://extensions</code>를 입력하고, 오른쪽 위 <strong>개발자 모드</strong>를 켭니다.</li><li><strong>압축해제된 확장 프로그램 로드</strong>를 누르고 <strong>extension</strong> 폴더를 선택합니다.</li><li>확장 기능 목록의 HTMLMemo에서 <strong>HTMLMemo 열기</strong>를 누릅니다. 연결 주소 설정이나 서버 실행은 필요 없습니다.</li></ol><p class="dialog-description small">이 파일의 보관함과 확장 기능 앱의 보관함은 별도입니다. HTML 내보내기로 문서를 옮길 수 있습니다.</p><details class="connection-advanced"><summary>현재 HTML 파일에 직접 연결하기</summary><p class="dialog-description small">확장 기능 설정에 아래 주소를 입력합니다. 로컬 파일은 확장 기능의 세부정보에서 「파일 URL에 대한 액세스 허용」을 켠 뒤 이 파일을 다시 여세요.</p><div class="copy-url"><input readonly value="${esc(appAddress())}" aria-label="HTMLMemo 주소"><button class="secondary-button" id="copy-app-url">복사</button></div></details><div class="dialog-actions"><button class="secondary-button" id="connection-delivery">실행 탭 열기</button><button class="secondary-button" id="check-connection">연결 확인</button><button class="primary-button" data-dialog-close>완료</button></div>`,()=>{
+    $('#copy-app-url').onclick=safely(async()=>{await navigator.clipboard.writeText(appAddress());toast('앱 주소를 복사했습니다.');});
+    $('#connection-delivery').onclick=()=>{$('#dialog').close();activate('execution');};
     $('#check-connection').onclick=safely(async()=>{const ok=await discoverBridge(); updateConnection(); toast(ok?'Chrome이 연결되었습니다.':'확장 기능을 설치한 뒤 페이지를 새로고침해주세요.',!ok);if(ok)await receiveCaptures();});
   });
 }
 function updateConnection() { $('#connection-button').classList.toggle('connected',bridgeAvailable()); $('#connection-button span').textContent=bridgeAvailable()?'Chrome 연결됨':'Chrome 연결'; }
 function settingsDialog() {
-  modal(`<div class="dialog-heading"><h2>HTMLMemo 설정</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><div class="setting-row"><div><strong>자동 저장 폴더</strong><p>${folder?esc(folder.name):'앱 내부에 HTML 파일로 보관 중'}</p></div><button id="settings-folder" class="secondary-button">${folder?'변경':'폴더 연결'}</button></div><p class="dialog-description small">폴더를 연결하면 새 페이지와 주석이 해당 HTML 파일에 자동 저장됩니다. 연결 전에 저장한 문서는 「파일 연결」로 각각 연결할 수 있습니다.</p><div class="setting-row"><div><strong>화면 테마</strong><p>서재와 도구의 밝기를 선택하세요.</p></div><select id="appearance"><option value="light">밝게</option><option value="dark">어둡게</option><option value="system">시스템</option></select></div><div class="setting-row"><div><strong>Chrome 연결</strong><p>${bridgeAvailable()?'연결되어 있습니다.':'모든 사이트를 탐색하고 저장하기'}</p></div><button id="settings-chrome" class="secondary-button">설정 방법</button></div><div class="setting-row"><div><strong>기기 보관함 유지</strong><p>브라우저의 자동 공간 정리에서 보호 요청</p></div><button id="persist-storage" class="secondary-button">보관 유지</button></div><p class="dialog-description small">앱 데이터 삭제 시 내부 보관함도 지워집니다. 연결된 외부 HTML 파일은 그대로 남습니다.</p>`,()=>{
+  modal(`<div class="dialog-heading"><h2>HTMLMemo 설정</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><p class="local-only-note">${icon('check',15)} 모든 문서·주석·설정은 이 기기에만 저장됩니다.</p><div class="setting-row"><div><strong>자동 저장 폴더</strong><p>${folder?esc(folder.name):settingsFolderHint?'백업 폴더: '+esc(settingsFolderHint)+' · 다시 연결해주세요.':'앱 내부에 HTML 파일로 보관 중'}</p></div><button id="settings-folder" class="secondary-button">${folder?'변경':'폴더 연결'}</button></div><p class="dialog-description small">폴더 권한은 설정 파일로 옮길 수 없어 새 기기에서 한 번 연결해야 합니다.</p><div class="setting-row"><div><strong>화면 테마</strong><p>서재와 도구의 밝기를 선택하세요.</p></div><select id="appearance"><option value="light">밝게</option><option value="dark">어둡게</option><option value="system">시스템</option></select></div><div class="setting-row"><div><strong>툴바 위치</strong><p>옮긴 위치도 설정 파일에 보관합니다.</p></div><button id="reset-toolbar-position" class="secondary-button">가운데로</button></div><div class="settings-backup"><h3>설정 파일</h3><p class="dialog-description small">테마·정렬·주석 색상·굵기·투명도·표시 시간·툴바 위치를 JSON 파일로 저장하고 다시 불러옵니다.</p><p id="settings-file-name" class="settings-file-name">${settingsFileHandle?esc(settingsFileHandle.name):'연결한 설정 파일이 없습니다.'}</p><div class="settings-file-actions"><button id="settings-save" class="secondary-button">${icon('save',15)} 설정 파일 저장</button><button id="settings-load" class="secondary-button">${icon('folder',15)} 설정 파일 불러오기</button><button id="settings-reload" class="secondary-button" ${settingsFileHandle?'':'disabled'}>${icon('reload',15)} 다시 불러오기</button></div></div><div class="setting-row"><div><strong>Chrome 연결</strong><p>${bridgeAvailable()?'연결되어 있습니다.':'웹 페이지를 저장하기'}</p></div><button id="settings-chrome" class="secondary-button">설정 방법</button></div><div class="setting-row"><div><strong>기기 보관함 유지</strong><p>브라우저의 자동 공간 정리에서 보호 요청</p></div><button id="persist-storage" class="secondary-button">보관 유지</button></div><p class="dialog-description small">앱 데이터 삭제 시 내부 보관함도 지워집니다. 중요한 문서는 HTML 파일로 내보내주세요.</p>`,()=>{
     $('#settings-folder').onclick=safely(async()=>{await chooseFolder();settingsDialog();});$('#settings-chrome').onclick=connectionDialog;
-    $('#appearance').value=localStorage.getItem('htmlmemo-theme')||'light'; $('#appearance').onchange=e=>applyTheme(e.target.value);
+    $('#appearance').value=preferences.theme; $('#appearance').onchange=safely(e=>changePreferences({theme:e.target.value}));
+    $('#settings-save').onclick=safely(saveSettingsBackup);$('#settings-load').onclick=safely(importSettingsBackup);$('#settings-reload').onclick=safely(async()=>{await restoreSettings(settingsFileHandle);settingsDialog();});
+    $('#reset-toolbar-position').onclick=safely(()=>{changePreferences({toolbarPosition:null});toast('툴바를 가운데로 옮겼습니다.');});
     $('#persist-storage').onclick=safely(async()=>toast(await navigator.storage.persist()?'이 기기에서 보관함을 유지합니다.':'브라우저가 보관 유지를 허용하지 않았습니다. HTML 내보내기로 파일을 보관해주세요.'));
   });
 }
-function applyTheme(theme) { localStorage.setItem('htmlmemo-theme',theme); document.documentElement.dataset.theme=theme==='system'?(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light'):theme; }
+function applyTheme(theme) { document.documentElement.dataset.theme=theme==='system'?(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light'):theme; }
+function applyToolbarPosition(){const bar=$('#toolbar'),p=preferences.toolbarPosition;if(!p){bar.style.left='50%';bar.style.top='';bar.style.bottom='';bar.style.transform='';return;}bar.style.transform='none';bar.style.bottom='auto';bar.style.left=(8+p.x*Math.max(0,innerWidth-bar.offsetWidth-16))+'px';bar.style.top=(8+p.y*Math.max(0,innerHeight-bar.offsetHeight-42))+'px';}
+function changePreferences(patch){preferences=storePreferences({...preferences,...patch,annotation:{...preferences.annotation,...patch.annotation}},localStorage);applyTheme(preferences.theme);$('#library-sort').value=preferences.librarySort;for(const tab of tabs)if(tab.reader)Object.assign(tab.reader,preferences.annotation);applyToolbarPosition();renderLibrary();if(reader())updateToolbarState();}
+async function restoreSettings(input){
+  if(input?.kind==='file'&&input.queryPermission){const options={mode:'read'};if(await input.queryPermission(options)!=='granted'&&await input.requestPermission(options)!=='granted')throw new Error('설정 파일 읽기 권한이 필요합니다. 파일을 다시 선택해주세요.');}
+  const backup=await readSettingsFile(input);changePreferences(backup.preferences);settingsFolderHint=backup.folderName;await setSetting('settings-folder-hint',settingsFolderHint);
+  if(input?.kind==='file'){settingsFileHandle=input;await setSetting('settings-file',input);}else{settingsFileHandle=null;await setSetting('settings-file',null);}
+  toast('설정을 불러와 적용했습니다.'+(settingsFolderHint&&!folder?' 저장 폴더는 다시 연결해주세요.':''));
+}
+async function importSettingsBackup(){
+  if(openPicker()){try{const [handle]=await window.showOpenFilePicker({types:[{description:'HTMLMemo 설정',accept:{'application/json':['.json']}}]});await restoreSettings(handle);settingsDialog();return;}catch(error){if(!['SecurityError','NotSupportedError'].includes(error.name))throw error;}}
+  $('#settings-file-input').click();
+}
+async function saveSettingsBackup(){
+  const json=serializeSettings(preferences,folder?.name||settingsFolderHint);
+  if(savePicker()){try{const handle=await window.showSaveFilePicker({suggestedName:settingsFileHandle?.name||'HTMLMemo-settings.json',types:[{description:'HTMLMemo 설정',accept:{'application/json':['.json']}}]});const writer=await handle.createWritable();try{await writer.write(json);await writer.close();}catch(error){await writer.abort().catch(()=>{});throw error;}settingsFileHandle=handle;await setSetting('settings-file',handle);settingsDialog();toast('설정을 로컬 파일로 저장했습니다.');return;}catch(error){if(!['SecurityError','NotSupportedError'].includes(error.name))throw error;}}
+  download(json,'HTMLMemo-settings.json','application/json;charset=utf-8');toast('설정 JSON 파일을 저장했습니다. 「설정 파일 불러오기」로 다시 열 수 있어요.');
+}
 async function refreshLibrary() { records=await listDocuments(); renderLibrary(); }
 function renderLibrary() {
   const filter=$('#library-filter').value.toLocaleLowerCase(); const sort=$('#library-sort').value;
@@ -69,21 +95,23 @@ function renderTabs() {
   $$('[data-tab]').forEach(el=>{el.onclick=e=>{if(!e.target.closest('[data-close]'))activate(el.dataset.tab);};el.onkeydown=e=>{if(e.key==='Enter'||e.key===' ')activate(el.dataset.tab);};});
   $$('[data-close]').forEach(button=>button.onclick=safely(e=>{e.stopPropagation();return closeTab(button.dataset.close);}));
   $('#library-tab').classList.toggle('active',activeId==='library');
+  $('#execution-tab').classList.toggle('active',activeId==='execution');
 }
 function activate(id) {
-  closePopover(); closeSidebar(); activeId=id; $('#library').hidden=id!=='library';$('#workspace').hidden=id==='library';
+  closePopover(); closeSidebar(); activeId=id; $('#library').hidden=id!=='library';$('#execution').hidden=id!=='execution';$('#workspace').hidden=id==='library'||id==='execution';
   tabs.forEach(tab=>tab.host.hidden=tab.id!==id);renderTabs(); updateChrome();
   if(reader())renderToolbar();else $('#toolbar').hidden=true;
   if(id==='library')renderLibrary();
+  if(id==='execution'){$('#status-left').textContent='서버 없이 실행 · 모든 데이터는 이 기기에 저장';document.title='실행 · 앱 전달 · HTMLMemo';}
 }
 function updateChrome() {
-  const tab=active(); const r=reader(); const local=tab?.type==='document';
+  const tab=active(); const r=reader(); const local=tab?.type==='document';const execution=activeId==='execution';
   $('#address').value=local?tab.record.name:tab?.url||'';$('#address-icon').innerHTML=icon(local?'file':'globe',15);$('#local-label').hidden=!local;
   $('#back').disabled=local?!r?.linkHistory.length:!tab||!tab.chromeId&&tab.cursor<=0;
   $('#forward').disabled=!tab||local||!tab.chromeId&&tab.cursor>=tab.history.length-1;
   $('#reload').disabled=!tab||local;
-  $('#save-page').innerHTML=icon(local?'download':'save',17)+`<span>${local?'HTML 내보내기':'페이지 저장'}</span>`;
-  $('#save-page').disabled=!tab;
+  $('#save-page').innerHTML=icon(local||execution?'download':'save',17)+`<span>${execution?'앱 내보내기':local?'HTML 내보내기':'페이지 저장'}</span>`;
+  $('#save-page').disabled=execution?exportingApp:!tab;
   if(local)saveStatus(tab); else if(tab)$('#status-left').textContent=tab.chromeId?'실제 Chrome 탭에서 탐색 중':'웹 탐색 · 로컬로 저장하면 주석을 남길 수 있어요.';
   document.title=tab?tab.title+' · HTMLMemo':'HTMLMemo · 나만의 웹 서재';
 }
@@ -110,6 +138,7 @@ async function openRecord(record) {
     onLink:url=>safely(openBrowser)(url),onKey:handleKey,requestText:promptText,
     onSelect:id=>{if(activeId===tab.id)annotationDialog(tab,id);},
   });
+  Object.assign(tab.reader,preferences.annotation);
   try { await tab.reader.ready; } catch(error) {tabs.splice(tabs.indexOf(tab),1);tab.reader.dispose();activate('library');throw error;}
   renderToolbar();updateChrome();
   // A recovery copy ahead of its external file must keep its pending status.
@@ -155,7 +184,7 @@ async function folderFile(title) {
 }
 async function importFiles() {
   if(!openPicker()){$('#file-input').click();return;}
-  const handles=await window.showOpenFilePicker({types:htmlTypes,multiple:true});
+  let handles;try{handles=await window.showOpenFilePicker({types:htmlTypes,multiple:true});}catch(error){if(['SecurityError','NotSupportedError'].includes(error.name)){$('#file-input').click();return;}throw error;}
   for(const handle of handles)await openLocalFile(handle,true);
 }
 async function openLocalFile(input,requestWrite=false) {
@@ -163,6 +192,7 @@ async function openLocalFile(input,requestWrite=false) {
   return createDocument(local.snapshot,local.handle,local.name,local);
 }
 async function savePage() {
+  if(activeId==='execution')return exportApp('zip');
   const tab=active();if(!tab)return;
   if(tab.reader)return exportDocument(tab);
   let live;
@@ -172,7 +202,7 @@ async function savePage() {
   // activation is still valid, before capture/network work.
   let handle=null;
   if(folder){if(!await permission(folder,true))throw new Error('저장 폴더 쓰기 권한이 필요합니다.');}
-  else if(savePicker())handle=await window.showSaveFilePicker({suggestedName:filename(tab.title),types:htmlTypes});
+  else if(savePicker()){try{handle=await window.showSaveFilePicker({suggestedName:filename(tab.title),types:htmlTypes});}catch(error){if(!['SecurityError','NotSupportedError'].includes(error.name))throw error;}}
   $('#save-page').disabled=true;$('#save-page').innerHTML=icon('reload',17)+'<span>페이지 보관 중…</span>';
   try {
     let snapshot;
@@ -192,7 +222,7 @@ async function connectDocumentFile(tab) {
     tab.record.fileHandle=tab.record.originalHandle;tab.queue.schedule();await tab.queue.flush();updateChrome();toast('원본 HTML 파일에 주석을 자동 저장합니다.');return;
   }
   if(!savePicker()){await tab.queue.flush();download(tab.reader.html(),tab.record.name);toast('HTML을 내보냈습니다. 이 브라우저는 내려받은 파일의 자동 갱신을 지원하지 않습니다.');return;}
-  const handle=await window.showSaveFilePicker({suggestedName:tab.record.name,types:htmlTypes});
+  let handle;try{handle=await window.showSaveFilePicker({suggestedName:tab.record.name,types:htmlTypes});}catch(error){if(['SecurityError','NotSupportedError'].includes(error.name)){await tab.queue.flush();download(tab.reader.html(),tab.record.name);toast('주석이 포함된 HTML을 저장했습니다.');return;}throw error;}
   if(tab.queue.running)await tab.queue.running.catch(()=>{});
   const disk=await handle.getFile();tab.record.fileHandle=handle;tab.record.name=handle.name;tab.record.diskStamp={modified:disk.lastModified,size:disk.size};
   tab.queue.schedule();await tab.queue.flush();updateChrome();toast('이 HTML 파일에 주석을 자동 저장합니다.');
@@ -251,6 +281,7 @@ function renderToolbar() {
   $('#toolbar').innerHTML=`<button class="toolbar-grip" aria-label="툴바 이동">${icon('grip',14)}</button><span class="tool-group">${toolbarButton('select','select','선택 / 읽기 (V)')}${toolbarButton('pen','pen','펜 (P)')}${toolbarButton('highlight','highlight','형광펜 (H)')}${toolbarButton('underline','underline','밑줄 (U)')}${toolbarButton('eraser','eraser','지우개 (E)')}${toolbarButton('note','note','메모 (N)')}</span><span class="toolbar-divider"></span>${toolbarButton('palette','palette','색상 · 굵기 · 투명도 설정','class="tool-button palette-button"')}<span class="tool-group toolbar-history">${toolbarButton('undo','undo','실행 취소 (Ctrl/⌘ Z)')}${toolbarButton('redo','redo','다시 실행 (Ctrl/⌘ Shift Z)')}</span><span class="toolbar-divider"></span><button class="tool-button zoom-button" data-action="zoom" title="확대 / 축소" aria-label="확대 / 축소">${Math.round(r.zoom*100)}%</button>${toolbarButton('more','more','더 많은 도구')}`;
   $$('[data-action]',$('#toolbar')).forEach(button=>{button.onpointerdown=e=>{if(e.pointerType==='mouse')e.preventDefault();};button.onclick=()=>toolAction(button.dataset.action);});
   bindToolbarDrag();updateToolbarState();
+  applyToolbarPosition();
 }
 function updateToolbarState() {
   const r=reader();if(!r)return;
@@ -278,8 +309,8 @@ function toolAction(action) {
   if(action==='palette') {
     const colors=['#edcf67','#77bdab','#9fc8f0','#bdace0','#f39da2','#da8b55','#366558','#374151'];
     showPopover('palette',`<h3>펜과 색상</h3><div class="swatches">${colors.map(c=>`<button data-color="${c}" style="--swatch:${c}" aria-label="색상 ${c}" class="swatch ${r.color===c?'chosen':''}"></button>`).join('')}<input type="color" id="custom-color" value="${r.color}" aria-label="사용자 색상"></div><label class="range-label">굵기 <output id="width-output">${r.width}px</output><input id="pen-width" type="range" min="1" max="18" value="${r.width}"></label><label class="range-label">형광펜 투명도 <output id="opacity-output">${Math.round(r.opacity*100)}%</output><input id="pen-opacity" type="range" min="10" max="90" value="${Math.round(r.opacity*100)}"></label><label class="select-label">펜 표시 시간 <select id="pen-ttl"><option value="0">영구 저장</option><option value="3">3초</option><option value="10">10초</option><option value="30">30초</option></select></label><p class="popover-hint">시간을 정한 펜은 잠깐 표시되고 저장되지 않아요.</p>`,()=>{
-      $$('[data-color]',$('#tool-popover')).forEach(button=>button.onclick=()=>{r.color=button.dataset.color;$$('.swatch').forEach(b=>b.classList.toggle('chosen',b===button));$('#custom-color').value=r.color;updateToolbarState();});
-      $('#custom-color').oninput=e=>{r.color=e.target.value;updateToolbarState();};$('#pen-width').oninput=e=>{r.width=Number(e.target.value);$('#width-output').textContent=r.width+'px';};$('#pen-opacity').oninput=e=>{r.opacity=Number(e.target.value)/100;$('#opacity-output').textContent=e.target.value+'%';};$('#pen-ttl').value=String(r.penTTL);$('#pen-ttl').onchange=e=>r.penTTL=Number(e.target.value);
+      $$('[data-color]',$('#tool-popover')).forEach(button=>button.onclick=safely(()=>{changePreferences({annotation:{color:button.dataset.color}});$$('.swatch').forEach(b=>b.classList.toggle('chosen',b===button));$('#custom-color').value=r.color;}));
+      $('#custom-color').oninput=safely(e=>changePreferences({annotation:{color:e.target.value}}));$('#pen-width').oninput=safely(e=>{changePreferences({annotation:{width:Number(e.target.value)}});$('#width-output').textContent=r.width+'px';});$('#pen-opacity').oninput=safely(e=>{changePreferences({annotation:{opacity:Number(e.target.value)/100}});$('#opacity-output').textContent=e.target.value+'%';});$('#pen-ttl').value=String(r.penTTL);$('#pen-ttl').onchange=safely(e=>changePreferences({annotation:{penTTL:Number(e.target.value)}}));
     });return;
   }
   if(action==='zoom') {showPopover('zoom',`<h3>확대 · 축소</h3><div class="zoom-controls"><button class="secondary-button" id="zoom-out">${icon('minus')}</button><input id="zoom-value" type="number" min="20" max="800" value="${Math.round(r.zoom*100)}" aria-label="확대 비율"><span>%</span><button class="secondary-button" id="zoom-in">${icon('plus')}</button></div><button id="zoom-fit" class="menu-button">화면 너비에 맞추기</button><button id="zoom-reset" class="menu-button">100% 원래 크기</button>`,()=>{
@@ -300,7 +331,7 @@ function bindToolbarDrag() {
   grip.onpointerdown=event=>{
     event.preventDefault();const start=bar.getBoundingClientRect();const origin={x:event.clientX,y:event.clientY};grip.setPointerCapture(event.pointerId);
     const move=e=>{bar.style.transform='none';bar.style.bottom='auto';bar.style.left=Math.max(8,Math.min(innerWidth-start.width-8,start.left+e.clientX-origin.x))+'px';bar.style.top=Math.max(8,Math.min(innerHeight-start.height-34,start.top+e.clientY-origin.y))+'px';if(!$('#tool-popover').hidden)positionPopover();};
-    const end=()=>{grip.removeEventListener('pointermove',move);grip.removeEventListener('pointerup',end);};grip.addEventListener('pointermove',move);grip.addEventListener('pointerup',end);
+    const end=()=>{grip.removeEventListener('pointermove',move);grip.removeEventListener('pointerup',end);grip.removeEventListener('pointercancel',end);const rect=bar.getBoundingClientRect();safely(()=>changePreferences({toolbarPosition:{x:Math.max(0,Math.min(1,(rect.left-8)/Math.max(1,innerWidth-rect.width-16))),y:Math.max(0,Math.min(1,(rect.top-8)/Math.max(1,innerHeight-rect.height-42)))}}))();};grip.addEventListener('pointermove',move);grip.addEventListener('pointerup',end);grip.addEventListener('pointercancel',end);
   };
 }
 function closeSidebar() {sidebarMode='';$('#sidebar').hidden=true;reader()?.search('');}
@@ -353,15 +384,25 @@ function handleKey(event) {
   if(event.ctrlKey||event.metaKey||event.altKey)return;
   const tools={v:'select',p:'pen',h:'highlight',u:'underline',e:'eraser',n:'note'};const tool=tools[event.key.toLowerCase()];if(tool){event.preventDefault();toolAction(tool);}
 }
+async function exportApp(kind='zip'){
+  if(exportingApp)return;exportingApp=true;$('#delivery-package').disabled=true;$('#delivery-html').disabled=true;updateChrome();$('#delivery-status').textContent='이 기기에서 앱 전달 파일을 만드는 중…';
+  try{const assets=await distributionAssets();if(kind==='html')download(standaloneHTML(assets),'HTMLMemo.html');else download(portableZIP(assets),'HTMLMemo-local.zip','application/zip');$('#delivery-status').textContent=kind==='html'?'HTMLMemo.html을 저장했습니다. Chrome으로 열면 서버 없이 실행됩니다.':'저장한 ZIP 파일을 보내주세요. 받은 분은 압축을 풀고 「먼저 열어주세요.html」을 열면 됩니다.';}
+  catch(error){$('#delivery-status').textContent='전달 파일을 만들지 못했습니다. '+error.message;throw error;}
+  finally{exportingApp=false;$('#delivery-package').disabled=false;$('#delivery-html').disabled=false;updateChrome();if(activeId==='execution')$('#status-left').textContent='서버 없이 실행 · 모든 데이터는 이 기기에 저장';}
+}
 function bindUI() {
   [['#library-tab','library'],['#new-tab','plus'],['#back','back'],['#forward','forward'],['#reload','reload'],['#import-button','folder'],['#save-page','save'],['#app-menu-button','more'],['#settings-button','settings'],['#library-search-icon','search'],['#empty-icon','file']].forEach(([id,name])=>setButton(id,name));
   $('#home-button').onclick=e=>{e.preventDefault();activate('library');};$('#library-tab').onclick=()=>activate('library');$('#new-tab').onclick=()=>{activate('library');$('#address').focus();};$('#browse-start').onclick=()=>$('#address').focus();
+  $('#execution-tab').onclick=()=>activate('execution');$('#execution-import').onclick=safely(importFiles);$('#execution-chrome').onclick=connectionDialog;$('#execution-settings').onclick=settingsDialog;
+  $('#delivery-package').onclick=safely(()=>exportApp('zip'));
+  $('#delivery-html').onclick=safely(()=>exportApp('html'));
   $('#address-form').onsubmit=safely(async event=>{event.preventDefault();const value=$('#address').value;await openBrowser(value,active()?.type!=='browser');});
   $('#back').onclick=safely(()=>browserHistory(-1));$('#forward').onclick=safely(()=>browserHistory(1));$('#reload').onclick=safely(async()=>{const tab=active();if(tab?.chromeId)await bridge('reloadTab',{tabId:tab.chromeId});else if(tab?.frame)tab.frame.src=tab.url;});
   $('#save-page').onclick=safely(savePage);$('#import-button').onclick=safely(importFiles);$('#hero-import').onclick=safely(importFiles);$('#choose-folder').onclick=safely(chooseFolder);
   $('#file-input').onchange=safely(async event=>{const files=[...event.target.files];event.target.value='';for(const file of files)await openLocalFile(file);});
-  $('#library-filter').oninput=renderLibrary;$('#library-sort').onchange=renderLibrary;$('#settings-button').onclick=settingsDialog;$('#connection-button').onclick=connectionDialog;
-  $('#open-example').onclick=safely(async()=>{const response=await fetch('./example.html');if(!response.ok)throw new Error('예제 문서를 불러오지 못했습니다.');await createDocument({html:await response.text(),title:'천천히 읽는다는 것',viewport:{width:960,height:800}},await folderFile('천천히 읽는다는 것'));});
+  $('#settings-file-input').onchange=safely(async event=>{const file=event.target.files[0];event.target.value='';if(file){await restoreSettings(file);settingsDialog();}});
+  $('#library-filter').oninput=renderLibrary;$('#library-sort').onchange=safely(e=>changePreferences({librarySort:e.target.value}));$('#settings-button').onclick=settingsDialog;$('#connection-button').onclick=connectionDialog;
+  $('#open-example').onclick=safely(async()=>{let html=await bundledExample();if(html===null){const response=await fetch('./example.html');if(!response.ok)throw new Error('예제 문서를 불러오지 못했습니다.');html=await response.text();}await createDocument({html,title:'천천히 읽는다는 것',viewport:{width:960,height:800}},await folderFile('천천히 읽는다는 것'));});
   $('#app-menu-button').onclick=()=>modal(`<div class="dialog-heading"><h2>HTMLMemo</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><button class="menu-button" id="menu-import">${icon('folder')} HTML 파일 열기</button><button class="menu-button" id="menu-folder">${icon('save')} 저장 폴더 연결</button><button class="menu-button" id="menu-chrome">${icon('globe')} Chrome 연결</button><button class="menu-button" id="menu-settings">${icon('settings')} 설정</button>`,()=>{
     $('#menu-import').onclick=safely(async()=>{$('#dialog').close();await importFiles();});$('#menu-folder').onclick=safely(async()=>{$('#dialog').close();await chooseFolder();});$('#menu-chrome').onclick=connectionDialog;$('#menu-settings').onclick=settingsDialog;
   });
@@ -371,13 +412,13 @@ function bindUI() {
   document.addEventListener('visibilitychange',()=>{if(document.hidden)for(const tab of tabs)if(tab.reader){tab.reader.rememberPosition();tab.queue.flush().catch(()=>{});}});
   window.addEventListener('online',network);window.addEventListener('offline',network);window.addEventListener('htmlmemo-chrome-ready',()=>{updateConnection();safely(receiveCaptures)();});window.addEventListener('htmlmemo-capture-ready',safely(receiveCaptures));
   window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();installing=event;$('#install-button').hidden=false;});$('#install-button').onclick=safely(async()=>{await installing?.prompt();$('#install-button').hidden=true;});
-  window.addEventListener('resize',()=>{closePopover();const bar=$('#toolbar');if(bar.style.top){bar.style.left='50%';bar.style.top='';bar.style.bottom='';bar.style.transform='';}});
+  window.addEventListener('resize',()=>{closePopover();applyToolbarPosition();});
   window.addEventListener('dragover',event=>{if([...event.dataTransfer.types].includes('Files'))event.preventDefault();});window.addEventListener('drop',safely(async event=>{if(![...(event.dataTransfer.types||[])].includes('Files'))return;event.preventDefault();for(const file of await droppedHTMLFiles(event.dataTransfer))await openLocalFile(file);}));
 }
 function network() {$('#network-status').textContent=navigator.onLine?'온라인':'오프라인';$('#network-status').classList.toggle('offline',!navigator.onLine);}
 async function initialize() {
-  applyTheme(localStorage.getItem('htmlmemo-theme')||'light');bindUI();network();folder=await getSetting('folder');await refreshLibrary();activate('library');
-  if('serviceWorker'in navigator)await navigator.serviceWorker.register('./sw.js').catch(()=>toast('오프라인 준비를 완료하지 못했습니다. 다음 접속에서 다시 준비합니다.',true));
+  try{preferences=loadPreferences(localStorage);}catch(error){toast('설정 일부를 읽지 못했습니다. 설정 파일로 복원할 수 있습니다.',true);}applyTheme(preferences.theme);bindUI();$('#library-sort').value=preferences.librarySort;network();folder=await getSetting('folder');settingsFileHandle=await getSetting('settings-file');settingsFolderHint=await getSetting('settings-folder-hint')||'';await refreshLibrary();activate('library');
+  if(/^https?:$/.test(location.protocol)&&'serviceWorker'in navigator)await navigator.serviceWorker.register('./sw.js').catch(()=>toast('오프라인 준비를 완료하지 못했습니다. 다음 접속에서 다시 준비합니다.',true));
   if('launchQueue'in window)window.launchQueue.setConsumer(safely(async params=>{for(const handle of params.files||[])await openLocalFile(handle);}));
   if(await discoverBridge()){updateConnection();await receiveCaptures();}
   setInterval(async()=>{

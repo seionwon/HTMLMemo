@@ -1,11 +1,13 @@
-import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { deflateSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
+import { crc32, zipFiles } from '../public/src/zip.js';
+import { standaloneHTML } from '../public/src/bundler.js';
+import { APP_FILES, EXTENSION_FILES, portableZIP } from '../public/src/distribution.js';
 
 export const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
-const crcTable=Array.from({length:256},(_,i)=>{for(let b=0;b<8;b++)i=i&1?0xedb88320^(i>>>1):i>>>1;return i>>>0;});
-export function crc32(bytes){let crc=0xffffffff;for(const byte of bytes)crc=crcTable[(crc^byte)&255]^(crc>>>8);return (crc^0xffffffff)>>>0;}
+export { crc32 };
 function pngChunk(type,data){const name=Buffer.from(type);const header=Buffer.alloc(4);header.writeUInt32BE(data.length);const crc=Buffer.alloc(4);crc.writeUInt32BE(crc32(Buffer.concat([name,data])));return Buffer.concat([header,name,data,crc]);}
 function createIcon(size){
   const data=Buffer.alloc((size*4+1)*size);const green=[39,98,84];const ivory=[255,253,246];const gold=[228,191,131];
@@ -19,18 +21,20 @@ function createIcon(size){
   const header=Buffer.alloc(13);header.writeUInt32BE(size,0);header.writeUInt32BE(size,4);header[8]=8;header[9]=6;
   return Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),pngChunk('IHDR',header),pngChunk('IDAT',deflateSync(data)),pngChunk('IEND',Buffer.alloc(0))]);
 }
-async function files(dir,prefix=''){const result=[];for(const entry of await readdir(dir,{withFileTypes:true})){if(entry.isDirectory())result.push(...await files(join(dir,entry.name),prefix+entry.name+'/'));else result.push({name:prefix+entry.name,data:await readFile(join(dir,entry.name))});}return result;}
-function zip(entries){
-  const chunks=[];const central=[];let offset=0;
-  for(const {name,data} of entries){
-    const filename=Buffer.from(name);const crc=crc32(data);const local=Buffer.alloc(30);local.writeUInt32LE(0x04034b50);local.writeUInt16LE(20,4);local.writeUInt16LE(0x800,6);local.writeUInt32LE(crc,14);local.writeUInt32LE(data.length,18);local.writeUInt32LE(data.length,22);local.writeUInt16LE(filename.length,26);
-    chunks.push(local,filename,data);const info=Buffer.alloc(46);info.writeUInt32LE(0x02014b50);info.writeUInt16LE(20,4);info.writeUInt16LE(20,6);info.writeUInt16LE(0x800,8);info.writeUInt32LE(crc,16);info.writeUInt32LE(data.length,20);info.writeUInt32LE(data.length,24);info.writeUInt16LE(filename.length,28);info.writeUInt32LE(offset,42);central.push(info,filename);offset+=local.length+filename.length+data.length;
-  }
-  const directory=Buffer.concat(central);const end=Buffer.alloc(22);end.writeUInt32LE(0x06054b50);end.writeUInt16LE(entries.length,8);end.writeUInt16LE(entries.length,10);end.writeUInt32LE(directory.length,12);end.writeUInt32LE(offset,16);return Buffer.concat([...chunks,directory,end]);
+export async function packageAssets(){
+  const app={},extension={};
+  for(const name of APP_FILES){const bytes=await readFile(join(root,'public',name));app[name]=name.endsWith('.png')?{base64:bytes.toString('base64')}:{text:bytes.toString('utf8')};}
+  for(const name of EXTENSION_FILES)extension[name]={text:await readFile(join(root,'extension',name),'utf8')};
+  return {app,extension};
 }
 export async function prepareAssets(){
   await mkdir(join(root,'public/icons'),{recursive:true});await mkdir(join(root,'public/downloads'),{recursive:true});
   await writeFile(join(root,'public/icons/icon-192.png'),createIcon(192));await writeFile(join(root,'public/icons/icon-512.png'),createIcon(512));
   await writeFile(join(root,'extension/capture.js'),await readFile(join(root,'public/shared/capture.js')));
-  await writeFile(join(root,'public/downloads/htmlmemo-chrome.zip'),zip(await files(join(root,'extension'))));
+  const assets=await packageAssets();await writeFile(join(root,'public/distribution.json'),JSON.stringify(assets));await writeFile(join(root,'public/HTMLMemo.html'),standaloneHTML(assets));
+  const extensionEntries=[];
+  for(const name of EXTENSION_FILES)extensionEntries.push({name,data:assets.extension[name].text});
+  for(const name of APP_FILES){const data=await readFile(join(root,'public',name));const target=join(root,'extension/app',name);await mkdir(resolve(target,'..'),{recursive:true});await writeFile(target,data);extensionEntries.push({name:'app/'+name,data});}
+  await writeFile(join(root,'public/downloads/htmlmemo-chrome.zip'),zipFiles(extensionEntries));
+  await writeFile(join(root,'public/downloads/HTMLMemo-local.zip'),portableZIP(assets));
 }

@@ -1,14 +1,15 @@
-const DEFAULT_APP = 'http://localhost:4173/';
+const DEFAULT_APP = chrome.runtime.getURL('app/index.html');
 const jobs = new Map();
 let storageTail=Promise.resolve();
 const mutateStorage=fn=>{const result=storageTail.then(fn);storageTail=result.catch(()=>{});return result;};
 const allowed = new Set(['ping','openBrowser','listTabs','focusTab','navigateTab','backTab','forwardTab','reloadTab','captureTab','takeCaptures','ackCapture']);
 const webURL = value => { const url=new URL(value); if(!['http:','https:'].includes(url.protocol)||url.username||url.password)throw new Error('http 또는 https 페이지를 선택해주세요.');return url.href; };
-async function appURL() {return (await chrome.storage.local.get('pwaUrl')).pwaUrl||DEFAULT_APP;}
+async function appURL() {const saved=(await chrome.storage.local.get('pwaUrl')).pwaUrl;if(!saved)return DEFAULT_APP;try{const url=new URL(saved);const development=url.protocol==='http:'&&['localhost','127.0.0.1'].includes(url.hostname);if(url.href===DEFAULT_APP||url.protocol==='file:'||development)return url.href;}catch{}return DEFAULT_APP;}
 async function isApp(sender) {
-  if(!sender.tab?.id||!sender.url)return false;
+  if(sender.id!==chrome.runtime.id||!sender.url)return false;
   const expected=new URL(await appURL());const actual=new URL(sender.url);
-  return actual.origin===expected.origin&&actual.pathname===expected.pathname;
+  const matching=actual.protocol===expected.protocol&&actual.host===expected.host&&actual.pathname===expected.pathname;
+  return matching&&(!!sender.tab?.id||actual.href.split(/[?#]/)[0]===DEFAULT_APP);
 }
 async function tracked() {return (await chrome.storage.session.get('tracked')).tracked||[];}
 async function track(id) {return mutateStorage(async()=>{const ids=await tracked();if(!ids.includes(id))await chrome.storage.session.set({tracked:[...ids,id]});});}
@@ -55,8 +56,8 @@ async function captureTab(id) {
 }
 async function openApp(captureId) {
   const url=await appURL();const expected=new URL(url);
-  const tabs=await chrome.tabs.query({});const existing=tabs.find(tab=>{try{const current=new URL(tab.url);return current.origin===expected.origin&&current.pathname===expected.pathname;}catch{return false;}});
-  if(existing){await chrome.tabs.update(existing.id,{active:true});await chrome.windows.update(existing.windowId,{focused:true});await chrome.tabs.sendMessage(existing.id,{event:'capture-ready'}).catch(()=>{});return;}
+  const tabs=await chrome.tabs.query({});const existing=tabs.find(tab=>{try{const current=new URL(tab.url);return current.protocol===expected.protocol&&current.host===expected.host&&current.pathname===expected.pathname;}catch{return false;}});
+  if(existing){await chrome.tabs.update(existing.id,{active:true});await chrome.windows.update(existing.windowId,{focused:true});await chrome.tabs.sendMessage(existing.id,{event:'capture-ready'}).catch(()=>{});await chrome.runtime.sendMessage({event:'capture-ready'}).catch(()=>{});return;}
   expected.searchParams.set('capture',captureId);await chrome.tabs.create({url:expected.href});
 }
 async function dispatch(message,sender) {
@@ -91,8 +92,7 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
   dispatch(message,sender).then(result=>respond({result}),error=>respond({error:error.message}));return true;
 });
 async function registerBridge() {
-  const url=new URL(await appURL());await chrome.scripting.unregisterContentScripts({ids:['htmlmemo-custom']}).catch(()=>{});
-  if(url.hostname!=='localhost'&&url.hostname!=='127.0.0.1')await chrome.scripting.registerContentScripts([{id:'htmlmemo-custom',matches:[url.origin+'/*'],js:['bridge.js'],runAt:'document_idle',persistAcrossSessions:true}]);
+  await chrome.scripting.unregisterContentScripts({ids:['htmlmemo-custom']}).catch(()=>{});
 }
 chrome.runtime.onInstalled.addListener(()=>registerBridge().catch(()=>{}));
 chrome.storage.onChanged.addListener(changes=>{if(changes.pwaUrl)registerBridge().catch(()=>{});});
