@@ -1,0 +1,115 @@
+diff --git a/apps/CodeMemo/src/components/Project/ProjectConsole.tsx b/apps/CodeMemo/src/components/Project/ProjectConsole.tsx
+--- a/apps/CodeMemo/src/components/Project/ProjectConsole.tsx
++++ b/apps/CodeMemo/src/components/Project/ProjectConsole.tsx
+@@ -8,6 +8,7 @@
+ import { db } from '../../db';
+ import { FolderMoveModal } from '../FolderView/FolderMoveModal';
+ import { InviteMembersModal } from './InviteMembersModal';
++import { RunDeploymentZip } from './RunDeploymentZip';
+ import { STUDY_KEY } from './StudyWindowEntry';
+ // A turn key holds the prompt text, which is not safe in a window name or a storage key. This makes
+ // a short, stable, harmless id out of it.
+@@ -2400,6 +2401,7 @@
+ 
+   return (
+     <div>
++      <RunDeploymentZip projectId={project.id} projectPath={project.path} running={running} />
+       {webEntry && !android?.android && (
+         <div style={{ marginBottom: 12 }}>
+           <Row style={{ justifyContent: 'space-between' }}>
+diff --git a/apps/CodeMemo/src/components/Project/RunDeploymentZip.tsx b/apps/CodeMemo/src/components/Project/RunDeploymentZip.tsx
+new file mode 100644
+--- /dev/null
++++ b/apps/CodeMemo/src/components/Project/RunDeploymentZip.tsx
+@@ -0,0 +1,91 @@
++import React from 'react';
++import { ccLs, ccDownloadUrl, type WorkFile } from './workspace';
++
++const directory = 'dist/downloads';
++
++// Show Pages archives from the build output; do not package project contents.
++function pagesBundle(files: WorkFile[]): WorkFile | null {
++  return files
++    .filter(file => !file.dir && file.size > 0 && Number.isFinite(file.mtime)
++      && /^[^/\\]+-pages\.zip$/i.test(file.name) && !file.name.startsWith('.'))
++    .sort((a, b) => b.mtime - a.mtime || a.name.localeCompare(b.name))[0] || null;
++}
++
++export const RunDeploymentZip: React.FC<{
++  projectId: string;
++  projectPath: string;
++  running: boolean;
++}> = ({ projectId, projectPath, running }) => {
++  const [archive, setArchive] = React.useState<WorkFile | null>(null);
++  const [busy, setBusy] = React.useState(false);
++  const [error, setError] = React.useState('');
++  const busyRef = React.useRef(false);
++
++  React.useEffect(() => {
++    setArchive(null); setError('');
++    if (!projectId || !projectPath) return;
++    let live = true, checking = false, denied = false;
++    const refresh = async () => {
++      if (!live || checking || denied || document.hidden) return;
++      checking = true;
++      try {
++        const files = await ccLs(projectId, directory);
++        if (live) { setArchive(pagesBundle(files)); setError(''); }
++      } catch (reason) {
++        if (!live) return;
++        const message = reason instanceof Error ? reason.message : String(reason);
++        if (/\b(401|403)\b/.test(message)) {
++          denied = true;
++          setArchive(null); setError('배포 파일을 읽을 권한을 확인해 주세요.');
++        } else if (/\b404\b/.test(message)) {
++          setArchive(null);
++        } else {
++          setError('배포 파일을 확인하지 못했습니다.');
++        }
++      } finally { checking = false; }
++    };
++    void refresh();
++    const timer = window.setInterval(refresh, 10000);
++    window.addEventListener('focus', refresh);
++    document.addEventListener('visibilitychange', refresh);
++    return () => {
++      live = false; window.clearInterval(timer);
++      window.removeEventListener('focus', refresh);
++      document.removeEventListener('visibilitychange', refresh);
++    };
++  }, [projectId, projectPath, running]);
++
++  const download = async (event: React.MouseEvent<HTMLAnchorElement>) => {
++    event.preventDefault();
++    if (!archive || busyRef.current) return;
++    busyRef.current = true; setBusy(true); setError('');
++    try {
++      // Obtain a fresh one-use ticket per click; do not store credentials or reuse a spent link.
++      const { url } = await ccDownloadUrl(projectId, `${directory}/${archive.name}`);
++      const link = document.createElement('a');
++      link.href = url; link.download = archive.name; link.rel = 'noopener';
++      document.body.appendChild(link);
++      try { link.click(); } finally { link.remove(); }
++    } catch {
++      setError('ZIP을 내려받지 못했습니다. 다운로드를 다시 눌러 주세요.');
++    } finally { busyRef.current = false; setBusy(false); }
++  };
++
++  if (!archive && !error) return null;
++  return (
++    <section aria-label="배포 ZIP" style={{ marginBottom: 12, padding: '12px 14px', border: '1px solid var(--border)', borderRadius: 8 }}>
++      {archive && (
++        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
++          <span style={{ fontSize: '0.82rem', wordBreak: 'break-all' }}>
++            📦 {archive.name} · {(archive.size / (1024 * 1024)).toFixed(1)} MB
++          </span>
++          <a href="#deployment-zip" download={archive.name} onClick={download} aria-disabled={busy}
++            style={{ color: 'var(--primary)', fontWeight: 700, opacity: busy ? 0.5 : 1 }}>
++            {busy ? '다운로드 준비 중…' : '배포 ZIP 다운로드'}
++          </a>
++        </div>
++      )}
++      {error && <p role="alert" style={{ fontSize: '0.78rem', margin: '8px 0 0' }}>{error}</p>}
++    </section>
++  );
++};
