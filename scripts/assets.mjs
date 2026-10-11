@@ -1,10 +1,10 @@
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, rm } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { deflateSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
-import { crc32, zipFiles } from '../public/src/zip.js';
+import { crc32 } from '../public/src/zip.js';
 import { standaloneHTML } from '../public/src/bundler.js';
-import { APP_FILES, EXTENSION_FILES, portableZIP } from '../public/src/distribution.js';
+import { APP_FILES, EXTENSION_FILES, chromeZIP } from '../public/src/distribution.js';
 
 export const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 export { crc32 };
@@ -32,9 +32,7 @@ export async function prepareAssets(){
   await writeFile(join(root,'public/icons/icon-192.png'),createIcon(192));await writeFile(join(root,'public/icons/icon-512.png'),createIcon(512));
   await writeFile(join(root,'extension/capture.js'),await readFile(join(root,'public/shared/capture.js')));
   const assets=await packageAssets();await writeFile(join(root,'public/distribution.json'),JSON.stringify(assets));await writeFile(join(root,'public/HTMLMemo.html'),standaloneHTML(assets));
-  const extensionEntries=[];
-  for(const name of EXTENSION_FILES)extensionEntries.push({name,data:assets.extension[name].text});
-  for(const name of APP_FILES){const data=await readFile(join(root,'public',name));const target=join(root,'extension/app',name);await mkdir(resolve(target,'..'),{recursive:true});await writeFile(target,data);extensionEntries.push({name:'app/'+name,data});}
-  await writeFile(join(root,'public/downloads/htmlmemo-chrome.zip'),zipFiles(extensionEntries));
-  await writeFile(join(root,'public/downloads/HTMLMemo-local.zip'),portableZIP(assets));
+  for(const name of APP_FILES){const data=await readFile(join(root,'public',name));const target=join(root,'extension/app',name);await mkdir(resolve(target,'..'),{recursive:true});await writeFile(target,data);}
+  for(const name of ['htmlmemo-chrome.zip','HTMLMemo-local.zip'])await rm(join(root,'public/downloads',name),{force:true});
+  await writeFile(join(root,'public/downloads/HTMLMemo-chrome.zip'),chromeZIP(assets));
 }

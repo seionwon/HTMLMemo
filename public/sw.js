@@ -1,5 +1,5 @@
-const CACHE = 'htmlmemo-v2';
-const SHELL = ['./','./index.html','./styles.css','./manifest.webmanifest','./example.html','./icons/icon.svg','./icons/icon-192.png','./icons/icon-512.png','./shared/capture.js','./src/app.js','./src/bridge.js','./src/document.js','./src/local-files.js','./src/model.js','./src/reader.js','./src/storage.js','./src/utils.js','./src/preferences.js','./src/distribution.js','./src/bundler.js','./src/zip.js','./distribution.json'];
+const CACHE = 'htmlmemo-v3';
+const SHELL = ['./','./index.html','./styles.css','./manifest.webmanifest','./example.html','./icons/icon.svg','./icons/icon-192.png','./icons/icon-512.png','./shared/capture.js','./src/app.js','./src/bridge.js','./src/document.js','./src/local-files.js','./src/model.js','./src/reader.js','./src/storage.js','./src/utils.js','./src/preferences.js','./src/distribution.js','./src/bundler.js','./src/zip.js','./src/install.js','./distribution.json'];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(SHELL)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key.startsWith('htmlmemo-')&&key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim())));
 self.addEventListener('fetch',event=>{

@@ -21,7 +21,7 @@
         <a class="brand" href="#" id="home-button" aria-label="HTMLMemo 서재"><span class="brand-icon">H<span></span></span><strong>HTMLMemo</strong></a>
         <span class="app-caption">나만의 웹 서재</span>
         <div class="title-actions">
-          <button id="install-button" class="quiet-button" hidden>앱 설치</button>
+          <button id="install-button" class="quiet-button">앱 설치</button>
           <button id="connection-button" class="connection" title="Chrome 연결 설정"><i></i><span>Chrome 연결</span></button>
           <button id="settings-button" class="icon-button" aria-label="설정"></button>
         </div>
@@ -58,11 +58,12 @@
         </div>
       </section>
       <section id="execution" class="execution-page" hidden>
-        <div class="execution-inner"><p class="eyebrow">LOCAL · READY TO USE</p><h1>받고, 열면,<br>바로 사용할 수 있어요.</h1><p class="execution-description">서버 실행도, 명령어 입력도 필요 없습니다.<br>문서·주석·설정은 모두 이 기기에만 저장됩니다.</p>
-          <div class="execution-cards"><article><span class="execution-step">01</span><h2>이 기기에서 사용하기</h2><p><strong>HTMLMemo.html</strong>을 Chrome으로 열고, 가지고 있는 HTML 파일을 가져오세요. 바로 주석을 남길 수 있습니다.</p><button id="execution-import" class="primary-button">HTML 파일 가져오기</button><button id="execution-settings" class="text-button">설정 파일 저장 · 불러오기 →</button></article>
-          <article><span class="execution-step">02</span><h2>다른 사람에게 전달하기</h2><p>앱과 Chrome 연결 기능, 처음 사용하는 분을 위한 안내를 ZIP 파일 하나에 담습니다.</p><button id="delivery-package" class="primary-button">앱 전달 파일 저장</button><button id="delivery-html" class="text-button">실행 HTML만 저장 →</button><p id="delivery-status" class="delivery-status" role="status">받은 분은 압축을 풀고 「먼저 열어주세요.html」을 열면 됩니다.</p></article></div>
-          <div class="execution-connect"><div><h2>웹 페이지도 저장하고 싶다면</h2><p>함께 받은 Chrome 연결 기능을 한 번 설치하세요. 앱이 확장 기능에 들어 있어 서버 없이 탐색·저장할 수 있습니다.</p></div><button id="execution-chrome" class="secondary-button">설치 순서 보기</button></div>
-          <p class="execution-privacy">전달 파일에는 앱만 들어갑니다. 내 문서·주석·설정·파일 권한은 포함되지 않습니다.</p>
+        <div class="execution-inner"><p class="eyebrow">ONE APP · LOCAL DATA</p><h1>한 주소로 열고,<br>앱으로 설치하세요.</h1><p class="execution-description">맥·윈도우·안드로이드·아이폰 모두 Chrome에서 시작하세요.<br>문서·주석·설정은 모두 이 기기에만 저장됩니다.</p>
+          <div class="execution-cards"><article><span class="execution-step">01</span><h2>이 기기에 설치하기</h2><p>같은 <strong>앱 설치</strong> 버튼을 사용하세요. 아이폰에서는 Chrome의 공유 메뉴를 사용하는 순서를 안내합니다.</p><button id="execution-install" class="primary-button">앱 설치</button><p id="install-status" class="delivery-status" role="status">설치 후 앱 아이콘으로 열고 HTML 파일을 가져오세요.</p><button id="execution-import" class="text-button">HTML 파일 가져오기 →</button><button id="execution-settings" class="text-button">설정 파일 저장 · 불러오기 →</button></article>
+          <article><span class="execution-step">02</span><h2>다른 사람에게 전달하기</h2><p>같은 앱 주소와 설치 안내를 HTML 파일 하나에 담습니다. 받은 분도 Chrome으로 열고 앱 설치를 누르면 됩니다.</p><button id="delivery-package" class="primary-button">설치 안내 파일 저장</button><p id="delivery-status" class="delivery-status" role="status">처음 설치할 때는 인터넷 연결이 필요합니다.</p></article></div>
+          <div class="execution-connect"><div><h2>컴퓨터에서 웹 페이지도 저장하려면</h2><p>Chrome 연결 기능을 추가하면 실제 Chrome 탭을 한 HTML 파일로 저장할 수 있습니다. 모바일에서는 로컬 HTML 읽기와 주석을 사용할 수 있습니다.</p></div><button id="execution-chrome" class="secondary-button">Chrome 연결 안내</button></div>
+          <p class="execution-privacy">전달 파일에는 설치 주소와 안내만 들어갑니다. 내 문서·주석·설정·파일 권한은 포함되지 않습니다.</p>
+          <details class="connection-advanced"><summary>앱 소유자 · GitHub Pages 배포 파일</summary><p class="dialog-description small">배포용 ZIP의 docs 폴더를 GitHub 저장소에 올리고, Pages의 게시 위치를 main /docs로 설정하세요. API 키는 필요 없습니다.</p><button id="pages-package" class="secondary-button">Pages 배포 파일 저장</button><p id="pages-status" class="delivery-status" role="status"></p></details>
         </div>
       </section>
       <section id="workspace" hidden><div id="workspaces"></div></section>

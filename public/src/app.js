@@ -6,12 +6,12 @@ import { listDocuments, putDocument, deleteDocument, getSetting, setSetting, wri
 import { bridge, bridgeAvailable, discoverBridge } from './bridge.js';
 import { readLocalHTML, droppedHTMLFiles } from './local-files.js';
 import { normalizePreferences, loadPreferences, storePreferences, serializeSettings, readSettingsFile } from './preferences.js';
-import { distributionAssets, portableZIP, bundledExample } from './distribution.js';
-import { standaloneHTML } from './bundler.js';
+import { distributionAssets, installationHTML, pagesZIP, chromeZIP, bundledExample } from './distribution.js';
+import { InstallController, isIOS, installableLocation, installationURL } from './install.js';
 
-let records = []; const tabs = []; let activeId = 'library'; let folder = null; let installing = null; let popoverName = ''; let sidebarMode = ''; let receiving = false;
+let records = []; const tabs = []; let activeId = 'library'; let folder = null; let popoverName = ''; let sidebarMode = ''; let receiving = false;
 let preferences=normalizePreferences(), settingsFileHandle=null, settingsFolderHint='';
-let exportingApp=false;
+let exportingApp=false, installController;
 const appAddress=()=>{const url=new URL(location.href);url.search='';url.hash='';return url.href;};
 const active = () => tabs.find(tab => tab.id === activeId);
 const reader = () => active()?.reader;
@@ -26,6 +26,20 @@ function modal(html, bind = () => {}) {
   closePopover(); $('#dialog-content').innerHTML=html; const dialog=$('#dialog'); dialog.returnValue=''; if (!dialog.open) dialog.showModal();
   $$('[data-dialog-close]',dialog).forEach(button=>button.onclick=()=>dialog.close()); bind(dialog);
 }
+function installGuide(kind) {
+  const heading=kind==='installed'?'설치된 HTMLMemo입니다.':'HTMLMemo 앱 설치';
+  let content;
+  if(kind==='installed')content='<p class="dialog-description">앱 아이콘으로 실행 중입니다. HTML 파일을 가져와 읽고 주석을 남겨보세요.</p>';
+  else if(kind==='local')content=`<p class="dialog-description">직접 연 HTML 파일이나 확장 기능 페이지에서는 PWA를 설치할 수 없습니다. Chrome에서 아래 앱 주소를 열고 같은 앱 설치 버튼을 누르세요. 앱 소유자가 GitHub Pages 배포를 먼저 완료해야 합니다.</p><p><a class="primary-button" href="${esc(installationURL(location))}">설치할 HTMLMemo 열기</a></p>`;
+  else if(kind==='ios')content='<p class="dialog-description">아이폰·아이패드의 Chrome에서는 아래 순서로 설치합니다. 앱 버튼만으로 공유 메뉴를 자동으로 열 수는 없습니다.</p><ol class="setup-steps"><li>Chrome 주소창의 <strong>공유</strong> 버튼을 누릅니다.</li><li><strong>홈 화면에 추가</strong>를 선택합니다.</li><li>이름을 확인하고 <strong>추가</strong>를 누릅니다.</li><li>홈 화면의 <strong>HTMLMemo</strong> 아이콘으로 앱을 엽니다.</li></ol><p class="dialog-description small">iOS 16.4 이상과 최신 Chrome을 사용하세요. 처음 설치한 뒤 앱 아이콘으로 열고 문서를 가져오세요.</p>';
+  else if(/Android/.test(navigator.userAgent||''))content='<ol class="setup-steps"><li>Chrome의 <strong>메뉴(⋮)</strong>를 엽니다.</li><li><strong>홈 화면에 추가 → 설치</strong>를 선택합니다.</li><li>앱 아이콘으로 HTMLMemo를 엽니다.</li></ol><p class="dialog-description small">설치 메뉴가 보이지 않으면 첫 로딩과 오프라인 준비가 끝난 뒤 다시 시도하세요.</p>';
+  else content='<ol class="setup-steps"><li>Chrome 주소창 오른쪽의 <strong>설치</strong> 아이콘을 누릅니다.</li><li>아이콘이 없다면 Chrome 메뉴의 <strong>전송, 저장 및 공유 → 페이지를 앱으로 설치</strong>를 선택합니다.</li><li>설치를 확인하고 앱 아이콘으로 HTMLMemo를 엽니다.</li></ol><p class="dialog-description small">설치 안내가 자동으로 열리는 환경에서는 앱 설치 버튼을 다시 누르면 됩니다.</p>';
+  modal(`<div class="dialog-heading"><h2>${heading}</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div>${content}<p class="local-only-note">${icon('check',15)} 문서·주석·설정은 기기에만 저장합니다.</p><div class="dialog-actions"><button class="primary-button" data-dialog-close>확인</button></div>`);
+}
+function updateInstall(state) {
+  for(const selector of ['#install-button','#execution-install']){const button=$(selector);button.hidden=selector==='#install-button'&&state.installed;button.disabled=state.busy;button.textContent=state.busy?'설치 확인 중…':state.installed?'설치 완료':'앱 설치';}
+  $('#install-status').textContent=state.installed?'앱으로 실행 중입니다. 문서·주석·설정은 이 기기에 저장됩니다.':!installableLocation(location)?'PWA 설치는 배포된 앱 주소에서 가능합니다. HTML 파일의 읽기·주석은 계속 사용할 수 있습니다.':isIOS(navigator)?'아이폰은 앱 설치 버튼에서 Chrome 공유 메뉴 사용 순서를 확인하세요.':'설치 후 앱 아이콘으로 열고 HTML 파일을 가져오세요.';
+}
 function promptText(type, initial = '') {
   return new Promise(resolve=>{
     modal(`<form method="dialog" class="note-form"><div class="dialog-heading"><h2>${type==='text'?'텍스트 입력':'메모 남기기'}</h2><button class="icon-button" value="cancel" aria-label="닫기">${icon('close')}</button></div><textarea id="note-text" placeholder="생각을 적어보세요…" maxlength="10000" rows="6">${esc(initial)}</textarea><div class="dialog-actions"><button class="secondary-button" value="cancel">취소</button><button class="primary-button" value="save">저장</button></div></form>`,dialog=>{
@@ -39,9 +53,12 @@ function confirmDialog(title, description, label = '확인') {
   }));
 }
 function connectionDialog() {
-  modal(`<div class="dialog-heading"><h2>웹 페이지도 저장하기</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><p class="dialog-description">Chrome 연결 기능에는 서버 없이 실행되는 HTMLMemo 앱이 함께 들어 있습니다. 처음 한 번만 아래 순서대로 설치해주세요.</p><ol class="setup-steps"><li>전달받은 압축 파일의 <strong>extension</strong> 폴더를 준비합니다. 없다면 실행 탭에서 앱 전달 파일을 저장하고 압축을 풉니다.</li><li>Chrome 주소창에 <code>chrome://extensions</code>를 입력하고, 오른쪽 위 <strong>개발자 모드</strong>를 켭니다.</li><li><strong>압축해제된 확장 프로그램 로드</strong>를 누르고 <strong>extension</strong> 폴더를 선택합니다.</li><li>확장 기능 목록의 HTMLMemo에서 <strong>HTMLMemo 열기</strong>를 누릅니다. 연결 주소 설정이나 서버 실행은 필요 없습니다.</li></ol><p class="dialog-description small">이 파일의 보관함과 확장 기능 앱의 보관함은 별도입니다. HTML 내보내기로 문서를 옮길 수 있습니다.</p><details class="connection-advanced"><summary>현재 HTML 파일에 직접 연결하기</summary><p class="dialog-description small">확장 기능 설정에 아래 주소를 입력합니다. 로컬 파일은 확장 기능의 세부정보에서 「파일 URL에 대한 액세스 허용」을 켠 뒤 이 파일을 다시 여세요.</p><div class="copy-url"><input readonly value="${esc(appAddress())}" aria-label="HTMLMemo 주소"><button class="secondary-button" id="copy-app-url">복사</button></div></details><div class="dialog-actions"><button class="secondary-button" id="connection-delivery">실행 탭 열기</button><button class="secondary-button" id="check-connection">연결 확인</button><button class="primary-button" data-dialog-close>완료</button></div>`,()=>{
+  if(isIOS(navigator)||/Android/.test(navigator.userAgent||'')){
+    modal(`<div class="dialog-heading"><h2>모바일에서 사용하기</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><p class="dialog-description">이 Chrome 연결 기능은 맥·윈도우의 Chrome 확장 프로그램입니다. 안드로이드·아이폰의 Chrome에는 설치할 수 없습니다.</p><p class="dialog-description">모바일에서도 HTML 파일을 가져와 읽고 주석을 남길 수 있습니다. 주석은 앱 안의 HTML에 자동 저장하고, HTML 내보내기로 파일을 저장합니다.</p><div class="dialog-actions"><button id="mobile-import" class="primary-button">HTML 파일 가져오기</button><button class="secondary-button" data-dialog-close>확인</button></div>`,()=>{$('#mobile-import').onclick=safely(async()=>{$('#dialog').close();await importFiles();});});return;
+  }
+  modal(`<div class="dialog-heading"><h2>Chrome에서 웹 페이지 저장하기</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><p class="dialog-description">맥·윈도우에서 실제 Chrome 탭을 저장하려면 연결 기능을 한 번 추가합니다. 기본 연결 주소는 sweon/HTMLMemo의 PWA입니다.</p><ol class="setup-steps"><li>아래 <strong>Chrome 연결 파일 저장</strong>을 누르고 ZIP의 압축을 풉니다.</li><li>Chrome 주소창에 <code>chrome://extensions</code>를 입력하고, 오른쪽 위 <strong>개발자 모드</strong>를 켭니다.</li><li><strong>압축해제된 확장 프로그램 로드</strong>를 누르고 <strong>extension</strong> 폴더를 선택합니다.</li><li>이 앱을 새로고침합니다. 주소창에서 탐색하거나 웹 페이지의 확장 기능에서 <strong>페이지 저장</strong>을 누릅니다.</li></ol><button id="download-chrome" class="secondary-button">Chrome 연결 파일 저장</button><details class="connection-advanced"><summary>현재 로컬 HTML 파일에 연결하기</summary><p class="dialog-description small">확장 기능 설정의 다른 연결 주소에 아래 주소를 입력합니다. 로컬 파일은 확장 기능의 세부정보에서 「파일 URL에 대한 액세스 허용」을 켠 뒤 다시 여세요. 직접 연 파일과 설치된 PWA의 보관함은 별도입니다.</p><div class="copy-url"><input readonly value="${esc(appAddress())}" aria-label="HTMLMemo 주소"><button class="secondary-button" id="copy-app-url">복사</button></div></details><div class="dialog-actions"><button class="secondary-button" id="check-connection">연결 확인</button><button class="primary-button" data-dialog-close>완료</button></div>`,()=>{
+    $('#download-chrome').onclick=safely(async()=>{const button=$('#download-chrome');button.disabled=true;try{download(chromeZIP(await distributionAssets()),'HTMLMemo-chrome.zip','application/zip');toast('압축을 풀고 extension 폴더를 선택해주세요.');}finally{button.disabled=false;}});
     $('#copy-app-url').onclick=safely(async()=>{await navigator.clipboard.writeText(appAddress());toast('앱 주소를 복사했습니다.');});
-    $('#connection-delivery').onclick=()=>{$('#dialog').close();activate('execution');};
     $('#check-connection').onclick=safely(async()=>{const ok=await discoverBridge(); updateConnection(); toast(ok?'Chrome이 연결되었습니다.':'확장 기능을 설치한 뒤 페이지를 새로고침해주세요.',!ok);if(ok)await receiveCaptures();});
   });
 }
@@ -102,7 +119,7 @@ function activate(id) {
   tabs.forEach(tab=>tab.host.hidden=tab.id!==id);renderTabs(); updateChrome();
   if(reader())renderToolbar();else $('#toolbar').hidden=true;
   if(id==='library')renderLibrary();
-  if(id==='execution'){$('#status-left').textContent='서버 없이 실행 · 모든 데이터는 이 기기에 저장';document.title='실행 · 앱 전달 · HTMLMemo';}
+  if(id==='execution'){$('#status-left').textContent='앱 설치 · 모든 데이터는 이 기기에 저장';document.title='실행 · 앱 전달 · HTMLMemo';}
 }
 function updateChrome() {
   const tab=active(); const r=reader(); const local=tab?.type==='document';const execution=activeId==='execution';
@@ -192,7 +209,7 @@ async function openLocalFile(input,requestWrite=false) {
   return createDocument(local.snapshot,local.handle,local.name,local);
 }
 async function savePage() {
-  if(activeId==='execution')return exportApp('zip');
+  if(activeId==='execution')return exportApp();
   const tab=active();if(!tab)return;
   if(tab.reader)return exportDocument(tab);
   let live;
@@ -384,18 +401,20 @@ function handleKey(event) {
   if(event.ctrlKey||event.metaKey||event.altKey)return;
   const tools={v:'select',p:'pen',h:'highlight',u:'underline',e:'eraser',n:'note'};const tool=tools[event.key.toLowerCase()];if(tool){event.preventDefault();toolAction(tool);}
 }
-async function exportApp(kind='zip'){
-  if(exportingApp)return;exportingApp=true;$('#delivery-package').disabled=true;$('#delivery-html').disabled=true;updateChrome();$('#delivery-status').textContent='이 기기에서 앱 전달 파일을 만드는 중…';
-  try{const assets=await distributionAssets();if(kind==='html')download(standaloneHTML(assets),'HTMLMemo.html');else download(portableZIP(assets),'HTMLMemo-local.zip','application/zip');$('#delivery-status').textContent=kind==='html'?'HTMLMemo.html을 저장했습니다. Chrome으로 열면 서버 없이 실행됩니다.':'저장한 ZIP 파일을 보내주세요. 받은 분은 압축을 풀고 「먼저 열어주세요.html」을 열면 됩니다.';}
-  catch(error){$('#delivery-status').textContent='전달 파일을 만들지 못했습니다. '+error.message;throw error;}
-  finally{exportingApp=false;$('#delivery-package').disabled=false;$('#delivery-html').disabled=false;updateChrome();if(activeId==='execution')$('#status-left').textContent='서버 없이 실행 · 모든 데이터는 이 기기에 저장';}
+async function exportApp(kind='install'){
+  if(exportingApp)return;exportingApp=true;$('#delivery-package').disabled=true;$('#pages-package').disabled=true;updateChrome();const status=$(kind==='pages'?'#pages-status':'#delivery-status');status.textContent='이 기기에서 전달 파일을 만드는 중…';
+  try{if(kind==='pages'){download(pagesZIP(await distributionAssets()),'HTMLMemo-pages.zip','application/zip');status.textContent='ZIP의 docs 폴더를 sweon/HTMLMemo 저장소에 올리고 Pages를 main /docs로 설정하세요.';}else{download(installationHTML(installationURL(location)),'HTMLMemo-install.html');status.textContent='HTMLMemo-install.html 파일 하나를 보내주세요. 받은 분은 Chrome으로 열고 앱 설치를 누르면 됩니다.';}}
+  catch(error){status.textContent='전달 파일을 만들지 못했습니다. '+error.message;throw error;}
+  finally{exportingApp=false;$('#delivery-package').disabled=false;$('#pages-package').disabled=false;updateChrome();if(activeId==='execution')$('#status-left').textContent='앱 설치 · 모든 데이터는 이 기기에 저장';}
 }
 function bindUI() {
   [['#library-tab','library'],['#new-tab','plus'],['#back','back'],['#forward','forward'],['#reload','reload'],['#import-button','folder'],['#save-page','save'],['#app-menu-button','more'],['#settings-button','settings'],['#library-search-icon','search'],['#empty-icon','file']].forEach(([id,name])=>setButton(id,name));
   $('#home-button').onclick=e=>{e.preventDefault();activate('library');};$('#library-tab').onclick=()=>activate('library');$('#new-tab').onclick=()=>{activate('library');$('#address').focus();};$('#browse-start').onclick=()=>$('#address').focus();
   $('#execution-tab').onclick=()=>activate('execution');$('#execution-import').onclick=safely(importFiles);$('#execution-chrome').onclick=connectionDialog;$('#execution-settings').onclick=settingsDialog;
-  $('#delivery-package').onclick=safely(()=>exportApp('zip'));
-  $('#delivery-html').onclick=safely(()=>exportApp('html'));
+  $('#delivery-package').onclick=safely(()=>exportApp());
+  $('#pages-package').onclick=safely(()=>exportApp('pages'));
+  installController=new InstallController({window,navigator,location,matchMedia,onChange:updateInstall,onGuide:installGuide});
+  $('#install-button').onclick=$('#execution-install').onclick=safely(async()=>{const result=await installController.install();if(result==='dismissed')toast('설치를 취소했습니다. 앱 설치 버튼에서 다시 안내를 볼 수 있어요.');});
   $('#address-form').onsubmit=safely(async event=>{event.preventDefault();const value=$('#address').value;await openBrowser(value,active()?.type!=='browser');});
   $('#back').onclick=safely(()=>browserHistory(-1));$('#forward').onclick=safely(()=>browserHistory(1));$('#reload').onclick=safely(async()=>{const tab=active();if(tab?.chromeId)await bridge('reloadTab',{tabId:tab.chromeId});else if(tab?.frame)tab.frame.src=tab.url;});
   $('#save-page').onclick=safely(savePage);$('#import-button').onclick=safely(importFiles);$('#hero-import').onclick=safely(importFiles);$('#choose-folder').onclick=safely(chooseFolder);
@@ -411,14 +430,13 @@ function bindUI() {
   window.addEventListener('beforeunload',event=>{if(tabs.some(t=>t.queue?.pending||t.queue?.error)){event.preventDefault();event.returnValue='';}});
   document.addEventListener('visibilitychange',()=>{if(document.hidden)for(const tab of tabs)if(tab.reader){tab.reader.rememberPosition();tab.queue.flush().catch(()=>{});}});
   window.addEventListener('online',network);window.addEventListener('offline',network);window.addEventListener('htmlmemo-chrome-ready',()=>{updateConnection();safely(receiveCaptures)();});window.addEventListener('htmlmemo-capture-ready',safely(receiveCaptures));
-  window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();installing=event;$('#install-button').hidden=false;});$('#install-button').onclick=safely(async()=>{await installing?.prompt();$('#install-button').hidden=true;});
   window.addEventListener('resize',()=>{closePopover();applyToolbarPosition();});
   window.addEventListener('dragover',event=>{if([...event.dataTransfer.types].includes('Files'))event.preventDefault();});window.addEventListener('drop',safely(async event=>{if(![...(event.dataTransfer.types||[])].includes('Files'))return;event.preventDefault();for(const file of await droppedHTMLFiles(event.dataTransfer))await openLocalFile(file);}));
 }
 function network() {$('#network-status').textContent=navigator.onLine?'온라인':'오프라인';$('#network-status').classList.toggle('offline',!navigator.onLine);}
 async function initialize() {
   try{preferences=loadPreferences(localStorage);}catch(error){toast('설정 일부를 읽지 못했습니다. 설정 파일로 복원할 수 있습니다.',true);}applyTheme(preferences.theme);bindUI();$('#library-sort').value=preferences.librarySort;network();folder=await getSetting('folder');settingsFileHandle=await getSetting('settings-file');settingsFolderHint=await getSetting('settings-folder-hint')||'';await refreshLibrary();activate('library');
-  if(/^https?:$/.test(location.protocol)&&'serviceWorker'in navigator)await navigator.serviceWorker.register('./sw.js').catch(()=>toast('오프라인 준비를 완료하지 못했습니다. 다음 접속에서 다시 준비합니다.',true));
+  if(installableLocation(location)&&'serviceWorker'in navigator)await navigator.serviceWorker.register('./sw.js').catch(()=>toast('오프라인 준비를 완료하지 못했습니다. 다음 접속에서 다시 준비합니다.',true));
   if('launchQueue'in window)window.launchQueue.setConsumer(safely(async params=>{for(const handle of params.files||[])await openLocalFile(handle);}));
   if(await discoverBridge()){updateConnection();await receiveCaptures();}
   setInterval(async()=>{
