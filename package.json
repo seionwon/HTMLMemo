@@ -1,0 +1,17 @@
+{
+  "name": "htmlmemo",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "웹 페이지를 한 파일로 보관하고 주석을 자동 저장하는 PWA",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "dev": "node scripts/server.mjs",
+    "start": "node scripts/server.mjs --production",
+    "build": "node scripts/build.mjs",
+    "check": "node scripts/check.mjs",
+    "test": "node --test --test-concurrency=1 tests/*.test.mjs",
+    "test:browser": "node --test tests/browser.integration.mjs"
+  },
+  "devDependencies": { "linkedom": "0.18.12" }
+}
