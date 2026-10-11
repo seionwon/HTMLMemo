@@ -402,17 +402,17 @@ function handleKey(event) {
   const tools={v:'select',p:'pen',h:'highlight',u:'underline',e:'eraser',n:'note'};const tool=tools[event.key.toLowerCase()];if(tool){event.preventDefault();toolAction(tool);}
 }
 async function exportApp(kind='install'){
-  if(exportingApp)return;exportingApp=true;$('#delivery-package').disabled=true;$('#pages-package').disabled=true;updateChrome();const status=$(kind==='pages'?'#pages-status':'#delivery-status');status.textContent='이 기기에서 전달 파일을 만드는 중…';
+  if(exportingApp)return;exportingApp=true;$('#delivery-package').disabled=true;$('#pages-package').disabled=true;$('#pages-package').setAttribute('aria-disabled','true');updateChrome();const status=$(kind==='pages'?'#pages-status':'#delivery-status');status.textContent='이 기기에서 전달 파일을 만드는 중…';
   try{if(kind==='pages'){download(pagesZIP(await distributionAssets()),'HTMLMemo-pages.zip','application/zip');status.textContent='ZIP의 docs 폴더를 sweon/HTMLMemo 저장소에 올리고 Pages를 main /docs로 설정하세요.';}else{download(installationHTML(installationURL(location)),'HTMLMemo-install.html');status.textContent='HTMLMemo-install.html 파일 하나를 보내주세요. 받은 분은 Chrome으로 열고 앱 설치를 누르면 됩니다.';}}
   catch(error){status.textContent='전달 파일을 만들지 못했습니다. '+error.message;throw error;}
-  finally{exportingApp=false;$('#delivery-package').disabled=false;$('#pages-package').disabled=false;updateChrome();if(activeId==='execution')$('#status-left').textContent='앱 설치 · 모든 데이터는 이 기기에 저장';}
+  finally{exportingApp=false;$('#delivery-package').disabled=false;$('#pages-package').disabled=false;$('#pages-package').setAttribute('aria-disabled','false');updateChrome();if(activeId==='execution')$('#status-left').textContent='앱 설치 · 모든 데이터는 이 기기에 저장';}
 }
 function bindUI() {
   [['#library-tab','library'],['#new-tab','plus'],['#back','back'],['#forward','forward'],['#reload','reload'],['#import-button','folder'],['#save-page','save'],['#app-menu-button','more'],['#settings-button','settings'],['#library-search-icon','search'],['#empty-icon','file']].forEach(([id,name])=>setButton(id,name));
   $('#home-button').onclick=e=>{e.preventDefault();activate('library');};$('#library-tab').onclick=()=>activate('library');$('#new-tab').onclick=()=>{activate('library');$('#address').focus();};$('#browse-start').onclick=()=>$('#address').focus();
   $('#execution-tab').onclick=()=>activate('execution');$('#execution-import').onclick=safely(importFiles);$('#execution-chrome').onclick=connectionDialog;$('#execution-settings').onclick=settingsDialog;
   $('#delivery-package').onclick=safely(()=>exportApp());
-  $('#pages-package').onclick=safely(()=>exportApp('pages'));
+  $('#pages-package').onclick=safely(event=>{event?.preventDefault();return exportApp('pages');});
   installController=new InstallController({window,navigator,location,matchMedia,onChange:updateInstall,onGuide:installGuide});
   $('#install-button').onclick=$('#execution-install').onclick=safely(async()=>{const result=await installController.install();if(result==='dismissed')toast('설치를 취소했습니다. 앱 설치 버튼에서 다시 안내를 볼 수 있어요.');});
   $('#address-form').onsubmit=safely(async event=>{event.preventDefault();const value=$('#address').value;await openBrowser(value,active()?.type!=='browser');});

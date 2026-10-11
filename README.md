@@ -16,7 +16,7 @@
 
 이 프로젝트는 **미리 빌드한 docs 폴더를 main 브랜치에 업로드**하는 한 가지 배포 절차를 사용합니다. API 토큰이나 별도의 Actions YAML 설정은 필요 없습니다. 아직 이 작업 환경에서 GitHub 계정에 연결하거나 저장소 업로드·Pages 활성화를 수행하지는 않았습니다.
 
-1. `npm run build`로 준비한 `dist/downloads/HTMLMemo-pages.zip`의 압축을 풉니다. 이미 전달받은 ZIP이 있으면 빌드 없이 압축만 풉니다.
+1. **실행 탭 상단 → 배포 ZIP 다운로드**를 눌러 `HTMLMemo-pages.zip`을 받고 압축을 풉니다. 개인 문서·주석·설정은 포함되지 않습니다. 개발자 빌드(`npm run build`)의 동일한 파일은 `dist/downloads/HTMLMemo-pages.zip`에 있습니다.
 2. [sweon/HTMLMemo](https://github.com/sweon/HTMLMemo)를 열고 **Code → Add file → Upload files**를 누릅니다. 빈 저장소라면 **uploading an existing file** 링크를 누릅니다.
 3. 압축을 푼 **docs 폴더 전체**를 업로드 영역에 끌어놓습니다. 목록에 `docs/index.html`, `docs/src/app.js`, `docs/manifest.webmanifest` 등이 표시되는지 확인합니다. ZIP 파일 자체를 올리거나 `docs/docs/index.html`로 두지 마세요.
 4. **Commit changes**로 `main` 브랜치에 저장합니다. 최초 업로드로 기본 브랜치를 만든 경우 이름이 `main`인지 확인합니다. 다른 기본 브랜치라면 아래 설정에서도 그 이름을 선택합니다.

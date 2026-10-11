@@ -66,7 +66,21 @@ async function fileApp({address='file:///Users/beginner/HTMLMemo.html',navigator
 }
 test('execution export is enabled without a document and produces just the installation HTML locally',async()=>{const app=await fileApp();assert.equal(app.doc.querySelector('#save-page').disabled,true);app.doc.querySelector('#execution-tab').onclick();const button=app.doc.querySelector('#save-page');assert.equal(button.disabled,false);assert.match(button.textContent,/앱 내보내기/);button.onclick();await new Promise(resolve=>setImmediate(resolve));assert.equal(button.disabled,false);assert.equal(app.blobs.length,1);const guide=new DOMParser().parseFromString(await app.blobs[0].text(),'text/html');assert.equal(guide.querySelector('a').getAttribute('href'),PUBLIC_APP_URL);assert.match(app.doc.querySelector('#delivery-status').textContent,/파일 하나를 보내/);assert.equal(app.doc.querySelector('#delivery-html'),null);});
 test('a failed handoff download restores the buttons and shows a recoverable error',async()=>{const app=await fileApp();app.doc.querySelector('#execution-tab').onclick();app.context.URL.createObjectURL=()=>{throw new Error('Download failed');};app.doc.querySelector('#delivery-package').onclick();await new Promise(resolve=>setImmediate(resolve));assert.equal(app.doc.querySelector('#save-page').disabled,false);assert.equal(app.doc.querySelector('#delivery-package').disabled,false);assert.equal(app.doc.querySelector('#pages-package').disabled,false);assert.match(app.doc.querySelector('#delivery-status').textContent,/만들지 못/);assert.equal(app.blobs.length,0);});
-test('the app owner can export docs for Pages and retry after missing build assets',async()=>{const app=await fileApp();app.doc.querySelector('#pages-package').onclick();await new Promise(resolve=>setImmediate(resolve));assert.ok(unzip(new Uint8Array(await app.blobs[0].arrayBuffer())).has('docs/index.html'));app.doc.querySelector('#htmlmemo-package-assets').textContent='{}';app.doc.querySelector('#pages-package').onclick();await new Promise(resolve=>setImmediate(resolve));assert.equal(app.doc.querySelector('#pages-package').disabled,false);assert.match(app.doc.querySelector('#pages-status').textContent,/만들지 못/);assert.equal(app.blobs.length,1);});
+test('the execution tab exposes a working Pages ZIP link and restores it after export errors',async()=>{
+  const app=await fileApp();app.doc.querySelector('#execution-tab').onclick();
+  const link=app.doc.querySelector('#pages-package');
+  assert.equal(link.tagName,'A');assert.equal(link.closest('details,[hidden]'),null);
+  assert.equal(link.getAttribute('download'),'HTMLMemo-pages.zip');assert.equal(link.getAttribute('href'),'./downloads/HTMLMemo-pages.zip');
+  assert.match(link.textContent,/배포 ZIP 다운로드/);assert.match(app.doc.querySelector('#pages-status').textContent,/HTMLMemo-pages\.zip/);
+  let prevented=0;const click={preventDefault:()=>prevented++};
+  link.onclick(click);assert.equal(link.getAttribute('aria-disabled'),'true');link.onclick(click);
+  await new Promise(resolve=>setImmediate(resolve));assert.equal(prevented,2);assert.equal(app.blobs.length,1);
+  assert.equal(app.blobs[0].type,'application/zip');assert.ok(unzip(new Uint8Array(await app.blobs[0].arrayBuffer())).has('docs/index.html'));
+  assert.equal(link.getAttribute('aria-disabled'),'false');
+  app.doc.querySelector('#htmlmemo-package-assets').textContent='{}';link.onclick(click);
+  await new Promise(resolve=>setImmediate(resolve));assert.equal(prevented,3);assert.equal(link.disabled,false);assert.equal(link.getAttribute('aria-disabled'),'false');
+  assert.match(app.doc.querySelector('#pages-status').textContent,/만들지 못/);assert.equal(app.blobs.length,1);
+});
 test('the real app uses the same button for native installation and iPhone Chrome instructions',async()=>{
   const desktop=await fileApp({address:PUBLIC_APP_URL});let prompted=0;
   desktop.emit('beforeinstallprompt',{preventDefault(){},prompt:async()=>prompted++,userChoice:Promise.resolve({outcome:'accepted'})});
