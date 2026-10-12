@@ -6,12 +6,12 @@ import { listDocuments, putDocument, deleteDocument, getSetting, setSetting, wri
 import { bridge, bridgeAvailable, discoverBridge } from './bridge.js';
 import { readLocalHTML, droppedHTMLFiles } from './local-files.js';
 import { normalizePreferences, loadPreferences, storePreferences, serializeSettings, readSettingsFile } from './preferences.js';
-import { distributionAssets, installationHTML, pagesZIP, chromeZIP, bundledExample } from './distribution.js';
-import { InstallController, isIOS, installableLocation, installationURL } from './install.js';
+import { distributionAssets, chromeZIP, bundledExample } from './distribution.js';
+import { InstallController, isIOS, installableLocation, installationURL, PUBLIC_APP_URL } from './install.js';
 
 let records = []; const tabs = []; let activeId = 'library'; let folder = null; let popoverName = ''; let sidebarMode = ''; let receiving = false;
 let preferences=normalizePreferences(), settingsFileHandle=null, settingsFolderHint='';
-let exportingApp=false, installController;
+let sharingApp=false, installController;
 const appAddress=()=>{const url=new URL(location.href);url.search='';url.hash='';return url.href;};
 const active = () => tabs.find(tab => tab.id === activeId);
 const reader = () => active()?.reader;
@@ -119,7 +119,7 @@ function activate(id) {
   tabs.forEach(tab=>tab.host.hidden=tab.id!==id);renderTabs(); updateChrome();
   if(reader())renderToolbar();else $('#toolbar').hidden=true;
   if(id==='library')renderLibrary();
-  if(id==='execution'){$('#status-left').textContent='앱 설치 · 모든 데이터는 이 기기에 저장';document.title='실행 · 앱 전달 · HTMLMemo';}
+  if(id==='execution'){$('#status-left').textContent='앱 설치 · URL 공유 · 모든 데이터는 이 기기에 저장';document.title='앱 설치 · URL 공유 · HTMLMemo';}
 }
 function updateChrome() {
   const tab=active(); const r=reader(); const local=tab?.type==='document';const execution=activeId==='execution';
@@ -127,8 +127,8 @@ function updateChrome() {
   $('#back').disabled=local?!r?.linkHistory.length:!tab||!tab.chromeId&&tab.cursor<=0;
   $('#forward').disabled=!tab||local||!tab.chromeId&&tab.cursor>=tab.history.length-1;
   $('#reload').disabled=!tab||local;
-  $('#save-page').innerHTML=icon(local||execution?'download':'save',17)+`<span>${execution?'앱 내보내기':local?'HTML 내보내기':'페이지 저장'}</span>`;
-  $('#save-page').disabled=execution?exportingApp:!tab;
+  $('#save-page').innerHTML=icon(execution?'globe':local?'download':'save',17)+`<span>${execution?'URL 복사':local?'HTML 내보내기':'페이지 저장'}</span>`;
+  $('#save-page').disabled=execution?sharingApp:!tab;
   if(local)saveStatus(tab); else if(tab)$('#status-left').textContent=tab.chromeId?'실제 Chrome 탭에서 탐색 중':'웹 탐색 · 로컬로 저장하면 주석을 남길 수 있어요.';
   document.title=tab?tab.title+' · HTMLMemo':'HTMLMemo · 나만의 웹 서재';
 }
@@ -209,7 +209,7 @@ async function openLocalFile(input,requestWrite=false) {
   return createDocument(local.snapshot,local.handle,local.name,local);
 }
 async function savePage() {
-  if(activeId==='execution')return exportApp();
+  if(activeId==='execution')return copyAppURL();
   const tab=active();if(!tab)return;
   if(tab.reader)return exportDocument(tab);
   let live;
@@ -401,18 +401,23 @@ function handleKey(event) {
   if(event.ctrlKey||event.metaKey||event.altKey)return;
   const tools={v:'select',p:'pen',h:'highlight',u:'underline',e:'eraser',n:'note'};const tool=tools[event.key.toLowerCase()];if(tool){event.preventDefault();toolAction(tool);}
 }
-async function exportApp(kind='install'){
-  if(exportingApp)return;exportingApp=true;$('#delivery-package').disabled=true;$('#pages-package').disabled=true;$('#pages-package').setAttribute('aria-disabled','true');updateChrome();const status=$(kind==='pages'?'#pages-status':'#delivery-status');status.textContent='이 기기에서 전달 파일을 만드는 중…';
-  try{if(kind==='pages'){download(pagesZIP(await distributionAssets()),'HTMLMemo-pages.zip','application/zip');status.textContent='ZIP의 docs 폴더를 seionwon/HTMLMemo 저장소에 올리고 Pages를 main /docs로 설정하세요.';}else{download(installationHTML(installationURL(location)),'HTMLMemo-install.html');status.textContent='HTMLMemo-install.html 파일 하나를 보내주세요. 받은 분은 Chrome으로 열고 앱 설치를 누르면 됩니다.';}}
-  catch(error){status.textContent='전달 파일을 만들지 못했습니다. '+error.message;throw error;}
-  finally{exportingApp=false;$('#delivery-package').disabled=false;$('#pages-package').disabled=false;$('#pages-package').setAttribute('aria-disabled','false');updateChrome();if(activeId==='execution')$('#status-left').textContent='앱 설치 · 모든 데이터는 이 기기에 저장';}
+async function copyAppURL(){
+  if(sharingApp)return;sharingApp=true;$('#share-app').disabled=true;updateChrome();
+  try{
+    if(typeof navigator.clipboard?.writeText!=='function')throw new Error('Clipboard unavailable');
+    await navigator.clipboard.writeText(PUBLIC_APP_URL);
+    $('#share-status').textContent='앱 주소를 복사했습니다. 이 주소만 보내주세요.';
+  }catch{
+    $('#share-url').focus();$('#share-url').select?.();
+    $('#share-status').textContent='자동 복사를 사용할 수 없습니다. 위 주소를 선택해 직접 복사해 보내주세요.';
+  }finally{sharingApp=false;$('#share-app').disabled=false;updateChrome();if(activeId==='execution')$('#status-left').textContent='앱 설치 · URL 공유 · 모든 데이터는 이 기기에 저장';}
 }
 function bindUI() {
   [['#library-tab','library'],['#new-tab','plus'],['#back','back'],['#forward','forward'],['#reload','reload'],['#import-button','folder'],['#save-page','save'],['#app-menu-button','more'],['#settings-button','settings'],['#library-search-icon','search'],['#empty-icon','file']].forEach(([id,name])=>setButton(id,name));
   $('#home-button').onclick=e=>{e.preventDefault();activate('library');};$('#library-tab').onclick=()=>activate('library');$('#new-tab').onclick=()=>{activate('library');$('#address').focus();};$('#browse-start').onclick=()=>$('#address').focus();
   $('#execution-tab').onclick=()=>activate('execution');$('#execution-import').onclick=safely(importFiles);$('#execution-chrome').onclick=connectionDialog;$('#execution-settings').onclick=settingsDialog;
-  $('#delivery-package').onclick=safely(()=>exportApp());
-  $('#pages-package').onclick=safely(event=>{event?.preventDefault();return exportApp('pages');});
+  $('#share-url').value=PUBLIC_APP_URL;$('#shared-app-link').href=PUBLIC_APP_URL;
+  $('#share-app').onclick=safely(copyAppURL);
   installController=new InstallController({window,navigator,location,matchMedia,onChange:updateInstall,onGuide:installGuide});
   $('#install-button').onclick=$('#execution-install').onclick=safely(async()=>{const result=await installController.install();if(result==='dismissed')toast('설치를 취소했습니다. 앱 설치 버튼에서 다시 안내를 볼 수 있어요.');});
   $('#address-form').onsubmit=safely(async event=>{event.preventDefault();const value=$('#address').value;await openBrowser(value,active()?.type!=='browser');});

@@ -33,6 +33,6 @@ export async function prepareAssets(){
   await writeFile(join(root,'extension/capture.js'),await readFile(join(root,'public/shared/capture.js')));
   const assets=await packageAssets();await writeFile(join(root,'public/distribution.json'),JSON.stringify(assets));await writeFile(join(root,'public/HTMLMemo.html'),standaloneHTML(assets));
   for(const name of APP_FILES){const data=await readFile(join(root,'public',name));const target=join(root,'extension/app',name);await mkdir(resolve(target,'..'),{recursive:true});await writeFile(target,data);}
-  for(const name of ['htmlmemo-chrome.zip','HTMLMemo-local.zip'])await rm(join(root,'public/downloads',name),{force:true});
+  for(const name of ['htmlmemo-chrome.zip','HTMLMemo-local.zip','HTMLMemo-pages.zip','HTMLMemo-install.html'])await rm(join(root,'public/downloads',name),{force:true});
   await writeFile(join(root,'public/downloads/HTMLMemo-chrome.zip'),chromeZIP(assets));
 }
