@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "description": "웹 페이지를 한 파일로 보관하고 주석을 자동 저장하는 PWA",
+  "repository": { "type": "git", "url": "https://github.com/seionwon/HTMLMemo.git" },
+  "homepage": "https://seionwon.github.io/HTMLMemo/",
   "engines": { "node": ">=22" },
   "scripts": {
     "dev": "node scripts/open.mjs",

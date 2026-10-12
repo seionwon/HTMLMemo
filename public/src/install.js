@@ -1,4 +1,4 @@
-export const PUBLIC_APP_URL = 'https://sweon.github.io/HTMLMemo/';
+export const PUBLIC_APP_URL = 'https://seionwon.github.io/HTMLMemo/';
 
 export function isIOS(navigator) {
   return /iPad|iPhone|iPod/.test(navigator.userAgent || '') ||

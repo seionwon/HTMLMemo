@@ -57,7 +57,7 @@ test('standalone detection and appinstalled lead to the installed state without 
 });
 
 test('handoff addresses retain the project scope and drop private file paths, queries and credentials',()=>{
-  assert.equal(installationURL(new URL('https://sweon.github.io/HTMLMemo/index.html?capture=private#note')),PUBLIC_APP_URL);
+  assert.equal(installationURL(new URL('https://seionwon.github.io/HTMLMemo/index.html?capture=private#note')),PUBLIC_APP_URL);
   assert.equal(installationURL(new URL('https://name:secret@example.test/project/?token=private')),'https://example.test/project/');
   assert.equal(installationURL(new URL('file:///Users/private/HTMLMemo.html')),PUBLIC_APP_URL);
   assert.equal(installationURL(new URL('chrome-extension://id/app/index.html')),PUBLIC_APP_URL);

@@ -45,3 +45,23 @@ HTMLMemo 프로젝트에서 구현과 관련 검증을 마친 변경을 기록�
 **검증:** `npm test` 66개 통과, 실패·취소·건너뛰기 0개. 네트워크를 차단한 실제 단일 HTML 스크립트의 DOM 모델 검사에서 실행 탭 링크가 접힌 메뉴나 숨겨진 요소 안에 있지 않은지, ZIP 생성·중복 클릭 방지·오류 후 복구가 동작하는지 확인했습니다. `npm run check` JavaScript 50개와 JSON 문법 검사 통과, `npm run build` 통과, `git diff --check` 통과. 실제 빌드의 Pages ZIP 24개 파일에 대해 CRC와 풀린 파일 바이트 일치를 확인하고, ZIP·로컬 검토 화면·단일 HTML에 새 다운로드 링크가 포함되는 것을 확인했습니다.
 
 **배포 상태와 한계:** 배포 ZIP을 다시 생성했습니다. GitHub 업로드와 Pages 활성화는 수행하지 않았습니다. 실제 브라우저 화면 렌더링이나 운영체제별 다운로드·설치는 이번 자동 검증에 포함하지 않았습니다.
+
+<a id="hist-20261012-001"></a>
+
+### 2026-10-12 12:42:19 +09:00 — GitHub 배포 대상을 seionwon/HTMLMemo로 변경
+
+| ID | change-kind | status |
+|---|---|---|
+| hist-20261012-001 | 배포 대상 설정 · 설치 주소 · Chrome 연결 변경 | 구현·자동 검증 완료 / GitHub 업로드·Pages 활성화 미수행 |
+
+**목적:** HTMLMemo의 배포 대상 저장소를 `https://github.com/seionwon/HTMLMemo`, 기본 설치 주소를 `https://seionwon.github.io/HTMLMemo/`로 통일했습니다. 패키지의 repository·homepage 메타데이터, 앱의 설치·배포 안내, Chrome 연결 설정과 README의 GitHub Pages·선택적 API 설정 안내에 새 대상을 반영했습니다. 이전 기능 이력의 주소는 당시 구현 기록으로 보존합니다.
+
+**여는 위치와 사용법:** HTMLMemo 앱 내부의 **실행 → 배포 ZIP 다운로드**에서 새 `HTMLMemo-pages.zip`을 받거나 빌드 결과인 `dist/downloads/HTMLMemo-pages.zip`을 사용합니다. 압축을 푼 docs 폴더를 **seionwon/HTMLMemo** 저장소에 올리고 **Settings → Pages → Deploy from a branch → main → /docs → Save**로 설정합니다. 실제 게시가 완료된 뒤 새 앱 주소를 사용자에게 전달합니다. **앱 설치**의 로컬 파일 안내와 **설치 안내 파일 저장**의 빌드 결과도 새 주소를 사용합니다. GitHub API를 사용하는 경우 README의 Resource owner를 seionwon으로 설정하는 안내를 따릅니다.
+
+**Chrome 연결과 오류 처리:** 새 Chrome 연결 ZIP의 기본 대상과 접근 허용 출처를 seionwon.github.io의 HTMLMemo 프로젝트로 변경했습니다. 해당 프로젝트의 루트 및 index.html만 허용하며 이전 Pages 출처, 다른 프로젝트와 다른 출처의 앱 요청은 거부합니다. 이전 Pages 주소가 연결 설정에 남아 있는 경우 백그라운드는 새 기본 주소를 선택합니다. 기존 연결 기능은 새 ZIP으로 교체하거나 다시 로드한 후 **연결 설정 → HTMLMemo PWA에 연결**을 눌러 설정 화면에도 새 주소를 저장합니다. 허용하지 않는 주소를 입력하면 연결 설정의 오류 안내에 새 저장소 이름을 표시합니다. 명시적으로 연결한 로컬 HTML의 읽기·주석 경로는 유지합니다.
+
+**로컬 데이터:** 문서·주석·설정의 저장 방식을 변경하거나 데이터를 업로드하지 않았습니다. 브라우저의 사이트 출처가 바뀌므로 이전 주소의 보관함이 새 주소로 자동 이전되지는 않습니다. 기존 문서는 HTML로 내보내고 설정은 JSON으로 저장한 뒤 새 주소에서 가져옵니다.
+
+**검증:** `npm test` 67개 통과, 실패·취소·건너뛰기 0개. 새 기본 Pages 주소의 연결과 index.html 별칭, 이전 출처의 캡처 읽기 거부, 이전 연결 설정이 남아 있을 때 새 주소 열기와 캡처 전달을 확인했습니다. 기존 설치·단일 파일 내보내기·로컬 HTML 주석·설정 저장과 복원 검사도 통과했습니다. `npm run check`에서 JavaScript 50개 및 JSON 문법 검사 통과, `npm run build` 통과, `git diff --check` 통과. 실제 Pages ZIP 24개 파일의 CRC와 풀린 빌드 바이트 일치를 확인하고, Chrome ZIP 31개 파일의 CRC·새 기본 주소·접근 허용 패턴을 확인했습니다. 두 ZIP과 직접 여는 단일 HTML의 실행 코드에 이전 Pages 출처가 없고, 설치 안내 HTML의 링크 두 개가 모두 새 HTTPS 주소를 가리키는 것을 확인했습니다.
+
+**배포 상태와 한계:** 새 주소를 반영한 배포 파일 생성까지 완료했습니다. GitHub 서버에서 저장소 생성·소유권 이전·파일 업로드 또는 Pages 활성화를 수행하지 않았으며, Git 원격 설정도 변경하지 않았습니다. 실제 새 사이트 게시 여부와 네 플랫폼의 브라우저 설치·Chrome 확장 실사용은 이번 작업에서 검증하지 않았습니다.

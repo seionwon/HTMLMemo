@@ -1,7 +1,7 @@
-const DEFAULT_APP = 'https://sweon.github.io/HTMLMemo/';
+const DEFAULT_APP = 'https://seionwon.github.io/HTMLMemo/';
 const BUNDLED_APP = chrome.runtime.getURL('app/index.html');
 const appPath = url => url.pathname.replace(/\/index\.html$/, '/');
-const projectApp = url => url.protocol==='https:'&&url.host==='sweon.github.io'&&appPath(url)==='/HTMLMemo/';
+const projectApp = url => url.protocol==='https:'&&url.host==='seionwon.github.io'&&appPath(url)==='/HTMLMemo/';
 const jobs = new Map();
 let storageTail=Promise.resolve();
 const mutateStorage=fn=>{const result=storageTail.then(fn);storageTail=result.catch(()=>{});return result;};

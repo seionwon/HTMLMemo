@@ -9,7 +9,7 @@
   "action": { "default_popup": "popup.html", "default_title": "HTMLMemo에 페이지 저장" },
   "options_page": "options.html",
   "content_scripts": [{
-    "matches": ["https://sweon.github.io/HTMLMemo/*", "http://localhost/*", "http://127.0.0.1/*", "file:///*"],
+    "matches": ["https://seionwon.github.io/HTMLMemo/*", "http://localhost/*", "http://127.0.0.1/*", "file:///*"],
     "js": ["bridge.js"],
     "run_at": "document_idle"
   }]

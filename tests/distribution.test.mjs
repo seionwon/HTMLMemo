@@ -43,7 +43,7 @@ test('the single installation handoff is inert HTML with one HTTPS destination a
 });
 test('the Chrome download has the extension folder expected by its setup instructions',()=>{
   const files=unzip(chromeZIP(assets));assert.ok(files.has('extension/manifest.json'));assert.ok(files.has('extension/app/index.html'));
-  const manifest=JSON.parse(text(files,'extension/manifest.json'));assert.ok(manifest.content_scripts[0].matches.includes('https://sweon.github.io/HTMLMemo/*'));
+  const manifest=JSON.parse(text(files,'extension/manifest.json'));assert.ok(manifest.content_scripts[0].matches.includes('https://seionwon.github.io/HTMLMemo/*'));assert.ok(!manifest.content_scripts[0].matches.some(pattern=>pattern.includes('sweon.github.io')));
 });
 test('asset preparation leaves the actual Chrome download file available on disk',async()=>{
   const bytes=new Uint8Array(await readFile(new URL('../public/downloads/HTMLMemo-chrome.zip',import.meta.url)));
