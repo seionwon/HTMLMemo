@@ -6,12 +6,16 @@ export function cleanAnnotations(doc) {
   doc.getElementById(LAYER_ID)?.remove();
   doc.getElementById(DATA_ID)?.remove();
   doc.getElementById('htmlmemo-annotation-style')?.remove();
-  for (const mark of [...doc.querySelectorAll('[data-htmlmemo-mark]')].reverse()) mark.replaceWith(...mark.childNodes);
-  for (const mark of [...doc.querySelectorAll('[data-htmlmemo-search]')].reverse()) mark.replaceWith(...mark.childNodes);
-  doc.body?.normalize();
+  let unwrapped = false;
+  for (const selector of ['[data-htmlmemo-mark]', '[data-htmlmemo-search]']) {
+    for (const mark of [...doc.querySelectorAll(selector)].reverse()) { mark.replaceWith(...mark.childNodes); unwrapped = true; }
+  }
+  // Normalization walks the entire tree. It is needed only after unwrapping
+  // marks, not when opening an unannotated book containing millions of nodes.
+  if (unwrapped) doc.body?.normalize();
 }
 function sanitizeTree(root, source, depth = 0) {
-  for (const element of [...root.querySelectorAll('*')]) {
+  for (const element of root.querySelectorAll('*')) {
     const tag = element.localName;
     if (['script','object','embed','frame','frameset','base'].includes(tag)) { element.remove(); continue; }
     if (tag === 'iframe') {
@@ -36,7 +40,7 @@ function sanitizeTree(root, source, depth = 0) {
     if (tag === 'template') sanitizeTree(element.content, source, depth);
   }
 }
-export function parseHTML(html, defaults = {}) {
+export function parseHTML(html, defaults = {}, {includeMetadata = false} = {}) {
   if (typeof html !== 'string' || !html.trim()) throw new Error('HTML 파일이 비어 있습니다.');
   const doc = new DOMParser().parseFromString(html, 'text/html');
   let embedded = {};
@@ -74,7 +78,14 @@ export function parseHTML(html, defaults = {}) {
   const freezeCSS=css=>css.replace(/(?<![\w.-])(-?\d*\.?\d+)(dvh|svh|lvh|vh)\b/g,(_,amount)=>`${Number(amount)*metadata.viewport.height/100}px`);
   for(const style of doc.querySelectorAll('style'))style.textContent=freezeCSS(style.textContent);
   for(const element of doc.querySelectorAll('[style]'))element.setAttribute('style',freezeCSS(element.getAttribute('style')));
-  return {html: '<!doctype html>\n' + doc.documentElement.outerHTML, metadata};
+  if (includeMetadata) doc.head.append(metadataElement(doc, metadata));
+  return {html: '<!doctype html>\n' + doc.documentElement.outerHTML, metadata,
+    nativeScroll: html.length >= 4 * 1024 * 1024 || n >= 20000};
+}
+function metadataElement(doc, metadata) {
+  const script = doc.createElement('script'); script.id = DATA_ID; script.type = 'application/json';
+  script.textContent = JSON.stringify({...metadata, version: FORMAT_VERSION, modifiedAt: Date.now()}).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
+  return script;
 }
 export function serializeHTML(doc, metadata) {
   const clone = doc.documentElement.cloneNode(true);
@@ -83,9 +94,7 @@ export function serializeHTML(doc, metadata) {
   clone.querySelectorAll('[data-htmlmemo-preview], [data-htmlmemo-selected]').forEach(element => element.remove());
   // Interactive editor-only styles should never change the standalone file.
   clone.querySelector('#htmlmemo-editor-style')?.remove();
-  const script = doc.createElement('script'); script.id = DATA_ID; script.type = 'application/json';
-  script.textContent = JSON.stringify({...metadata, version: FORMAT_VERSION, modifiedAt: Date.now()}).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
-  clone.querySelector('head').append(script);
+  clone.querySelector('head').append(metadataElement(doc, metadata));
   return '<!doctype html>\n' + clone.outerHTML;
 }
 export function textIndex(doc) {

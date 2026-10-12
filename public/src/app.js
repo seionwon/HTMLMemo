@@ -1,5 +1,5 @@
 import { $, $$, icon, escapeHTML as esc, uid, filename, normalizeURL, displayHost, formatDate, formatBytes, download } from './utils.js';
-import { parseHTML, serializeHTML } from './document.js';
+import { parseHTML } from './document.js';
 import { SaveQueue } from './model.js';
 import { Reader } from './reader.js';
 import { listDocuments, putDocument, deleteDocument, getSetting, setSetting, writeInternalHTML, writeExternalHTML, permission } from './storage.js';
@@ -133,12 +133,15 @@ function updateChrome() {
   document.title=tab?tab.title+' · HTMLMemo':'HTMLMemo · 나만의 웹 서재';
 }
 function createHost(id,type) { const host=document.createElement('div');host.id='workspace-'+id;host.className='workspace-host '+type+'-host';host.hidden=true;$('#workspaces').append(host);return host; }
-async function openRecord(record) {
+async function openRecord(record, prepared = null) {
   const existing=tabs.find(tab=>tab.record?.id===record.id);if(existing){activate(existing.id);return existing;}
-  const parsed=parseHTML(record.html,{title:record.title,source:record.source});
+  const parsed=prepared || parseHTML(record.html,{title:record.title,source:record.source});
   const tab={id:uid(),type:'document',title:record.title,record:{...record},host:null};tab.host=createHost(tab.id,'document');
+  // The initial standalone copy is already sanitized and contains metadata.
+  // Reuse it until editing or moving, avoiding a second full DOM clone on import.
+  tab.initialHTML=prepared && !parsed.metadata.annotations.length ? record.html : null;
   tab.queue=new SaveQueue(async()=>{
-    const html=tab.reader.html(); const metadata=structuredClone(tab.reader.metadata);
+    const html=tab.initialHTML || tab.reader.html();tab.initialHTML=null; const metadata=structuredClone(tab.reader.metadata);
     tab.record.html=html;tab.record.metadata=metadata;tab.record.title=metadata.title;tab.record.modified=Date.now();
     tab.record.diskPending=!!tab.record.fileHandle;
     // Commit the full standalone HTML to IndexedDB first. A failed external
@@ -150,8 +153,8 @@ async function openRecord(record) {
   },()=>{if(activeId===tab.id)saveStatus(tab);renderTabs();});
   tabs.push(tab);activate(tab.id);
   tab.reader=new Reader(tab.host,parsed,{
-    onChange:()=>{tab.queue.schedule();if(activeId===tab.id){renderToolbar();if(sidebarMode==='annotations')renderSidebar('annotations');}},
-    onPosition:()=>tab.queue.schedule(),onView:()=>{if(activeId===tab.id){updateChrome();updateToolbarState();}},
+    onChange:()=>{tab.initialHTML=null;tab.queue.schedule();if(activeId===tab.id){renderToolbar();if(sidebarMode==='annotations')renderSidebar('annotations');}},
+    onPosition:()=>{tab.initialHTML=null;tab.queue.schedule();},onView:()=>{if(activeId===tab.id){updateChrome();updateToolbarState();}},
     onLink:url=>safely(openBrowser)(url),onKey:handleKey,requestText:promptText,
     onSelect:id=>{if(activeId===tab.id)annotationDialog(tab,id);},
   });
@@ -174,14 +177,14 @@ async function closeTab(id) {
   tabs.splice(tabs.indexOf(tab),1);if(activeId===id)activate(tabs.at(-1)?.id||'library');else renderTabs();await refreshLibrary();
 }
 async function createDocument(snapshot, handle = null, name = null, local = {}) {
-  const parsed=parseHTML(snapshot.html,{title:snapshot.title,source:snapshot.url,viewport:snapshot.viewport,warnings:snapshot.warnings});
+  const parsed=parseHTML(snapshot.html,{title:snapshot.title,source:snapshot.url,viewport:snapshot.viewport,warnings:snapshot.warnings},{includeMetadata:true});
   const title=parsed.metadata.title; const record={id:uid(),title,name:name||handle?.name||filename(title),source:parsed.metadata.source,created:Date.now(),modified:Date.now(),fileHandle:handle,originalHandle:local.originalHandle||null,metadata:parsed.metadata};
-  const doc=new DOMParser().parseFromString(parsed.html,'text/html');record.html=serializeHTML(doc,parsed.metadata);
+  record.html=parsed.html;
   if(local.diskStamp)record.diskStamp=local.diskStamp;
   else if(handle){const disk=await handle.getFile();record.diskStamp={modified:disk.lastModified,size:disk.size};}
-  await putDocument(record);const tab=await openRecord(record);tab.queue.schedule();
+  await putDocument(record);records=records.filter(r=>r.id!==record.id).concat(record);const tab=await openRecord(record,parsed);tab.queue.schedule();
   try { await tab.queue.flush(); } catch(error) { showError(error); }
-  await refreshLibrary();activate(tab.id);
+  renderLibrary();activate(tab.id);
   if(tab.queue.error)return tab;
   if(parsed.metadata.warnings.length)toast(`페이지를 저장했습니다. ${parsed.metadata.warnings.length}개의 리소스를 보관하지 못했습니다. 문서 정보에서 확인할 수 있어요.`,true);
   else toast(local.originalHandle||name?'로컬 HTML을 주석 탭에서 열었습니다.':'HTML 파일로 저장하고 새 탭에서 열었습니다.');
@@ -205,7 +208,10 @@ async function importFiles() {
   for(const handle of handles)await openLocalFile(handle,true);
 }
 async function openLocalFile(input,requestWrite=false) {
+  $('#status-left').textContent='로컬 HTML을 읽는 중…';
   const local=await readLocalHTML(input,{requestWrite});
+  $('#status-left').textContent='HTML 문서를 준비하는 중…';
+  await new Promise(resolve=>setTimeout(resolve,0));
   return createDocument(local.snapshot,local.handle,local.name,local);
 }
 async function savePage() {
@@ -366,7 +372,7 @@ function renderSidebar(mode) {
   }else if(mode==='outline'){
     const outline=r.outline();content.innerHTML=`<p class="panel-label">목차</p>${outline.length?outline.map((item,index)=>`<button class="outline-item" style="padding-left:${12+(item.level-1)*12}px" data-heading="${index}">${esc(item.title)}</button>`).join(''):'<p class="panel-empty">이 문서에 제목 목차가 없습니다.</p>'}<p class="panel-label">북마크</p>${r.metadata.bookmarks.map(mark=>`<div class="bookmark-row"><button class="outline-item" data-bookmark="${esc(mark.id)}">${icon('bookmark',14)} ${esc(mark.title)}</button><button class="icon-button" data-delete-bookmark="${esc(mark.id)}" aria-label="북마크 삭제">${icon('close',13)}</button></div>`).join('')}<button id="add-bookmark" class="text-button">+ 현재 위치 저장</button>`;
     $$('[data-heading]').forEach(button=>button.onclick=()=>r.jump(outline[Number(button.dataset.heading)].node));
-    $$('[data-bookmark]').forEach(button=>button.onclick=()=>{const mark=r.metadata.bookmarks.find(m=>m.id===button.dataset.bookmark);r.viewport.scrollTop=mark.top*r.zoom;r.viewport.scrollLeft=mark.left*r.zoom;});
+    $$('[data-bookmark]').forEach(button=>button.onclick=()=>{const mark=r.metadata.bookmarks.find(m=>m.id===button.dataset.bookmark);r.scrollTop=mark.top*r.zoom;r.scrollLeft=mark.left*r.zoom;});
     $$('[data-delete-bookmark]').forEach(button=>button.onclick=()=>{r.metadata.bookmarks=r.metadata.bookmarks.filter(m=>m.id!==button.dataset.deleteBookmark);active().queue.schedule();renderSidebar('outline');});$('#add-bookmark').onclick=()=>toolAction('bookmark');
   }else{
     content.innerHTML=r.metadata.annotations.length?r.metadata.annotations.map(a=>`<div class="annotation-row"><button class="annotation-item" data-annotation="${esc(a.id)}"><span class="annotation-type" style="color:${a.color}">${icon(a.type==='pen'?'pen':a.type==='note'?'note':a.type==='highlight'?'highlight':a.type==='underline'?'underline':'shapes',16)}</span><span>${esc(a.text||a.textAnchor?.quote||({pen:'펜 그림',rect:'사각형',ellipse:'타원',arrow:'화살표',area:'영역 강조','area-underline':'영역 밑줄',strike:'취소선'})[a.type]||'주석')}</span></button><button class="icon-button" data-delete-annotation="${esc(a.id)}" aria-label="주석 삭제">${icon('trash',14)}</button></div>`).join(''):'<p class="panel-empty">아직 주석이 없어요.<br>툴바에서 도구를 골라 생각을 남겨보세요.</p>';

@@ -8,8 +8,10 @@ export class Reader {
   constructor(host, parsed, callbacks) {
     this.host = host; this.metadata = parsed.metadata; this.callbacks = callbacks; this.history = new History(this.metadata.annotations);
     this.tool = 'select'; this.color = '#edcf67'; this.width = 3; this.opacity = .35; this.penTTL = 0; this.zoom = 1;
+    this.nativeScroll = !!parsed.nativeScroll;
     this.selection = null; this.selectedId = null; this.linkHistory = []; this.searchResults = []; this.searchPosition = -1; this.autoFit = !this.metadata.view.zoom;
     this.viewport = document.createElement('div'); this.viewport.className = 'reader-viewport';
+    this.viewport.classList.toggle('reader-native-scroll', this.nativeScroll);
     this.sizer = document.createElement('div'); this.sizer.className = 'reader-sizer';
     this.frame = document.createElement('iframe'); this.frame.className = 'document-frame'; this.frame.title = this.metadata.title;
     // The parent can manipulate the DOM. Source scripts, forms and top-level
@@ -24,15 +26,18 @@ export class Reader {
           if (!this.doc?.body) throw new Error('HTML 문서를 표시하지 못했습니다.');
           this.bind(); this.measure(); this.render();
           this.zoom = clamp(this.metadata.view.zoom || this.fitZoom(), .2, 8); this.applyZoom();
-          requestAnimationFrame(() => { this.viewport.scrollTop = Number(this.metadata.view.scrollTop) || 0; this.viewport.scrollLeft = Number(this.metadata.view.scrollLeft) || 0; this.callbacks.onView?.(); resolve(this); });
+          requestAnimationFrame(() => { this.scrollTop = Number(this.metadata.view.scrollTop) || 0; this.scrollLeft = Number(this.metadata.view.scrollLeft) || 0; this.callbacks.onView?.(); resolve(this); });
         } catch (error) { reject(error); }
       }, {once:true});
     });
-    this.frame.srcdoc = parsed.html;
+    if (this.nativeScroll) {
+      this.documentURL = URL.createObjectURL(new Blob([parsed.html], {type:'text/html;charset=utf-8'}));
+      this.frame.src = this.documentURL;
+    } else this.frame.srcdoc = parsed.html;
   }
   bind() {
     const editorStyle = this.doc.createElement('style'); editorStyle.id = 'htmlmemo-editor-style';
-    editorStyle.textContent = 'html{overflow:hidden!important;height:auto!important;min-height:0!important}body{touch-action:pan-x pan-y;height:auto!important;min-height:0!important}html[data-htmlmemo-drawing] *{cursor:crosshair!important;user-select:none!important;touch-action:none!important}'; this.doc.head.append(editorStyle);
+    editorStyle.textContent = `html{overflow:${this.nativeScroll?'auto':'hidden'}!important;height:auto!important;min-height:0!important;scroll-behavior:auto!important}body{touch-action:pan-x pan-y;height:auto!important;min-height:0!important}html[data-htmlmemo-drawing] *{cursor:crosshair!important;user-select:none!important;touch-action:none!important}`; this.doc.head.append(editorStyle);
     this.doc.addEventListener('pointerdown', event => this.pointerDown(event), true);
     this.doc.addEventListener('pointermove', event => this.pointerMove(event), true);
     this.doc.addEventListener('pointerup', event => this.pointerUp(event), true);
@@ -52,25 +57,31 @@ export class Reader {
       if (hash) {
         let id; try { id = decodeURIComponent(hash.slice(1)); } catch { id = hash.slice(1); }
         const target = this.doc.getElementById(id) || [...this.doc.querySelectorAll('a[name]')].find(a => a.name === id);
-        if (target) { this.linkHistory.push({top:this.viewport.scrollTop, left:this.viewport.scrollLeft}); if (this.linkHistory.length > 128) this.linkHistory.shift(); this.jump(target); }
+        if (target) { this.linkHistory.push({top:this.scrollTop, left:this.scrollLeft}); if (this.linkHistory.length > 128) this.linkHistory.shift(); this.jump(target); }
       } else if (/^https?:/.test(href)) this.callbacks.onLink?.(href);
     }, true);
-    this.viewport.addEventListener('scroll', () => {
+    (this.nativeScroll ? this.doc : this.viewport).addEventListener('scroll', () => {
       clearTimeout(this.positionTimer);
       this.positionTimer = setTimeout(() => {
         if (this.disposed) return;
-        this.metadata.view = {scrollTop:this.viewport.scrollTop, scrollLeft:this.viewport.scrollLeft, zoom:this.zoom};
+        this.metadata.view = {scrollTop:this.scrollTop, scrollLeft:this.scrollLeft, zoom:this.zoom};
         this.callbacks.onPosition?.(); this.callbacks.onView?.();
       }, 250);
-    });
+    }, {passive:true});
     this.resizeObserver = new ResizeObserver(() => { if (!this.disposed) { this.measure(); this.renderDrawingLayer(); } });
     this.resizeObserver.observe(this.doc.body);
-    this.hostObserver = new ResizeObserver(() => { if (!this.disposed && this.autoFit) { this.zoom = this.fitZoom(); this.applyZoom(); } }); this.hostObserver.observe(this.viewport);
+    this.hostObserver = new ResizeObserver(() => { if (!this.disposed) { if(this.autoFit)this.zoom = this.fitZoom(); if(this.nativeScroll || this.autoFit)this.applyZoom(); } }); this.hostObserver.observe(this.viewport);
     this.doc.fonts.ready.then(() => { if (!this.disposed) { this.measure(); this.renderDrawingLayer(); } });
   }
   measure() {
     if (!this.doc) return;
     const body = this.doc.body;
+    if (this.nativeScroll) {
+      // Keep the browsing viewport small. Expanding an iframe to a whole book
+      // makes Chrome lay out/paint all its pages and can exceed CSS height limits.
+      this.naturalHeight = Math.max(body.scrollHeight, this.doc.documentElement.scrollHeight, 200);
+      this.applyZoom(); return;
+    }
     // The iframe's own viewport height must not feed back into scrollHeight.
     // Body geometry and descendant bottoms capture both normal and positioned content.
     let height = Math.max(body.offsetHeight + body.offsetTop, body.getBoundingClientRect().bottom, 200);
@@ -80,18 +91,23 @@ export class Reader {
   }
   fitZoom() { return clamp((this.viewport.clientWidth - (innerWidth < 600 ? 16 : 56)) / this.naturalWidth, .2, 2); }
   applyZoom() {
+    if (this.nativeScroll) this.frame.style.height = Math.max(200, this.viewport.clientHeight / this.zoom) + 'px';
     this.frame.style.transform = `scale(${this.zoom})`;
-    this.sizer.style.width = this.naturalWidth * this.zoom + 'px'; this.sizer.style.height = (this.naturalHeight || 800) * this.zoom + 'px';
+    this.sizer.style.width = this.naturalWidth * this.zoom + 'px'; this.sizer.style.height = this.nativeScroll ? Math.max(200 * this.zoom, this.viewport.clientHeight) + 'px' : (this.naturalHeight || 800) * this.zoom + 'px';
   }
+  get scrollTop() { return this.nativeScroll ? (this.doc.defaultView.scrollY || 0) * this.zoom : this.viewport.scrollTop; }
+  set scrollTop(value) { if(this.nativeScroll)this.doc.defaultView.scrollTo(this.doc.defaultView.scrollX, value / this.zoom);else this.viewport.scrollTop=value; }
+  get scrollLeft() { return this.nativeScroll ? this.viewport.scrollLeft + (this.doc.defaultView.scrollX || 0) * this.zoom : this.viewport.scrollLeft; }
+  set scrollLeft(value) { if(this.nativeScroll){const target=Math.max(0,value);this.viewport.scrollLeft=target;this.doc.defaultView.scrollTo((target-this.viewport.scrollLeft)/this.zoom, this.doc.defaultView.scrollY);}else this.viewport.scrollLeft=value; }
   setZoom(value, fit = false) {
-    const centerX = (this.viewport.scrollLeft + this.viewport.clientWidth / 2) / this.zoom;
-    const centerY = (this.viewport.scrollTop + this.viewport.clientHeight / 2) / this.zoom;
+    const centerX = (this.scrollLeft + this.viewport.clientWidth / 2) / this.zoom;
+    const centerY = (this.scrollTop + this.viewport.clientHeight / 2) / this.zoom;
     this.autoFit = fit; this.zoom = clamp(fit ? this.fitZoom() : value, .2, 8); this.applyZoom();
-    this.viewport.scrollLeft = centerX * this.zoom - this.viewport.clientWidth / 2; this.viewport.scrollTop = centerY * this.zoom - this.viewport.clientHeight / 2;
+    this.scrollLeft = centerX * this.zoom - this.viewport.clientWidth / 2; this.scrollTop = centerY * this.zoom - this.viewport.clientHeight / 2;
     this.rememberPosition(); this.callbacks.onView?.();
   }
   rememberPosition() {
-    this.metadata.view = {scrollTop:this.viewport.scrollTop, scrollLeft:this.viewport.scrollLeft, zoom:this.zoom};
+    this.metadata.view = {scrollTop:this.scrollTop, scrollLeft:this.scrollLeft, zoom:this.zoom};
     this.callbacks.onPosition?.();
   }
   setTool(tool) {
@@ -117,7 +133,7 @@ export class Reader {
     if (element.namespaceURI === NS || element.closest('#' + LAYER_ID)) element = this.doc.body;
     while (element !== this.doc.body && ['span','a','b','strong','em','i','small','mark'].includes(element.localName)) element = element.parentElement;
     const rect = element.getBoundingClientRect();
-    return {key:element.dataset.htmlmemoAnchor || 'body', x:rect.left, y:rect.top, width:Math.max(1, rect.width), height:Math.max(1, rect.height)};
+    return {key:element.dataset.htmlmemoAnchor || 'body', x:rect.left + this.doc.defaultView.scrollX, y:rect.top + this.doc.defaultView.scrollY, width:Math.max(1, rect.width), height:Math.max(1, rect.height)};
   }
   pointerDown(event) {
     if (event.button !== 0) return;
@@ -180,7 +196,7 @@ export class Reader {
     if (!annotation.anchor) return annotation.points;
     const element = this.doc.querySelector(`[data-htmlmemo-anchor="${annotation.anchor}"]`) || this.doc.body;
     const r = element.getBoundingClientRect();
-    return annotation.points.map(p => ({x:r.left + p.x * Math.max(1,r.width), y:r.top + p.y * Math.max(1,r.height)}));
+    return annotation.points.map(p => ({x:r.left + this.doc.defaultView.scrollX + p.x * Math.max(1,r.width), y:r.top + this.doc.defaultView.scrollY + p.y * Math.max(1,r.height)}));
   }
   drawAnnotation(annotation, preview = false) {
     const p = preview ? annotation.points : this.absolutePoints(annotation); if (!p?.length) return null;
@@ -207,18 +223,18 @@ export class Reader {
   renderDrawingLayer() {
     if (!this.doc || this.disposed) return;
     this.doc.getElementById(LAYER_ID)?.remove();
-    this.layer = svg(this.doc, 'svg', {id:LAYER_ID,width:this.naturalWidth,height:this.naturalHeight || 800,'aria-label':'HTMLMemo 주석',style:'position:absolute;top:0;left:0;z-index:2147483000;pointer-events:none;overflow:visible;'});
+    this.layer = svg(this.doc, 'svg', {id:LAYER_ID,width:this.naturalWidth,height:this.nativeScroll ? 1 : this.naturalHeight || 800,'aria-label':'HTMLMemo 주석',style:'position:absolute;top:0;left:0;z-index:2147483000;pointer-events:none;overflow:visible;'});
     this.layer.dataset.htmlmemoUi = '';
     for (const annotation of this.metadata.annotations.filter(a => !TEXT_TOOLS.includes(a.type))) { const node = this.drawAnnotation(annotation); if (node) this.layer.append(node); }
     this.doc.body.append(this.layer);
     // Source pages can position their body. Keep overlay coordinates relative
     // to the document viewport rather than applying the body offset twice.
-    const offset=this.layer.getBoundingClientRect();this.layer.style.left=-offset.left+'px';this.layer.style.top=-offset.top+'px';
+    const offset=this.layer.getBoundingClientRect();this.layer.style.left=-(offset.left + (this.doc.defaultView.scrollX || 0))+'px';this.layer.style.top=-(offset.top + (this.doc.defaultView.scrollY || 0))+'px';
   }
   html() { return serializeHTML(this.doc, this.metadata); }
-  async back() { const p = this.linkHistory.pop(); if (!p) return false; this.viewport.scrollTop=p.top; this.viewport.scrollLeft=p.left; this.callbacks.onView?.(); return true; }
+  async back() { const p = this.linkHistory.pop(); if (!p) return false; this.scrollTop=p.top; this.scrollLeft=p.left; this.callbacks.onView?.(); return true; }
   jump(target) {
-    const r = target.getBoundingClientRect(); this.viewport.scrollTop = Math.max(0,(r.top+r.height/2)*this.zoom-this.viewport.clientHeight/2); this.viewport.scrollLeft = Math.max(0,(r.left+r.width/2)*this.zoom-this.viewport.clientWidth/2);
+    const r = target.getBoundingClientRect(); this.scrollTop = Math.max(0,(r.top+this.doc.defaultView.scrollY+r.height/2)*this.zoom-this.viewport.clientHeight/2); this.scrollLeft = Math.max(0,(r.left+this.doc.defaultView.scrollX+r.width/2)*this.zoom-this.viewport.clientWidth/2);
   }
   jumpAnnotation(id) {
     const annotation = this.metadata.annotations.find(a=>a.id===id); if (!annotation) return;
@@ -241,11 +257,11 @@ export class Reader {
     for (const mark of [...this.doc.querySelectorAll('[data-htmlmemo-search]')].reverse()) mark.replaceWith(...mark.childNodes);
     this.doc.body.normalize(); const result=this.searchResults[this.searchPosition];
     const range=rangeFromOffsets(this.doc,result.start,result.end); if (!range) return;
-    const rect=range.getBoundingClientRect(); this.viewport.scrollTop=Math.max(0,(rect.top+rect.height/2)*this.zoom-this.viewport.clientHeight/2);
-    this.viewport.scrollLeft=Math.max(0,(rect.left+rect.width/2)*this.zoom-this.viewport.clientWidth/2);
+    const rect=range.getBoundingClientRect(); this.scrollTop=Math.max(0,(rect.top+this.doc.defaultView.scrollY+rect.height/2)*this.zoom-this.viewport.clientHeight/2);
+    this.scrollLeft=Math.max(0,(rect.left+this.doc.defaultView.scrollX+rect.width/2)*this.zoom-this.viewport.clientWidth/2);
     wrapOffsets(this.doc,result.start,result.end,{'data-htmlmemo-search':''},'background:#f0a85b80;outline:2px solid #df9057;border-radius:2px;color:inherit');
   }
   outline() { return [...this.doc.querySelectorAll('h1,h2,h3,h4,h5,h6')].filter(n=>n.textContent.trim()).map(node=>({node,level:Number(node.localName[1]),title:node.textContent.trim()})); }
-  addBookmark(title) { this.metadata.bookmarks.push({id:uid(),title,top:this.viewport.scrollTop/this.zoom,left:this.viewport.scrollLeft/this.zoom}); this.callbacks.onChange?.(); }
-  dispose() { this.disposed=true; clearTimeout(this.positionTimer); this.resizeObserver?.disconnect(); this.hostObserver?.disconnect(); this.frame.srcdoc=''; this.host.remove(); }
+  addBookmark(title) { this.metadata.bookmarks.push({id:uid(),title,top:this.scrollTop/this.zoom,left:this.scrollLeft/this.zoom}); this.callbacks.onChange?.(); }
+  dispose() { this.disposed=true; clearTimeout(this.positionTimer); this.resizeObserver?.disconnect(); this.hostObserver?.disconnect(); this.frame.srcdoc=''; if(this.documentURL){URL.revokeObjectURL(this.documentURL);this.documentURL=null;} this.host.remove(); }
 }
