@@ -316,7 +316,7 @@ function toolbarButton(action,name,label,extra='') {return `<button class="tool-
 function renderToolbar() {
   const r=reader();if(!r||!r.doc)return;
   $('#toolbar').hidden=false;
-  $('#toolbar').innerHTML=`<button class="toolbar-grip" aria-label="툴바 이동">${icon('grip',14)}</button><span class="tool-group">${toolbarButton('select','select','선택 / 읽기 (V)')}${toolbarButton('pen','pen','펜 (P)')}${toolbarButton('highlight','highlight','형광펜 (H)')}${toolbarButton('underline','underline','밑줄 (U)')}${toolbarButton('eraser','eraser','지우개 (E)')}${toolbarButton('note','note','메모 (N)')}</span><span class="toolbar-divider"></span>${toolbarButton('palette','palette','색상 · 굵기 · 투명도 설정','class="tool-button palette-button"')}<span class="tool-group toolbar-history">${toolbarButton('undo','undo','실행 취소 (Ctrl/⌘ Z)')}${toolbarButton('redo','redo','다시 실행 (Ctrl/⌘ Shift Z)')}</span><span class="toolbar-divider"></span><button class="tool-button zoom-button" data-action="zoom" title="확대 / 축소" aria-label="확대 / 축소">${Math.round(r.zoom*100)}%</button>${toolbarButton('speak','speaker','선택한 글 읽어주기 (TTS · Esc로 중지)')}${toolbarButton('more','more','더 많은 도구')}`;
+  $('#toolbar').innerHTML=`<button class="toolbar-grip" aria-label="툴바 이동">${icon('grip',14)}</button><span class="tool-group">${toolbarButton('select','select','선택 / 읽기 (V)')}${toolbarButton('pen','pen','펜 (P)')}${toolbarButton('highlight','highlight','형광펜 (H)')}${toolbarButton('underline','underline','밑줄 (U)')}${toolbarButton('eraser','eraser','지우개 (E)')}${toolbarButton('note','note','메모 (N)')}</span><span class="toolbar-divider"></span>${toolbarButton('palette','palette','색상 · 굵기 · 투명도 설정','class="tool-button palette-button"')}<span class="tool-group toolbar-history">${toolbarButton('undo','undo','실행 취소 (Ctrl/⌘ Z)')}${toolbarButton('redo','redo','다시 실행 (Ctrl/⌘ Shift Z)')}</span><span class="toolbar-divider"></span><button class="tool-button zoom-button" data-action="zoom" title="확대 / 축소" aria-label="확대 / 축소">${Math.round(r.zoom*100)}%</button>${toolbarButton('speak','speaker','소리내어 읽기 (TTS 툴바)')}${toolbarButton('more','more','더 많은 도구')}`;
   $$('[data-action]',$('#toolbar')).forEach(button=>{button.onpointerdown=e=>{if(e.pointerType==='mouse')e.preventDefault();};button.onclick=()=>toolAction(button.dataset.action);});
   bindToolbarDrag();updateToolbarState();
   applyToolbarPosition();
@@ -363,7 +363,7 @@ function showSelectionMenu(r) {
 }
 function toolAction(action) {
   const r=reader();if(!r)return;
-  if(action==='speak'){closePopover();if(!r.speakSelection()&&!r.selection)toast('읽을 글을 먼저 선택해 주세요.');return;}
+  if(action==='speak'){closePopover();r.toggleReadAloud();return;}
   if(['select','pen','highlight','underline','eraser','note','text','rect','ellipse','arrow','area','area-underline','strike'].includes(action)){
     closePopover();r.setTool(action);updateToolbarState();return;
   }
@@ -419,7 +419,7 @@ function closeSidebar() {
 function renderSidebar(mode) {
   const r=reader();if(!r)return;sidebarMode=mode;sidebarRestoreMode=mode;closePopover();const panel=$('#sidebar');panel.hidden=false;panel.classList.remove('sidebar-collapsed');
   const title={search:'문서 검색',outline:'목차 · 북마크',annotations:'주석 목록'}[mode];
-  panel.innerHTML=`<div class="sidebar-heading"><h2>${title}</h2><button class="icon-button sidebar-header-toggle" id="reader-sidebar-toggle" aria-controls="sidebar" aria-label="문서 사이드바 접기" aria-pressed="true"></button></div><div class="sidebar-content"></div>`;$('#reader-sidebar-toggle').onclick=toggleReaderSidebar;updateReaderSidebarToggle();
+  panel.innerHTML=`<div class="sidebar-heading"><h2>${title}</h2><button class="icon-button sidebar-header-toggle" id="reader-sidebar-toggle" aria-controls="sidebar" aria-label="문서 사이드바 접기" aria-pressed="true">${icon('back',16)}</button></div><div class="sidebar-content"></div>`;$('#reader-sidebar-toggle').onclick=toggleReaderSidebar;updateReaderSidebarToggle();
   const content=$('.sidebar-content',panel);
   if(mode==='search'){
     content.innerHTML='<div class="search-field"><input id="document-search" aria-label="문서 검색어" placeholder="문서 안에서 찾기" autocomplete="off"></div><div class="search-navigation"><span id="search-count">검색어를 입력하세요.</span><button id="search-prev" class="icon-button" aria-label="이전 검색 결과">'+icon('back')+'</button><button id="search-next" class="icon-button" aria-label="다음 검색 결과">'+icon('forward')+'</button></div><div id="search-results"></div>';
@@ -456,7 +456,7 @@ function documentMenu(record) {
 }
 function handleKey(event) {
   const isField=/^(INPUT|TEXTAREA|SELECT)$/.test(event.target?.tagName)||event.target?.isContentEditable;
-  if(event.key==='Escape') {reader()?.stopSpeech();if($('#dialog').open)return;if(!$('#tool-popover').hidden)closePopover();else if(!$('#sidebar').hidden&&!$('#sidebar').classList.contains('sidebar-collapsed'))closeSidebar();else if(readerFocused)void leaveReaderFocus();else if(reader())reader().setTool('select');return;}
+  if(event.key==='Escape') {if(reader()?.readAloud?.escape()){event.preventDefault();return;}reader()?.stopSpeech();if($('#dialog').open)return;if(!$('#tool-popover').hidden)closePopover();else if(!$('#sidebar').hidden&&!$('#sidebar').classList.contains('sidebar-collapsed'))closeSidebar();else if(readerFocused)void leaveReaderFocus();else if(reader())reader().setTool('select');return;}
   if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='s'){event.preventDefault();if(reader())safely(()=>active().queue.flush())();else safely(savePage)();return;}
   if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='l'){event.preventDefault();$('#address').focus();$('#address').select();return;}
   if(!reader()||isField||$('#dialog').open)return;
