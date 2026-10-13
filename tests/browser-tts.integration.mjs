@@ -29,12 +29,15 @@ test('real Chrome: browsing, capture, local annotation, file writes, reopen and 
       await page.evaluate(`(()=>{const doc=document.querySelector('.document-host:not([hidden]) iframe').contentDocument;const text=doc.querySelector('#selection').firstChild;const range=doc.createRange();range.setStart(text,0);range.setEnd(text,15);doc.getSelection().removeAllRanges();doc.getSelection().addRange(range);doc.dispatchEvent(new Event('selectionchange'));doc.body.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,button:0}));window.__expectedQuote=range.toString();})()`);
       await page.waitFor('!document.querySelector("#tool-popover").hidden && !!document.querySelector("[data-selection=speak]")');
       assert.deepEqual(await page.evaluate('[...document.querySelectorAll("[data-selection]")].map(b=>b.textContent)'),['복사','형광펜','밑줄','메모','읽어주기','웹 검색']);
-      assert.equal(await page.evaluate('!!document.querySelector("#toolbar [data-action=speak]")'),false);
+      assert.equal(await page.evaluate('!!document.querySelector("#toolbar [data-action=speak]")'),true);
       await page.click('[data-selection=speak]');
       const result=await page.evaluate('({calls:window.__speechCalls,quote:window.__expectedQuote,hidden:document.querySelector("#tool-popover").hidden})');
       assert.equal(result.calls[0][0],'cancel');assert.equal(result.calls[1][0],'speak');assert.equal(result.calls[1][1],result.quote);assert.deepEqual(result.calls[1].slice(3),[1,1,1,null]);assert.equal(result.hidden,true);
       await page.send('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
       assert.deepEqual(await page.evaluate('window.__speechCalls.map(c=>c[0])'),['cancel','speak','cancel']);
+      await page.click('#toolbar [data-action=speak]');
+      assert.deepEqual(await page.evaluate('window.__speechCalls.map(c=>c[0])'),['cancel','speak','cancel','cancel','speak']);
+      assert.equal(await page.evaluate('window.__speechCalls.at(-1)[1]'),result.quote);
       await page.evaluate(`(()=>{const doc=document.querySelector('.document-host:not([hidden]) iframe').contentDocument;doc.body.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,button:0}));})()`);
       await page.waitFor('!document.querySelector("#tool-popover").hidden');
       await page.click('[data-selection=note]');await page.waitFor('document.querySelector("#dialog").open');

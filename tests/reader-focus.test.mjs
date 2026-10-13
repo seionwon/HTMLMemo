@@ -57,7 +57,7 @@ test('toolbar retains compact buttons and includes selected-text TTS',async()=>{
  Object.assign(a.context,{icon,$$:(selector,root)=>[...root.querySelectorAll(selector)],bindToolbarDrag(){},updateToolbarState(){},applyToolbarPosition(){}});
  const toolbar=appSource.slice(appSource.indexOf('function toolbarButton('),appSource.indexOf('function updateToolbarState()'));
  new vm.Script(toolbar+'renderToolbar();').runInContext(a.context);
- assert.deepEqual([...a.doc.querySelectorAll('#toolbar [data-action]')].map(button=>button.dataset.action),['select','pen','highlight','underline','eraser','note','palette','undo','redo','zoom','more']);
+ assert.deepEqual([...a.doc.querySelectorAll('#toolbar [data-action]')].map(button=>button.dataset.action),['select','pen','highlight','underline','eraser','note','palette','undo','redo','zoom','speak','more']);
  assert.ok(a.doc.querySelector('#toolbar .toolbar-grip'));
  assert.equal(a.doc.querySelector('#toolbar [data-action=zoom]').textContent,'100%');
  const css=await readFile(new URL('../public/design.tailwind.css',import.meta.url),'utf8');
