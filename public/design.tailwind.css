@@ -43,3 +43,37 @@ body[data-codememo-design]{margin:0;font-family:var(--app-font);background:var(-
 .desk-shell{display:flex;flex:1;min-height:0}.desk-nav{width:180px;flex-shrink:0;border-right:1px solid var(--line);background:var(--surface);padding:24px 16px;display:flex;flex-direction:column;gap:10px}.desk-nav strong{margin:8px 8px 22px}.desk-nav button{text-align:left;padding:12px;border-radius:10px;font-size:12px}.desk-nav button:hover,.desk-nav button[aria-current=page]{background:var(--green-light);color:var(--green)}
 #main{min-width:0;flex:1}.chrome{background:var(--surface)}.library-inner{max-width:1120px}.hero{display:block;min-height:0;padding:44px 0 32px}.hero-art{display:none}.hero h1{font-size:40px}.hero-description{max-width:540px}.eyebrow{color:var(--green)}.document-card,.execution-cards article,.empty-library{border-radius:18px}.card-preview{background:var(--surface-muted)}.empty-library{background:var(--surface);border:1px solid var(--line);margin:20px 0}.library-heading{padding-top:24px}
 @media(max-width:767px){.desk-shell{flex-direction:column}.desk-nav{width:100%;flex-direction:row;flex-wrap:wrap;padding:8px 12px;gap:4px;border-right:0;border-bottom:1px solid var(--line)}.desk-nav strong{display:none}.desk-nav button{padding:9px;font-size:11px}.hero{padding:28px 0}.hero h1{font-size:35px}}
+
+/* Keep the brand, tabs and app controls on one row, including narrow/zoomed screens. */
+.chrome-topline{display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"brand tabs actions";align-items:center;gap:12px;padding:0 18px;min-width:0}
+.chrome-topline>.titlebar{grid-area:brand;padding:0;height:44px;white-space:nowrap;min-width:0;width:max-content;justify-self:start;gap:12px}
+.chrome-topline>.title-actions{grid-area:actions;height:44px;margin-left:0;white-space:nowrap;gap:10px;min-width:0}
+.chrome-topline>.tabbar{grid-area:tabs;height:44px;padding:0;min-width:0;width:100%;overflow:hidden}
+.chrome-topline #tabs{align-items:center;flex:0 1 auto;min-width:0;max-width:100%}
+.chrome-topline .brand{gap:8px}
+.chrome-topline .brand-icon{width:28px;height:28px}
+.chrome-topline .brand-icon img{width:100%;height:100%}
+.chrome-topline .tab,.chrome-topline .library-tab,.chrome-topline .execution-tab{border-radius:7px;flex-shrink:0}
+.chrome-topline .tab.active,.chrome-topline .library-tab.active,.chrome-topline .execution-tab.active{border-bottom-color:var(--line)}
+.chrome-topline .library-tab{width:32px}
+.chrome-topline #new-tab{flex-shrink:0}
+#install-button{display:inline-flex;align-items:center;justify-content:center;gap:5px}
+#install-button svg,#connection-button svg{display:none}
+.sidebar{top:var(--chrome-height,146px)}
+@media(max-width:1100px){.chrome-topline .app-caption{display:none}}
+@media(max-width:800px){
+ .chrome-topline{padding:0 12px;gap:8px}
+ .chrome-topline>.title-actions{gap:4px}
+ #install-button,#connection-button{height:28px;width:28px;padding:0}
+ #install-button svg,#connection-button svg{display:block}
+ #install-button span,#connection-button span{display:none}
+ #connection-button{justify-content:center;position:relative}
+ #connection-button i{position:absolute;right:1px;top:2px;width:4px;height:4px}
+}
+@media(max-width:600px){
+ .chrome-topline{padding:0 8px;gap:6px}
+ .chrome-topline>.titlebar,.chrome-topline>.title-actions,.chrome-topline>.tabbar{height:40px}
+ .chrome-topline .brand strong{display:none}
+ .chrome-topline .execution-tab{padding:0 8px}
+ .chrome-topline .title-actions .icon-button{width:28px;height:28px}
+}

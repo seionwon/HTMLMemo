@@ -1,0 +1,1198 @@
+{
+  "status": "pass",
+  "url": "http://127.0.0.1:63744/",
+  "verifiedAt": "2026-10-13T06:35:38.556Z",
+  "rows": [
+    {
+      "width": 1920,
+      "mode": "library",
+      "row": {
+        "left": 0,
+        "right": 1920,
+        "top": 0,
+        "height": 44,
+        "center": 22
+      },
+      "parts": [
+        {
+          "left": 18,
+          "right": 243.59375,
+          "top": 0,
+          "height": 44,
+          "center": 22
+        },
+        {
+          "left": 255.59375,
+          "right": 1698.96875,
+          "top": 0,
+          "height": 44,
+          "center": 22
+        },
+        {
+          "left": 1710.96875,
+          "right": 1902,
+          "top": 0,
+          "height": 44,
+          "center": 22
+        }
+      ],
+      "buttons": [
+        {
+          "selector": "#library-tab",
+          "left": 255.59375,
+          "right": 287.59375,
+          "top": 6,
+          "height": 32,
+          "center": 22
+        },
+        {
+          "selector": "#execution-tab",
+          "left": 291.59375,
+          "right": 338.625,
+          "top": 6,
+          "height": 32,
+          "center": 22
+        },
+        {
+          "selector": "#new-tab",
+          "left": 346.625,
+          "right": 375.625,
+          "top": 6.5,
+          "height": 31,
+          "center": 22
+        },
+        {
+          "selector": "#install-button",
+          "left": 1710.96875,
+          "right": 1762.6875,
+          "top": 9,
+          "height": 26,
+          "center": 22
+        },
+        {
+          "selector": "#connection-button",
+          "left": 1772.6875,
+          "right": 1861,
+          "top": 14,
+          "height": 16,
+          "center": 22
+        },
+        {
+          "selector": "#settings-button",
+          "left": 1871,
+          "right": 1902,
+          "top": 6.5,
+          "height": 31,
+          "center": 22
+        }
+      ],
+      "overflow": false
+    },
+    {
+      "width": 1280,
+      "mode": "library",
+      "row": {
+        "left": 0,
+        "right": 1280,
+        "top": 0,
+        "height": 44,
+        "center": 22
+      },
+      "parts": [
+        {
+          "left": 18,
+          "right": 243.59375,
+          "top": 0,
+          "height": 44,
+          "center": 22
+        },
+        {
+          "left": 255.59375,
+          "right": 1058.96875,
+          "top": 0,
+          "height": 44,
+          "center": 22
+        },
+        {
+          "left": 1070.96875,
+          "right": 1262,
+          "top": 0,
+          "height": 44,
+          "center": 22
+        }
+      ],
+      "buttons": [
+        {
+          "selector": "#library-tab",
+          "left": 255.59375,
+          "right": 287.59375,
+          "top": 6,
+          "height": 32,
+          "center": 22
+        },
+        {
+          "selector": "#execution-tab",
+          "left": 291.59375,
+          "right": 338.625,
+          "top": 6,
+          "height": 32,
+          "center": 22
+        },
+        {
+          "selector": "#new-tab",
+          "left": 346.625,
+          "right": 375.625,
+          "top": 6.5,
+          "height": 31,
+          "center": 22
+        },
+        {
+          "selector": "#install-button",
+          "left": 1070.96875,
+          "right": 1122.6875,
+          "top": 9,
+          "height": 26,
+          "center": 22
+        },
+        {
+          "selector": "#connection-button",
+          "left": 1132.6875,
+          "right": 1221,
+          "top": 14,
+          "height": 16,
+          "center": 22
+        },
+        {
+          "selector": "#settings-button",
+          "left": 1231,
+          "right": 1262,
+          "top": 6.5,
+          "height": 31,
+          "center": 22
+        }
+      ],
+      "overflow": false
+    },
+    {
+      "width": 1024,
+      "mode": "library",
+      "row": {
+        "left": 0,
+        "right": 1024,
+        "top": 0,
+        "height": 44,
+        "center": 22
+      },
+      "parts": [
+        {
+          "left": 18,
+          "right": 152.171875,
+          "top": 0,
+          "height": 44,
+          "center": 22
+        },
+        {
+          "left": 164.171875,
+          "right": 802.96875,
+          "top": 0,
+          "height": 44,
+          "center": 22
+        },
+        {
+          "left": 814.96875,
+          "right": 1006,
+          "top": 0,
+          "height": 44,
+          "center": 22
+        }
+      ],
+      "buttons": [
+        {
+          "selector": "#library-tab",
+          "left": 164.171875,
+          "right": 196.171875,
+          "top": 6,
+          "height": 32,
+          "center": 22
+        },
+        {
+          "selector": "#execution-tab",
+          "left": 200.171875,
+          "right": 247.203125,
+          "top": 6,
+          "height": 32,
+          "center": 22
+        },
+        {
+          "selector": "#new-tab",
+          "left": 255.203125,
+          "right": 284.203125,
+          "top": 6.5,
+          "height": 31,
+          "center": 22
+        },
+        {
+          "selector": "#install-button",
+          "left": 814.96875,
+          "right": 866.6875,
+          "top": 9,
+          "height": 26,
+          "center": 22
+        },
+        {
+          "selector": "#connection-button",
+          "left": 876.6875,
+          "right": 965,
+          "top": 14,
+          "height": 16,
+          "center": 22
+        },
+        {
+          "selector": "#settings-button",
+          "left": 975,
+          "right": 1006,
+          "top": 6.5,
+          "height": 31,
+          "center": 22
+        }
+      ],
+      "overflow": false
+    },
+    {
+      "width": 960,
+      "mode": "library",
+      "row": {
+        "left": 0,
+        "right": 960,
+        "top": 0,
+        "height": 44,
+        "center": 22
+      },
+      "parts": [
+        {
+          "left": 18,
+          "right": 152.171875,
+          "top": 0,
+          "height": 44,
+          "center": 22
+        },
+        {
+          "left": 164.171875,
+          "right": 738.96875,
+          "top": 0,
+          "height": 44,
+          "center": 22
+        },
+        {
+          "left": 750.96875,
+          "right": 942,
+          "top": 0,
+          "height": 44,
+          "center": 22
+        }
+      ],
+      "buttons": [
+        {
+          "selector": "#library-tab",
+          "left": 164.171875,
+          "right": 196.171875,
+          "top": 6,
+          "height": 32,
+          "center": 22
+        },
+        {
+          "selector": "#execution-tab",
+          "left": 200.171875,
+          "right": 247.203125,
+          "top": 6,
+          "height": 32,
+          "center": 22
+        },
+        {
+          "selector": "#new-tab",
+          "left": 255.203125,
+          "right": 284.203125,
+          "top": 6.5,
+          "height": 31,
+          "center": 22
+        },
+        {
+          "selector": "#install-button",
+          "left": 750.96875,
+          "right": 802.6875,
+          "top": 9,
+          "height": 26,
+          "center": 22
+        },
+        {
+          "selector": "#connection-button",
+          "left": 812.6875,
+          "right": 901,
+          "top": 14,
+          "height": 16,
+          "center": 22
+        },
+        {
+          "selector": "#settings-button",
+          "left": 911,
+          "right": 942,
+          "top": 6.5,
+          "height": 31,
+          "center": 22
+        }
+      ],
+      "overflow": false
+    },
+    {
+      "width": 820,
+      "mode": "library",
+      "row": {
+        "left": 0,
+        "right": 820,
+        "top": 0,
+        "height": 44,
+        "center": 22
+      },
+      "parts": [
+        {
+          "left": 18,
+          "right": 152.171875,
+          "top": 0,
+          "height": 44,
+          "center": 22
+        },
+        {
+          "left": 164.171875,
+          "right": 598.96875,
+          "top": 0,
+          "height": 44,
+          "center": 22
+        },
+        {
+          "left": 610.96875,
+          "right": 802,
+          "top": 0,
+          "height": 44,
+          "center": 22
+        }
+      ],
+      "buttons": [
+        {
+          "selector": "#library-tab",
+          "left": 164.171875,
+          "right": 196.171875,
+          "top": 6,
+          "height": 32,
+          "center": 22
+        },
+        {
+          "selector": "#execution-tab",
+          "left": 200.171875,
+          "right": 247.203125,
+          "top": 6,
+          "height": 32,
+          "center": 22
+        },
+        {
+          "selector": "#new-tab",
+          "left": 255.203125,
+          "right": 284.203125,
+          "top": 6.5,
+          "height": 31,
+          "center": 22
+        },
+        {
+          "selector": "#install-button",
+          "left": 610.96875,
+          "right": 662.6875,
+          "top": 9,
+          "height": 26,
+          "center": 22
+        },
+        {
+          "selector": "#connection-button",
+          "left": 672.6875,
+          "right": 761,
+          "top": 14,
+          "height": 16,
+          "center": 22
+        },
+        {
+          "selector": "#settings-button",
+          "left": 771,
+          "right": 802,
+          "top": 6.5,
+          "height": 31,
+          "center": 22
+        }
+      ],
+      "overflow": false
+    },
+    {
+      "width": 640,
+      "mode": "library",
+      "row": {
+        "left": 0,
+        "right": 640,
+        "top": 0,
+        "height": 44,
+        "center": 22
+      },
+      "parts": [
+        {
+          "left": 12,
+          "right": 146.171875,
+          "top": 0,
+          "height": 44,
+          "center": 22
+        },
+        {
+          "left": 154.171875,
+          "right": 525,
+          "top": 0,
+          "height": 44,
+          "center": 22
+        },
+        {
+          "left": 533,
+          "right": 628,
+          "top": 0,
+          "height": 44,
+          "center": 22
+        }
+      ],
+      "buttons": [
+        {
+          "selector": "#library-tab",
+          "left": 154.171875,
+          "right": 186.171875,
+          "top": 6,
+          "height": 32,
+          "center": 22
+        },
+        {
+          "selector": "#execution-tab",
+          "left": 190.171875,
+          "right": 237.203125,
+          "top": 6,
+          "height": 32,
+          "center": 22
+        },
+        {
+          "selector": "#new-tab",
+          "left": 245.203125,
+          "right": 274.203125,
+          "top": 6.5,
+          "height": 31,
+          "center": 22
+        },
+        {
+          "selector": "#install-button",
+          "left": 533,
+          "right": 561,
+          "top": 8,
+          "height": 28,
+          "center": 22
+        },
+        {
+          "selector": "#connection-button",
+          "left": 565,
+          "right": 593,
+          "top": 8,
+          "height": 28,
+          "center": 22
+        },
+        {
+          "selector": "#settings-button",
+          "left": 597,
+          "right": 628,
+          "top": 6.5,
+          "height": 31,
+          "center": 22
+        }
+      ],
+      "overflow": false
+    },
+    {
+      "width": 390,
+      "mode": "library",
+      "row": {
+        "left": 0,
+        "right": 390,
+        "top": 0,
+        "height": 40,
+        "center": 20
+      },
+      "parts": [
+        {
+          "left": 8,
+          "right": 36,
+          "top": 0,
+          "height": 40,
+          "center": 20
+        },
+        {
+          "left": 42,
+          "right": 284,
+          "top": 0,
+          "height": 40,
+          "center": 20
+        },
+        {
+          "left": 290,
+          "right": 382,
+          "top": 0,
+          "height": 40,
+          "center": 20
+        }
+      ],
+      "buttons": [
+        {
+          "selector": "#library-tab",
+          "left": 42,
+          "right": 74,
+          "top": 4,
+          "height": 32,
+          "center": 20
+        },
+        {
+          "selector": "#execution-tab",
+          "left": 78,
+          "right": 113.3125,
+          "top": 4,
+          "height": 32,
+          "center": 20
+        },
+        {
+          "selector": "#new-tab",
+          "left": 121.3125,
+          "right": 150.3125,
+          "top": 4.5,
+          "height": 31,
+          "center": 20
+        },
+        {
+          "selector": "#install-button",
+          "left": 290,
+          "right": 318,
+          "top": 6,
+          "height": 28,
+          "center": 20
+        },
+        {
+          "selector": "#connection-button",
+          "left": 322,
+          "right": 350,
+          "top": 6,
+          "height": 28,
+          "center": 20
+        },
+        {
+          "selector": "#settings-button",
+          "left": 354,
+          "right": 382,
+          "top": 6,
+          "height": 28,
+          "center": 20
+        }
+      ],
+      "overflow": false
+    },
+    {
+      "width": 320,
+      "mode": "library",
+      "row": {
+        "left": 0,
+        "right": 320,
+        "top": 0,
+        "height": 40,
+        "center": 20
+      },
+      "parts": [
+        {
+          "left": 8,
+          "right": 36,
+          "top": 0,
+          "height": 40,
+          "center": 20
+        },
+        {
+          "left": 42,
+          "right": 214,
+          "top": 0,
+          "height": 40,
+          "center": 20
+        },
+        {
+          "left": 220,
+          "right": 312,
+          "top": 0,
+          "height": 40,
+          "center": 20
+        }
+      ],
+      "buttons": [
+        {
+          "selector": "#library-tab",
+          "left": 42,
+          "right": 74,
+          "top": 4,
+          "height": 32,
+          "center": 20
+        },
+        {
+          "selector": "#execution-tab",
+          "left": 78,
+          "right": 113.3125,
+          "top": 4,
+          "height": 32,
+          "center": 20
+        },
+        {
+          "selector": "#new-tab",
+          "left": 121.3125,
+          "right": 150.3125,
+          "top": 4.5,
+          "height": 31,
+          "center": 20
+        },
+        {
+          "selector": "#install-button",
+          "left": 220,
+          "right": 248,
+          "top": 6,
+          "height": 28,
+          "center": 20
+        },
+        {
+          "selector": "#connection-button",
+          "left": 252,
+          "right": 280,
+          "top": 6,
+          "height": 28,
+          "center": 20
+        },
+        {
+          "selector": "#settings-button",
+          "left": 284,
+          "right": 312,
+          "top": 6,
+          "height": 28,
+          "center": 20
+        }
+      ],
+      "overflow": false
+    },
+    {
+      "width": 1280,
+      "mode": "document",
+      "row": {
+        "left": 0,
+        "right": 1280,
+        "top": 0,
+        "height": 44,
+        "center": 22
+      },
+      "parts": [
+        {
+          "left": 18,
+          "right": 243.59375,
+          "top": 0,
+          "height": 44,
+          "center": 22
+        },
+        {
+          "left": 255.59375,
+          "right": 1058.96875,
+          "top": 0,
+          "height": 44,
+          "center": 22
+        },
+        {
+          "left": 1070.96875,
+          "right": 1262,
+          "top": 0,
+          "height": 44,
+          "center": 22
+        }
+      ],
+      "buttons": [
+        {
+          "selector": "#library-tab",
+          "left": 255.59375,
+          "right": 287.59375,
+          "top": 6,
+          "height": 32,
+          "center": 22
+        },
+        {
+          "selector": "#execution-tab",
+          "left": 291.59375,
+          "right": 338.625,
+          "top": 6,
+          "height": 32,
+          "center": 22
+        },
+        {
+          "selector": "#new-tab",
+          "left": 494.03125,
+          "right": 523.03125,
+          "top": 6.5,
+          "height": 31,
+          "center": 22
+        },
+        {
+          "selector": "#install-button",
+          "left": 1070.96875,
+          "right": 1122.6875,
+          "top": 9,
+          "height": 26,
+          "center": 22
+        },
+        {
+          "selector": "#connection-button",
+          "left": 1132.6875,
+          "right": 1221,
+          "top": 14,
+          "height": 16,
+          "center": 22
+        },
+        {
+          "selector": "#settings-button",
+          "left": 1231,
+          "right": 1262,
+          "top": 6.5,
+          "height": 31,
+          "center": 22
+        }
+      ],
+      "overflow": false
+    },
+    {
+      "width": 1024,
+      "mode": "document",
+      "row": {
+        "left": 0,
+        "right": 1024,
+        "top": 0,
+        "height": 44,
+        "center": 22
+      },
+      "parts": [
+        {
+          "left": 18,
+          "right": 152.171875,
+          "top": 0,
+          "height": 44,
+          "center": 22
+        },
+        {
+          "left": 164.171875,
+          "right": 802.96875,
+          "top": 0,
+          "height": 44,
+          "center": 22
+        },
+        {
+          "left": 814.96875,
+          "right": 1006,
+          "top": 0,
+          "height": 44,
+          "center": 22
+        }
+      ],
+      "buttons": [
+        {
+          "selector": "#library-tab",
+          "left": 164.171875,
+          "right": 196.171875,
+          "top": 6,
+          "height": 32,
+          "center": 22
+        },
+        {
+          "selector": "#execution-tab",
+          "left": 200.171875,
+          "right": 247.203125,
+          "top": 6,
+          "height": 32,
+          "center": 22
+        },
+        {
+          "selector": "#new-tab",
+          "left": 402.609375,
+          "right": 431.609375,
+          "top": 6.5,
+          "height": 31,
+          "center": 22
+        },
+        {
+          "selector": "#install-button",
+          "left": 814.96875,
+          "right": 866.6875,
+          "top": 9,
+          "height": 26,
+          "center": 22
+        },
+        {
+          "selector": "#connection-button",
+          "left": 876.6875,
+          "right": 965,
+          "top": 14,
+          "height": 16,
+          "center": 22
+        },
+        {
+          "selector": "#settings-button",
+          "left": 975,
+          "right": 1006,
+          "top": 6.5,
+          "height": 31,
+          "center": 22
+        }
+      ],
+      "overflow": false
+    },
+    {
+      "width": 820,
+      "mode": "document",
+      "row": {
+        "left": 0,
+        "right": 820,
+        "top": 0,
+        "height": 44,
+        "center": 22
+      },
+      "parts": [
+        {
+          "left": 18,
+          "right": 152.171875,
+          "top": 0,
+          "height": 44,
+          "center": 22
+        },
+        {
+          "left": 164.171875,
+          "right": 598.96875,
+          "top": 0,
+          "height": 44,
+          "center": 22
+        },
+        {
+          "left": 610.96875,
+          "right": 802,
+          "top": 0,
+          "height": 44,
+          "center": 22
+        }
+      ],
+      "buttons": [
+        {
+          "selector": "#library-tab",
+          "left": 164.171875,
+          "right": 196.171875,
+          "top": 6,
+          "height": 32,
+          "center": 22
+        },
+        {
+          "selector": "#execution-tab",
+          "left": 200.171875,
+          "right": 247.203125,
+          "top": 6,
+          "height": 32,
+          "center": 22
+        },
+        {
+          "selector": "#new-tab",
+          "left": 402.609375,
+          "right": 431.609375,
+          "top": 6.5,
+          "height": 31,
+          "center": 22
+        },
+        {
+          "selector": "#install-button",
+          "left": 610.96875,
+          "right": 662.6875,
+          "top": 9,
+          "height": 26,
+          "center": 22
+        },
+        {
+          "selector": "#connection-button",
+          "left": 672.6875,
+          "right": 761,
+          "top": 14,
+          "height": 16,
+          "center": 22
+        },
+        {
+          "selector": "#settings-button",
+          "left": 771,
+          "right": 802,
+          "top": 6.5,
+          "height": 31,
+          "center": 22
+        }
+      ],
+      "overflow": false
+    },
+    {
+      "width": 640,
+      "mode": "document",
+      "row": {
+        "left": 0,
+        "right": 640,
+        "top": 0,
+        "height": 44,
+        "center": 22
+      },
+      "parts": [
+        {
+          "left": 12,
+          "right": 146.171875,
+          "top": 0,
+          "height": 44,
+          "center": 22
+        },
+        {
+          "left": 154.171875,
+          "right": 525,
+          "top": 0,
+          "height": 44,
+          "center": 22
+        },
+        {
+          "left": 533,
+          "right": 628,
+          "top": 0,
+          "height": 44,
+          "center": 22
+        }
+      ],
+      "buttons": [
+        {
+          "selector": "#library-tab",
+          "left": 154.171875,
+          "right": 186.171875,
+          "top": 6,
+          "height": 32,
+          "center": 22
+        },
+        {
+          "selector": "#execution-tab",
+          "left": 190.171875,
+          "right": 237.203125,
+          "top": 6,
+          "height": 32,
+          "center": 22
+        },
+        {
+          "selector": "#new-tab",
+          "left": 392.609375,
+          "right": 421.609375,
+          "top": 6.5,
+          "height": 31,
+          "center": 22
+        },
+        {
+          "selector": "#install-button",
+          "left": 533,
+          "right": 561,
+          "top": 8,
+          "height": 28,
+          "center": 22
+        },
+        {
+          "selector": "#connection-button",
+          "left": 565,
+          "right": 593,
+          "top": 8,
+          "height": 28,
+          "center": 22
+        },
+        {
+          "selector": "#settings-button",
+          "left": 597,
+          "right": 628,
+          "top": 6.5,
+          "height": 31,
+          "center": 22
+        }
+      ],
+      "overflow": false
+    },
+    {
+      "width": 390,
+      "mode": "document",
+      "row": {
+        "left": 0,
+        "right": 390,
+        "top": 0,
+        "height": 40,
+        "center": 20
+      },
+      "parts": [
+        {
+          "left": 8,
+          "right": 36,
+          "top": 0,
+          "height": 40,
+          "center": 20
+        },
+        {
+          "left": 42,
+          "right": 284,
+          "top": 0,
+          "height": 40,
+          "center": 20
+        },
+        {
+          "left": 290,
+          "right": 382,
+          "top": 0,
+          "height": 40,
+          "center": 20
+        }
+      ],
+      "buttons": [
+        {
+          "selector": "#library-tab",
+          "left": 42,
+          "right": 74,
+          "top": 4,
+          "height": 32,
+          "center": 20
+        },
+        {
+          "selector": "#execution-tab",
+          "left": 78,
+          "right": 113.3125,
+          "top": 4,
+          "height": 32,
+          "center": 20
+        },
+        {
+          "selector": "#new-tab",
+          "left": 255,
+          "right": 284,
+          "top": 4.5,
+          "height": 31,
+          "center": 20
+        },
+        {
+          "selector": "#install-button",
+          "left": 290,
+          "right": 318,
+          "top": 6,
+          "height": 28,
+          "center": 20
+        },
+        {
+          "selector": "#connection-button",
+          "left": 322,
+          "right": 350,
+          "top": 6,
+          "height": 28,
+          "center": 20
+        },
+        {
+          "selector": "#settings-button",
+          "left": 354,
+          "right": 382,
+          "top": 6,
+          "height": 28,
+          "center": 20
+        }
+      ],
+      "overflow": false
+    },
+    {
+      "width": 320,
+      "mode": "document",
+      "row": {
+        "left": 0,
+        "right": 320,
+        "top": 0,
+        "height": 40,
+        "center": 20
+      },
+      "parts": [
+        {
+          "left": 8,
+          "right": 36,
+          "top": 0,
+          "height": 40,
+          "center": 20
+        },
+        {
+          "left": 42,
+          "right": 214,
+          "top": 0,
+          "height": 40,
+          "center": 20
+        },
+        {
+          "left": 220,
+          "right": 312,
+          "top": 0,
+          "height": 40,
+          "center": 20
+        }
+      ],
+      "buttons": [
+        {
+          "selector": "#library-tab",
+          "left": 42,
+          "right": 74,
+          "top": 4,
+          "height": 32,
+          "center": 20
+        },
+        {
+          "selector": "#execution-tab",
+          "left": 78,
+          "right": 113.3125,
+          "top": 4,
+          "height": 32,
+          "center": 20
+        },
+        {
+          "selector": "#new-tab",
+          "left": 185,
+          "right": 214,
+          "top": 4.5,
+          "height": 31,
+          "center": 20
+        },
+        {
+          "selector": "#install-button",
+          "left": 220,
+          "right": 248,
+          "top": 6,
+          "height": 28,
+          "center": 20
+        },
+        {
+          "selector": "#connection-button",
+          "left": 252,
+          "right": 280,
+          "top": 6,
+          "height": 28,
+          "center": 20
+        },
+        {
+          "selector": "#settings-button",
+          "left": 284,
+          "right": 312,
+          "top": 6,
+          "height": 28,
+          "center": 20
+        }
+      ],
+      "overflow": false
+    }
+  ],
+  "errors": []
+}

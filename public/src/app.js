@@ -37,7 +37,7 @@ function installGuide(kind) {
   modal(`<div class="dialog-heading"><h2>${heading}</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div>${content}<p class="local-only-note">${icon('check',15)} 문서·주석·설정은 기기에만 저장합니다.</p><div class="dialog-actions"><button class="primary-button" data-dialog-close>확인</button></div>`);
 }
 function updateInstall(state) {
-  for(const selector of ['#install-button','#execution-install']){const button=$(selector);button.hidden=selector==='#install-button'&&state.installed;button.disabled=state.busy;button.textContent=state.busy?'설치 확인 중…':state.installed?'설치 완료':'앱 설치';}
+  for(const selector of ['#install-button','#execution-install']){const button=$(selector);button.hidden=selector==='#install-button'&&state.installed;button.disabled=state.busy;const label=state.busy?'설치 확인 중…':state.installed?'설치 완료':'앱 설치';if(selector==='#install-button')button.innerHTML=icon('download',16)+'<span>'+label+'</span>';else button.textContent=label;button.title=label;button.setAttribute('aria-label',label);}
   $('#install-status').textContent=state.installed?'앱으로 실행 중입니다. 문서·주석·설정은 이 기기에 저장됩니다.':!installableLocation(location)?'PWA 설치는 배포된 앱 주소에서 가능합니다. HTML 파일의 읽기·주석은 계속 사용할 수 있습니다.':isIOS(navigator)?'아이폰은 앱 설치 버튼에서 Chrome 공유 메뉴 사용 순서를 확인하세요.':'설치 후 앱 아이콘으로 열고 HTML 파일을 가져오세요.';
 }
 function promptText(type, initial = '') {
@@ -62,7 +62,7 @@ function connectionDialog() {
     $('#check-connection').onclick=safely(async()=>{const ok=await discoverBridge(); updateConnection(); toast(ok?'Chrome이 연결되었습니다.':'확장 기능을 설치한 뒤 페이지를 새로고침해주세요.',!ok);if(ok)await receiveCaptures();});
   });
 }
-function updateConnection() { $('#connection-button').classList.toggle('connected',bridgeAvailable()); $('#connection-button span').textContent=bridgeAvailable()?'Chrome 연결됨':'Chrome 연결'; }
+function updateConnection() { $('#connection-button').classList.toggle('connected',bridgeAvailable()); const label=bridgeAvailable()?'Chrome 연결됨':'Chrome 연결';$('#connection-button span').textContent=label;$('#connection-button').title=label;$('#connection-button').setAttribute('aria-label',label); }
 function settingsDialog() {
   modal(`<div class="dialog-heading"><h2>HTMLMemo 설정</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><p class="local-only-note">${icon('check',15)} 모든 문서·주석·설정은 이 기기에만 저장됩니다.</p><div class="setting-row"><div><strong>자동 저장 폴더</strong><p>${folder?esc(folder.name):settingsFolderHint?'백업 폴더: '+esc(settingsFolderHint)+' · 다시 연결해주세요.':'앱 내부에 HTML 파일로 보관 중'}</p></div><button id="settings-folder" class="secondary-button">${folder?'변경':'폴더 연결'}</button></div><p class="dialog-description small">폴더 권한은 설정 파일로 옮길 수 없어 새 기기에서 한 번 연결해야 합니다.</p><div class="setting-row"><div><strong>화면 테마</strong><p>서재와 도구의 밝기를 선택하세요.</p></div><select id="appearance"><option value="light">밝게</option><option value="dark">어둡게</option><option value="system">시스템</option></select></div><div class="setting-row"><div><strong>툴바 위치</strong><p>옮긴 위치도 설정 파일에 보관합니다.</p></div><button id="reset-toolbar-position" class="secondary-button">가운데로</button></div><div class="settings-backup"><h3>설정 파일</h3><p class="dialog-description small">테마·정렬·주석 색상·굵기·투명도·표시 시간·툴바 위치를 JSON 파일로 저장하고 다시 불러옵니다.</p><p id="settings-file-name" class="settings-file-name">${settingsFileHandle?esc(settingsFileHandle.name):'연결한 설정 파일이 없습니다.'}</p><div class="settings-file-actions"><button id="settings-save" class="secondary-button">${icon('save',15)} 설정 파일 저장</button><button id="settings-load" class="secondary-button">${icon('folder',15)} 설정 파일 불러오기</button><button id="settings-reload" class="secondary-button" ${settingsFileHandle?'':'disabled'}>${icon('reload',15)} 다시 불러오기</button></div></div><div class="setting-row"><div><strong>Chrome 연결</strong><p>${bridgeAvailable()?'연결되어 있습니다.':'웹 페이지를 저장하기'}</p></div><button id="settings-chrome" class="secondary-button">설정 방법</button></div><div class="setting-row"><div><strong>기기 보관함 유지</strong><p>브라우저의 자동 공간 정리에서 보호 요청</p></div><button id="persist-storage" class="secondary-button">보관 유지</button></div><p class="dialog-description small">앱 데이터 삭제 시 내부 보관함도 지워집니다. 중요한 문서는 HTML 파일로 내보내주세요.</p>`,()=>{
     $('#settings-folder').onclick=safely(async()=>{await chooseFolder();settingsDialog();});$('#settings-chrome').onclick=connectionDialog;
@@ -451,8 +451,23 @@ function bindUI() {
   window.addEventListener('dragover',event=>{if([...event.dataTransfer.types].includes('Files'))event.preventDefault();});window.addEventListener('drop',safely(async event=>{if(![...(event.dataTransfer.types||[])].includes('Files'))return;event.preventDefault();for(const file of await droppedHTMLFiles(event.dataTransfer))await openLocalFile(file);}));
 }
 function network() {$('#network-status').textContent=navigator.onLine?'온라인':'오프라인';$('#network-status').classList.toggle('offline',!navigator.onLine);}
+function fitHeader() {
+  const header=$('.chrome'),row=$('.chrome-topline');
+  if(!row || typeof ResizeObserver==='undefined')return;
+  let scheduled=false;
+  const update=()=>{
+    if(scheduled)return;scheduled=true;
+    requestAnimationFrame(()=>{
+      scheduled=false;if(!row.clientWidth)return;
+      row.dataset.layoutMeasured='true';
+      document.documentElement.style.setProperty('--chrome-height',header.offsetHeight+'px');
+    });
+  };
+  const resize=new ResizeObserver(update);resize.observe(header);
+  document.fonts?.ready?.then(update);window.addEventListener('resize',update);update();
+}
 async function initialize() {
-  try{preferences=loadPreferences(localStorage);}catch(error){toast('설정 일부를 읽지 못했습니다. 설정 파일로 복원할 수 있습니다.',true);}applyTheme(preferences.theme);bindUI();$('#library-sort').value=preferences.librarySort;network();folder=await getSetting('folder');settingsFileHandle=await getSetting('settings-file');settingsFolderHint=await getSetting('settings-folder-hint')||'';await refreshLibrary();activate('library');
+  try{preferences=loadPreferences(localStorage);}catch(error){toast('설정 일부를 읽지 못했습니다. 설정 파일로 복원할 수 있습니다.',true);}applyTheme(preferences.theme);bindUI();fitHeader();$('#library-sort').value=preferences.librarySort;network();folder=await getSetting('folder');settingsFileHandle=await getSetting('settings-file');settingsFolderHint=await getSetting('settings-folder-hint')||'';await refreshLibrary();activate('library');
   if(installableLocation(location)&&'serviceWorker'in navigator)await navigator.serviceWorker.register('./sw.js').catch(()=>toast('오프라인 준비를 완료하지 못했습니다. 다음 접속에서 다시 준비합니다.',true));
   if('launchQueue'in window)window.launchQueue.setConsumer(safely(async params=>{for(const handle of params.files||[])await openLocalFile(handle);}));
   if(await discoverBridge()){updateConnection();await receiveCaptures();}

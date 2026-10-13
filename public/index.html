@@ -17,14 +17,10 @@
 <body data-codememo-design="canvas" class="font-design bg-canvas text-ink">
   <div id="app">
     <header class="chrome">
+      <div class="chrome-topline single-row">
       <div class="titlebar">
         <a class="brand" href="#" id="home-button" aria-label="HTMLMemo 서재"><span class="brand-icon"><img src="./icons/icon.svg" alt="" width="32" height="32"></span><strong>HTMLMemo</strong></a>
         <span class="app-caption">나만의 웹 서재</span>
-        <div class="title-actions">
-          <button id="install-button" class="quiet-button">앱 설치</button>
-          <button id="connection-button" class="connection" title="Chrome 연결 설정"><i></i><span>Chrome 연결</span></button>
-          <button id="settings-button" class="icon-button" aria-label="설정"></button>
-        </div>
       </div>
       <nav class="tabbar" aria-label="열린 탭">
         <button id="library-tab" class="library-tab active" title="서재" aria-label="서재"></button>
@@ -32,6 +28,12 @@
         <div id="tabs" role="tablist"></div>
         <button id="new-tab" class="icon-button" aria-label="새 탭"></button>
       </nav>
+      <div class="title-actions">
+        <button id="install-button" class="quiet-button" aria-label="앱 설치" title="앱 설치">앱 설치</button>
+        <button id="connection-button" class="connection" title="Chrome 연결 설정" aria-label="Chrome 연결 설정"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c-5 5-5 13 0 18M12 3c5 5 5 13 0 18"/></svg><i></i><span>Chrome 연결</span></button>
+        <button id="settings-button" class="icon-button" aria-label="설정"></button>
+      </div>
+      </div>
       <div class="addressbar">
         <div class="navigation">
           <button id="back" class="icon-button" aria-label="뒤로" disabled></button>
