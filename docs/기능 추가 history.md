@@ -525,4 +525,6 @@ HTMLMemo 프로젝트에서 구현과 관련 검증을 마친 변경을 기록�
 
 **검증:** check(58개 JavaScript·JSON), 단위 검사 105개, build를 통과했습니다. 앱 패널 자동 생성이 없는 것, 원본 문서 목차 토글의 삽입, 주석 레이어 보존과 임시 UI 미저장을 검사했습니다. Pages 게시 결과는 완료 후 보충합니다.
 
+**게시 완료 (2026-10-14 01:57:00 +09:00):** `81d096b87f5bf2d26041cb1afca11124ab7b2b8c`를 main에 push했고 [GitHub Actions 38434884642](https://github.com/seionwon/HTMLMemo/actions/runs/38434884642)의 test·check·build·Pages 배포 성공을 확인했습니다. 공개 `app.js`와 `reader.js`가 로컬 빌드와 일치하며, 앱 패널 자동 열기 없이 문서 자체의 목차 토글 처리만 포함하는 것을 확인했습니다.
+
 **게시 완료 (2026-10-14 01:54:49 +09:00):** `71faa97a6ab4a994b9e180862513f7a3fbc65984`을 main에 push하고 [GitHub Actions 38434175685](https://github.com/seionwon/HTMLMemo/actions/runs/38434175685)의 Pages 게시 성공과 공개 파일·로컬 빌드 일치를 확인했습니다. 공개 앱의 임시 Chrome 프로필에 사이드바·본문 내부 목차·main 본문이 있는 검사용 HTML을 넣고, 첫 발화가 본문 제목이며 목차 문장이 발화에 없음을 확인했습니다. 재생/일시정지/재개도 통과했고 런타임 오류는 0건이었습니다.
