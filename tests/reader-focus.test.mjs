@@ -86,6 +86,11 @@ test('both library and document sidebars expose toggles in their own headers',as
  assert.match(css,/#app\.desk-sidebar-hidden \.desk-nav/);
 });
 
+test('opening a local document immediately creates its visible outline sidebar',()=>{
+ const openRecord=appSource.slice(appSource.indexOf('async function openRecord('),appSource.indexOf('function saveStatus('));
+ assert.match(openRecord,/await tab\.reader\.ready;[\s\S]*renderSidebar\('outline'\);[\s\S]*updateChrome\(\)/);
+});
+
 
 test('fitting a focused pane uses its full width without the normal reader margins',()=>{
  const a=app(),r=Object.create(Reader.prototype),host=a.doc.createElement('div');a.doc.querySelector('#workspaces').append(host);

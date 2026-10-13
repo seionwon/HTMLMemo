@@ -170,7 +170,12 @@ async function openRecord(record, prepared = null) {
   });
   Object.assign(tab.reader,preferences.annotation);
   try { await tab.reader.ready; } catch(error) {tabs.splice(tabs.indexOf(tab),1);tab.reader.dispose();activate('library');throw error;}
-  renderToolbar();updateChrome();
+  renderToolbar();
+  // A local document always starts with its own outline panel.  Previously the
+  // panel could be left as an empty, collapsed strip because activate() runs
+  // before this Reader is assigned.
+  renderSidebar('outline');
+  updateChrome();
   // A recovery copy ahead of its external file must keep its pending status.
   if(record.diskPending) { tab.queue.schedule(); tab.queue.flush().catch(showError); }
   return tab;
