@@ -378,3 +378,5 @@ HTMLMemo 프로젝트에서 구현과 관련 검증을 마친 변경을 기록�
 **동작:** 앱 창·전역 창·문서 iframe 창 순서로 SpeechSynthesis와 SpeechSynthesisUtterance를 찾아 사용합니다. 재생 전 일시정지된 음성 엔진을 재개하며, 사용할 수 있는 목소리 중 한국어 또는 문서 언어와 맞는 목소리를 선택합니다. 음성 출력이 끝나거나 오류·취소되면 버튼 상태를 되돌립니다. 읽을 문단을 찾을 수 없거나 기기가 지원하지 않으면 기존 오류 표시로 안내합니다. 외부 TTS 서버·문서 전송은 추가하지 않았습니다.
 
 **검증:** npm run check, npm run build, npm test 96개가 통과했습니다. 선택문·현재 문단·한국어 목소리·일시정지 해제·재시작·오류·미지원 처리를 모의 음성 엔진으로 확인했습니다. npm run test:browser는 Chrome 프로세스가 시작 직후 종료되어 완료하지 못했습니다(`Chrome exited null`). 실제 목소리 출력 및 기기별 음성 설정은 이 환경에서 확인하지 못했습니다. 게시 결과는 같은 항목에 보충합니다.
+
+**게시 결과 (2026-10-14 01:05:31 +09:00):** 변경을 `44c7cabf4ca13c0d33dd4a27a8ff73b7b1ad538c`에 커밋해 origin/main에 push했습니다. [GitHub Actions 38427511302](https://github.com/seionwon/HTMLMemo/actions/runs/38427511302)의 테스트·검사·빌드와 Pages 배포가 성공했습니다. 운영 주소의 reader.js가 HTTP 200으로 응답하고 현재 문단 fallback·음성 API fallback·resume 처리를 포함함을 확인했습니다.
