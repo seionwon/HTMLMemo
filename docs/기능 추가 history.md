@@ -393,3 +393,5 @@ HTMLMemo 프로젝트에서 구현과 관련 검증을 마친 변경을 기록�
 **선택 텍스트 도구:** 같은 작업 폴더에 있던 선택 텍스트 메뉴 개선을 함께 반영했습니다. 문장에서 글자를 선택하면 복사·형광펜·밑줄·메모·읽어주기·웹 검색 메뉴가 열리고, ‘읽어주기’는 선택한 문장만 브라우저의 음성 엔진으로 읽습니다. 이 동작은 기존 요청의 HTMLMemoEx 선택 텍스트 TTS 방식에 맞춘 것입니다.
 
 **검증·범위:** npm run check(54개 JavaScript·JSON), npm run build(로컬 Tailwind CSS 4.3.3), npm test(97개)가 통과했습니다. 두 토글의 접근성 이름·토글 함수·문서 패널 복원 상태와 선택 텍스트 TTS 처리를 검사했습니다. npm run test:browser는 Chrome 프로세스가 시작 직후 종료되어 완료하지 못했습니다(`Chrome exited null`). 실제 Chrome 화면 검사를 통과했다고 표시하지 않습니다. 현재 세션의 패널 열림 상태만 바꾸며 문서·주석 저장 데이터는 변경하지 않습니다. 게시 결과는 같은 항목에 보충합니다.
+
+**게시 결과 (2026-10-14 01:20:45 +09:00):** 변경을 `1a6ce642f76efe08bc50d95868063879125e1212`에 커밋해 origin/main에 push했습니다. [GitHub Actions 38429103799](https://github.com/seionwon/HTMLMemo/actions/runs/38429103799)의 테스트·검사·빌드와 Pages 배포가 성공했습니다. 운영 주소의 index.html·styles.css·src/app.js·src/reader.js·sw.js·manifest.webmanifest가 HTTP 200으로 응답하고 해당 Actions Pages 아티팩트와 바이트 단위로 일치함을 확인했습니다.
