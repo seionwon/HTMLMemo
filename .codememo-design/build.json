@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "targets": [
+    {
+      "input": ".codememo-design/base.tailwind.css",
+      "output": "public/styles.css",
+      "kind": "css"
+    }
+  ]
+}

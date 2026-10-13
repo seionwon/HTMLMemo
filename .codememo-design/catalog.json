@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "framework": "tailwind-v4",
+  "title": "HTMLMemo",
+  "preserveCurrent": true,
+  "tailored": true,
+  "designs": [
+    {
+      "id": "current",
+      "title": "현재 디자인",
+      "description": "현재 앱의 색상과 화면 구성을 유지합니다.",
+      "layout": "current",
+      "radius": 8,
+      "density": "comfortable",
+      "font": "system",
+      "previewHtml": "<div class=\"min-h-screen\"><header class=\"flex items-center justify-between gap-3 border-b border-line bg-surface px-5 py-3\"><div class=\"flex items-center gap-3\"><img src=\"{{CODEMEMO_ICON}}\" width=\"36\" height=\"36\" alt=\"\" class=\"rounded-lg\"/><strong>HTMLMemo</strong></div><span class=\"text-xs text-muted\">내 서재</span></header><main class=\"mx-auto max-w-5xl p-6\"><section class=\"py-8\"><p class=\"mb-3 text-xs font-semibold tracking-widest text-brand\">나만의 웹 서재</p><h1 class=\"text-4xl font-semibold leading-snug\">읽고, 남기고,<br>다시 이어서.</h1><p class=\"mt-4 max-w-lg text-sm leading-relaxed text-muted\">저장한 문서를 중심으로 서재·최근 기록·가져오기를 구분하고 넓은 읽기 영역을 둔 서재 화면.</p><div class=\"mt-6\"><button data-design-primary class=\"rounded-lg px-4 py-2 text-sm font-semibold\">웹 페이지 열기</button></div></section><section class=\"grid gap-4 sm:grid-cols-3\"><article data-design-card class=\"p-5\"><span class=\"text-xs text-brand\">01</span><h2 class=\"my-3 font-semibold\">저장한 웹 페이지</h2><div class=\"h-2 w-full rounded bg-line\"></div><div class=\"mt-2 h-2 w-3/4 rounded bg-line\"></div></article><article data-design-card class=\"p-5\"><span class=\"text-xs text-brand\">02</span><h2 class=\"my-3 font-semibold\">최근 읽은 문서</h2><div class=\"h-2 w-full rounded bg-line\"></div><div class=\"mt-2 h-2 w-3/4 rounded bg-line\"></div></article><article data-design-card class=\"p-5\"><span class=\"text-xs text-brand\">03</span><h2 class=\"my-3 font-semibold\">주석과 메모</h2><div class=\"h-2 w-full rounded bg-line\"></div><div class=\"mt-2 h-2 w-3/4 rounded bg-line\"></div></article></section></main></div>"
+    },
+    {
+      "id": "canvas",
+      "title": "라이브러리 데스크",
+      "description": "저장한 문서를 중심으로 서재·최근 기록·가져오기를 구분하고 넓은 읽기 영역을 둔 서재 화면.",
+      "layout": "sidebar",
+      "radius": 18,
+      "density": "compact",
+      "font": "system",
+      "previewHtml": "<div class=\"min-h-screen md:grid md:grid-cols-[180px_1fr]\"><aside class=\"border-b border-line bg-surface p-5 md:border-r\"><img src=\"{{CODEMEMO_ICON}}\" width=\"36\" height=\"36\" alt=\"\" class=\"rounded-lg\"/><strong class=\"mt-3 block\">HTMLMemo</strong><nav class=\"mt-6 flex flex-wrap gap-3 md:flex-col\"><span class=\"text-sm text-muted\">웹 페이지 열기</span><span class=\"text-sm text-muted\">HTML 파일 가져오기</span><span class=\"text-sm text-muted\">내 서재</span></nav></aside><div><header class=\"flex items-center justify-between gap-3 border-b border-line bg-surface px-5 py-3\"><div class=\"flex items-center gap-3\"><img src=\"{{CODEMEMO_ICON}}\" width=\"36\" height=\"36\" alt=\"\" class=\"rounded-lg\"/><strong>HTMLMemo</strong></div><span class=\"text-xs text-muted\">내 서재</span></header><main class=\"mx-auto max-w-5xl p-6\"><section class=\"py-8\"><p class=\"mb-3 text-xs font-semibold tracking-widest text-brand\">나만의 웹 서재</p><h1 class=\"text-4xl font-semibold leading-snug\">읽고, 남기고,<br>다시 이어서.</h1><p class=\"mt-4 max-w-lg text-sm leading-relaxed text-muted\">저장한 문서를 중심으로 서재·최근 기록·가져오기를 구분하고 넓은 읽기 영역을 둔 서재 화면.</p><div class=\"mt-6\"><button data-design-primary class=\"rounded-lg px-4 py-2 text-sm font-semibold\">웹 페이지 열기</button></div></section><section class=\"grid gap-4 sm:grid-cols-3\"><article data-design-card class=\"p-5\"><span class=\"text-xs text-brand\">01</span><h2 class=\"my-3 font-semibold\">저장한 웹 페이지</h2><div class=\"h-2 w-full rounded bg-line\"></div><div class=\"mt-2 h-2 w-3/4 rounded bg-line\"></div></article><article data-design-card class=\"p-5\"><span class=\"text-xs text-brand\">02</span><h2 class=\"my-3 font-semibold\">최근 읽은 문서</h2><div class=\"h-2 w-full rounded bg-line\"></div><div class=\"mt-2 h-2 w-3/4 rounded bg-line\"></div></article><article data-design-card class=\"p-5\"><span class=\"text-xs text-brand\">03</span><h2 class=\"my-3 font-semibold\">주석과 메모</h2><div class=\"h-2 w-full rounded bg-line\"></div><div class=\"mt-2 h-2 w-3/4 rounded bg-line\"></div></article></section></main></div></div>"
+    }
+  ],
+  "colors": [
+    {
+      "id": "original",
+      "title": "현재 색상",
+      "primary": "#276254",
+      "background": "#f5f5f1",
+      "surface": "#fffefb",
+      "text": "#303b35",
+      "muted": "#80877d",
+      "border": "#e0e3da"
+    },
+    {
+      "id": "alternative",
+      "title": "라이브러리 데스크 색상",
+      "primary": "#7c3aed",
+      "background": "#f6f7fb",
+      "surface": "#ffffff",
+      "text": "#202633",
+      "muted": "#667085",
+      "border": "#e0e5ee"
+    }
+  ],
+  "icons": [
+    {
+      "id": "original",
+      "title": "현재 아이콘",
+      "symbol": "book",
+      "file": "public/icons/icon-192.png"
+    },
+    {
+      "id": "alternative",
+      "title": "새 문서 심볼",
+      "symbol": "layers"
+    }
+  ],
+  "screen": {
+    "title": "HTMLMemo",
+    "description": "저장한 문서를 중심으로 서재·최근 기록·가져오기를 구분하고 넓은 읽기 영역을 둔 서재 화면.",
+    "actions": [
+      "웹 페이지 열기",
+      "HTML 파일 가져오기",
+      "내 서재"
+    ],
+    "items": [
+      "저장한 웹 페이지",
+      "최근 읽은 문서",
+      "주석과 메모"
+    ]
+  }
+}
