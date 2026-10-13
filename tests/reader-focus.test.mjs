@@ -13,7 +13,7 @@ function app({native=false,rejected=false,deferred=false,exitDeferred=false}={})
  const doc=new DOMParser().parseFromString(html,'text/html'),root=doc.querySelector('#app');
  const calls={requested:0,exited:0,measured:0,search:[]};
  const metadata={annotations:[{id:'note-1',text:'Keep my note'}]};
- const r={doc:{},metadata,measure(){calls.measured++;},setTool(){}};
+ const r={doc:{},metadata,measure(){calls.measured++;},setTool(){},stopSpeech(){calls.speechStopped=true;}};
  let finish,finishExit;
  doc.exitFullscreen=async()=>{calls.exited++;if(exitDeferred)await new Promise(resolve=>finishExit=resolve);doc.fullscreenElement=null;doc.dispatchEvent(new doc.defaultView.Event('fullscreenchange'));};
  if(native)root.requestFullscreen=async()=>{calls.requested++;if(rejected)throw Error('Permission denied');if(deferred)await new Promise(resolve=>finish=resolve);doc.fullscreenElement=root;doc.dispatchEvent(new doc.defaultView.Event('fullscreenchange'));};
@@ -52,12 +52,12 @@ test('F and Escape toggle the view; typing and Ctrl-F retain their existing beha
  a.context.handleKey(key('f',{tagName:'DIV'},true));assert.deepEqual(a.calls.search,['search']);
  a.context.handleKey(key('Escape',{tagName:'DIV'}));assert.equal(a.context.readerFocused,false);
 });
-test('toolbar button markup remains unchanged; only outside spacing is compacted',async()=>{
+test('toolbar retains compact buttons and includes selected-text TTS',async()=>{
  const a=app();a.r.zoom=1;
  Object.assign(a.context,{icon,$$:(selector,root)=>[...root.querySelectorAll(selector)],bindToolbarDrag(){},updateToolbarState(){},applyToolbarPosition(){}});
  const toolbar=appSource.slice(appSource.indexOf('function toolbarButton('),appSource.indexOf('function updateToolbarState()'));
  new vm.Script(toolbar+'renderToolbar();').runInContext(a.context);
- assert.deepEqual([...a.doc.querySelectorAll('#toolbar [data-action]')].map(button=>button.dataset.action),['select','pen','highlight','underline','eraser','note','palette','undo','redo','zoom','more']);
+ assert.deepEqual([...a.doc.querySelectorAll('#toolbar [data-action]')].map(button=>button.dataset.action),['select','pen','highlight','underline','eraser','note','palette','undo','redo','zoom','speak','more']);
  assert.ok(a.doc.querySelector('#toolbar .toolbar-grip'));
  assert.equal(a.doc.querySelector('#toolbar [data-action=zoom]').textContent,'100%');
  const css=await readFile(new URL('../public/design.tailwind.css',import.meta.url),'utf8');

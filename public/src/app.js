@@ -118,6 +118,7 @@ function renderTabs() {
   $('#execution-tab').classList.toggle('active',activeId==='execution');
 }
 function activate(id) {
+  if(id!==activeId)reader()?.stopSpeech();
   if(readerFocused && id!==activeId)void leaveReaderFocus();
   closePopover(); closeSidebar(); activeId=id; $('#library').hidden=id!=='library';$('#execution').hidden=id!=='execution';$('#workspace').hidden=id==='library'||id==='execution';
   tabs.forEach(tab=>tab.host.hidden=tab.id!==id);renderTabs(); updateChrome();
@@ -312,7 +313,7 @@ function toolbarButton(action,name,label,extra='') {return `<button class="tool-
 function renderToolbar() {
   const r=reader();if(!r||!r.doc)return;
   $('#toolbar').hidden=false;
-  $('#toolbar').innerHTML=`<button class="toolbar-grip" aria-label="툴바 이동">${icon('grip',14)}</button><span class="tool-group">${toolbarButton('select','select','선택 / 읽기 (V)')}${toolbarButton('pen','pen','펜 (P)')}${toolbarButton('highlight','highlight','형광펜 (H)')}${toolbarButton('underline','underline','밑줄 (U)')}${toolbarButton('eraser','eraser','지우개 (E)')}${toolbarButton('note','note','메모 (N)')}</span><span class="toolbar-divider"></span>${toolbarButton('palette','palette','색상 · 굵기 · 투명도 설정','class="tool-button palette-button"')}<span class="tool-group toolbar-history">${toolbarButton('undo','undo','실행 취소 (Ctrl/⌘ Z)')}${toolbarButton('redo','redo','다시 실행 (Ctrl/⌘ Shift Z)')}</span><span class="toolbar-divider"></span><button class="tool-button zoom-button" data-action="zoom" title="확대 / 축소" aria-label="확대 / 축소">${Math.round(r.zoom*100)}%</button>${toolbarButton('more','more','더 많은 도구')}`;
+  $('#toolbar').innerHTML=`<button class="toolbar-grip" aria-label="툴바 이동">${icon('grip',14)}</button><span class="tool-group">${toolbarButton('select','select','선택 / 읽기 (V)')}${toolbarButton('pen','pen','펜 (P)')}${toolbarButton('highlight','highlight','형광펜 (H)')}${toolbarButton('underline','underline','밑줄 (U)')}${toolbarButton('eraser','eraser','지우개 (E)')}${toolbarButton('note','note','메모 (N)')}</span><span class="toolbar-divider"></span>${toolbarButton('palette','palette','색상 · 굵기 · 투명도 설정','class="tool-button palette-button"')}<span class="tool-group toolbar-history">${toolbarButton('undo','undo','실행 취소 (Ctrl/⌘ Z)')}${toolbarButton('redo','redo','다시 실행 (Ctrl/⌘ Shift Z)')}</span><span class="toolbar-divider"></span><button class="tool-button zoom-button" data-action="zoom" title="확대 / 축소" aria-label="확대 / 축소">${Math.round(r.zoom*100)}%</button>${toolbarButton('speak','speaker','선택한 텍스트 읽어주기 (TTS · Esc로 중지)')}${toolbarButton('more','more','더 많은 도구')}`;
   $$('[data-action]',$('#toolbar')).forEach(button=>{button.onpointerdown=e=>{if(e.pointerType==='mouse')e.preventDefault();};button.onclick=()=>toolAction(button.dataset.action);});
   bindToolbarDrag();updateToolbarState();
   applyToolbarPosition();
@@ -336,6 +337,7 @@ function showPopover(name,html,bind=()=>{}) {
 }
 function toolAction(action) {
   const r=reader();if(!r)return;
+  if(action==='speak'){closePopover();r.speakSelection();return;}
   if(['select','pen','highlight','underline','eraser','note','text','rect','ellipse','arrow','area','area-underline','strike'].includes(action)){
     closePopover();r.setTool(action);updateToolbarState();return;
   }
@@ -409,7 +411,7 @@ function documentMenu(record) {
 }
 function handleKey(event) {
   const isField=/^(INPUT|TEXTAREA|SELECT)$/.test(event.target?.tagName)||event.target?.isContentEditable;
-  if(event.key==='Escape') {if($('#dialog').open)return;if(!$('#tool-popover').hidden)closePopover();else if(!$('#sidebar').hidden)closeSidebar();else if(readerFocused)void leaveReaderFocus();else if(reader())reader().setTool('select');return;}
+  if(event.key==='Escape') {reader()?.stopSpeech();if($('#dialog').open)return;if(!$('#tool-popover').hidden)closePopover();else if(!$('#sidebar').hidden)closeSidebar();else if(readerFocused)void leaveReaderFocus();else if(reader())reader().setTool('select');return;}
   if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='s'){event.preventDefault();if(reader())safely(()=>active().queue.flush())();else safely(savePage)();return;}
   if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='l'){event.preventDefault();$('#address').focus();$('#address').select();return;}
   if(!reader()||isField||$('#dialog').open)return;

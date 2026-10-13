@@ -45,6 +45,7 @@ const paths = {
   rect: '<rect x="3" y="5" width="18" height="14" rx="1"/>', ellipse: '<ellipse cx="12" cy="12" rx="9" ry="7"/>',
   arrow: '<path d="m4 20 16-16M9 4h11v11"/>', area: '<rect x="3" y="5" width="18" height="14" fill="currentColor" opacity=".2"/><rect x="3" y="5" width="18" height="14" stroke-dasharray="3 3"/>',
   palette: '<path d="M12 3a9 9 0 0 0 0 18h1c3 0 3-3 1-4s-1-3 1-3h3c5 0 2-11-6-11z"/><circle cx="7" cy="10" r=".6"/><circle cx="10" cy="6" r=".6"/><circle cx="15" cy="7" r=".6"/>',
+  speaker: '<path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/>',
   more: '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
   settings: '<path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3" fill="var(--surface,white)"/><circle cx="16" cy="17" r="3" fill="var(--surface,white)"/>',
   external: '<path d="M14 3h7v7M21 3l-11 11M10 3H3v18h18v-7"/>',

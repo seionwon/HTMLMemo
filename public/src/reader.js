@@ -342,5 +342,32 @@ export class Reader {
   }
   outline() { return [...this.doc.querySelectorAll('h1,h2,h3,h4,h5,h6')].filter(n=>n.textContent.trim()).map(node=>({node,level:Number(node.localName[1]),title:node.textContent.trim()})); }
   addBookmark(title) { this.metadata.bookmarks.push({id:uid(),title,top:this.scrollTop/this.zoom,left:this.scrollLeft/this.zoom}); this.callbacks.onChange?.(); }
-  dispose() { this.disposed=true; clearTimeout(this.positionTimer);clearTimeout(this.dynamicTimer);this.dynamicObserver?.disconnect(); this.resizeObserver?.disconnect(); this.hostObserver?.disconnect(); this.frame.srcdoc=''; if(this.documentURL){URL.revokeObjectURL(this.documentURL);this.documentURL=null;} this.host.remove(); }
+  speakSelection() {
+    const text = this.doc.getSelection()?.toString().trim() || this.selection?.quote?.trim();
+    if (!text) return false;
+    const win = this.host.ownerDocument.defaultView;
+    if (!win.speechSynthesis || !win.SpeechSynthesisUtterance) {
+      this.callbacks.onError?.(new Error('기기의 음성 읽기를 지원하지 않습니다.'));
+      return false;
+    }
+    this.stopSpeech();
+    const utterance = new win.SpeechSynthesisUtterance(text);
+    utterance.lang = /[가-힣]/.test(text) ? 'ko-KR' : (this.doc.documentElement.lang || 'en-US');
+    this.speech = win.speechSynthesis;
+    this.utterance = utterance;
+    utterance.onend = () => { if (this.utterance === utterance) this.utterance = null; };
+    utterance.onerror = event => {
+      if (this.utterance !== utterance) return;
+      this.utterance = null;
+      if (!['canceled','interrupted'].includes(event.error)) this.callbacks.onError?.(new Error('음성 읽기를 실행하지 못했습니다. 기기의 음성 설정을 확인해 주세요.'));
+    };
+    this.speech.cancel();
+    this.speech.speak(utterance);
+    return true;
+  }
+  stopSpeech() {
+    this.utterance = null;
+    this.speech?.cancel();
+  }
+  dispose() { this.stopSpeech(); this.disposed=true; clearTimeout(this.positionTimer);clearTimeout(this.dynamicTimer);this.dynamicObserver?.disconnect(); this.resizeObserver?.disconnect(); this.hostObserver?.disconnect(); this.frame.srcdoc=''; if(this.documentURL){URL.revokeObjectURL(this.documentURL);this.documentURL=null;} this.host.remove(); }
 }
