@@ -441,6 +441,8 @@ HTMLMemo 프로젝트에서 구현과 관련 검증을 마친 변경을 기록�
 
 **CI 보완:** 첫 Pages 실행에서는 테스트가 스타일 컴파일 전의 배포 자산과 컴파일 후 자산을 비교해 실패했습니다. 배포 자산 검사도 먼저 로컬 Tailwind CSS를 컴파일하도록 순서를 맞췄습니다. 이후 로컬 npm test 98개·npm run check·npm run build를 다시 통과시켰습니다.
 
+**게시 결과 (2026-10-14 01:44:30 +09:00):** 수정과 CI 보완을 `bb744eec09fa306367e5d28c451edc419264b900`, `bbfbebbb8cd2ab8921280e935c8e94302d5df4f3`에 커밋해 origin/main에 push했습니다. [GitHub Actions 38432420424](https://github.com/seionwon/HTMLMemo/actions/runs/38432420424)의 테스트·검사·빌드와 Pages 배포가 성공했습니다. 운영 주소의 index.html·styles.css·src/app.js·sw.js·manifest.webmanifest가 HTTP 200으로 응답하고 해당 Actions Pages 아티팩트와 바이트 단위로 일치함을 확인했습니다.
+
 <a id="hist-20261014-008"></a>
 ### 2026-10-14 01:25:15 +09:00 — 툴바 TTS 버튼 복원
 
