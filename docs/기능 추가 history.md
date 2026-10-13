@@ -511,3 +511,7 @@ HTMLMemo 프로젝트에서 구현과 관련 검증을 마친 변경을 기록�
 **수정:** 재생과 문장 이동 시 본문 루트를 다시 선택합니다. 명시적인 낭독·책 본문 영역, MemoSuite의 wm-doc, main/role=main, 일반적인 main-content/book-content, article을 우선하며 숨겨진 본문과 목차 안의 article은 선택하지 않습니다. 본문 내부에 있는 nav·aside·탐색/보조/도구 영역 및 목차·사이드바도 읽기 대상에서 제외합니다. 별도 본문 영역이 없는 단순 HTML은 body에서 본문을 읽되 탐색 영역과 페이지 머리말·꼬리말은 제외합니다. TTS 툴바 모양·재생 조작·설정은 변경하지 않았습니다.
 
 **검증:** check·build·단위 검사 103개 통과. 본문 앞의 목차, 본문 안의 목차, role=main·wm-doc·book-content, 숨겨진 본문, 단순 HTML의 루트 선택을 검사했습니다. 별도 Chrome 검사 3개 통과: 실제 가져온 문서에 앞쪽 사이드바와 본문 안의 목차를 추가한 뒤 첫 발화가 본문 제목임을 확인하고 재생·이동 과정에 목차 문장이 포함되지 않음을 확인했습니다. 발화는 기록용 음성 엔진으로 검사했으며 실제 소리를 들은 검사는 아닙니다.
+
+**hist-20261014-012 게시 보충 (2026-10-14 01:54:59 +09:00):** `dbcd22f1f81130f17e5d8851f7e66b9d7337b97c`를 main에 push했고 [GitHub Actions 38434265654](https://github.com/seionwon/HTMLMemo/actions/runs/38434265654)의 test·check·build·Pages 배포 성공을 확인했습니다. 공개 `src/app.js`가 로컬 파일과 일치하며, Reader 준비 뒤 `renderSidebar('outline')`로 오른쪽 목차·북마크 패널을 즉시 만드는 것을 확인했습니다. 실제 Chrome 통합 검사는 이 환경에서 전용 Chrome이 즉시 종료되어 완료하지 못했습니다(`Chrome exited null`).
+
+**게시 완료 (2026-10-14 01:54:49 +09:00):** `71faa97a6ab4a994b9e180862513f7a3fbc65984`을 main에 push하고 [GitHub Actions 38434175685](https://github.com/seionwon/HTMLMemo/actions/runs/38434175685)의 Pages 게시 성공과 공개 파일·로컬 빌드 일치를 확인했습니다. 공개 앱의 임시 Chrome 프로필에 사이드바·본문 내부 목차·main 본문이 있는 검사용 HTML을 넣고, 첫 발화가 본문 제목이며 목차 문장이 발화에 없음을 확인했습니다. 재생/일시정지/재개도 통과했고 런타임 오류는 0건이었습니다.
