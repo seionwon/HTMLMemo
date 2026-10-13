@@ -1,6 +1,6 @@
 import { clamp, uid } from './utils.js';
 import { History, TEXT_TOOLS, DRAW_TOOLS } from './model.js';
-import { LAYER_ID, cleanAnnotations, textIndex, selectionAnchor, resolveTextAnchor, wrapOffsets, rangeFromOffsets, serializeHTML } from './document.js';
+import { LAYER_ID, prepareLoadedHTML, cleanAnnotations, textIndex, selectionAnchor, resolveTextAnchor, wrapOffsets, rangeFromOffsets, serializeHTML } from './document.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const svg = (doc, tag, attrs = {}) => { const node = doc.createElementNS(NS, tag); for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, String(value)); return node; };
@@ -17,21 +17,40 @@ export class Reader {
     // The parent can manipulate the DOM. Source scripts, forms and top-level
     // navigation remain disabled by the sandbox, even for imported hostile HTML.
     this.frame.setAttribute('sandbox', 'allow-same-origin'); this.frame.referrerPolicy = 'no-referrer';
-    this.naturalWidth = this.metadata.viewport.width; this.frame.style.width = this.naturalWidth + 'px';
+    this.naturalWidth = this.metadata.viewport.width; this.frame.style.height = '100%'; this.frame.style.width = this.naturalWidth + 'px';
     this.sizer.append(this.frame); this.viewport.append(this.sizer); host.append(this.viewport);
+    if (this.nativeScroll) this.applyZoom();
+    if (parsed.file) this.frame.style.pointerEvents = 'none';
     this.ready = new Promise((resolve, reject) => {
-      this.frame.addEventListener('load', () => {
+      this.frame.addEventListener('load', async () => {
         try {
           this.doc = this.frame.contentDocument;
           if (!this.doc?.body) throw new Error('HTML 문서를 표시하지 못했습니다.');
-          this.bind(); this.measure(); this.render();
+          if (parsed.file) {
+            // Let the browser paint the original File before preparation. Reuse
+            // its DOM instead of decoding, parsing and copying the book again.
+            await new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done)));
+            if (this.disposed) { resolve(this); return; }
+            const blockNavigation = event => { if(event.type==='click'||event.key==='Enter')event.preventDefault(); };
+            this.doc.addEventListener('click',blockNavigation,true);this.doc.addEventListener('keydown',blockNavigation,true);
+            this.frame.style.pointerEvents = '';
+            const prepared = await prepareLoadedHTML(this.doc, this.metadata, () => this.disposed);
+            this.doc.removeEventListener('click',blockNavigation,true);this.doc.removeEventListener('keydown',blockNavigation,true);
+            const openingScroll = {top:this.doc.defaultView.scrollY,left:this.doc.defaultView.scrollX};
+            this.metadata = prepared.metadata; this.history = new History(this.metadata.annotations);
+            this.initialHTML = prepared.html;
+            this.naturalWidth = this.metadata.viewport.width;
+            this.frame.style.width = this.naturalWidth + 'px';
+            this.openingScroll = openingScroll;
+          }
+          this.bind(); this.frame.style.pointerEvents = ''; this.measure(); this.render();
           this.zoom = clamp(this.metadata.view.zoom || this.fitZoom(), .2, 8); this.applyZoom();
-          requestAnimationFrame(() => { this.scrollTop = Number(this.metadata.view.scrollTop) || 0; this.scrollLeft = Number(this.metadata.view.scrollLeft) || 0; this.callbacks.onView?.(); resolve(this); });
+          requestAnimationFrame(() => { if(this.disposed){resolve(this);return;} this.scrollTop = this.openingScroll?.top ? this.openingScroll.top*this.zoom : Number(this.metadata.view.scrollTop) || 0; this.scrollLeft = this.openingScroll?.left ? this.openingScroll.left*this.zoom : Number(this.metadata.view.scrollLeft) || 0; this.callbacks.onView?.(); resolve(this); });
         } catch (error) { reject(error); }
       }, {once:true});
     });
     if (this.nativeScroll) {
-      this.documentURL = URL.createObjectURL(new Blob([parsed.html], {type:'text/html;charset=utf-8'}));
+      this.documentURL = URL.createObjectURL(parsed.file || new Blob([parsed.html], {type:'text/html;charset=utf-8'}));
       this.frame.src = this.documentURL;
     } else this.frame.srcdoc = parsed.html;
   }
@@ -44,6 +63,8 @@ export class Reader {
     this.doc.addEventListener('pointercancel', () => { this.gesture = null; this.preview?.remove(); this.preview = null; });
     this.doc.addEventListener('selectionchange', () => { const s = this.doc.getSelection(); if (s?.rangeCount && !s.isCollapsed) this.selection = selectionAnchor(this.doc, s.getRangeAt(0)); });
     this.doc.addEventListener('keydown', event => this.callbacks.onKey?.(event));
+    this.doc.addEventListener('dblclick', event => this.focusDocument(event));
+    this.viewport.addEventListener('dblclick', event => this.focusDocument(event));
     this.doc.addEventListener('click', event => {
       const annotation = event.target.closest?.('[data-htmlmemo-id]');
       if (annotation && this.tool === 'select') { event.preventDefault(); event.stopPropagation(); this.selectedId = annotation.dataset.htmlmemoId; this.callbacks.onSelect?.(this.selectedId); return; }
@@ -73,6 +94,12 @@ export class Reader {
     this.hostObserver = new ResizeObserver(() => { if (!this.disposed) { if(this.autoFit)this.zoom = this.fitZoom(); if(this.nativeScroll || this.autoFit)this.applyZoom(); } }); this.hostObserver.observe(this.viewport);
     this.doc.fonts.ready.then(() => { if (!this.disposed) { this.measure(); this.renderDrawingLayer(); } });
   }
+  focusDocument(event) {
+    if (this.disposed || event.button != null && event.button !== 0) return;
+    if (event.target.closest?.('a,button,input,textarea,select,[contenteditable],[data-htmlmemo-id]')) return;
+    event.preventDefault();
+    this.callbacks.onDocumentFocus?.();
+  }
   measure() {
     if (!this.doc) return;
     const body = this.doc.body;
@@ -89,7 +116,7 @@ export class Reader {
     this.naturalHeight = Math.ceil(height + 24);
     this.frame.style.height = this.naturalHeight + 'px'; this.applyZoom();
   }
-  fitZoom() { return clamp((this.viewport.clientWidth - (innerWidth < 600 ? 16 : 56)) / this.naturalWidth, .2, 2); }
+  fitZoom() { const inset=this.host.closest('.reader-focus') ? 0 : innerWidth < 600 ? 16 : 56; return clamp((this.viewport.clientWidth - inset) / this.naturalWidth, .2, 2); }
   applyZoom() {
     if (this.nativeScroll) this.frame.style.height = Math.max(200, this.viewport.clientHeight / this.zoom) + 'px';
     this.frame.style.transform = `scale(${this.zoom})`;

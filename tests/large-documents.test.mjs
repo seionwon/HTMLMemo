@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DOMParser as Parser } from 'linkedom';
 import { installDOM, documentFor } from './dom.mjs';
-import { parseHTML, serializeHTML, DATA_ID } from '../public/src/document.js';
+import { parseHTML, prepareLoadedHTML, serializeHTML, DATA_ID } from '../public/src/document.js';
 import { Reader } from '../public/src/reader.js';
 installDOM();
 
@@ -80,4 +80,13 @@ test('disposing a large reader releases its local Blob URL without touching file
   const r = nativeReader();const url = URL.createObjectURL(new Blob(['local HTML']));
   r.documentURL = url;r.host = {remove(){}};r.dispose();
   assert.equal(r.documentURL, null);assert.equal(r.disposed, true);
+});
+
+
+test('native preparation yields between batches, retains annotation anchors, and supports cancellation',async()=>{
+  const doc=documentFor('<html><head><title>Batched book</title></head><body>'+ '<p onclick="bad()">Page</p>'.repeat(4000)+'</body></html>');
+  let tick=false;setTimeout(()=>{tick=true;},0);
+  const prepared=await prepareLoadedHTML(doc);assert.equal(tick,true);assert.equal(prepared.metadata.title,'Batched book');
+  assert.equal(doc.body.lastElementChild.getAttribute('data-htmlmemo-anchor'),'n3999');assert.ok(!prepared.html.includes('onclick'));
+  await assert.rejects(prepareLoadedHTML(documentFor('<html><head></head><body>Cancelled</body></html>'),{},()=>true),{name:'AbortError'});
 });

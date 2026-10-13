@@ -12,6 +12,7 @@ import { InstallController, isIOS, installableLocation, installationURL, PUBLIC_
 let records = []; const tabs = []; let activeId = 'library'; let folder = null; let popoverName = ''; let sidebarMode = ''; let receiving = false;
 let preferences=normalizePreferences(), settingsFileHandle=null, settingsFolderHint='';
 let sharingApp=false, installController;
+let readerFocused=false, nativeReaderFullscreen=false, focusBusy=false;
 const appAddress=()=>{const url=new URL(location.href);url.search='';url.hash='';return url.href;};
 const active = () => tabs.find(tab => tab.id === activeId);
 const reader = () => active()?.reader;
@@ -117,6 +118,7 @@ function renderTabs() {
   $('#execution-tab').classList.toggle('active',activeId==='execution');
 }
 function activate(id) {
+  if(readerFocused && id!==activeId)void leaveReaderFocus();
   closePopover(); closeSidebar(); activeId=id; $('#library').hidden=id!=='library';$('#execution').hidden=id!=='execution';$('#workspace').hidden=id==='library'||id==='execution';
   tabs.forEach(tab=>tab.host.hidden=tab.id!==id);renderTabs(); updateChrome();
   if(reader())renderToolbar();else $('#toolbar').hidden=true;
@@ -125,6 +127,7 @@ function activate(id) {
 }
 function updateChrome() {
   const tab=active(); const r=reader(); const local=tab?.type==='document';const execution=activeId==='execution';
+  $('#reader-fullscreen').hidden=!local;$('#reader-fullscreen').disabled=!r?.doc;
   $('#address').value=local?tab.record.name:tab?.url||'';$('#address-icon').innerHTML=icon(local?'file':'globe',15);$('#local-label').hidden=!local;
   $('#back').disabled=local?!r?.linkHistory.length:!tab||!tab.chromeId&&tab.cursor<=0;
   $('#forward').disabled=!tab||local||!tab.chromeId&&tab.cursor>=tab.history.length-1;
@@ -141,8 +144,9 @@ async function openRecord(record, prepared = null) {
   const tab={id:uid(),type:'document',title:record.title,record:{...record},host:null};tab.host=createHost(tab.id,'document');
   // The initial standalone copy is already sanitized and contains metadata.
   // Reuse it until editing or moving, avoiding a second full DOM clone on import.
-  tab.initialHTML=prepared && !parsed.metadata.annotations.length ? record.html : null;
+  tab.initialHTML=prepared && !parsed.file && !parsed.metadata.annotations.length ? record.html : null;
   tab.queue=new SaveQueue(async()=>{
+    await tab.reader.ready;
     const html=tab.initialHTML || tab.reader.html();tab.initialHTML=null; const metadata=structuredClone(tab.reader.metadata);
     tab.record.html=html;tab.record.metadata=metadata;tab.record.title=metadata.title;tab.record.modified=Date.now();
     tab.record.diskPending=!!tab.record.fileHandle;
@@ -158,6 +162,7 @@ async function openRecord(record, prepared = null) {
     onChange:()=>{tab.initialHTML=null;tab.queue.schedule();if(activeId===tab.id){renderToolbar();if(sidebarMode==='annotations')renderSidebar('annotations');}},
     onPosition:()=>{tab.initialHTML=null;tab.queue.schedule();},onView:()=>{if(activeId===tab.id){updateChrome();updateToolbarState();}},
     onLink:url=>safely(openBrowser)(url),onKey:handleKey,requestText:promptText,
+    onDocumentFocus:()=>{if(activeId===tab.id && !readerFocused)void toggleReaderFocus();},
     onSelect:id=>{if(activeId===tab.id)annotationDialog(tab,id);},
   });
   Object.assign(tab.reader,preferences.annotation);
@@ -175,16 +180,19 @@ function saveStatus(tab) {
 }
 async function closeTab(id) {
   const tab=tabs.find(t=>t.id===id);if(!tab)return;
-  if(tab.reader){tab.reader.rememberPosition();await tab.queue.flush();tab.reader.dispose();}else tab.host.remove();
+  if(tab.reader){await tab.reader.ready;tab.reader.rememberPosition();await tab.queue.flush();tab.reader.dispose();}else tab.host.remove();
   tabs.splice(tabs.indexOf(tab),1);if(activeId===id)activate(tabs.at(-1)?.id||'library');else renderTabs();await refreshLibrary();
 }
 async function createDocument(snapshot, handle = null, name = null, local = {}) {
-  const parsed=parseHTML(snapshot.html,{title:snapshot.title,source:snapshot.url,viewport:snapshot.viewport,warnings:snapshot.warnings},{includeMetadata:true});
+  const parsed=snapshot.file ? {...parseHTML('<html><head></head><body></body></html>',{title:snapshot.title}),file:snapshot.file,nativeScroll:true} : parseHTML(snapshot.html,{title:snapshot.title,source:snapshot.url,viewport:snapshot.viewport,warnings:snapshot.warnings},{includeMetadata:true});
   const title=parsed.metadata.title; const record={id:uid(),title,name:name||handle?.name||filename(title),source:parsed.metadata.source,created:Date.now(),modified:Date.now(),fileHandle:handle,originalHandle:local.originalHandle||null,metadata:parsed.metadata};
   record.html=parsed.html;
   if(local.diskStamp)record.diskStamp=local.diskStamp;
   else if(handle){const disk=await handle.getFile();record.diskStamp={modified:disk.lastModified,size:disk.size};}
-  await putDocument(record);records=records.filter(r=>r.id!==record.id).concat(record);const tab=await openRecord(record,parsed);tab.queue.schedule();
+  records=records.filter(r=>r.id!==record.id).concat(record);let tab;
+  try{tab=await openRecord(record,parsed);}catch(error){records=records.filter(r=>r.id!==record.id);renderLibrary();throw error;}
+  if(snapshot.file){tab.initialHTML=tab.reader.metadata.annotations.length ? null : tab.reader.initialHTML;tab.reader.initialHTML=null;tab.record.metadata=tab.reader.metadata;tab.record.source=tab.reader.metadata.source;tab.title=tab.record.title=tab.reader.metadata.title;}
+  tab.queue.schedule();
   try { await tab.queue.flush(); } catch(error) { showError(error); }
   renderLibrary();activate(tab.id);
   if(tab.queue.error)return tab;
@@ -211,7 +219,7 @@ async function importFiles() {
 }
 async function openLocalFile(input,requestWrite=false) {
   $('#status-left').textContent='로컬 HTML을 읽는 중…';
-  const local=await readLocalHTML(input,{requestWrite});
+  const local=await readLocalHTML(input,{requestWrite,native:true});
   $('#status-left').textContent='HTML 문서를 준비하는 중…';
   await new Promise(resolve=>setTimeout(resolve,0));
   return createDocument(local.snapshot,local.handle,local.name,local);
@@ -253,6 +261,7 @@ async function connectDocumentFile(tab) {
   tab.queue.schedule();await tab.queue.flush();updateChrome();toast('이 HTML 파일에 주석을 자동 저장합니다.');
 }
 async function exportDocument(tab) {
+  await tab.reader.ready;
   if(savePicker())return connectDocumentFile(tab);
   await tab.queue.flush();download(tab.reader.html(),tab.record.name);toast('주석이 포함된 HTML 파일을 내보냈습니다.');
 }
@@ -400,14 +409,39 @@ function documentMenu(record) {
 }
 function handleKey(event) {
   const isField=/^(INPUT|TEXTAREA|SELECT)$/.test(event.target?.tagName)||event.target?.isContentEditable;
-  if(event.key==='Escape') {if($('#dialog').open)return;if(!$('#tool-popover').hidden)closePopover();else if(!$('#sidebar').hidden)closeSidebar();else if(reader())reader().setTool('select');return;}
+  if(event.key==='Escape') {if($('#dialog').open)return;if(!$('#tool-popover').hidden)closePopover();else if(!$('#sidebar').hidden)closeSidebar();else if(readerFocused)void leaveReaderFocus();else if(reader())reader().setTool('select');return;}
   if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='s'){event.preventDefault();if(reader())safely(()=>active().queue.flush())();else safely(savePage)();return;}
   if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='l'){event.preventDefault();$('#address').focus();$('#address').select();return;}
   if(!reader()||isField||$('#dialog').open)return;
   if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='z'){event.preventDefault();event.shiftKey?reader().redo():reader().undo();return;}
   if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='f'){event.preventDefault();renderSidebar('search');return;}
   if(event.ctrlKey||event.metaKey||event.altKey)return;
+  if(event.key.toLowerCase()==='f'){event.preventDefault();void toggleReaderFocus();return;}
   const tools={v:'select',p:'pen',h:'highlight',u:'underline',e:'eraser',n:'note'};const tool=tools[event.key.toLowerCase()];if(tool){event.preventDefault();toolAction(tool);}
+}
+function setReaderFocus(value) {
+  readerFocused=value;$('#app').classList.toggle('reader-focus',value);
+  const button=$('#reader-fullscreen');button.textContent=value?'전체 화면 종료':'전체 화면';button.setAttribute('aria-label',button.textContent+' (F)');button.setAttribute('aria-pressed',String(value));
+  closePopover();closeSidebar();requestAnimationFrame(()=>{applyToolbarPosition();reader()?.measure();});
+}
+async function leaveReaderFocus() {
+  const entering=focusBusy;focusBusy=true;
+  setReaderFocus(false);
+  try{if(nativeReaderFullscreen && document.fullscreenElement===$('#app'))await document.exitFullscreen();}
+  catch{/* The browser may already be leaving fullscreen. */}
+  finally{nativeReaderFullscreen=false;if(!entering)focusBusy=false;}
+}
+async function toggleReaderFocus() {
+  if(!reader()?.doc)return;
+  if(readerFocused){await leaveReaderFocus();return;}
+  if(focusBusy)return;
+  focusBusy=true;setReaderFocus(true);
+  try{
+    // Fullscreen the reader shell, keeping annotation tools and dialogs available.
+    // Browsers without this API still get a document-only, viewport-filling view.
+    if($('#app').requestFullscreen){await $('#app').requestFullscreen();nativeReaderFullscreen=document.fullscreenElement===$('#app');}
+  }catch{/* Keep document focus mode when browser fullscreen is unavailable. */}
+  finally{focusBusy=false;if(!readerFocused && document.fullscreenElement===$('#app'))await leaveReaderFocus();}
 }
 async function copyAppURL(){
   if(sharingApp)return;sharingApp=true;$('#share-app').disabled=true;updateChrome();
@@ -421,6 +455,8 @@ async function copyAppURL(){
   }finally{sharingApp=false;$('#share-app').disabled=false;updateChrome();if(activeId==='execution')$('#status-left').textContent='앱 설치 · URL 공유 · 모든 데이터는 이 기기에 저장';}
 }
 function bindUI() {
+  $('#reader-fullscreen').onclick=()=>void toggleReaderFocus();
+  document.addEventListener('fullscreenchange',()=>{if(document.fullscreenElement===$('#app') && readerFocused)nativeReaderFullscreen=true;else if(nativeReaderFullscreen){nativeReaderFullscreen=false;setReaderFocus(false);}});
   [['#library-tab','library'],['#new-tab','plus'],['#back','back'],['#forward','forward'],['#reload','reload'],['#import-button','folder'],['#save-page','save'],['#app-menu-button','more'],['#settings-button','settings'],['#library-search-icon','search'],['#empty-icon','file']].forEach(([id,name])=>setButton(id,name));
   $('#desk-library').onclick=()=>activate('library');
   $('#desk-execution').onclick=()=>activate('execution');
@@ -445,7 +481,7 @@ function bindUI() {
   document.addEventListener('keydown',handleKey);document.addEventListener('pointerdown',event=>{if(!event.target.closest('#toolbar,#tool-popover')&&!$('#tool-popover').hidden)closePopover();});
   $('#dialog').addEventListener('click',event=>{if(event.target===$('#dialog'))$('#dialog').close();});
   window.addEventListener('beforeunload',event=>{if(tabs.some(t=>t.queue?.pending||t.queue?.error)){event.preventDefault();event.returnValue='';}});
-  document.addEventListener('visibilitychange',()=>{if(document.hidden)for(const tab of tabs)if(tab.reader){tab.reader.rememberPosition();tab.queue.flush().catch(()=>{});}});
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)for(const tab of tabs)if(tab.reader?.doc){tab.reader.rememberPosition();tab.queue.flush().catch(()=>{});}});
   window.addEventListener('online',network);window.addEventListener('offline',network);window.addEventListener('htmlmemo-chrome-ready',()=>{updateConnection();safely(receiveCaptures)();});window.addEventListener('htmlmemo-capture-ready',safely(receiveCaptures));
   window.addEventListener('resize',()=>{closePopover();applyToolbarPosition();});
   window.addEventListener('dragover',event=>{if([...event.dataTransfer.types].includes('Files'))event.preventDefault();});window.addEventListener('drop',safely(async event=>{if(![...(event.dataTransfer.types||[])].includes('Files'))return;event.preventDefault();for(const file of await droppedHTMLFiles(event.dataTransfer))await openLocalFile(file);}));

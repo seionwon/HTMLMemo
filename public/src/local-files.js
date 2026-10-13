@@ -1,11 +1,27 @@
+import { LOCAL_CSP } from './document.js';
 import { permission } from './storage.js';
 
-export async function readLocalHTML(input, {requestWrite = false} = {}) {
+export async function readLocalHTML(input, {requestWrite = false, native = false} = {}) {
   const originalHandle = input?.kind === 'file' && typeof input.getFile === 'function' ? input : null;
   const file = originalHandle ? await originalHandle.getFile() : input;
   if (!file || typeof file.text !== 'function' || !/\.html?$/i.test(file.name || '') && file.type !== 'text/html') throw new Error('HTML 또는 HTM 파일을 선택해주세요.');
+  // Inspect only the encoding header. Blob slices retain the original file bytes;
+  // the browser streams/parses them without making a giant JS string first.
+  let nativeFile = null;
+  if (native && file.size >= 4 * 1024 * 1024 && typeof file.slice === 'function') {
+    const header = new Uint8Array(await file.slice(0,4096).arrayBuffer());
+    const charset = new TextDecoder().decode(header).match(/<meta\b[^>]*charset\s*=\s*["']?([\w-]+)/i)?.[1] || 'utf-8';
+    const utf16 = header[0] === 0xff && header[1] === 0xfe || header[0] === 0xfe && header[1] === 0xff;
+    if (!utf16 && /^(utf-8|utf8)$/i.test(charset)) {
+      const offset = header[0] === 0xef && header[1] === 0xbb && header[2] === 0xbf ? 3 : 0;
+      // CSP precedes every source byte. Sandbox independently blocks scripts,
+      // forms, popups and automatic meta refresh before DOM preparation.
+      nativeFile = new Blob(['<!doctype html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="' + LOCAL_CSP + '">',file.slice(offset)],{type:'text/html;charset=utf-8'});
+    }
+  }
   let html;
-  if (typeof file.arrayBuffer === 'function') {
+  if (nativeFile) html = null;
+  else if (typeof file.arrayBuffer === 'function') {
     const bytes = new Uint8Array(await file.arrayBuffer());
     const header = new TextDecoder().decode(bytes.subarray(0,4096));
     const charset = bytes[0] === 0xff && bytes[1] === 0xfe ? 'utf-16le' : bytes[0] === 0xfe && bytes[1] === 0xff ? 'utf-16be' : header.match(/<meta\b[^>]*charset\s*=\s*["']?([\w-]+)/i)?.[1] || 'utf-8';
@@ -16,7 +32,7 @@ export async function readLocalHTML(input, {requestWrite = false} = {}) {
   let writable = false;
   try { writable = originalHandle ? await permission(originalHandle,requestWrite) : false; } catch { /* A missing write gesture must not block reading or annotation. */ }
   return {
-    snapshot:{html,title:file.name}, name:file.name, handle:writable ? originalHandle : null,
+    snapshot:{html,file:nativeFile,title:file.name}, name:file.name, handle:writable ? originalHandle : null,
     originalHandle, diskStamp:originalHandle ? {modified:file.lastModified,size:file.size} : null,
   };
 }

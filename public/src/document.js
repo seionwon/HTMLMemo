@@ -2,6 +2,7 @@ import { FORMAT_VERSION, validateAnnotations } from './model.js';
 
 export const LAYER_ID = 'htmlmemo-annotation-layer';
 export const DATA_ID = 'htmlmemo-data';
+export const LOCAL_CSP = "default-src 'none'; img-src data: blob:; style-src 'unsafe-inline' data:; font-src data:; media-src data:; script-src 'none'; connect-src 'none'; form-action 'none'; base-uri 'none'";
 export function cleanAnnotations(doc) {
   doc.getElementById(LAYER_ID)?.remove();
   doc.getElementById(DATA_ID)?.remove();
@@ -14,14 +15,15 @@ export function cleanAnnotations(doc) {
   // marks, not when opening an unannotated book containing millions of nodes.
   if (unwrapped) doc.body?.normalize();
 }
-function sanitizeTree(root, source, depth = 0) {
+function* sanitizeTree(root, source, depth = 0) {
   for (const element of root.querySelectorAll('*')) {
+    yield;
     const tag = element.localName;
     if (['script','object','embed','frame','frameset','base'].includes(tag)) { element.remove(); continue; }
     if (tag === 'iframe') {
       const html=element.getAttribute('srcdoc');
       if(!html||depth>=3){element.remove();continue;}
-      const nested=new DOMParser().parseFromString(html,'text/html');sanitizeTree(nested,source,depth+1);
+      const nested=new DOMParser().parseFromString(html,'text/html');yield* sanitizeTree(nested,source,depth+1);
       element.setAttribute('srcdoc',nested.documentElement.outerHTML);element.setAttribute('sandbox','');element.removeAttribute('src');element.removeAttribute('allow');
     }
     if (tag === 'meta' && /^(refresh|content-security-policy)$/i.test(element.getAttribute('http-equiv') || '')) { element.remove(); continue; }
@@ -37,12 +39,32 @@ function sanitizeTree(root, source, depth = 0) {
     }
     element.removeAttribute('contenteditable');
     if (tag === 'form') { element.removeAttribute('action'); element.setAttribute('inert', ''); }
-    if (tag === 'template') sanitizeTree(element.content, source, depth);
+    if (tag === 'template') yield* sanitizeTree(element.content, source, depth);
   }
 }
-export function parseHTML(html, defaults = {}, {includeMetadata = false} = {}) {
-  if (typeof html !== 'string' || !html.trim()) throw new Error('HTML 파일이 비어 있습니다.');
-  const doc = new DOMParser().parseFromString(html, 'text/html');
+export function parseHTML(html, defaults = {}, options = {}) {
+  const work = prepareHTML(html, defaults, options);
+  let step; do { step = work.next(); } while (!step.done);
+  return step.value;
+}
+export async function prepareLoadedHTML(doc, defaults = {}, isCancelled = () => false) {
+  const work = prepareHTML(null, defaults, {document:doc,includeMetadata:true});
+  try {
+    for (;;) {
+      if (isCancelled()) throw new DOMException('문서 열기가 취소되었습니다.','AbortError');
+      const start = performance.now();
+      for (let count=0;count<1000;count++) {
+        const step=work.next();if(step.done)return step.value;
+        if(performance.now()-start>=8)break;
+      }
+      // Yield between bounded batches so the native document can paint/scroll.
+      await new Promise(resolve=>setTimeout(resolve,0));
+    }
+  } finally { work.return(); }
+}
+function* prepareHTML(html, defaults, {includeMetadata = false, document: loadedDocument = null} = {}) {
+  if (!loadedDocument && (typeof html !== 'string' || !html.trim())) throw new Error('HTML 파일이 비어 있습니다.');
+  const doc = loadedDocument || new DOMParser().parseFromString(html, 'text/html');
   let embedded = {};
   const data = doc.getElementById(DATA_ID);
   if (data) {
@@ -53,15 +75,16 @@ export function parseHTML(html, defaults = {}, {includeMetadata = false} = {}) {
   let source = embedded.source || defaults.source || '';
   try { const url=new URL(source); source=['http:','https:'].includes(url.protocol)&&!url.username&&!url.password?url.href:''; } catch { source=''; }
   cleanAnnotations(doc);
-  sanitizeTree(doc, source);
+  yield* sanitizeTree(doc, source);
   for(const meta of doc.head.querySelectorAll('meta[charset],meta[http-equiv]'))if(meta.hasAttribute('charset')||/^content-type$/i.test(meta.getAttribute('http-equiv')))meta.remove();
   const charset=doc.createElement('meta');charset.setAttribute('charset','utf-8');doc.head.prepend(charset);
   const csp = doc.createElement('meta'); csp.httpEquiv = 'Content-Security-Policy';
-  csp.content = "default-src 'none'; img-src data: blob:; style-src 'unsafe-inline' data:; font-src data:; media-src data:; script-src 'none'; connect-src 'none'; form-action 'none'; base-uri 'none'";
+  csp.content = LOCAL_CSP;
   doc.head.prepend(csp);
   let n = 0;
   doc.body.setAttribute('data-htmlmemo-anchor', 'body');
   for (const element of doc.body.querySelectorAll('*')) {
+    yield;
     if (!['style','meta','link','template'].includes(element.localName)) element.setAttribute('data-htmlmemo-anchor', 'n' + n++);
   }
   const viewport = embedded.viewport || defaults.viewport || {width: 1100, height: 800};
@@ -76,11 +99,11 @@ export function parseHTML(html, defaults = {}, {includeMetadata = false} = {}) {
   // Freeze viewport-based heights to the capture viewport. The reader grows
   // its iframe to the full document; otherwise 100vh can cause endless growth.
   const freezeCSS=css=>css.replace(/(?<![\w.-])(-?\d*\.?\d+)(dvh|svh|lvh|vh)\b/g,(_,amount)=>`${Number(amount)*metadata.viewport.height/100}px`);
-  for(const style of doc.querySelectorAll('style'))style.textContent=freezeCSS(style.textContent);
-  for(const element of doc.querySelectorAll('[style]'))element.setAttribute('style',freezeCSS(element.getAttribute('style')));
+  for(const style of doc.querySelectorAll('style')){yield;style.textContent=freezeCSS(style.textContent);}
+  for(const element of doc.querySelectorAll('[style]')){yield;element.setAttribute('style',freezeCSS(element.getAttribute('style')));}
   if (includeMetadata) doc.head.append(metadataElement(doc, metadata));
   return {html: '<!doctype html>\n' + doc.documentElement.outerHTML, metadata,
-    nativeScroll: html.length >= 4 * 1024 * 1024 || n >= 20000};
+    nativeScroll: !!loadedDocument || html.length >= 4 * 1024 * 1024 || n >= 20000};
 }
 function metadataElement(doc, metadata) {
   const script = doc.createElement('script'); script.id = DATA_ID; script.type = 'application/json';

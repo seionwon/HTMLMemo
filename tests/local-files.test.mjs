@@ -40,3 +40,25 @@ test('external edits and revoked permissions prevent overwriting the original lo
 test('failed external writes abort without advancing the saved checkpoint',async()=>{
   let aborted=false;const handle={queryPermission:async()=> 'granted',getFile:async()=>({lastModified:123,size:10}),createWritable:async()=>({write:async()=>{throw new Error('disk full');},abort:async()=>aborted=true})};const record={fileHandle:handle,diskStamp:{modified:123,size:10}};await assert.rejects(writeExternalHTML(record,'changed'),/disk full/);assert.equal(aborted,true);assert.equal(record.diskStamp.modified,123);
 });
+
+test('large UTF-8 import streams original bytes after a CSP header without reading the entire file',async()=>{
+  const raw=file('<html><head><title>Large</title></head><body>'+ 'x'.repeat(4*1024*1024)+'</body></html>');
+  raw.arrayBuffer=async()=>{throw Error('Full file read must not run');};raw.text=async()=>{throw Error('Full text read must not run');};
+  const local=await readLocalHTML(raw,{native:true});assert.equal(local.snapshot.html,null);assert.ok(local.snapshot.file instanceof Blob);
+  const beginning=await local.snapshot.file.slice(0,1024).text();assert.match(beginning,/Content-Security-Policy/);assert.ok(beginning.indexOf("script-src 'none'")<beginning.indexOf('<title>Large'));
+  assert.equal(local.snapshot.file.size>raw.size,true);assert.equal(local.handle,null);
+});
+test('native option leaves small and UTF-16 files on the encoding-safe import path',async()=>{
+  assert.equal((await readLocalHTML(file('<body>small</body>'),{native:true})).snapshot.file,null);
+  const raw=new File([Buffer.from([255,254]),Buffer.from('<html><head></head><body>'+ '한'.repeat(2200000)+'</body></html>','utf16le')],'large.htm',{type:'text/html'});
+  const local=await readLocalHTML(raw,{native:true});assert.equal(local.snapshot.file,null);assert.match(local.snapshot.html,/한/);
+});
+test('preparing a browser-loaded document reuses its DOM and restores embedded annotations securely',()=>{
+  const original=parseHTML('<html><head><title>Book</title></head><body><p>Text</p></body></html>',{}, {includeMetadata:true});
+  original.metadata.annotations=[{id:'saved',type:'note',color:'#edcf67',width:3,opacity:1,points:[{x:1,y:1}],text:'Saved note'}];
+  const doc=documentFor(serializeHTML(documentFor(original.html),original.metadata));
+  const script=doc.createElement('script');script.textContent='window.bad=true';doc.body.append(script);doc.body.firstElementChild.setAttribute('onclick','bad()');
+  const result=parseHTML(null,{title:'file.html'},{document:doc,includeMetadata:true});
+  assert.equal(result.nativeScroll,true);assert.equal(result.metadata.title,'Book');assert.equal(result.metadata.annotations[0].text,'Saved note');
+  assert.ok(!result.html.includes('window.bad'));assert.ok(!doc.body.firstElementChild.hasAttribute('onclick'));assert.match(result.html,/script-src 'none'/);
+});
