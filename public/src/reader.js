@@ -342,32 +342,62 @@ export class Reader {
   }
   outline() { return [...this.doc.querySelectorAll('h1,h2,h3,h4,h5,h6')].filter(n=>n.textContent.trim()).map(node=>({node,level:Number(node.localName[1]),title:node.textContent.trim()})); }
   addBookmark(title) { this.metadata.bookmarks.push({id:uid(),title,top:this.scrollTop/this.zoom,left:this.scrollLeft/this.zoom}); this.callbacks.onChange?.(); }
+  currentReadingText() {
+    const selected = this.doc.getSelection()?.toString().trim() || this.selection?.quote?.trim();
+    if (selected) return selected;
+    const offset = this.nativeScroll ? this.doc.defaultView.scrollY : this.viewport.scrollTop / this.zoom;
+    const candidates = [...this.doc.querySelectorAll('p,li,h1,h2,h3,h4,h5,h6,blockquote,figcaption')];
+    const current = candidates.find(element => {
+      const rect = element.getBoundingClientRect();
+      return rect.bottom + this.doc.defaultView.scrollY > offset + 4 && element.textContent.trim();
+    });
+    return current?.textContent.trim() || '';
+  }
+  speechAPI() {
+    const windows = [this.host.ownerDocument.defaultView, globalThis, this.doc.defaultView];
+    for (const win of windows) {
+      const speech = win?.speechSynthesis;
+      const Utterance = win?.SpeechSynthesisUtterance || globalThis.SpeechSynthesisUtterance;
+      if (speech && Utterance) return {speech, Utterance};
+    }
+    return null;
+  }
   speakSelection() {
-    const text = this.doc.getSelection()?.toString().trim() || this.selection?.quote?.trim();
-    if (!text) return false;
-    const win = this.host.ownerDocument.defaultView;
-    if (!win.speechSynthesis || !win.SpeechSynthesisUtterance) {
+    const text = this.currentReadingText();
+    if (!text) {
+      this.callbacks.onError?.(new Error('읽을 글자를 선택하거나 본문 문단으로 이동해 주세요.'));
+      return false;
+    }
+    const api = this.speechAPI();
+    if (!api) {
       this.callbacks.onError?.(new Error('기기의 음성 읽기를 지원하지 않습니다.'));
       return false;
     }
     this.stopSpeech();
-    const utterance = new win.SpeechSynthesisUtterance(text);
+    const utterance = new api.Utterance(text);
     utterance.lang = /[가-힣]/.test(text) ? 'ko-KR' : (this.doc.documentElement.lang || 'en-US');
-    this.speech = win.speechSynthesis;
+    const voice = api.speech.getVoices?.().find(item => item.lang?.toLowerCase() === utterance.lang.toLowerCase()) || api.speech.getVoices?.().find(item => item.lang?.toLowerCase().startsWith(utterance.lang.slice(0,2).toLowerCase()));
+    if (voice) utterance.voice = voice;
+    this.speech = api.speech;
     this.utterance = utterance;
-    utterance.onend = () => { if (this.utterance === utterance) this.utterance = null; };
+    utterance.onstart = () => this.callbacks.onView?.();
+    utterance.onend = () => { if (this.utterance === utterance) { this.utterance = null; this.callbacks.onView?.(); } };
     utterance.onerror = event => {
       if (this.utterance !== utterance) return;
       this.utterance = null;
+      this.callbacks.onView?.();
       if (!['canceled','interrupted'].includes(event.error)) this.callbacks.onError?.(new Error('음성 읽기를 실행하지 못했습니다. 기기의 음성 설정을 확인해 주세요.'));
     };
     this.speech.cancel();
+    this.speech.resume?.();
     this.speech.speak(utterance);
+    this.callbacks.onView?.();
     return true;
   }
   stopSpeech() {
     this.utterance = null;
     this.speech?.cancel();
+    this.callbacks.onView?.();
   }
   dispose() { this.stopSpeech(); this.disposed=true; clearTimeout(this.positionTimer);clearTimeout(this.dynamicTimer);this.dynamicObserver?.disconnect(); this.resizeObserver?.disconnect(); this.hostObserver?.disconnect(); this.frame.srcdoc=''; if(this.documentURL){URL.revokeObjectURL(this.documentURL);this.documentURL=null;} this.host.remove(); }
 }
