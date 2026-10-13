@@ -1,3 +1,4 @@
+import { createReadAloud } from './read-aloud.js';
 import { clamp, uid } from './utils.js';
 import { History, TEXT_TOOLS, DRAW_TOOLS } from './model.js';
 import { LAYER_ID, prepareLoadedHTML, cleanAnnotations, textIndex, selectionAnchor, resolveTextAnchor, wrapOffsets, rangeFromOffsets, serializeHTML } from './document.js';
@@ -366,9 +367,15 @@ export class Reader {
     const window = this.host.ownerDocument.defaultView, document = this.doc;
     const { speechSynthesis, SpeechSynthesisUtterance } = window;
     if (!window.speechSynthesis) { this.callbacks.onError?.(new Error('기기의 음성 읽기를 지원하지 않습니다.')); return false; }
+    this.readAloud?.close();
     speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(anchor.quote); u.lang = /[가-힣]/.test(anchor.quote) ? 'ko-KR' : (document.documentElement.lang || 'en-US'); speechSynthesis.speak(u);
     return true;
   }
-  stopSpeech() { this.host?.ownerDocument?.defaultView?.speechSynthesis?.cancel(); }
-  dispose() { this.stopSpeech(); this.disposed=true; clearTimeout(this.positionTimer);clearTimeout(this.dynamicTimer);this.dynamicObserver?.disconnect(); this.resizeObserver?.disconnect(); this.hostObserver?.disconnect(); this.frame.srcdoc=''; if(this.documentURL){URL.revokeObjectURL(this.documentURL);this.documentURL=null;} this.host.remove(); }
+  toggleReadAloud() {
+    if (!this.host.ownerDocument.defaultView.speechSynthesis) { this.callbacks.onError?.(new Error('기기의 음성 읽기를 지원하지 않습니다.'));return; }
+    this.readAloud ||= createReadAloud(this);
+    this.readAloud?.toggle();
+  }
+  stopSpeech() { this.readAloud?.close(); this.host?.ownerDocument?.defaultView?.speechSynthesis?.cancel(); }
+  dispose() { this.readAloud?.dispose();this.readAloud=null;this.stopSpeech(); this.disposed=true; clearTimeout(this.positionTimer);clearTimeout(this.dynamicTimer);this.dynamicObserver?.disconnect(); this.resizeObserver?.disconnect(); this.hostObserver?.disconnect(); this.frame.srcdoc=''; if(this.documentURL){URL.revokeObjectURL(this.documentURL);this.documentURL=null;} this.host.remove(); }
 }
