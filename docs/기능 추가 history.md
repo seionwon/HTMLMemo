@@ -158,7 +158,7 @@ HTMLMemo 프로젝트에서 구현과 관련 검증을 마친 변경을 기록�
 
 | ID | change-kind | status |
 |---|---|---|
-| hist-20261013-003 | 상단 레이아웃 수정 · 좁은 화면 대응 · 게시 확인 | 구현·로컬 검증 완료 / 이번 Pages 게시 확인은 아래 보충 |
+| hist-20261013-003 | 상단 레이아웃 수정 · 좁은 화면 대응 · 게시 확인 | 구현·실제 Chrome 검증·GitHub Pages 게시 완료 |
 
 **배경과 원인:** 사용자가 보고한 사이트에는 기존 제목줄·탭줄이 분리된 HTML이 게시되어 있었습니다. 앞선 hist-20261013-002는 작업 폴더에만 남아 있었고 Pages에는 없었습니다. 그 수정도 공간이 부족하면 두 줄로 전환하는 구조였으므로, CSS를 항상 같은 행의 3개 영역으로 배치하도록 바꾸고 자바스크립트의 두 줄 전환 조건을 제거했습니다.
 
@@ -166,4 +166,8 @@ HTMLMemo 프로젝트에서 구현과 관련 검증을 마친 변경을 기록�
 
 **검증:** npm run build, npm run check의 JavaScript 52개·JSON, npm test 73개가 통과했습니다. 기존 실제 Chrome 기능 검사 5개에서 웹 탐색·캡처·주석 저장·파일 가져오기·다시 열기·오프라인을 확인했습니다. 실제 Chrome에서 서재 1920·1280·1024·960·820·640·390·320px, 열린 문서 1280·1024·820·640·390·320px의 총 14개 상태를 검사해 세 영역의 중심 높이가 같고 상단 높이는 44/40px이며 모든 상단 버튼이 화면 안에 있는 것을 확인했습니다. 페이지 가로 넘침과 브라우저 예외는 없었습니다. 내장 브라우저 실행 도구가 제공되지 않아 앱의 기존 Chrome 검사 도구와 새 임시 프로필을 사용했습니다. 최초 화면 검사는 검사 서버 경로의 끝 슬래시 및 보이지 않는 예제 버튼을 사용한 오류를 바로잡고 실제 파일 가져오기 버튼으로 다시 수행했습니다.
 
-[로컬 화면 검증](verification/header-single-row-2026-10-13/local.json) · [컴퓨터 화면](verification/header-single-row-2026-10-13/desktop.png) · [폰 화면](verification/header-single-row-2026-10-13/mobile.png). 소스 빌드와 Pages의 게시 완료는 구분하며 실제 게시 결과는 이 항목에 보충합니다.
+[로컬 화면 검증](verification/header-single-row-2026-10-13/local.json) · [컴퓨터 화면](verification/header-single-row-2026-10-13/desktop.png) · [폰 화면](verification/header-single-row-2026-10-13/mobile.png).
+
+**실제 게시와 화면 확인:** 수정 소스 `7f494a58475504f8c603e27a93b316398ac0f166`을 저장소에 고정된 seionwon 인증으로 origin/main에 push했습니다. [해당 GitHub Actions 실행](https://github.com/seionwon/HTMLMemo/actions/runs/38357787692)의 Pages 게시 성공과 온라인 파일 일치를 2026-10-13 15:38:43 +09:00에 확인했습니다. 이어서 https://seionwon.github.io/HTMLMemo/ 실제 주소에 새 Chrome 검사 프로필로 접속해 같은 14개 화면 폭과 열린 문서 상태를 검사했습니다. 상단은 모두 한 줄, 높이는 44/40px이며 버튼 가림·페이지 가로 넘침·브라우저 예외가 없었습니다. 실제 온라인 화면에서 컴퓨터와 폰의 배치를 눈으로 확인했습니다. 앞선 미게시 기록 hist-20261013-002의 수정도 이번 변경에 포함되어 게시되었습니다.
+
+[게시 결과](verification/header-single-row-2026-10-13/published.json) · [운영 사이트 화면 검증](verification/header-single-row-2026-10-13/live.json) · [게시된 컴퓨터 화면](verification/header-single-row-2026-10-13/live-desktop.png) · [게시된 폰 화면](verification/header-single-row-2026-10-13/live-mobile.png).
