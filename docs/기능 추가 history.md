@@ -118,3 +118,15 @@ HTMLMemo 프로젝트에서 구현과 관련 검증을 마친 변경을 기록�
 **검증과 오류:** npm run build 통과, npm test 73개 통과, npm run check JavaScript 52개와 JSON 검사 통과, git diff --check 통과. 실제 앱 스크립트의 DOM 모델에서 새 메뉴의 화면 전환·현재 위치 표시·주소창 포커스·파일 가져오기 연결과 단일 HTML 아이콘 포함을 확인했습니다. 배포 파일의 컴파일 버전·실제 유틸리티·선택 SVG 일치·설치 아이콘·manifest 색상·의존성 잠금 일치를 추가 검사했습니다. 실제 브라우저 검사는 localhost listen EPERM 제한으로 실행되지 않아 화면 렌더링과 실기기 설치는 검증하지 못했습니다. 의존성 다운로드가 완료되지 않아 로컬 빌드는 이미 설치된 정확한 버전의 컴파일러 패키지를 이 프로젝트 node_modules에 복사해 실행했습니다. 새 환경의 npm ci 다운로드는 네트워크 접근이 필요합니다.
 
 **배포 상태와 한계:** 기존 GitHub Pages용 dist/index.html·styles.css·manifest·아이콘과 오프라인 리소스, Chrome 연결 파일까지 생성했습니다. gh auth status에서 GitHub 토큰이 유효하지 않아 원격 업로드·Actions 게시를 수행하지 못했습니다. 실제 운영 사이트에 반영됐다고 표시하지 않으며 적용 영수증도 deployed:false로 기록합니다. 유효한 저장소 인증과 기존 Pages 배포 실행이 남아 있습니다.
+
+<a id="pages-selected-design-20261013"></a>
+
+### 2026-10-13 13:18:22 +09:00 — 선택한 라이브러리 데스크 디자인의 GitHub Pages 게시 완료
+
+**배경과 상태 정정:** 앞선 디자인 적용은 로컬 소스·배포 파일까지 생성됐으나 GitHub 인증 오류로 게시되지 않았습니다. 사용자가 선택한 디자인과 색상·아이콘·시스템 화면 모드를 그대로 유지한 채 저장소에 고정된 seionwon 인증으로 게시를 재개했습니다. 앞선 실패 기록은 당시 상황을 보존합니다.
+
+**게시:** 선택은 canvas / alternative 색상 / alternative 아이콘 / primary #334155 / system입니다. 앱 소스와 선택 파일을 `84a6de7`에 저장하고 origin/main으로 push했습니다. GitHub Actions의 기존 deploy-pages.yml 검사·빌드·게시가 성공했으며 https://seionwon.github.io/HTMLMemo/ 에 반영됐습니다. 소스와 앱 데이터 저장 방식은 변경하지 않았습니다.
+
+**검증:** npm run build, npm run check의 JavaScript 52개·JSON 검사, npm test 73개, git diff --check가 통과했습니다. 해당 커밋의 성공한 Pages deployment를 확인한 뒤 index.html·styles.css·icons/icon.svg·manifest.webmanifest·src/app.js를 캐시 우회 요청으로 받아 로컬 dist 파일과 바이트 단위로 비교해 모두 일치했습니다. GitHub CLI의 전역 활성 계정을 변경하지 않았습니다. 인증 정보와 사용자 문서·설정은 게시 파일이나 이력에 넣지 않았습니다.
+
+**후속 자동화:** CodeMemo의 적용 버튼에서 검증·빌드·저장·push·Pages 게시 확인까지 이어지는 서버 기능은 MemoSuite 본체의 별도 후속 수정으로 진행합니다. 이 항목의 사이트 게시 성공과 본체 기능 배포를 구분합니다.

@@ -24,7 +24,7 @@
 
 워크플로는 npm ci, npm test, npm run check, npm run build를 실행하고 **dist/만** GitHub Pages에 게시합니다. 개인 문서·설정·첨부·개발 의존성은 웹 빌드에 포함하지 않습니다. 검사나 빌드가 실패하면 배포 작업을 실행하지 않습니다. 앱 코드 또는 연결 기능의 코드가 바뀌면 오프라인 캐시 버전도 변경하며 기기의 문서 저장소는 지우지 않습니다.
 
-GitHub Pages의 Source 설정과 실제 사이트 게시가 완료되어야 주소를 다른 사용자에게 전달할 수 있습니다. 현재 작업 환경은 GitHub에 로그인되어 있지 않아 원격 업로드·Pages 설정·온라인 배포를 수행하지 않았습니다. 로컬 빌드 성공을 실제 게시 완료로 표시하지 않습니다. [GitHub Actions를 통한 Pages 배포](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
+GitHub Pages의 Source 설정과 실제 사이트 게시가 완료되어야 주소를 다른 사용자에게 전달할 수 있습니다. 2026-10-13에는 사용자가 선택한 라이브러리 데스크 디자인을 `84a6de7`로 main에 push하고 GitHub Actions·Pages 게시 성공을 확인했습니다. 게시된 HTML·CSS·아이콘·manifest·앱 JavaScript가 로컬 빌드와 일치함도 검증했습니다. 로컬 빌드 성공만으로 실제 게시 완료를 표시하지 않습니다. [GitHub Actions를 통한 Pages 배포](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
 
 ## GitHub 게시 인증
 
