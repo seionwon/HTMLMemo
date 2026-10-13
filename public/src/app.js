@@ -354,7 +354,10 @@ function toolAction(action) {
   });return;}
   if(action==='more') {
     const items=[['search','search','문서 검색'],['outline','list','목차 · 북마크'],['annotations','note','주석 목록'],['rect','rect','사각형'],['ellipse','ellipse','타원'],['arrow','arrow','화살표'],['area','area','영역 형광펜'],['area-underline','underline','영역 밑줄'],['strike','strike','취소선'],['text','text','텍스트'],['undo','undo','실행 취소'],['redo','redo','다시 실행'],['bookmark','bookmark','현재 위치 북마크'],['connect','save','파일 연결 / 저장 재시도'],['info','file','문서 정보'],['clear','trash','주석 모두 지우기']];
-    showPopover('more',`<h3>문서 도구</h3><div class="more-grid">${items.map(([id,name,label])=>`<button class="menu-button" data-more="${id}">${icon(name,16)}<span>${label}</span></button>`).join('')}</div>`,()=>$$('[data-more]').forEach(button=>button.onclick=safely(()=>{const id=button.dataset.more;closePopover();return toolAction(id);})));return;
+    showPopover('more',`<div class="popover-heading"><h3>문서 도구</h3><button class="icon-button popover-close" data-popover-close aria-label="문서 도구 닫기" title="닫기">${icon('close',16)}</button></div><div class="more-grid">${items.map(([id,name,label])=>`<button class="menu-button" data-more="${id}">${icon(name,16)}<span>${label}</span></button>`).join('')}</div>`,()=>{
+      $('[data-popover-close]',$('#tool-popover')).onclick=closePopover;
+      $$('[data-more]',$('#tool-popover')).forEach(button=>button.onclick=safely(()=>{const id=button.dataset.more;closePopover();return toolAction(id);}));
+    });return;
   }
   if(['search','outline','annotations'].includes(action)){closePopover();renderSidebar(action);return;}
   if(action==='connect')return safely(()=>connectDocumentFile(active()))();

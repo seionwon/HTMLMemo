@@ -65,6 +65,11 @@ test('toolbar retains compact buttons and includes selected-text TTS',async()=>{
  assert.match(css,/#app\.reader-focus>\.chrome/);
 });
 
+test('document tools provide an explicit close button',()=>{
+ assert.match(appSource,/data-popover-close aria-label="문서 도구 닫기"/);
+ assert.match(appSource,/\$\('\[data-popover-close\]'\s*,\$\('#tool-popover'\)\)\.onclick=closePopover/);
+});
+
 
 test('fitting a focused pane uses its full width without the normal reader margins',()=>{
  const a=app(),r=Object.create(Reader.prototype),host=a.doc.createElement('div');a.doc.querySelector('#workspaces').append(host);

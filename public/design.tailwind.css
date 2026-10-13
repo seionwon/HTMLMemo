@@ -99,3 +99,6 @@ body[data-codememo-design]{margin:0;font-family:var(--app-font);background:var(-
 .floating-toolbar{border-radius:5px}
 
 .floating-toolbar .toolbar-history{display:flex}
+.tool-popover .popover-heading{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.tool-popover .popover-heading h3{margin:0}
+.tool-popover .popover-close{flex:0 0 auto;width:28px;height:28px;padding:4px}
