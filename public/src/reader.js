@@ -58,7 +58,7 @@ export class Reader {
   bind() {
     const editorStyle = this.doc.createElement('style'); editorStyle.id = 'htmlmemo-editor-style';
     editorStyle.textContent = `html{overflow:${this.nativeScroll?'auto':'hidden'}!important;height:auto!important;min-height:0!important;scroll-behavior:auto!important}body{touch-action:pan-x pan-y;height:auto!important;min-height:0!important}html[data-htmlmemo-drawing] *{cursor:crosshair!important;user-select:none!important;touch-action:none!important}`; this.doc.head.append(editorStyle);
-    this.doc.addEventListener('pointerdown', event => this.pointerDown(event), true);
+    this.doc.addEventListener('pointerdown', event => { this.callbacks.onSelectionDismiss?.(); this.pointerDown(event); }, true);
     this.doc.addEventListener('pointermove', event => this.pointerMove(event), true);
     this.doc.addEventListener('pointerup', event => this.pointerUp(event), true);
     this.doc.addEventListener('pointercancel', () => { this.gesture = null; this.preview?.remove(); this.preview = null; });
@@ -252,6 +252,13 @@ export class Reader {
       }
       return;
     }
+    if (this.tool === 'select') setTimeout(() => {
+      if (this.disposed || this.tool !== 'select') return;
+      const selection = this.doc.getSelection();
+      if (!selection?.rangeCount || selection.isCollapsed) return;
+      this.selection = selectionAnchor(this.doc, selection.getRangeAt(0));
+      if (this.selection) this.callbacks.onTextSelection?.(this.selection);
+    }, 0);
     if (TEXT_TOOLS.includes(this.tool)) setTimeout(() => {
       const selection = this.doc.getSelection();
       if (selection?.rangeCount && !selection.isCollapsed) this.addText(this.tool, selectionAnchor(this.doc, selection.getRangeAt(0)));
@@ -342,62 +349,20 @@ export class Reader {
   }
   outline() { return [...this.doc.querySelectorAll('h1,h2,h3,h4,h5,h6')].filter(n=>n.textContent.trim()).map(node=>({node,level:Number(node.localName[1]),title:node.textContent.trim()})); }
   addBookmark(title) { this.metadata.bookmarks.push({id:uid(),title,top:this.scrollTop/this.zoom,left:this.scrollLeft/this.zoom}); this.callbacks.onChange?.(); }
-  currentReadingText() {
-    const selected = this.doc.getSelection()?.toString().trim() || this.selection?.quote?.trim();
-    if (selected) return selected;
-    const offset = this.nativeScroll ? this.doc.defaultView.scrollY : this.viewport.scrollTop / this.zoom;
-    const candidates = [...this.doc.querySelectorAll('p,li,h1,h2,h3,h4,h5,h6,blockquote,figcaption')];
-    const current = candidates.find(element => {
-      const rect = element.getBoundingClientRect();
-      return rect.bottom + this.doc.defaultView.scrollY > offset + 4 && element.textContent.trim();
-    });
-    return current?.textContent.trim() || '';
-  }
-  speechAPI() {
-    const windows = [this.host.ownerDocument.defaultView, globalThis, this.doc.defaultView];
-    for (const win of windows) {
-      const speech = win?.speechSynthesis;
-      const Utterance = win?.SpeechSynthesisUtterance || globalThis.SpeechSynthesisUtterance;
-      if (speech && Utterance) return {speech, Utterance};
-    }
-    return null;
-  }
   speakSelection() {
-    const text = this.currentReadingText();
-    if (!text) {
-      this.callbacks.onError?.(new Error('읽을 글자를 선택하거나 본문 문단으로 이동해 주세요.'));
-      return false;
-    }
-    const api = this.speechAPI();
-    if (!api) {
-      this.callbacks.onError?.(new Error('기기의 음성 읽기를 지원하지 않습니다.'));
-      return false;
-    }
-    this.stopSpeech();
-    const utterance = new api.Utterance(text);
-    utterance.lang = /[가-힣]/.test(text) ? 'ko-KR' : (this.doc.documentElement.lang || 'en-US');
-    const voice = api.speech.getVoices?.().find(item => item.lang?.toLowerCase() === utterance.lang.toLowerCase()) || api.speech.getVoices?.().find(item => item.lang?.toLowerCase().startsWith(utterance.lang.slice(0,2).toLowerCase()));
-    if (voice) utterance.voice = voice;
-    this.speech = api.speech;
-    this.utterance = utterance;
-    utterance.onstart = () => this.callbacks.onView?.();
-    utterance.onend = () => { if (this.utterance === utterance) { this.utterance = null; this.callbacks.onView?.(); } };
-    utterance.onerror = event => {
-      if (this.utterance !== utterance) return;
-      this.utterance = null;
-      this.callbacks.onView?.();
-      if (!['canceled','interrupted'].includes(event.error)) this.callbacks.onError?.(new Error('음성 읽기를 실행하지 못했습니다. 기기의 음성 설정을 확인해 주세요.'));
-    };
-    this.speech.cancel();
-    this.speech.resume?.();
-    this.speech.speak(utterance);
-    this.callbacks.onView?.();
+    const anchor = this.selection || (() => {
+      const selection = this.doc.getSelection();
+      return selection?.rangeCount && !selection.isCollapsed ? selectionAnchor(this.doc, selection.getRangeAt(0)) : null;
+    })();
+    if (!anchor) return false;
+    // HTMLMemoEx tab.js/content.js selectionAction('speak'), with the host window
+    // supplying the browser API because the document lives inside our reader iframe.
+    const window = this.host.ownerDocument.defaultView, document = this.doc;
+    const { speechSynthesis, SpeechSynthesisUtterance } = window;
+    if (!window.speechSynthesis) { this.callbacks.onError?.(new Error('기기의 음성 읽기를 지원하지 않습니다.')); return false; }
+    speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(anchor.quote); u.lang = /[가-힣]/.test(anchor.quote) ? 'ko-KR' : (document.documentElement.lang || 'en-US'); speechSynthesis.speak(u);
     return true;
   }
-  stopSpeech() {
-    this.utterance = null;
-    this.speech?.cancel();
-    this.callbacks.onView?.();
-  }
+  stopSpeech() { this.host?.ownerDocument?.defaultView?.speechSynthesis?.cancel(); }
   dispose() { this.stopSpeech(); this.disposed=true; clearTimeout(this.positionTimer);clearTimeout(this.dynamicTimer);this.dynamicObserver?.disconnect(); this.resizeObserver?.disconnect(); this.hostObserver?.disconnect(); this.frame.srcdoc=''; if(this.documentURL){URL.revokeObjectURL(this.documentURL);this.documentURL=null;} this.host.remove(); }
 }

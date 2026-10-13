@@ -9,7 +9,7 @@ import { normalizePreferences, loadPreferences, storePreferences, serializeSetti
 import { distributionAssets, chromeZIP, bundledExample } from './distribution.js';
 import { InstallController, isIOS, installableLocation, installationURL, PUBLIC_APP_URL } from './install.js';
 
-let records = []; const tabs = []; let activeId = 'library'; let folder = null; let popoverName = ''; let sidebarMode = ''; let receiving = false;
+let records = []; const tabs = []; let activeId = 'library'; let folder = null; let popoverName = ''; let sidebarMode = '', sidebarRestoreMode = 'outline'; let receiving = false;
 let preferences=normalizePreferences(), settingsFileHandle=null, settingsFolderHint='';
 let sharingApp=false, installController;
 let readerFocused=false, nativeReaderFullscreen=false, focusBusy=false;
@@ -137,6 +137,7 @@ function updateChrome() {
   $('#save-page').disabled=execution?sharingApp:!tab;
   if(local)saveStatus(tab); else if(tab)$('#status-left').textContent=tab.chromeId?'실제 Chrome 탭에서 탐색 중':'웹 탐색 · 로컬로 저장하면 주석을 남길 수 있어요.';
   document.title=tab?tab.title+' · HTMLMemo':'HTMLMemo · 나만의 웹 서재';
+  updateReaderSidebarToggle();
 }
 function createHost(id,type) { const host=document.createElement('div');host.id='workspace-'+id;host.className='workspace-host '+type+'-host';host.hidden=true;$('#workspaces').append(host);return host; }
 async function openRecord(record, prepared = null) {
@@ -162,6 +163,8 @@ async function openRecord(record, prepared = null) {
   tab.reader=new Reader(tab.host,parsed,{
     onChange:()=>{tab.initialHTML=null;tab.queue.schedule();if(activeId===tab.id){renderToolbar();if(sidebarMode==='annotations')renderSidebar('annotations');}},
     onPosition:()=>{tab.initialHTML=null;tab.queue.schedule();},onView:()=>{if(activeId===tab.id){updateChrome();updateToolbarState();}},
+    onTextSelection:()=>{if(activeId===tab.id)showSelectionMenu(tab.reader);},
+    onSelectionDismiss:()=>{if(popoverName==='selection')closePopover();},
     onLink:url=>safely(openBrowser)(url),onKey:handleKey,requestText:promptText,onError:showError,
     onDocumentFocus:()=>{if(activeId===tab.id && !readerFocused)void toggleReaderFocus();},
     onSelect:id=>{if(activeId===tab.id)annotationDialog(tab,id);},
@@ -313,14 +316,14 @@ function toolbarButton(action,name,label,extra='') {return `<button class="tool-
 function renderToolbar() {
   const r=reader();if(!r||!r.doc)return;
   $('#toolbar').hidden=false;
-  $('#toolbar').innerHTML=`<button class="toolbar-grip" aria-label="툴바 이동">${icon('grip',14)}</button><span class="tool-group">${toolbarButton('select','select','선택 / 읽기 (V)')}${toolbarButton('pen','pen','펜 (P)')}${toolbarButton('highlight','highlight','형광펜 (H)')}${toolbarButton('underline','underline','밑줄 (U)')}${toolbarButton('eraser','eraser','지우개 (E)')}${toolbarButton('note','note','메모 (N)')}</span><span class="toolbar-divider"></span>${toolbarButton('palette','palette','색상 · 굵기 · 투명도 설정','class="tool-button palette-button"')}<span class="tool-group toolbar-history">${toolbarButton('undo','undo','실행 취소 (Ctrl/⌘ Z)')}${toolbarButton('redo','redo','다시 실행 (Ctrl/⌘ Shift Z)')}</span><span class="toolbar-divider"></span><button class="tool-button zoom-button" data-action="zoom" title="확대 / 축소" aria-label="확대 / 축소">${Math.round(r.zoom*100)}%</button>${toolbarButton('speak','speaker','선택한 텍스트 또는 현재 문단 읽어주기 (TTS · Esc로 중지)')}${toolbarButton('more','more','더 많은 도구')}`;
+  $('#toolbar').innerHTML=`<button class="toolbar-grip" aria-label="툴바 이동">${icon('grip',14)}</button><span class="tool-group">${toolbarButton('select','select','선택 / 읽기 (V)')}${toolbarButton('pen','pen','펜 (P)')}${toolbarButton('highlight','highlight','형광펜 (H)')}${toolbarButton('underline','underline','밑줄 (U)')}${toolbarButton('eraser','eraser','지우개 (E)')}${toolbarButton('note','note','메모 (N)')}</span><span class="toolbar-divider"></span>${toolbarButton('palette','palette','색상 · 굵기 · 투명도 설정','class="tool-button palette-button"')}<span class="tool-group toolbar-history">${toolbarButton('undo','undo','실행 취소 (Ctrl/⌘ Z)')}${toolbarButton('redo','redo','다시 실행 (Ctrl/⌘ Shift Z)')}</span><span class="toolbar-divider"></span><button class="tool-button zoom-button" data-action="zoom" title="확대 / 축소" aria-label="확대 / 축소">${Math.round(r.zoom*100)}%</button>${toolbarButton('more','more','더 많은 도구')}`;
   $$('[data-action]',$('#toolbar')).forEach(button=>{button.onpointerdown=e=>{if(e.pointerType==='mouse')e.preventDefault();};button.onclick=()=>toolAction(button.dataset.action);});
   bindToolbarDrag();updateToolbarState();
   applyToolbarPosition();
 }
 function updateToolbarState() {
   const r=reader();if(!r)return;
-  $$('[data-action]',$('#toolbar')).forEach(button=>{const selected=button.dataset.action===r.tool;const speaking=button.dataset.action==='speak'&&!!r.utterance;button.classList.toggle('active',selected||speaking);if(['select','pen','highlight','underline','eraser','note','speak'].includes(button.dataset.action))button.setAttribute('aria-pressed',String(selected||speaking));});
+  $$('[data-action]',$('#toolbar')).forEach(button=>{const selected=button.dataset.action===r.tool;button.classList.toggle('active',selected);if(['select','pen','highlight','underline','eraser','note'].includes(button.dataset.action))button.setAttribute('aria-pressed',String(selected));});
   const undo=$('[data-action="undo"]',$('#toolbar'));if(undo)undo.disabled=!r.history.canUndo;
   const redo=$('[data-action="redo"]',$('#toolbar'));if(redo)redo.disabled=!r.history.canRedo;
   const zoom=$('.zoom-button');if(zoom)zoom.textContent=Math.round(r.zoom*100)+'%';
@@ -333,7 +336,29 @@ function positionPopover() {
 }
 function showPopover(name,html,bind=()=>{}) {
   if(popoverName===name){closePopover();return;}
-  popoverName=name;$('#tool-popover').innerHTML=html;$('#tool-popover').hidden=false;positionPopover();bind();
+  popoverName=name;$('#tool-popover').classList.toggle('selection',name==='selection');$('#tool-popover').innerHTML=html;$('#tool-popover').hidden=false;positionPopover();bind();
+}
+function showSelectionMenu(r) {
+  const anchor=r.selection;if(!anchor)return;
+  if(popoverName==='selection')closePopover();
+  showPopover('selection',`${[['copy','복사'],['highlight','형광펜'],['underline','밑줄'],['note','메모'],['speak','읽어주기'],['webSearch','웹 검색']].map(([a,l]) => `<button data-selection="${a}">${l}</button>`).join('')}`,()=>{
+    const pop=$('#tool-popover');pop.setAttribute('role','dialog');pop.setAttribute('aria-label','선택한 텍스트');
+    $$('[data-selection]',pop).forEach(button=>{
+      button.onpointerdown=e=>e.preventDefault();
+      button.onclick=safely(async()=>{
+        const action=button.dataset.selection;
+        if(['highlight','underline'].includes(action))r.addText(action,anchor);
+        else if(action==='note'){
+          const text=await promptText('메모','');
+          if(text?.trim())r.addText('note',anchor,text.trim());
+        }
+        else if(action==='copy'){try{await navigator.clipboard.writeText(anchor.quote);toast('텍스트를 복사했습니다.');}catch{toast('글자를 다시 선택한 뒤 Ctrl/⌘+C로 복사하세요.');}}
+        else if(action==='speak'){r.selection=anchor;if(!r.speakSelection())return;}
+        else if(action==='webSearch')window.open('https://www.google.com/search?q='+encodeURIComponent(anchor.quote.slice(0,2000)),'_blank','noopener,noreferrer');
+        closePopover();
+      });
+    });
+  });
 }
 function toolAction(action) {
   const r=reader();if(!r)return;
@@ -373,9 +398,20 @@ function bindToolbarDrag() {
     const end=()=>{grip.removeEventListener('pointermove',move);grip.removeEventListener('pointerup',end);grip.removeEventListener('pointercancel',end);const rect=bar.getBoundingClientRect();safely(()=>changePreferences({toolbarPosition:{x:Math.max(0,Math.min(1,(rect.left-8)/Math.max(1,innerWidth-rect.width-16))),y:Math.max(0,Math.min(1,(rect.top-8)/Math.max(1,innerHeight-rect.height-42)))}}))();};grip.addEventListener('pointermove',move);grip.addEventListener('pointerup',end);grip.addEventListener('pointercancel',end);
   };
 }
-function closeSidebar() {sidebarMode='';$('#sidebar').hidden=true;reader()?.search('');}
+function updateDeskSidebarToggle() {
+  const hidden=$('#app').classList.contains('desk-sidebar-hidden');const button=$('#desk-sidebar-toggle');
+  button.innerHTML=icon(hidden?'forward':'back',16);button.setAttribute('aria-pressed',String(!hidden));button.setAttribute('aria-label',hidden?'서재 사이드바 보이기':'서재 사이드바 숨기기');button.title=button.getAttribute('aria-label');
+}
+function toggleDeskSidebar() { $('#app').classList.toggle('desk-sidebar-hidden');updateDeskSidebarToggle(); }
+function updateReaderSidebarToggle() {
+  const button=$('#reader-sidebar-toggle');const available=!!reader();const open=!$('#sidebar').hidden;
+  button.hidden=!available;button.innerHTML=icon(open?'forward':'back',16);button.setAttribute('aria-pressed',String(open));button.setAttribute('aria-label',open?'문서 사이드바 숨기기':'문서 사이드바 보이기');button.title=button.getAttribute('aria-label');
+  $('#app').classList.toggle('reader-sidebar-open',available&&open);
+}
+function toggleReaderSidebar() { if($('#sidebar').hidden)renderSidebar(sidebarRestoreMode);else closeSidebar(); }
+function closeSidebar() {if(sidebarMode)sidebarRestoreMode=sidebarMode;sidebarMode='';$('#sidebar').hidden=true;reader()?.search('');updateReaderSidebarToggle();}
 function renderSidebar(mode) {
-  const r=reader();if(!r)return;sidebarMode=mode;closePopover();const panel=$('#sidebar');panel.hidden=false;
+  const r=reader();if(!r)return;sidebarMode=mode;sidebarRestoreMode=mode;closePopover();const panel=$('#sidebar');panel.hidden=false;updateReaderSidebarToggle();
   const title={search:'문서 검색',outline:'목차 · 북마크',annotations:'주석 목록'}[mode];
   panel.innerHTML=`<div class="sidebar-heading"><h2>${title}</h2><button class="icon-button" id="close-sidebar" aria-label="패널 닫기">${icon('close')}</button></div><div class="sidebar-content"></div>`;$('#close-sidebar').onclick=closeSidebar;
   const content=$('.sidebar-content',panel);
@@ -462,6 +498,9 @@ async function copyAppURL(){
 }
 function bindUI() {
   $('#reader-fullscreen').onclick=()=>void toggleReaderFocus();
+  $('#desk-sidebar-toggle').onclick=toggleDeskSidebar;
+  $('#reader-sidebar-toggle').onclick=toggleReaderSidebar;
+  updateDeskSidebarToggle();updateReaderSidebarToggle();
   document.addEventListener('fullscreenchange',()=>{if(document.fullscreenElement===$('#app') && readerFocused)nativeReaderFullscreen=true;else if(nativeReaderFullscreen){nativeReaderFullscreen=false;setReaderFocus(false);}});
   [['#library-tab','library'],['#new-tab','plus'],['#back','back'],['#forward','forward'],['#reload','reload'],['#import-button','folder'],['#save-page','save'],['#app-menu-button','more'],['#settings-button','settings'],['#library-search-icon','search'],['#empty-icon','file']].forEach(([id,name])=>setButton(id,name));
   $('#desk-library').onclick=()=>activate('library');

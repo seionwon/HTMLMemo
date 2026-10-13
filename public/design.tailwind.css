@@ -102,3 +102,23 @@ body[data-codememo-design]{margin:0;font-family:var(--app-font);background:var(-
 .tool-popover .popover-heading{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .tool-popover .popover-heading h3{margin:0}
 .tool-popover .popover-close{flex:0 0 auto;width:28px;height:28px;padding:4px}
+
+/* HTMLMemoEx tab.css: text-selection menu. */
+#tool-popover.selection { display:flex;gap:3px;flex-wrap:wrap;width:310px;max-width:calc(100vw - 20px);padding:6px; }
+#tool-popover.selection[hidden] { display:none; }
+#tool-popover.selection button { font-size:11px;padding:4px 9px; }
+
+/* The library and document sidebars keep a small edge toggle when collapsed. */
+.desk-shell{position:relative}
+.sidebar-toggle{position:absolute;z-index:36;width:26px;height:38px;border:1px solid var(--line);background:var(--surface);color:var(--muted);display:grid;place-items:center;padding:0;box-shadow:0 2px 10px #00000012}
+.sidebar-toggle:hover{color:var(--green);background:var(--green-light)}
+.desk-sidebar-toggle{top:12px;left:calc(180px - 13px);border-radius:0 7px 7px 0}
+#app.desk-sidebar-hidden .desk-nav{display:none}
+#app.desk-sidebar-hidden .desk-sidebar-toggle{left:0}
+.reader-sidebar-toggle{position:fixed;top:calc(var(--chrome-height,146px) + 12px);right:0;border-radius:7px 0 0 7px}
+#app.reader-sidebar-open .reader-sidebar-toggle{right:300px}
+#app.reader-focus .reader-sidebar-toggle{top:max(12px,env(safe-area-inset-top));z-index:102}
+#app.reader-focus.reader-sidebar-open .reader-sidebar-toggle{right:300px}
+@media(max-width:1000px){#app.reader-sidebar-open .reader-sidebar-toggle{right:280px}}
+@media(max-width:767px){.desk-sidebar-toggle{top:8px;left:auto;right:8px;border-radius:7px}#app.desk-sidebar-hidden .desk-sidebar-toggle{left:auto;right:8px}.desk-nav{padding-right:42px!important}}
+@media(max-width:480px){#app.reader-sidebar-open .reader-sidebar-toggle{right:min(90vw,280px)}}

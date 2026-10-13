@@ -57,7 +57,7 @@ test('toolbar retains compact buttons and includes selected-text TTS',async()=>{
  Object.assign(a.context,{icon,$$:(selector,root)=>[...root.querySelectorAll(selector)],bindToolbarDrag(){},updateToolbarState(){},applyToolbarPosition(){}});
  const toolbar=appSource.slice(appSource.indexOf('function toolbarButton('),appSource.indexOf('function updateToolbarState()'));
  new vm.Script(toolbar+'renderToolbar();').runInContext(a.context);
- assert.deepEqual([...a.doc.querySelectorAll('#toolbar [data-action]')].map(button=>button.dataset.action),['select','pen','highlight','underline','eraser','note','palette','undo','redo','zoom','speak','more']);
+ assert.deepEqual([...a.doc.querySelectorAll('#toolbar [data-action]')].map(button=>button.dataset.action),['select','pen','highlight','underline','eraser','note','palette','undo','redo','zoom','more']);
  assert.ok(a.doc.querySelector('#toolbar .toolbar-grip'));
  assert.equal(a.doc.querySelector('#toolbar [data-action=zoom]').textContent,'100%');
  const css=await readFile(new URL('../public/design.tailwind.css',import.meta.url),'utf8');
@@ -68,6 +68,14 @@ test('toolbar retains compact buttons and includes selected-text TTS',async()=>{
 test('document tools provide an explicit close button',()=>{
  assert.match(appSource,/data-popover-close aria-label="문서 도구 닫기"/);
  assert.match(appSource,/\$\('\[data-popover-close\]'\s*,\$\('#tool-popover'\)\)\.onclick=closePopover/);
+});
+
+test('both library and document sidebars expose persistent toggles',()=>{
+ assert.match(html,/id="desk-sidebar-toggle"[\s\S]*서재 사이드바 숨기기/);
+ assert.match(html,/id="reader-sidebar-toggle"[\s\S]*문서 사이드바 보이기/);
+ assert.match(appSource,/function toggleDeskSidebar\(\)/);
+ assert.match(appSource,/function toggleReaderSidebar\(\)/);
+ assert.match(appSource,/sidebarRestoreMode/);
 });
 
 
