@@ -96,6 +96,8 @@ export class Reader {
     this.resizeObserver.observe(this.doc.body);
     this.hostObserver = new ResizeObserver(() => { if (!this.disposed) { if(this.autoFit)this.zoom = this.fitZoom(); if(this.nativeScroll || this.autoFit)this.applyZoom(); } }); this.hostObserver.observe(this.viewport);
     this.doc.fonts.ready.then(() => { if (!this.disposed) { this.measure(); this.renderDrawingLayer(); } });
+    this.installDocumentTocToggle();
+    this.tocTimers=[250,1000,3000].map(delay=>setTimeout(()=>this.installDocumentTocToggle(),delay));
     if (this.metadata.execution?.allowScripts) {
       this.dynamicAnchor = 0;
       this.dynamicObserver = new MutationObserver(records => {
@@ -105,6 +107,17 @@ export class Reader {
       this.observeDynamicDocument();
       this.scheduleDynamicRefresh();
     }
+  }
+  installDocumentTocToggle() {
+    if (this.disposed || !this.doc) return;
+    const toc=this.doc.querySelector('.toc,#toc,.table-of-contents,#table-of-contents,.book-toc,#book-toc,[data-toc]');
+    if (!toc || toc.querySelector('[data-htmlmemo-toc-toggle]')) return;
+    let style=this.doc.getElementById('htmlmemo-toc-toggle-style');if(!style){style=this.doc.createElement('style');style.id='htmlmemo-toc-toggle-style';style.textContent=`:is(.toc,#toc,.table-of-contents,#table-of-contents,.book-toc,#book-toc,[data-toc]){position:relative}:is(.toc,#toc,.table-of-contents,#table-of-contents,.book-toc,#book-toc,[data-toc])>[data-htmlmemo-toc-toggle]{position:absolute;top:10px;right:10px;z-index:2147483647;width:30px;height:30px;border:1px solid currentColor;border-radius:6px;background:inherit;color:inherit;font:700 22px/1 system-ui;cursor:pointer}:is(.toc,#toc,.table-of-contents,#table-of-contents,.book-toc,#book-toc,[data-toc])[data-htmlmemo-toc-collapsed]{width:48px!important;min-width:48px!important;padding:6px!important}:is(.toc,#toc,.table-of-contents,#table-of-contents,.book-toc,#book-toc,[data-toc])[data-htmlmemo-toc-collapsed]>:not([data-htmlmemo-toc-toggle]){display:none!important}:is(.toc,#toc,.table-of-contents,#table-of-contents,.book-toc,#book-toc,[data-toc])[data-htmlmemo-toc-collapsed]>[data-htmlmemo-toc-toggle]{position:static;width:34px;height:34px}`;this.doc.head.append(style);}
+    style.dataset.htmlmemoUi='';
+    const button=this.doc.createElement('button');button.type='button';button.dataset.htmlmemoUi='';button.dataset.htmlmemoTocToggle='';button.setAttribute('aria-label','목차 사이드바 접기');button.setAttribute('aria-expanded','true');button.textContent='‹';
+    button.addEventListener('pointerdown',event=>event.stopPropagation(),true);
+    button.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();const collapsed=toc.toggleAttribute('data-htmlmemo-toc-collapsed');button.textContent=collapsed?'›':'‹';button.setAttribute('aria-label',collapsed?'목차 사이드바 펼치기':'목차 사이드바 접기');button.setAttribute('aria-expanded',String(!collapsed));this.measure();});
+    toc.append(button);
   }
   observeDynamicDocument() {
     if (!this.disposed) this.dynamicObserver?.observe(this.doc.documentElement,{childList:true,subtree:true,characterData:true});
@@ -377,5 +390,5 @@ export class Reader {
     this.readAloud?.toggle();
   }
   stopSpeech() { this.readAloud?.close(); this.host?.ownerDocument?.defaultView?.speechSynthesis?.cancel(); }
-  dispose() { this.readAloud?.dispose();this.readAloud=null;this.stopSpeech(); this.disposed=true; clearTimeout(this.positionTimer);clearTimeout(this.dynamicTimer);this.dynamicObserver?.disconnect(); this.resizeObserver?.disconnect(); this.hostObserver?.disconnect(); this.frame.srcdoc=''; if(this.documentURL){URL.revokeObjectURL(this.documentURL);this.documentURL=null;} this.host.remove(); }
+  dispose() { this.readAloud?.dispose();this.readAloud=null;this.stopSpeech(); this.disposed=true; clearTimeout(this.positionTimer);clearTimeout(this.dynamicTimer);this.tocTimers?.forEach(clearTimeout);this.dynamicObserver?.disconnect(); this.resizeObserver?.disconnect(); this.hostObserver?.disconnect(); this.frame.srcdoc=''; if(this.documentURL){URL.revokeObjectURL(this.documentURL);this.documentURL=null;} this.host.remove(); }
 }

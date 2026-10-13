@@ -86,9 +86,16 @@ test('both library and document sidebars expose toggles in their own headers',as
  assert.match(css,/#app\.desk-sidebar-hidden \.desk-nav/);
 });
 
-test('opening a local document immediately creates its visible outline sidebar',()=>{
+test('opening a local document does not create the app outline sidebar',()=>{
  const openRecord=appSource.slice(appSource.indexOf('async function openRecord('),appSource.indexOf('function saveStatus('));
- assert.match(openRecord,/await tab\.reader\.ready;[\s\S]*renderSidebar\('outline'\);[\s\S]*updateChrome\(\)/);
+ assert.doesNotMatch(openRecord,/await tab\.reader\.ready;[\s\S]*renderSidebar\('outline'\);[\s\S]*updateChrome\(\)/);
+});
+
+test('the document-owned table of contents gets its own temporary toggle',async()=>{
+ const readerSource=await readFile(new URL('../public/src/reader.js',import.meta.url),'utf8');
+ assert.match(readerSource,/installDocumentTocToggle\(\)/);
+ assert.match(readerSource,/data-htmlmemo-toc-toggle/);
+ assert.match(readerSource,/목차 사이드바 접기/);
 });
 
 
