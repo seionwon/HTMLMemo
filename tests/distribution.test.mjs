@@ -5,6 +5,7 @@ import { readFile, writeFile, mkdir, access } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { prepareAssets, packageAssets } from '../scripts/assets.mjs';
+import { compileDesign } from '../scripts/design.mjs';
 import { standaloneHTML, bundleModules, assetBytes } from '../public/src/bundler.js';
 import { pwaEntries, chromeZIP, APP_FILES, EXTENSION_FILES } from '../public/src/distribution.js';
 import { PUBLIC_APP_URL } from '../public/src/install.js';
@@ -12,7 +13,7 @@ import { crc32, zipFiles } from '../public/src/zip.js';
 import { serializeSettings, PREFERENCES_KEY } from '../public/src/preferences.js';
 import { DOMParser } from 'linkedom';
 let assets;
-before(async()=>{await prepareAssets();assets=await packageAssets();});
+before(async()=>{await compileDesign();await prepareAssets();assets=await packageAssets();});
 function unzip(bytes){const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),files=new Map();let offset=0;while(view.getUint32(offset,true)===0x04034b50){assert.equal(view.getUint16(offset+8,true),0);const size=view.getUint32(offset+18,true),nameLength=view.getUint16(offset+26,true),extraLength=view.getUint16(offset+28,true),name=new TextDecoder().decode(bytes.subarray(offset+30,offset+30+nameLength)),start=offset+30+nameLength+extraLength,data=bytes.subarray(start,start+size);assert.equal(crc32(data),view.getUint32(offset+14,true));assert.ok(!files.has(name));files.set(name,data);offset=start+size;}assert.equal(view.getUint32(offset,true),0x02014b50);assert.equal(view.getUint32(bytes.length-22,true),0x06054b50);assert.equal(view.getUint16(bytes.length-12,true),files.size);return files;}
 const text=(files,name)=>new TextDecoder().decode(files.get(name));
 const webFiles=input=>new Map(pwaEntries(input).map(entry=>[entry.name,typeof entry.data==='string'?new TextEncoder().encode(entry.data):entry.data]));

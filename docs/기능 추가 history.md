@@ -439,6 +439,8 @@ HTMLMemo 프로젝트에서 구현과 관련 검증을 마친 변경을 기록�
 
 **검증:** npm run check(57개 JavaScript·JSON), npm run build(로컬 Tailwind CSS 4.3.3), npm test(98개)가 통과했습니다. 목차 헤더의 즉시 표시 아이콘과 접힌 패널 규칙에 `overflow: hidden`이 없는 것을 검사했습니다. 실제 Chrome 통합 검사는 이 실행 환경에서 Chrome이 시작 직후 종료되어 완료하지 못했습니다(`Chrome exited null`). 게시 결과는 같은 항목에 보충합니다.
 
+**CI 보완:** 첫 Pages 실행에서는 테스트가 스타일 컴파일 전의 배포 자산과 컴파일 후 자산을 비교해 실패했습니다. 배포 자산 검사도 먼저 로컬 Tailwind CSS를 컴파일하도록 순서를 맞췄습니다. 이후 로컬 npm test 98개·npm run check·npm run build를 다시 통과시켰습니다.
+
 <a id="hist-20261014-008"></a>
 ### 2026-10-14 01:25:15 +09:00 — 툴바 TTS 버튼 복원
 
