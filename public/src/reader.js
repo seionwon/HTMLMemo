@@ -193,9 +193,15 @@ export class Reader {
     this.callbacks.onView?.();
   }
   annotation(type, properties) { return {id:uid(), type, color:this.color, width:this.width, opacity:type === 'highlight' || type === 'area' ? this.opacity : 1, created:Date.now(), ...properties}; }
-  addText(type, anchor) {
+  addText(type, anchor, text) {
     if (!anchor?.quote.trim()) return;
-    this.commit([...this.metadata.annotations, this.annotation(type, {textAnchor:anchor})]);
+    if (type === 'note') {
+      const resolved = resolveTextAnchor(textIndex(this.doc), anchor); if (!resolved || !text?.trim()) return;
+      const range = rangeFromOffsets(this.doc, resolved.start, resolved.end); if (!range) return;
+      const rect = range.getBoundingClientRect(), element = range.startContainer.parentElement;
+      const position = this.elementAnchor(element);
+      this.commit([...this.metadata.annotations, this.annotation(type, {anchor:position.key, points:[{x:(rect.left + this.doc.defaultView.scrollX-position.x)/position.width,y:(rect.top+this.doc.defaultView.scrollY-position.y)/position.height}], text:text.trim()})]);
+    } else this.commit([...this.metadata.annotations, this.annotation(type, {textAnchor:anchor})]);
     this.doc.getSelection()?.removeAllRanges(); this.selection = null;
   }
   commit(annotations) {

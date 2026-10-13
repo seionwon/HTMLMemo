@@ -336,6 +336,7 @@ function positionPopover() {
 }
 function showPopover(name,html,bind=()=>{}) {
   if(popoverName===name){closePopover();return;}
+  $('#tool-popover').removeAttribute('aria-label');$('#tool-popover').removeAttribute('role');
   popoverName=name;$('#tool-popover').classList.toggle('selection',name==='selection');$('#tool-popover').innerHTML=html;$('#tool-popover').hidden=false;positionPopover();bind();
 }
 function showSelectionMenu(r) {
@@ -362,7 +363,6 @@ function showSelectionMenu(r) {
 }
 function toolAction(action) {
   const r=reader();if(!r)return;
-  if(action==='speak'){closePopover();r.speakSelection();return;}
   if(['select','pen','highlight','underline','eraser','note','text','rect','ellipse','arrow','area','area-underline','strike'].includes(action)){
     closePopover();r.setTool(action);updateToolbarState();return;
   }

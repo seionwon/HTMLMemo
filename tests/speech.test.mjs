@@ -23,3 +23,20 @@ test('TTS requires a selection and reports unsupported or failed speech',()=>{
   f.r.selection={quote:'hello'};delete f.win.speechSynthesis;assert.equal(f.r.speakSelection(),false);assert.match(f.errors[0],/지원하지/);
   const g=fixture('hello');g.r.selection={quote:'hello'};assert.equal(g.r.speakSelection(),true);assert.equal(g.spoken[0].text,'hello');
 });
+
+// Literal speech branch from HTMLMemoEx/tab.js selectionAction (2026-10-14).
+function reference(window, document, anchor) {
+  const {speechSynthesis,SpeechSynthesisUtterance}=window;
+  if (!window.speechSynthesis) return;
+  speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(anchor.quote); u.lang = /[가-힣]/.test(anchor.quote) ? 'ko-KR' : (document.documentElement.lang || 'en-US'); speechSynthesis.speak(u);
+}
+test('speech calls exactly match HTMLMemoEx, including whitespace and browser defaults',()=>{
+  for(const [quote,lang] of [['  안녕하세요.\n다음 줄  ','en'],['Bonjour','fr'],['Hello',''],['123','ja']]){
+    const actual=fixture('',lang),expected=fixture('',lang);actual.r.selection={quote};
+    actual.win.speechSynthesis.resume=()=>assert.fail('Source does not resume');
+    actual.win.speechSynthesis.getVoices=()=>assert.fail('Source does not pick a voice');
+    actual.r.speakSelection();reference(expected.win,expected.r.doc,{quote});
+    assert.deepEqual(actual.spoken.map(u=>({...u})),expected.spoken.map(u=>({...u})));
+    assert.equal(actual.cancels,expected.cancels);
+  }
+});
