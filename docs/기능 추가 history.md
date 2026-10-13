@@ -363,3 +363,5 @@ HTMLMemo 프로젝트에서 구현과 관련 검증을 마친 변경을 기록�
 **목적·사용법:** 주석 툴바의 더 많은 도구 버튼을 눌러 여는 ‘문서 도구’ 패널 제목 오른쪽에 × 닫기 버튼을 추가했습니다. 이 버튼을 누르면 패널이 바로 닫힙니다. 기존 Esc 키와 패널 바깥 클릭으로 닫는 동작도 유지합니다.
 
 **검증·범위:** 닫기 버튼의 접근성 이름과 click 연결을 확인하는 검사를 추가했습니다. npm run check, npm run build, npm test 96개가 통과했습니다. npm run test:browser는 Chrome 프로세스가 시작 직후 종료되어 완료하지 못했습니다(`Chrome exited null`). 실제 Chrome 화면 검사를 통과했다고 표시하지 않습니다. 선택한 디자인·아이콘·색상과 기존 도구 버튼 구성은 유지합니다. 게시 결과는 같은 항목에 보충합니다.
+
+**게시 결과 (2026-10-14 00:57:22 +09:00):** 변경을 `c9f5852cd6d9e3eb140790e783faf36577c1e32c`에 커밋해 origin/main에 push했습니다. [GitHub Actions 38426325657](https://github.com/seionwon/HTMLMemo/actions/runs/38426325657)의 테스트·검사·빌드 및 Pages 게시가 성공했습니다. 운영 주소의 index.html·app.js·styles.css·sw.js·manifest가 HTTP 200으로 응답하며 해당 Actions Pages 아티팩트와 바이트 단위로 일치함을 확인했습니다.
