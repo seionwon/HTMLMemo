@@ -90,3 +90,22 @@ test('native preparation yields between batches, retains annotation anchors, and
   assert.equal(doc.body.lastElementChild.getAttribute('data-htmlmemo-anchor'),'n3999');assert.ok(!prepared.html.includes('onclick'));
   await assert.rejects(prepareLoadedHTML(documentFor('<html><head></head><body>Cancelled</body></html>'),{},()=>true),{name:'AbortError'});
 });
+
+test('late JavaScript-generated text receives stable anchors and restores annotation/save callbacks',async()=>{
+  const r=Object.create(Reader.prototype);r.doc=documentFor('<html><head></head><body><p>Late content</p><p data-htmlmemo-anchor="existing">Keep</p></body></html>');r.dynamicAnchor=0;r.metadata={execution:{allowScripts:true},annotations:[]};
+  let saved=0,rendered=0;r.measure=()=>{};r.render=()=>{rendered++;};r.callbacks={onChange(){saved++;}};
+  await r.refreshDynamicDocument();assert.equal(r.doc.querySelector('p').getAttribute('data-htmlmemo-anchor'),'js0');assert.equal(r.doc.body.lastElementChild.getAttribute('data-htmlmemo-anchor'),'existing');assert.equal(saved,1);assert.equal(rendered,1);
+  await r.refreshDynamicDocument();assert.equal(r.doc.querySelector('p').getAttribute('data-htmlmemo-anchor'),'js0');assert.equal(r.dynamicAnchor,1);
+});
+
+test('a packed JavaScript book expands its gzip payload and the generated paragraphs become annotatable',async()=>{
+  const {gzipSync}=await import('node:zlib');const vm=await import('node:vm');
+  const packed=gzipSync(Buffer.from('<p id="expanded">압축에서 복원된 본문</p>')).toString('base64');
+  const source=`<html><head></head><body><div id="book">불러오는 중…</div><script>globalThis.finished=(async()=>{const response=await fetch('data:application/gzip;base64,${packed}');const text=await new Response(response.body.pipeThrough(new DecompressionStream('gzip'))).text();document.getElementById('book').innerHTML=text;})();</script></body></html>`;
+  const parsed=parseHTML(source,{}, {allowScripts:true});const doc=documentFor(parsed.html);const context=vm.createContext({document:doc,fetch,Response,DecompressionStream});
+  vm.runInContext(doc.querySelector('script').textContent,context);await context.finished;
+  assert.equal(doc.querySelector('#expanded').textContent,'압축에서 복원된 본문');
+  const r=Object.create(Reader.prototype);r.doc=doc;r.metadata=parsed.metadata;r.dynamicAnchor=0;r.measure=()=>{};r.render=()=>{};r.callbacks={};await r.refreshDynamicDocument();
+  assert.ok(doc.querySelector('#expanded').hasAttribute('data-htmlmemo-anchor'));
+  const saved=serializeHTML(doc,r.metadata);assert.equal(parseHTML(saved).metadata.execution.allowScripts,true);assert.ok(saved.includes(packed));assert.ok(saved.includes('압축에서 복원된 본문'));
+});

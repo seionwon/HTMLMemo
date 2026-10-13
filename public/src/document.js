@@ -3,6 +3,7 @@ import { FORMAT_VERSION, validateAnnotations } from './model.js';
 export const LAYER_ID = 'htmlmemo-annotation-layer';
 export const DATA_ID = 'htmlmemo-data';
 export const LOCAL_CSP = "default-src 'none'; img-src data: blob:; style-src 'unsafe-inline' data:; font-src data:; media-src data:; script-src 'none'; connect-src 'none'; form-action 'none'; base-uri 'none'";
+export const SCRIPT_CSP = "default-src 'none'; img-src data: blob:; style-src 'unsafe-inline' data:; font-src data:; media-src data: blob:; script-src 'unsafe-inline' 'unsafe-eval' data: blob: https: http:; worker-src data: blob:; connect-src data: blob:; form-action 'none'; base-uri 'none'";
 export function cleanAnnotations(doc) {
   doc.getElementById(LAYER_ID)?.remove();
   doc.getElementById(DATA_ID)?.remove();
@@ -15,31 +16,31 @@ export function cleanAnnotations(doc) {
   // marks, not when opening an unannotated book containing millions of nodes.
   if (unwrapped) doc.body?.normalize();
 }
-function* sanitizeTree(root, source, depth = 0) {
+function* sanitizeTree(root, source, depth = 0, allowScripts = false) {
   for (const element of root.querySelectorAll('*')) {
     yield;
     const tag = element.localName;
-    if (['script','object','embed','frame','frameset','base'].includes(tag)) { element.remove(); continue; }
+    if ((!allowScripts && tag === 'script') || ['object','embed','frame','frameset','base'].includes(tag)) { element.remove(); continue; }
     if (tag === 'iframe') {
       const html=element.getAttribute('srcdoc');
       if(!html||depth>=3){element.remove();continue;}
-      const nested=new DOMParser().parseFromString(html,'text/html');yield* sanitizeTree(nested,source,depth+1);
-      element.setAttribute('srcdoc',nested.documentElement.outerHTML);element.setAttribute('sandbox','');element.removeAttribute('src');element.removeAttribute('allow');
+      const nested=new DOMParser().parseFromString(html,'text/html');yield* sanitizeTree(nested,source,depth+1,allowScripts);
+      element.setAttribute('srcdoc',nested.documentElement.outerHTML);element.setAttribute('sandbox',allowScripts?'allow-scripts':'');element.removeAttribute('src');element.removeAttribute('allow');
     }
     if (tag === 'meta' && /^(refresh|content-security-policy)$/i.test(element.getAttribute('http-equiv') || '')) { element.remove(); continue; }
     for (const attr of [...element.attributes]) {
-      if (/^on/i.test(attr.name) || ['autofocus','ping','formaction'].includes(attr.name) || attr.name==='srcdoc'&&tag!=='iframe') element.removeAttribute(attr.name);
+      if (!allowScripts && /^on/i.test(attr.name) || ['autofocus','ping','formaction'].includes(attr.name) || attr.name==='srcdoc'&&tag!=='iframe') element.removeAttribute(attr.name);
       if (['href','src','xlink:href','action'].includes(attr.name)) {
         const value = attr.value.trim().replace(/[\u0000-\u0020]/g, '');
-        if (/^(javascript|vbscript):/i.test(value) || /^(?:data:text\/html|data:image\/svg\+xml)/i.test(value) && !['img','image'].includes(tag)) element.removeAttribute(attr.name);
-        else if (tag === 'a' && attr.name === 'href' && !value.startsWith('#') && source) {
+        if ((!allowScripts && /^javascript:/i.test(value) || /^vbscript:/i.test(value)) || /^(?:data:text\/html|data:image\/svg\+xml)/i.test(value) && !['img','image'].includes(tag)) element.removeAttribute(attr.name);
+        else if (tag === 'a' && attr.name === 'href' && !value.startsWith('#') && source && !(allowScripts && /^javascript:/i.test(value))) {
           try { const resolved = new URL(attr.value, source); if (['http:','https:','mailto:','tel:'].includes(resolved.protocol)) element.setAttribute('href', resolved.href); else element.removeAttribute('href'); } catch { element.removeAttribute('href'); }
         }
       }
     }
     element.removeAttribute('contenteditable');
     if (tag === 'form') { element.removeAttribute('action'); element.setAttribute('inert', ''); }
-    if (tag === 'template') yield* sanitizeTree(element.content, source, depth);
+    if (tag === 'template') yield* sanitizeTree(element.content, source, depth,allowScripts);
   }
 }
 export function parseHTML(html, defaults = {}, options = {}) {
@@ -48,7 +49,7 @@ export function parseHTML(html, defaults = {}, options = {}) {
   return step.value;
 }
 export async function prepareLoadedHTML(doc, defaults = {}, isCancelled = () => false) {
-  const work = prepareHTML(null, defaults, {document:doc,includeMetadata:true});
+  const work = prepareHTML(null, defaults, {document:doc,includeMetadata:true,allowScripts:defaults.execution?.allowScripts===true});
   try {
     for (;;) {
       if (isCancelled()) throw new DOMException('문서 열기가 취소되었습니다.','AbortError');
@@ -62,7 +63,7 @@ export async function prepareLoadedHTML(doc, defaults = {}, isCancelled = () => 
     }
   } finally { work.return(); }
 }
-function* prepareHTML(html, defaults, {includeMetadata = false, document: loadedDocument = null} = {}) {
+function* prepareHTML(html, defaults, {includeMetadata = false, document: loadedDocument = null, allowScripts = undefined} = {}) {
   if (!loadedDocument && (typeof html !== 'string' || !html.trim())) throw new Error('HTML 파일이 비어 있습니다.');
   const doc = loadedDocument || new DOMParser().parseFromString(html, 'text/html');
   let embedded = {};
@@ -74,12 +75,13 @@ function* prepareHTML(html, defaults, {includeMetadata = false, document: loaded
   }
   let source = embedded.source || defaults.source || '';
   try { const url=new URL(source); source=['http:','https:'].includes(url.protocol)&&!url.username&&!url.password?url.href:''; } catch { source=''; }
+  allowScripts = (allowScripts ?? defaults.execution?.allowScripts ?? embedded.execution?.allowScripts ?? false) === true;
   cleanAnnotations(doc);
-  yield* sanitizeTree(doc, source);
+  yield* sanitizeTree(doc, source,0,allowScripts);
   for(const meta of doc.head.querySelectorAll('meta[charset],meta[http-equiv]'))if(meta.hasAttribute('charset')||/^content-type$/i.test(meta.getAttribute('http-equiv')))meta.remove();
   const charset=doc.createElement('meta');charset.setAttribute('charset','utf-8');doc.head.prepend(charset);
   const csp = doc.createElement('meta'); csp.httpEquiv = 'Content-Security-Policy';
-  csp.content = LOCAL_CSP;
+  csp.content = allowScripts ? SCRIPT_CSP : LOCAL_CSP;
   doc.head.prepend(csp);
   let n = 0;
   doc.body.setAttribute('data-htmlmemo-anchor', 'body');
@@ -93,7 +95,7 @@ function* prepareHTML(html, defaults, {includeMetadata = false, document: loaded
   const metadata = {
     version: FORMAT_VERSION, title: String(embedded.title || doc.title || defaults.title || 'HTML 문서').slice(0,1000),
     source, capturedAt: embedded.capturedAt || Date.now(), viewport: {width: Math.min(4096, Math.max(320, Number(viewport.width) || 1100)), height: Number(viewport.height) || 800},
-    annotations: embedded.annotations || [], view: {scrollTop:Math.max(0,Number(view.scrollTop)||0),scrollLeft:Math.max(0,Number(view.scrollLeft)||0),zoom:Number.isFinite(view.zoom)?Math.min(8,Math.max(.2,view.zoom)):null}, bookmarks,
+    execution:{allowScripts:!!allowScripts}, annotations: embedded.annotations || [], view: {scrollTop:Math.max(0,Number(view.scrollTop)||0),scrollLeft:Math.max(0,Number(view.scrollLeft)||0),zoom:Number.isFinite(view.zoom)?Math.min(8,Math.max(.2,view.zoom)):null}, bookmarks,
     warnings: (Array.isArray(embedded.warnings) ? embedded.warnings : defaults.warnings || []).filter(w=>typeof w==='string').slice(0,5000),
   };
   // Freeze viewport-based heights to the capture viewport. The reader grows
@@ -103,7 +105,7 @@ function* prepareHTML(html, defaults, {includeMetadata = false, document: loaded
   for(const element of doc.querySelectorAll('[style]')){yield;element.setAttribute('style',freezeCSS(element.getAttribute('style')));}
   if (includeMetadata) doc.head.append(metadataElement(doc, metadata));
   return {html: '<!doctype html>\n' + doc.documentElement.outerHTML, metadata,
-    nativeScroll: !!loadedDocument || html.length >= 4 * 1024 * 1024 || n >= 20000};
+    nativeScroll: !!allowScripts || !!loadedDocument || html.length >= 4 * 1024 * 1024 || n >= 20000};
 }
 function metadataElement(doc, metadata) {
   const script = doc.createElement('script'); script.id = DATA_ID; script.type = 'application/json';

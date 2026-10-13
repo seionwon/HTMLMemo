@@ -14,9 +14,9 @@ export class Reader {
     this.viewport.classList.toggle('reader-native-scroll', this.nativeScroll);
     this.sizer = document.createElement('div'); this.sizer.className = 'reader-sizer';
     this.frame = document.createElement('iframe'); this.frame.className = 'document-frame'; this.frame.title = this.metadata.title;
-    // The parent can manipulate the DOM. Source scripts, forms and top-level
-    // navigation remain disabled by the sandbox, even for imported hostile HTML.
-    this.frame.setAttribute('sandbox', 'allow-same-origin'); this.frame.referrerPolicy = 'no-referrer';
+    // Local documents explicitly enable scripts; captures retain static mode.
+    // Forms, popups and top-level navigation remain sandboxed.
+    this.frame.setAttribute('sandbox', this.metadata.execution?.allowScripts ? 'allow-same-origin allow-scripts' : 'allow-same-origin'); this.frame.referrerPolicy = 'no-referrer';
     this.naturalWidth = this.metadata.viewport.width; this.frame.style.height = '100%'; this.frame.style.width = this.naturalWidth + 'px';
     this.sizer.append(this.frame); this.viewport.append(this.sizer); host.append(this.viewport);
     if (this.nativeScroll) this.applyZoom();
@@ -71,9 +71,10 @@ export class Reader {
       if (annotation && this.tool === 'select') { event.preventDefault(); event.stopPropagation(); this.selectedId = annotation.dataset.htmlmemoId; this.callbacks.onSelect?.(this.selectedId); return; }
       const link = event.target.closest?.('a[href]');
       if (!link) return;
+      const href = link.getAttribute('href');
+      if (this.metadata.execution?.allowScripts && /^javascript:/i.test(href)) return;
       event.preventDefault();
       if (this.tool !== 'select') return;
-      const href = link.getAttribute('href');
       let hash = href.startsWith('#') ? href : '';
       if (!hash && this.metadata.source) { try { const current = new URL(this.metadata.source); const dest = new URL(href); if (current.origin === dest.origin && current.pathname === dest.pathname && current.search === dest.search) hash = dest.hash; } catch { /* non-web links aren't opened by the app */ } }
       if (hash) {
@@ -94,6 +95,43 @@ export class Reader {
     this.resizeObserver.observe(this.doc.body);
     this.hostObserver = new ResizeObserver(() => { if (!this.disposed) { if(this.autoFit)this.zoom = this.fitZoom(); if(this.nativeScroll || this.autoFit)this.applyZoom(); } }); this.hostObserver.observe(this.viewport);
     this.doc.fonts.ready.then(() => { if (!this.disposed) { this.measure(); this.renderDrawingLayer(); } });
+    if (this.metadata.execution?.allowScripts) {
+      this.dynamicAnchor = 0;
+      this.dynamicObserver = new MutationObserver(records => {
+        const editor = node => (node.nodeType===3?node.parentElement:node)?.closest?.('#'+LAYER_ID+',#htmlmemo-annotation-style,#htmlmemo-editor-style,[data-htmlmemo-mark],[data-htmlmemo-search]');
+        if(records.some(record=>!editor(record.target) && (record.type==='characterData' || [...record.addedNodes,...record.removedNodes].some(node=>!editor(node)))))this.scheduleDynamicRefresh();
+      });
+      this.observeDynamicDocument();
+      this.scheduleDynamicRefresh();
+    }
+  }
+  observeDynamicDocument() {
+    if (!this.disposed) this.dynamicObserver?.observe(this.doc.documentElement,{childList:true,subtree:true,characterData:true});
+  }
+  scheduleDynamicRefresh() {
+    if (this.disposed) return;
+    this.dynamicDirty = true;
+    clearTimeout(this.dynamicTimer);
+    this.dynamicTimer = setTimeout(() => this.refreshDynamicDocument().catch(error=>this.callbacks.onError?.(error)),400);
+  }
+  async refreshDynamicDocument() {
+    if (this.disposed || this.dynamicRunning) return;
+    this.dynamicRunning = true;this.dynamicDirty = false;
+    try {
+      const body = this.doc.body;if (!body) return;
+      body.setAttribute('data-htmlmemo-anchor','body');
+      let count=0;
+      for (const element of body.querySelectorAll('*')) {
+        if (!element.closest('#'+LAYER_ID) && !['script','style','meta','link','template'].includes(element.localName) && !element.hasAttribute('data-htmlmemo-anchor')) element.setAttribute('data-htmlmemo-anchor','js'+this.dynamicAnchor++);
+        if (++count % 1000 === 0) {await new Promise(resolve=>setTimeout(resolve,0));if(this.disposed)return;}
+      }
+      this.initialHTML = null;
+      this.measure();this.render();
+      this.callbacks.onChange?.();this.callbacks.onView?.();
+    } finally {
+      this.dynamicRunning = false;
+      if (this.dynamicDirty && !this.disposed) this.scheduleDynamicRefresh();
+    }
   }
   focusDocument(event) {
     if (this.disposed || event.button != null && event.button !== 0) return;
@@ -220,6 +258,7 @@ export class Reader {
     }, 0);
   }
   render() {
+    this.dynamicObserver?.disconnect();
     cleanAnnotations(this.doc); this.selectedId = null;
     const style = this.doc.createElement('style'); style.id = 'htmlmemo-annotation-style';
     style.textContent = '[data-htmlmemo-mark]{border-radius:2px;box-decoration-break:clone;-webkit-box-decoration-break:clone}'; this.doc.head.append(style);
@@ -230,6 +269,7 @@ export class Reader {
     }
     this.renderDrawingLayer();
     if (this.searchQuery) this.search(this.searchQuery, false);
+    this.observeDynamicDocument();
   }
   absolutePoints(annotation) {
     if (!annotation.anchor) return annotation.points;
@@ -302,5 +342,5 @@ export class Reader {
   }
   outline() { return [...this.doc.querySelectorAll('h1,h2,h3,h4,h5,h6')].filter(n=>n.textContent.trim()).map(node=>({node,level:Number(node.localName[1]),title:node.textContent.trim()})); }
   addBookmark(title) { this.metadata.bookmarks.push({id:uid(),title,top:this.scrollTop/this.zoom,left:this.scrollLeft/this.zoom}); this.callbacks.onChange?.(); }
-  dispose() { this.disposed=true; clearTimeout(this.positionTimer); this.resizeObserver?.disconnect(); this.hostObserver?.disconnect(); this.frame.srcdoc=''; if(this.documentURL){URL.revokeObjectURL(this.documentURL);this.documentURL=null;} this.host.remove(); }
+  dispose() { this.disposed=true; clearTimeout(this.positionTimer);clearTimeout(this.dynamicTimer);this.dynamicObserver?.disconnect(); this.resizeObserver?.disconnect(); this.hostObserver?.disconnect(); this.frame.srcdoc=''; if(this.documentURL){URL.revokeObjectURL(this.documentURL);this.documentURL=null;} this.host.remove(); }
 }

@@ -45,3 +45,11 @@ test('capture embeds nested styles, image URLs, canvas and input state into one 
 test('capture reports resource failures without silently keeping network dependencies',async()=>{
   await import('../public/shared/capture.js');const doc=documentFor('<html><head><title>Failure</title><style>p{background:url(missing.svg)}</style></head><body><img src="missing.svg"><p>original text</p></body></html>');const snapshot=await HTMLMemoCapture.captureDocument(doc,{fetchResource:async()=>{throw new Error('blocked');}});assert.equal(snapshot.warnings.length,2);assert.equal(documentFor(snapshot.html).querySelector('img').hasAttribute('src'),false);assert.ok(!snapshot.html.includes('url(missing.svg)'));assert.ok(snapshot.html.includes('original text'));
 });
+
+test('local JavaScript mode preserves scripts, handlers and executable links through annotation export and reopen',()=>{
+  const source='<html><head><title>Script book</title></head><body><div id="book">불러오는 중…</div><button onclick="renderBook()">Open</button><a href="javascript:renderBook()">Read</a><script>function renderBook(){document.getElementById("book").textContent="Ready";}renderBook();</script></body></html>';
+  const parsed=parseHTML(source,{}, {allowScripts:true,includeMetadata:true});const doc=documentFor(parsed.html);
+  assert.equal(parsed.metadata.execution.allowScripts,true);assert.equal(parsed.nativeScroll,true);assert.ok(doc.querySelector('script:not(#htmlmemo-data)'));assert.equal(doc.querySelector('button').getAttribute('onclick'),'renderBook()');assert.equal(doc.querySelector('a').getAttribute('href'),'javascript:renderBook()');assert.match(parsed.html,/script-src 'unsafe-inline' 'unsafe-eval'/);assert.match(parsed.html,/worker-src data: blob:/);
+  parsed.metadata.annotations=[annotation];const saved=serializeHTML(doc,parsed.metadata);const reopened=parseHTML(saved);
+  assert.equal(reopened.metadata.execution.allowScripts,true);assert.deepEqual(reopened.metadata.annotations,[annotation]);assert.ok(reopened.html.includes('function renderBook()'));
+});

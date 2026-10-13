@@ -62,3 +62,9 @@ test('preparing a browser-loaded document reuses its DOM and restores embedded a
   assert.equal(result.nativeScroll,true);assert.equal(result.metadata.title,'Book');assert.equal(result.metadata.annotations[0].text,'Saved note');
   assert.ok(!result.html.includes('window.bad'));assert.ok(!doc.body.firstElementChild.hasAttribute('onclick'));assert.match(result.html,/script-src 'none'/);
 });
+
+test('large local JavaScript option streams bytes with scripts, workers and data URL fetch enabled',async()=>{
+  const raw=file('<html><head></head><body><script>document.body.append("ready")</script>'+ 'x'.repeat(4*1024*1024)+'</body></html>');raw.arrayBuffer=async()=>{throw Error('Full read');};
+  const local=await readLocalHTML(raw,{native:true,allowScripts:true});const header=await local.snapshot.file.slice(0,1024).text();
+  assert.equal(local.snapshot.allowScripts,true);assert.match(header,/script-src 'unsafe-inline' 'unsafe-eval'/);assert.match(header,/connect-src data: blob:/);assert.match(header,/document.body.append/);
+});

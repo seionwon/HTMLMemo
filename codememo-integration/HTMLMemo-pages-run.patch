@@ -1,0 +1,119 @@
+--- a/apps/CodeMemo/src/components/Project/ProjectConsole.tsx
++++ b/apps/CodeMemo/src/components/Project/ProjectConsole.tsx
+@@ -2147,6 +2147,10 @@
+ 
+ const RunPanel: React.FC<{ project: Project; onRunChange: (r: string) => void; onPathSave: (p: string) => void; onMeta: (p: Partial<ProjectMeta>) => void }> = ({ project, onRunChange, onPathSave, onMeta }) => {
+   const { t } = useLanguage();
++  // HTMLMemo is distributed through one GitHub Pages address. Old project
++  // metadata can still contain a localhost URL or a static-file classification.
++  const pagesUrl = /(?:^|[\\/])HTMLMemo[\\/]?$/.test(project.path || '')
++    ? 'https://seionwon.github.io/HTMLMemo/' : '';
+   const cacheKey = project.id;
+   const cached = loadRun(cacheKey);
+   const [cmd, setCmd] = React.useState(cached?.cmd ?? (project.run || ''));
+@@ -2220,10 +2224,15 @@
+     // eslint-disable-next-line react-hooks/exhaustive-deps
+   }, [project.path]);
+ 
+-  const isApp = project.webKind === 'app';
++  const isApp = !!pagesUrl || project.webKind === 'app';
+   // Accept a bare host ("app.example.com") and default it to https:// so the link always works.
+   const withScheme = (u: string) => { const s = (u || '').trim(); return s && !/^https?:\/\//i.test(s) ? `https://${s}` : s; };
+-  const liveUrl = withScheme(project.liveUrl || liveUrlDraft || '');
++  const liveUrl = pagesUrl || withScheme(project.liveUrl || liveUrlDraft || '');
++  React.useEffect(() => {
++    if (pagesUrl && (project.liveUrl !== pagesUrl || project.webKind !== 'app')) {
++      onMeta({ liveUrl: pagesUrl, webKind: 'app' });
++    }
++  }, [pagesUrl, project.liveUrl, project.webKind, onMeta]);
+   const openInBrowser = async () => {
+     if (!project.path || opening) return;
+     // SaaS app → open its real public URL (a dev/static preview can't serve a running service).
+@@ -2393,19 +2402,20 @@
+   const [recheckingKind, setRecheckingKind] = React.useState(false);
+   const detectWebKind = React.useCallback(async (force = false) => {
+     if (!project.path) return;
++    if (pagesUrl) return; // The Pages route is authoritative for HTMLMemo.
+     if (!force && project.webKind) return;            // already judged → use the cached value
+     if (force) setRecheckingKind(true);
+     try { onMeta({ webKind: await ccWebKind(project.path, project.id) }); } finally { if (force) setRecheckingKind(false); }
+-  }, [project.path, project.webKind, project.id, onMeta]);
++  }, [project.path, project.webKind, project.id, onMeta, pagesUrl]);
+   React.useEffect(() => { detectWebKind(false); }, [detectWebKind]);
+   // For a SaaS app with no public URL set yet, try to auto-detect one (from the project's
+   // package.json/manifest/CNAME/README) and save it, so Open in browser works without manual entry.
+   React.useEffect(() => {
+-    if (project.webKind !== 'app' || project.liveUrl || !project.path) return;
++    if (pagesUrl || project.webKind !== 'app' || project.liveUrl || !project.path) return;
+     let live = true;
+     ccLiveUrl(project.path, project.id).then(u => { if (live && u) { setLiveUrlDraft(u); onMeta({ liveUrl: u }); } });
+     return () => { live = false; };
+-  }, [project.webKind, project.liveUrl, project.path, project.id, onMeta]);
++  }, [project.webKind, project.liveUrl, project.path, project.id, onMeta, pagesUrl]);
+   // Reconnect to an in-progress run on return; only abort the client reader on unmount.
+   React.useEffect(() => {
+     if (cached?.running && cached?.runId) stream(cached.runId, true);
+@@ -2425,20 +2435,20 @@
+ 
+   return (
+     <div>
+-      <RunDeploymentZip projectId={project.id} projectPath={project.path} running={running} />
+-      {webEntry && !android?.android && (
++      {!pagesUrl && <RunDeploymentZip projectId={project.id} projectPath={project.path} running={running} />}
++      {(webEntry || pagesUrl) && !android?.android && (
+         <div style={{ marginBottom: 12 }}>
+           <Row style={{ justifyContent: 'space-between' }}>
+-            <span style={{ fontSize: '0.85rem' }}>{tc(t, 'web_intro', 'This is a web project — run it in your browser:')}</span>
++            <span style={{ fontSize: '0.85rem' }}>{pagesUrl ? 'GitHub Pages에서 HTMLMemo 실행' : tc(t, 'web_intro', 'This is a web project — run it in your browser:')}</span>
+             <Row>
+               {/* One sharing button, picked once by the project's nature: static → Save as HTML;
+                   app/SaaS → Copy link. ↻ re-checks if the project's nature ever changes. */}
+-              {project.webKind === 'static'
++              {!pagesUrl && project.webKind === 'static'
+                 ? <Btn disabled={exportingHtml} onClick={exportHtml} title={tc(t, 'export_html', 'Save as HTML')}><FiDownload /> {exportingHtml ? tc(t, 'export_html_busy', 'Bundling…') : tc(t, 'export_html', 'Save as HTML')}</Btn>
+-                : project.webKind === 'app'
++                : isApp
+                   ? <Btn disabled={copyingLink} onClick={copyLink} title={tc(t, 'copy_link', 'Copy share link')}><FiExternalLink /> {copyingLink ? tc(t, 'opening', 'Opening…') : tc(t, 'copy_link', 'Copy link')}</Btn>
+                   : null}
+-              <Btn disabled={recheckingKind} onClick={() => detectWebKind(true)} title={tc(t, 'web_recheck', 'Re-check project type')}><FiRefreshCw /></Btn>
++              {!pagesUrl && <Btn disabled={recheckingKind} onClick={() => detectWebKind(true)} title={tc(t, 'web_recheck', 'Re-check project type')}><FiRefreshCw /></Btn>}
+               <Btn $primary disabled={opening} onClick={openInBrowser}><FiPlay /> {opening ? tc(t, 'opening', 'Opening…') : tc(t, 'open_in_browser', 'Open in browser')}</Btn>
+             </Row>
+           </Row>
+@@ -2446,7 +2456,7 @@
+           {/* SaaS app: open/share its real public URL (set once; auto-detected when possible). */}
+           {isApp && (
+             <div style={{ marginTop: 6 }}>
+-              {(editingLiveUrl || !liveUrl) ? (
++              {(!pagesUrl && (editingLiveUrl || !liveUrl)) ? (
+                 <Row style={{ gap: 6 }}>
+                   <div style={{ flex: 1, minWidth: 180 }}>
+                     <Input placeholder={tc(t, 'live_url_ph', 'Public URL, e.g. https://app.example.com')} value={liveUrlDraft}
+@@ -2456,15 +2466,15 @@
+                 </Row>
+               ) : (
+                 <Row style={{ gap: 8, alignItems: 'center', fontSize: '0.78rem' }}>
+-                  <span style={{ color: 'var(--text-secondary)' }}>{tc(t, 'live_url_label', 'Public URL')}:</span>
++                  <span style={{ color: 'var(--text-secondary)' }}>{pagesUrl ? 'GitHub Pages' : tc(t, 'live_url_label', 'Public URL')}:</span>
+                   <a href={liveUrl} target="_blank" rel="noopener" style={{ color: 'var(--primary)', wordBreak: 'break-all' }}>{liveUrl}</a>
+-                  <button onClick={() => setEditingLiveUrl(true)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: 2 }} title={tc(t, 'rename', 'Edit')}><FiEdit2 size={13} /></button>
++                  {!pagesUrl && <button onClick={() => setEditingLiveUrl(true)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: 2 }} title={tc(t, 'rename', 'Edit')}><FiEdit2 size={13} /></button>}
+                 </Row>
+               )}
+             </div>
+           )}
+           <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: 4 }}>
+-            {project.webKind === 'static'
++            {pagesUrl ? '앱 실행과 공유는 이 GitHub Pages 주소를 사용합니다.' : project.webKind === 'static'
+               ? tc(t, 'export_html_sub', 'Save as one self-contained file you can send to anyone — opens in any browser.')
+               : isApp
+                 ? tc(t, 'live_url_sub', 'Opens this app’s public URL (its deployed address) — set it once above.')
+@@ -2478,7 +2488,7 @@
+           output for static; keep them for SaaS apps (need `pnpm dev` etc.) and unknown projects. */}
+       {/* A native WebView app can contain HTML and have an old cached static classification.
+           Current Gradle/APK detection must still expose its build and download controls. */}
+-      {(project.webKind !== 'static' || android?.gradle || !!apk) && (
++      {(!pagesUrl || running) && (project.webKind !== 'static' || android?.gradle || !!apk) && (
+         <>
+           <Row style={{ marginBottom: 6 }}>
+             <div style={{ flex: 1, minWidth: 200 }}>

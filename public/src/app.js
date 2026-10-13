@@ -161,7 +161,7 @@ async function openRecord(record, prepared = null) {
   tab.reader=new Reader(tab.host,parsed,{
     onChange:()=>{tab.initialHTML=null;tab.queue.schedule();if(activeId===tab.id){renderToolbar();if(sidebarMode==='annotations')renderSidebar('annotations');}},
     onPosition:()=>{tab.initialHTML=null;tab.queue.schedule();},onView:()=>{if(activeId===tab.id){updateChrome();updateToolbarState();}},
-    onLink:url=>safely(openBrowser)(url),onKey:handleKey,requestText:promptText,
+    onLink:url=>safely(openBrowser)(url),onKey:handleKey,requestText:promptText,onError:showError,
     onDocumentFocus:()=>{if(activeId===tab.id && !readerFocused)void toggleReaderFocus();},
     onSelect:id=>{if(activeId===tab.id)annotationDialog(tab,id);},
   });
@@ -184,7 +184,7 @@ async function closeTab(id) {
   tabs.splice(tabs.indexOf(tab),1);if(activeId===id)activate(tabs.at(-1)?.id||'library');else renderTabs();await refreshLibrary();
 }
 async function createDocument(snapshot, handle = null, name = null, local = {}) {
-  const parsed=snapshot.file ? {...parseHTML('<html><head></head><body></body></html>',{title:snapshot.title}),file:snapshot.file,nativeScroll:true} : parseHTML(snapshot.html,{title:snapshot.title,source:snapshot.url,viewport:snapshot.viewport,warnings:snapshot.warnings},{includeMetadata:true});
+  const parsed=snapshot.file ? {...parseHTML('<html><head></head><body></body></html>',{title:snapshot.title,execution:{allowScripts:!!snapshot.allowScripts}}),file:snapshot.file,nativeScroll:true} : parseHTML(snapshot.html,{title:snapshot.title,source:snapshot.url,viewport:snapshot.viewport,warnings:snapshot.warnings},{includeMetadata:true,allowScripts:snapshot.allowScripts});
   const title=parsed.metadata.title; const record={id:uid(),title,name:name||handle?.name||filename(title),source:parsed.metadata.source,created:Date.now(),modified:Date.now(),fileHandle:handle,originalHandle:local.originalHandle||null,metadata:parsed.metadata};
   record.html=parsed.html;
   if(local.diskStamp)record.diskStamp=local.diskStamp;
@@ -219,7 +219,7 @@ async function importFiles() {
 }
 async function openLocalFile(input,requestWrite=false) {
   $('#status-left').textContent='로컬 HTML을 읽는 중…';
-  const local=await readLocalHTML(input,{requestWrite,native:true});
+  const local=await readLocalHTML(input,{requestWrite,native:true,allowScripts:true});
   $('#status-left').textContent='HTML 문서를 준비하는 중…';
   await new Promise(resolve=>setTimeout(resolve,0));
   return createDocument(local.snapshot,local.handle,local.name,local);
@@ -337,7 +337,7 @@ function showPopover(name,html,bind=()=>{}) {
 function toolAction(action) {
   const r=reader();if(!r)return;
   if(['select','pen','highlight','underline','eraser','note','text','rect','ellipse','arrow','area','area-underline','strike'].includes(action)){
-    closePopover();r.setTool(action);toast(({pen:'드래그해서 그리세요. 터치 스크롤은 선택 도구를 사용하세요.',highlight:'텍스트를 드래그해 선택하면 강조됩니다.',underline:'텍스트를 드래그해 선택하면 밑줄이 생깁니다.',eraser:'지울 주석을 누르세요.',note:'메모를 남길 위치를 누르세요.',text:'글자를 넣을 위치를 누르세요.',rect:'드래그해서 사각형을 그리세요.',ellipse:'드래그해서 타원을 그리세요.',arrow:'드래그해서 화살표를 그리세요.',area:'이미지나 원하는 영역을 드래그해 강조하세요.','area-underline':'드래그해서 영역 밑줄을 그리세요.',strike:'텍스트를 선택해 취소선을 남기세요.'})[action]||'선택 · 스크롤 · 링크 탐색');updateToolbarState();return;
+    closePopover();r.setTool(action);updateToolbarState();return;
   }
   if(action==='undo'){r.undo();return;}if(action==='redo'){r.redo();return;}
   if(action==='palette') {
