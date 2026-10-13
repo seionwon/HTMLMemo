@@ -128,7 +128,6 @@ function activate(id) {
 }
 function updateChrome() {
   const tab=active(); const r=reader(); const local=tab?.type==='document';const execution=activeId==='execution';
-  $('#reader-fullscreen').hidden=!local;$('#reader-fullscreen').disabled=!r?.doc;
   $('#address').value=local?tab.record.name:tab?.url||'';$('#address-icon').innerHTML=icon(local?'file':'globe',15);$('#local-label').hidden=!local;
   $('#back').disabled=local?!r?.linkHistory.length:!tab||!tab.chromeId&&tab.cursor<=0;
   $('#forward').disabled=!tab||local||!tab.chromeId&&tab.cursor>=tab.history.length-1;
@@ -468,7 +467,6 @@ function handleKey(event) {
 }
 function setReaderFocus(value) {
   readerFocused=value;$('#app').classList.toggle('reader-focus',value);
-  const button=$('#reader-fullscreen');button.textContent=value?'전체 화면 종료':'전체 화면';button.setAttribute('aria-label',button.textContent+' (F)');button.setAttribute('aria-pressed',String(value));
   const focusedReader=reader();
   closePopover();closeSidebar();requestAnimationFrame(()=>{applyToolbarPosition();focusedReader?.setFocusLayout?.(value);focusedReader?.measure();});
 }
@@ -503,7 +501,6 @@ async function copyAppURL(){
   }finally{sharingApp=false;$('#share-app').disabled=false;updateChrome();if(activeId==='execution')$('#status-left').textContent='앱 설치 · URL 공유 · 모든 데이터는 이 기기에 저장';}
 }
 function bindUI() {
-  $('#reader-fullscreen').onclick=()=>void toggleReaderFocus();
   $('#desk-sidebar-toggle').onclick=toggleDeskSidebar;
   updateDeskSidebarToggle();updateReaderSidebarToggle();
   document.addEventListener('fullscreenchange',()=>{if(document.fullscreenElement===$('#app') && readerFocused)nativeReaderFullscreen=true;else if(nativeReaderFullscreen){nativeReaderFullscreen=false;setReaderFocus(false);}});

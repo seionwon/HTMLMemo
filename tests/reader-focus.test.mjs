@@ -24,10 +24,9 @@ function app({native=false,rejected=false,deferred=false,exitDeferred=false}={})
 test('document focus works without browser fullscreen and keeps annotation tools/dialogs in its shell',async()=>{
  const a=app();const notes=a.r.metadata.annotations;
  await a.context.toggleReaderFocus();assert.equal(a.context.readerFocused,true);assert.ok(a.root.classList.contains('reader-focus'));
- assert.equal(a.doc.querySelector('#reader-fullscreen').getAttribute('aria-pressed'),'true');
  assert.ok(a.root.contains(a.doc.querySelector('#toolbar')));assert.ok(a.root.contains(a.doc.querySelector('#dialog')));
  assert.strictEqual(a.r.metadata.annotations,notes);assert.equal(a.calls.requested,0);
- await a.context.toggleReaderFocus();assert.equal(a.context.readerFocused,false);assert.equal(a.doc.querySelector('#reader-fullscreen').textContent,'전체 화면');
+ await a.context.toggleReaderFocus();assert.equal(a.context.readerFocused,false);
 });
 test('native fullscreen targets the app shell and exit restores the document view',async()=>{
  const a=app({native:true});await a.context.toggleReaderFocus();assert.strictEqual(a.doc.fullscreenElement,a.root);assert.equal(a.context.nativeReaderFullscreen,true);
@@ -37,9 +36,9 @@ test('a denied browser fullscreen request retains usable document focus',async()
  const a=app({native:true,rejected:true});await a.context.toggleReaderFocus();assert.equal(a.context.readerFocused,true);assert.equal(a.context.focusBusy,false);assert.equal(a.context.nativeReaderFullscreen,false);
  await a.context.leaveReaderFocus();assert.equal(a.context.readerFocused,false);assert.equal(a.calls.exited,0);
 });
-test('browser Escape/fullscreenchange clears focus and restores the exit button',async()=>{
+test('browser Escape/fullscreenchange clears focus',async()=>{
  const a=app({native:true});await a.context.toggleReaderFocus();a.doc.fullscreenElement=null;a.doc.dispatchEvent(new a.doc.defaultView.Event('fullscreenchange'));
- assert.equal(a.context.readerFocused,false);assert.equal(a.context.nativeReaderFullscreen,false);assert.equal(a.doc.querySelector('#reader-fullscreen').getAttribute('aria-pressed'),'false');
+ assert.equal(a.context.readerFocused,false);assert.equal(a.context.nativeReaderFullscreen,false);
 });
 test('a user can exit while a fullscreen request is pending without being trapped or reopened',async()=>{
  const a=app({native:true,deferred:true});const pending=a.context.toggleReaderFocus();await a.context.toggleReaderFocus();assert.equal(a.context.readerFocused,false);
@@ -63,6 +62,11 @@ test('toolbar retains compact buttons and includes selected-text TTS',async()=>{
  const css=await readFile(new URL('../public/design.tailwind.css',import.meta.url),'utf8');
  assert.match(css,/\.floating-toolbar\{height:auto;min-height:0;padding:0 1px;gap:0/);
  assert.match(css,/#app\.reader-focus>\.chrome/);
+});
+
+test('document focus is entered through a document double-click, without a separate screen button',()=>{
+ assert.doesNotMatch(html,/id="reader-fullscreen"/);
+ assert.doesNotMatch(appSource,/reader-fullscreen/);
 });
 
 test('document tools provide an explicit close button',()=>{

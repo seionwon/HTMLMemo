@@ -81,7 +81,7 @@ test('real Chrome: MemoSuite TTS toolbar in HTMLMemo',{timeout:90000},async t=>{
       await page.click('.mstts-player [aria-label="플레이어 닫기"]');await page.click('#toolbar [data-action=speak]');
       assert.equal(await page.evaluate('document.querySelector(".mstts-player").getBoundingClientRect().top'),moved);
       await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
-      await page.click('#reader-fullscreen');
+      await page.evaluate(`document.querySelector('.document-host:not([hidden]) iframe').contentDocument.body.dispatchEvent(new MouseEvent('dblclick',{bubbles:true,button:0,cancelable:true}));`);
       await page.waitFor('document.querySelector("#app").classList.contains("reader-focus")');
       assert.equal(await page.evaluate('document.querySelector("#app").contains(document.querySelector(".mstts-player"))'),true);
       await page.click('.mstts-player [aria-label="소리내어 읽기"]');
