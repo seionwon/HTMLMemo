@@ -98,6 +98,21 @@ test('the document-owned table of contents gets its own temporary toggle',async(
  assert.match(readerSource,/목차 사이드바 접기/);
 });
 
+test('a sticky document table of contents keeps its layout and entries when the toggle is added',()=>{
+ const doc=new DOMParser().parseFromString('<html><head><style>.toc{position:sticky;top:0}</style></head><body><nav class="toc"><h2>목차</h2><a href="#chapter">첫 장</a></nav><main id="chapter">본문</main></body></html>','text/html');
+ const toc=doc.querySelector('.toc'),r=Object.create(Reader.prototype);let measured=0;
+ r.doc=doc;r.disposed=false;r.measure=()=>measured++;
+ r.installDocumentTocToggle();
+ const button=toc.querySelector('[data-htmlmemo-toc-toggle]');
+ assert.equal(toc.firstElementChild,button);
+ assert.equal(toc.querySelector('a')?.textContent,'첫 장');
+ assert.match(doc.querySelector('style').textContent,/\.toc\{position:sticky/);
+ assert.doesNotMatch(doc.querySelector('#htmlmemo-toc-toggle-style').textContent,/\.toc[^}]*position\s*:/);
+ button.click();assert.equal(toc.hasAttribute('data-htmlmemo-toc-collapsed'),true);
+ button.click();assert.equal(toc.hasAttribute('data-htmlmemo-toc-collapsed'),false);
+ assert.equal(measured,2);
+});
+
 
 test('fitting a focused pane uses its full width without the normal reader margins',()=>{
  const a=app(),r=Object.create(Reader.prototype),host=a.doc.createElement('div');a.doc.querySelector('#workspaces').append(host);
