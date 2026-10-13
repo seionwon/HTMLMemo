@@ -47,9 +47,8 @@
       </div>
     </header>
     <div class="desk-shell">
-      <button id="desk-sidebar-toggle" class="sidebar-toggle desk-sidebar-toggle" type="button" aria-controls="desk-nav" aria-label="서재 사이드바 숨기기" aria-pressed="true"></button>
       <nav id="desk-nav" class="desk-nav" aria-label="서재 탐색">
-        <strong class="text-sm font-semibold">나만의 웹 서재</strong>
+        <div class="desk-nav-heading"><strong class="text-sm font-semibold">나만의 웹 서재</strong><button id="desk-sidebar-toggle" class="icon-button sidebar-header-toggle" type="button" aria-controls="desk-nav" aria-label="서재 사이드바 접기" aria-pressed="true"></button></div>
         <button id="desk-library" aria-current="page">내 서재</button>
         <button id="desk-browse">웹 페이지 열기</button>
         <button id="desk-import">HTML 파일 가져오기</button>
@@ -83,7 +82,6 @@
     <div id="toolbar" class="floating-toolbar" role="toolbar" aria-label="주석 도구" hidden></div>
     <div id="tool-popover" class="tool-popover" hidden></div>
     <aside id="sidebar" class="sidebar" hidden></aside>
-    <button id="reader-sidebar-toggle" class="sidebar-toggle reader-sidebar-toggle" type="button" aria-controls="sidebar" aria-label="문서 사이드바 보이기" aria-pressed="false" hidden></button>
     <div id="toast" class="toast" role="status" hidden></div>
     <dialog id="dialog"><div id="dialog-content"></div></dialog>
     <input type="file" id="file-input" accept=".html,.htm,text/html" multiple hidden>

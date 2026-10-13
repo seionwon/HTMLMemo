@@ -70,12 +70,15 @@ test('document tools provide an explicit close button',()=>{
  assert.match(appSource,/\$\('\[data-popover-close\]'\s*,\$\('#tool-popover'\)\)\.onclick=closePopover/);
 });
 
-test('both library and document sidebars expose persistent toggles',()=>{
- assert.match(html,/id="desk-sidebar-toggle"[\s\S]*서재 사이드바 숨기기/);
- assert.match(html,/id="reader-sidebar-toggle"[\s\S]*문서 사이드바 보이기/);
+test('both library and document sidebars expose toggles in their own headers',async()=>{
+ assert.match(html,/class="desk-nav-heading"[\s\S]*id="desk-sidebar-toggle"[\s\S]*서재 사이드바 접기/);
+ assert.match(appSource,/class="sidebar-heading"[\s\S]*id="reader-sidebar-toggle"[\s\S]*문서 사이드바 접기/);
  assert.match(appSource,/function toggleDeskSidebar\(\)/);
  assert.match(appSource,/function toggleReaderSidebar\(\)/);
  assert.match(appSource,/sidebarRestoreMode/);
+ const css=await readFile(new URL('../public/design.tailwind.css',import.meta.url),'utf8');
+ assert.match(css,/\.sidebar\.sidebar-collapsed/);
+ assert.match(css,/#app\.desk-sidebar-hidden \.desk-nav/);
 });
 
 
