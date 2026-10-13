@@ -38,6 +38,7 @@ export class Reader {
             this.doc.removeEventListener('click',blockNavigation,true);this.doc.removeEventListener('keydown',blockNavigation,true);
             const openingScroll = {top:this.doc.defaultView.scrollY,left:this.doc.defaultView.scrollX};
             this.metadata = prepared.metadata; this.history = new History(this.metadata.annotations);
+            this.autoFit = !this.metadata.view.zoom;
             this.initialHTML = prepared.html;
             this.naturalWidth = this.metadata.viewport.width;
             this.frame.style.width = this.naturalWidth + 'px';
