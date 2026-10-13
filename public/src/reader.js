@@ -116,7 +116,18 @@ export class Reader {
     this.naturalHeight = Math.ceil(height + 24);
     this.frame.style.height = this.naturalHeight + 'px'; this.applyZoom();
   }
-  fitZoom() { const inset=this.host.closest('.reader-focus') ? 0 : innerWidth < 600 ? 16 : 56; return clamp((this.viewport.clientWidth - inset) / this.naturalWidth, .2, 2); }
+  setFocusLayout(focused) {
+    if (this.disposed) return;
+    if (focused) {
+      if (!this.focusLayout) this.focusLayout = {zoom:this.zoom,autoFit:this.autoFit};
+      this.setZoom(this.fitZoom(),true);
+    } else if (this.focusLayout) {
+      const previous=this.focusLayout;this.focusLayout=null;
+      this.setZoom(previous.zoom,previous.autoFit);
+    }
+    this.measure();
+  }
+  fitZoom() { const inset=this.host.closest('.reader-focus') ? 0 : innerWidth < 600 ? 16 : 56; return clamp((this.viewport.clientWidth - inset) / this.naturalWidth, .2, this.host.closest('.reader-focus') ? 8 : 2); }
   applyZoom() {
     if (this.nativeScroll) this.frame.style.height = Math.max(200, this.viewport.clientHeight / this.zoom) + 'px';
     this.frame.style.transform = `scale(${this.zoom})`;

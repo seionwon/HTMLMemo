@@ -87,7 +87,7 @@ body[data-codememo-design]{margin:0;font-family:var(--app-font);background:var(-
 #app.reader-focus>.chrome,#app.reader-focus>.statusbar,#app.reader-focus .desk-nav{display:none}
 #app.reader-focus .desk-shell,#app.reader-focus #main,#app.reader-focus #workspace{height:100%;min-height:0}
 #app.reader-focus .reader-viewport{padding:0}
-#app.reader-focus .reader-sizer{box-shadow:none}
+#app.reader-focus .reader-sizer{box-shadow:none;margin:0}
 #app.reader-focus .floating-toolbar{bottom:max(8px,env(safe-area-inset-bottom))}
 #app.reader-focus .reader-fullscreen{top:max(8px,env(safe-area-inset-top));right:max(8px,env(safe-area-inset-right))}
 #app.reader-focus .sidebar{top:0;bottom:0}

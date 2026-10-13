@@ -255,3 +255,26 @@ HTMLMemo 프로젝트에서 구현과 관련 검증을 마친 변경을 기록�
 [전체 화면 컴퓨터](verification/pages-latest-2026-10-13/reader-focus-desktop.png) · [전체 화면 폰](verification/pages-latest-2026-10-13/reader-focus-mobile.png) · [큰 문서 컴퓨터](verification/pages-latest-2026-10-13/reader-desktop.png) · [큰 문서 폰](verification/pages-latest-2026-10-13/reader-mobile.png).
 
 [Pages 게시 결과](verification/pages-latest-2026-10-13/published.json) · [운영 화면 검증 결과](verification/pages-latest-2026-10-13/live.json) · [게시된 컴퓨터 화면](verification/pages-latest-2026-10-13/live-desktop.png) · [게시된 폰 화면](verification/pages-latest-2026-10-13/live-mobile.png).
+
+
+<a id="hist-20261013-008"></a>
+### 2026-10-13 22:14:12 +09:00 — 전체 화면 문서의 좌우 여백 제거
+
+| ID | change-kind | status |
+|---|---|---|
+| hist-20261013-008 | 문서 전체 화면 너비 맞춤 | 실제 Chrome 검증 완료 / GitHub Pages 게시 진행 |
+
+**목적·사용법:** 로컬 HTML 문서 pane을 더블클릭하거나 전체 화면 버튼·F로 진입하면, 저장된 수동 확대 설정과 관계없이 문서를 pane 너비에 맞춥니다. 전체 화면의 바깥 padding은 0을 유지하고 문서 표시 틀의 자동 중앙 margin을 제거했습니다. 화면 크기가 바뀌면 너비 맞춤을 유지하며 종료 시 진입 전 수동 확대 또는 자동 맞춤 설정을 복원합니다. 원본 HTML 안에 지정된 문단·본문 margin은 편집하지 않으며 주석 좌표·문서 내용·기존 도구 버튼을 유지합니다. 기존 확대 상한 때문에 작은 문서가 큰 화면 가운데 남는 현상을 줄이도록 전체 화면 맞춤 상한을 일반 화면 2배와 구분해 8배로 설정했습니다.
+
+**검증:** npm run check JavaScript 53개·JSON, npm test 88개, 공식 로컬 Tailwind CSS 4.3.3 및 npm run build 통과했습니다. 저장된 50% 확대 상태에서도 전체 화면 너비에 맞추고 크기 변경 뒤에도 유지하며 종료 시 50% 수동 설정을 복원하는 DOM/API 모델 검사를 추가했습니다. 실제 Chrome 통합 검사에 iframe과 viewport의 좌우 경계·너비 비교를 추가했습니다. npm run test:browser는 현재 실행 환경의 127.0.0.1 listen EPERM으로 실제 Chrome 검사에 진입하지 못했습니다. 이 제한을 GitHub 장애로 해석하지 않습니다. 선택한 디자인·아이콘·색상과 기존 후보를 보존했습니다.
+
+**게시 상태:** 이전 변경의 실제 게시·운영 검증 후속 기록을 보존합니다. 이번 환경에서 현재 origin에 git ls-remote를 실행했으나 github.com DNS 해석 실패가 발생했고, gh api repos/seionwon/HTMLMemo도 api.github.com 연결 실패가 발생했습니다. GitHub의 인증 거부 응답이나 장애를 확인한 것은 아니며, 현재 실행 환경의 네트워크 제한과 구분하여 기록합니다. 이번 변경은 소스와 dist에 반영되었고 원격 업로드·Actions·온라인 화면 확인을 완료하지 않았습니다. 전역 인증이나 Pages Source 설정은 변경하지 않았으며 codememo-integration 미적용 패치는 포함하지 않았습니다.
+
+**후속 실행 확인 (2026-10-13 22:16:18 +09:00):** 사용자의 계속 요청으로 현재 환경의 남은 검증·게시 경로를 다시 확인했습니다. git ls-remote origin refs/heads/main은 github.com DNS 해석 실패, gh api repos/seionwon/HTMLMemo는 api.github.com 연결 실패로 종료했습니다. npm run test:browser는 127.0.0.1 listen EPERM으로 실제 Chrome 시작 전에 종료했습니다. 인증 실패 응답은 받지 않았으며 자격 증명·Pages Source·실행 권한을 변경하지 않았습니다. 수정 파일은 작업 폴더에 보존되어 있고 이번 수정의 원격 게시·운영 확인은 여전히 미완료입니다.
+
+
+**허용된 환경에서 후속 검증 (2026-10-13 22:34:26 +09:00):** 이번 실행에서 원격 main 조회가 성공했고 GitHub API는 HTTP 200으로 응답했습니다. 실제 Chrome도 실행할 수 있었습니다. CodeMemo에 기록된 HTMLMemo 대화의 Codex 설정은 `access: workspace-write`로 인터넷을 차단하는 상태임을 확인했습니다. 현재 실행 환경의 실패와 GitHub 자체의 장애를 구분하고, 이미 허용된 기존 서버 게시 경로에서 배포를 재개합니다. 저장소의 seionwon 인증·origin·main·기존 Pages Source와 사용자가 선택한 디자인을 유지하며 사용자 기기의 대화 권한 선택은 임의로 바꾸지 않습니다. 이 구분을 AGENTS.md에도 보충했습니다.
+
+**Chrome 검사 보완과 결과:** 새 전체 화면 너비 맞춤이 확대·위치를 자동 저장하므로 오프라인 재접속을 즉시 시도한 최초 검사에서는 저장 중 재접속 경고(beforeunload)가 나타났습니다. 검사 도구가 이 경고에 응답하지 않아 CDP 명령이 시간 초과되었음을 진단 프로필에서 확인했습니다. 앱의 저장 보호 경고를 제거하지 않고 모든 탭의 저장 중 표시가 사라진 뒤 오프라인 재접속하도록 검사 순서를 보완했습니다. 중간에 탭을 닫아 저장을 기다리는 방식도 검사했으나 같은 원본 핸들을 가진 두 검증 문서의 충돌 보호가 동작해 이를 채택하지 않았습니다. 최종 실제 Chrome 검사 7개가 모두 통과했으며 전체 화면 iframe의 왼쪽 경계와 viewport 경계·너비 일치, 툴바·주석 저장, 다시 열기·오프라인 및 큰 File 우선 표시를 확인했습니다. 이전 listen EPERM 기록은 당시 환경의 기록으로 보존합니다.
+
+[전체 화면 컴퓨터 검증](verification/reader-full-width-2026-10-13/reader-focus-desktop.png) · [전체 화면 폰 검증](verification/reader-full-width-2026-10-13/reader-focus-mobile.png). 실제 Pages 게시 결과와 운영 화면 검증은 아래에 보충합니다.

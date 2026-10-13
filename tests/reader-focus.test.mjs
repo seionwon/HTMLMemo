@@ -92,3 +92,15 @@ test('document and blank pane double-click enter focus without changing annotati
  await a.context.leaveReaderFocus();for(const target of doc.querySelectorAll('a,input,[data-htmlmemo-id]'))click(target);assert.equal(a.context.readerFocused,false);assert.equal(prevented,2);
  r.disposed=true;click(doc.body);assert.equal(a.context.readerFocused,false);
 });
+
+
+test('full pane focus fits even a saved manual zoom and restores it on exit',()=>{
+ const a=app(),r=Object.create(Reader.prototype),host=a.doc.createElement('div');a.doc.querySelector('#workspaces').append(host);
+ r.host=host;r.viewport={clientWidth:1600};r.naturalWidth=1000;r.zoom=.5;r.autoFit=false;
+ r.setZoom=function(value,fit){this.autoFit=fit;this.zoom=fit?this.fitZoom():value;};r.measure=()=>{};
+ const prior=globalThis.innerWidth;globalThis.innerWidth=1600;
+ try{a.root.classList.add('reader-focus');r.setFocusLayout(true);assert.equal(r.zoom,1.6);assert.equal(r.autoFit,true);
+ r.viewport.clientWidth=1800;r.setFocusLayout(true);assert.equal(r.zoom,1.8);
+ a.root.classList.remove('reader-focus');r.setFocusLayout(false);assert.equal(r.zoom,.5);assert.equal(r.autoFit,false);}
+ finally{if(prior===undefined)delete globalThis.innerWidth;else globalThis.innerWidth=prior;}
+});

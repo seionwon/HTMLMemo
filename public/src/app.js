@@ -422,7 +422,8 @@ function handleKey(event) {
 function setReaderFocus(value) {
   readerFocused=value;$('#app').classList.toggle('reader-focus',value);
   const button=$('#reader-fullscreen');button.textContent=value?'전체 화면 종료':'전체 화면';button.setAttribute('aria-label',button.textContent+' (F)');button.setAttribute('aria-pressed',String(value));
-  closePopover();closeSidebar();requestAnimationFrame(()=>{applyToolbarPosition();reader()?.measure();});
+  const focusedReader=reader();
+  closePopover();closeSidebar();requestAnimationFrame(()=>{applyToolbarPosition();focusedReader?.setFocusLayout?.(value);focusedReader?.measure();});
 }
 async function leaveReaderFocus() {
   const entering=focusBusy;focusBusy=true;
