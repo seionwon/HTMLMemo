@@ -94,20 +94,23 @@ test('opening a local document does not create the app outline sidebar',()=>{
 test('the document-owned table of contents gets its own temporary toggle',async()=>{
  const readerSource=await readFile(new URL('../public/src/reader.js',import.meta.url),'utf8');
  assert.match(readerSource,/installDocumentTocToggle\(\)/);
- assert.match(readerSource,/data-htmlmemo-toc-toggle/);
+ assert.match(readerSource,/dataset\.htmlmemoTocToggle/);
  assert.match(readerSource,/목차 사이드바 접기/);
 });
 
 test('a sticky document table of contents keeps its layout and entries when the toggle is added',()=>{
  const doc=new DOMParser().parseFromString('<html><head><style>.toc{position:sticky;top:0}</style></head><body><nav class="toc"><h2>목차</h2><a href="#chapter">첫 장</a></nav><main id="chapter">본문</main></body></html>','text/html');
+ const outer=new DOMParser().parseFromString('<html><body><div id="host"></div></body></html>','text/html');
  const toc=doc.querySelector('.toc'),r=Object.create(Reader.prototype);let measured=0;
- r.doc=doc;r.disposed=false;r.measure=()=>measured++;
+ r.doc=doc;r.host=outer.querySelector('#host');r.viewport=outer.createElement('div');r.host.append(r.viewport);r.disposed=false;r.measure=()=>measured++;r.positionDocumentTocToggle=()=>{};
  r.installDocumentTocToggle();
- const button=toc.querySelector('[data-htmlmemo-toc-toggle]');
- assert.equal(toc.firstElementChild,button);
+ const button=r.host.querySelector('[data-htmlmemo-toc-toggle]');
+ assert.ok(button);
+ assert.equal(toc.querySelector('[data-htmlmemo-toc-toggle]'),null);
+ assert.equal(toc.firstElementChild.localName,'h2');
  assert.equal(toc.querySelector('a')?.textContent,'첫 장');
  assert.match(doc.querySelector('style').textContent,/\.toc\{position:sticky/);
- assert.doesNotMatch(doc.querySelector('#htmlmemo-toc-toggle-style').textContent,/\.toc[^}]*position\s*:/);
+ assert.equal(doc.querySelector('#htmlmemo-toc-toggle-style'),null);
  button.click();assert.equal(toc.hasAttribute('data-htmlmemo-toc-collapsed'),true);
  button.click();assert.equal(toc.hasAttribute('data-htmlmemo-toc-collapsed'),false);
  assert.equal(measured,2);

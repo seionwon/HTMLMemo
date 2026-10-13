@@ -53,3 +53,13 @@ test('local JavaScript mode preserves scripts, handlers and executable links thr
   parsed.metadata.annotations=[annotation];const saved=serializeHTML(doc,parsed.metadata);const reopened=parseHTML(saved);
   assert.equal(reopened.metadata.execution.allowScripts,true);assert.deepEqual(reopened.metadata.annotations,[annotation]);assert.ok(reopened.html.includes('function renderBook()'));
 });
+test('native scrolling keeps the original document viewport CSS',()=>{
+  const source='<html><head><style>.toc{height:100vh;position:sticky;top:0}.page{min-height:100dvh}</style></head><body><nav class="toc">목차</nav><main class="page">본문</main></body></html>';
+  const native=parseHTML(source,{}, {allowScripts:true});
+  assert.equal(native.nativeScroll,true);
+  assert.match(documentFor(native.html).querySelector('style').textContent,/height:100vh/);
+  assert.match(documentFor(native.html).querySelector('style').textContent,/100dvh/);
+  const staticDocument=parseHTML(source);
+  assert.equal(staticDocument.nativeScroll,false);
+  assert.doesNotMatch(documentFor(staticDocument.html).querySelector('style').textContent,/100(?:d)?vh/);
+});

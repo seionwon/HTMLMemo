@@ -98,14 +98,17 @@ function* prepareHTML(html, defaults, {includeMetadata = false, document: loaded
     execution:{allowScripts:!!allowScripts}, annotations: embedded.annotations || [], view: {scrollTop:Math.max(0,Number(view.scrollTop)||0),scrollLeft:Math.max(0,Number(view.scrollLeft)||0),zoom:Number.isFinite(view.zoom)?Math.min(8,Math.max(.2,view.zoom)):null}, bookmarks,
     warnings: (Array.isArray(embedded.warnings) ? embedded.warnings : defaults.warnings || []).filter(w=>typeof w==='string').slice(0,5000),
   };
-  // Freeze viewport-based heights to the capture viewport. The reader grows
-  // its iframe to the full document; otherwise 100vh can cause endless growth.
-  const freezeCSS=css=>css.replace(/(?<![\w.-])(-?\d*\.?\d+)(dvh|svh|lvh|vh)\b/g,(_,amount)=>`${Number(amount)*metadata.viewport.height/100}px`);
-  for(const style of doc.querySelectorAll('style')){yield;style.textContent=freezeCSS(style.textContent);}
-  for(const element of doc.querySelectorAll('[style]')){yield;element.setAttribute('style',freezeCSS(element.getAttribute('style')));}
+  const nativeScroll = !!allowScripts || !!loadedDocument || html.length >= 4 * 1024 * 1024 || n >= 20000;
+  // Only the older full-height iframe needs viewport units frozen. A native
+  // scrolling iframe must retain the file's own responsive layout.
+  if (!nativeScroll) {
+    const freezeCSS=css=>css.replace(/(?<![\w.-])(-?\d*\.?\d+)(dvh|svh|lvh|vh)\b/g,(_,amount)=>`${Number(amount)*metadata.viewport.height/100}px`);
+    for(const style of doc.querySelectorAll('style')){yield;style.textContent=freezeCSS(style.textContent);}
+    for(const element of doc.querySelectorAll('[style]')){yield;element.setAttribute('style',freezeCSS(element.getAttribute('style')));}
+  }
   if (includeMetadata) doc.head.append(metadataElement(doc, metadata));
   return {html: '<!doctype html>\n' + doc.documentElement.outerHTML, metadata,
-    nativeScroll: !!allowScripts || !!loadedDocument || html.length >= 4 * 1024 * 1024 || n >= 20000};
+    nativeScroll};
 }
 function metadataElement(doc, metadata) {
   const script = doc.createElement('script'); script.id = DATA_ID; script.type = 'application/json';
