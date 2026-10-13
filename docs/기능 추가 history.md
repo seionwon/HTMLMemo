@@ -326,3 +326,6 @@ HTMLMemo 프로젝트에서 구현과 관련 검증을 마친 변경을 기록�
 **검증:** npm run check, npm test 92개, npm run build가 통과했습니다. 실제 toolAction 함수를 VM에서 실행해 13개 버튼 모두 올바른 도구를 선택하고 선택 상태를 갱신하면서 toast를 호출하지 않는 것을 확인했습니다. npm run test:browser는 Chrome 프로세스가 시작 직후 종료되어 완료하지 못했으며 실제 브라우저 검사를 통과했다고 표시하지 않습니다.
 
 **반영 상태:** 프로젝트 소스와 로컬 dist에 반영했습니다. GitHub Pages에는 이번 수정을 게시하지 않았습니다. 기존 선택 디자인·아이콘·색상·후보 및 로컬 Tailwind 컴파일 방식을 유지했습니다.
+
+
+**게시 후속 확인 (2026-10-14 00:09:30 +09:00):** 사용자 요청에 따라 기존 소스 커밋 `4dee846`을 `git push origin main`으로 게시했습니다. [GitHub Actions 38419358246](https://github.com/seionwon/HTMLMemo/actions/runs/38419358246)의 검사·테스트·빌드 및 Pages 배포가 모두 성공했습니다. https://seionwon.github.io/HTMLMemo/ 의 index.html·app.js·reader.js·document.js·local-files.js·styles.css·sw.js·manifest.webmanifest가 HTTP 200으로 응답하고 해당 Actions 배포 아티팩트와 바이트 단위로 일치함을 확인했습니다. 도구 선택 안내 토스트 제거와 로컬 HTML JavaScript 실행 수정이 실제 게시 파일에 포함됩니다. 서비스 워커 캐시 버전은 htmlmemo-8649a8f3입니다. 로컬 빌드와 서비스 워커 캐시 식별자가 달라 CI 아티팩트를 직접 받아 비교했으며 게시 파일은 CI 결과와 일치합니다. Chrome 검사는 다시 시도했지만 시작 직후 프로세스 종료(Chrome exited null)로 완료하지 못했습니다. 따라서 실제 운영 화면·원본 대용량 문서의 동작까지 검증했다고 표시하지 않습니다. 이전 실패·미게시 기록은 당시 결과로 보존합니다.
