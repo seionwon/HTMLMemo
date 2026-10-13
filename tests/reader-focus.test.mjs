@@ -74,46 +74,9 @@ test('document tools provide an explicit close button',()=>{
  assert.match(appSource,/\$\('\[data-popover-close\]'\s*,\$\('#tool-popover'\)\)\.onclick=closePopover/);
 });
 
-test('both library and document sidebars expose toggles in their own headers',async()=>{
- assert.match(html,/class="desk-nav-heading"[\s\S]*id="desk-sidebar-toggle"[\s\S]*서재 사이드바 접기/);
- assert.match(appSource,/class="sidebar-heading"[\s\S]*id="reader-sidebar-toggle"[\s\S]*문서 사이드바 접기[\s\S]*icon\('back',16\)/);
- assert.match(appSource,/function toggleDeskSidebar\(\)/);
- assert.match(appSource,/function toggleReaderSidebar\(\)/);
- assert.match(appSource,/sidebarRestoreMode/);
- const css=await readFile(new URL('../public/design.tailwind.css',import.meta.url),'utf8');
- assert.match(css,/\.sidebar\.sidebar-collapsed/);
- assert.doesNotMatch(css,/\.sidebar\.sidebar-collapsed\{[^}]*overflow:hidden/);
- assert.match(css,/#app\.desk-sidebar-hidden \.desk-nav/);
-});
-
 test('opening a local document does not create the app outline sidebar',()=>{
  const openRecord=appSource.slice(appSource.indexOf('async function openRecord('),appSource.indexOf('function saveStatus('));
  assert.doesNotMatch(openRecord,/await tab\.reader\.ready;[\s\S]*renderSidebar\('outline'\);[\s\S]*updateChrome\(\)/);
-});
-
-test('the document-owned table of contents gets its own temporary toggle',async()=>{
- const readerSource=await readFile(new URL('../public/src/reader.js',import.meta.url),'utf8');
- assert.match(readerSource,/installDocumentTocToggle\(\)/);
- assert.match(readerSource,/dataset\.htmlmemoTocToggle/);
- assert.match(readerSource,/목차 사이드바 접기/);
-});
-
-test('a sticky document table of contents keeps its layout and entries when the toggle is added',()=>{
- const doc=new DOMParser().parseFromString('<html><head><style>.toc{position:sticky;top:0}</style></head><body><nav class="toc"><h2>목차</h2><a href="#chapter">첫 장</a></nav><main id="chapter">본문</main></body></html>','text/html');
- const outer=new DOMParser().parseFromString('<html><body><div id="host"></div></body></html>','text/html');
- const toc=doc.querySelector('.toc'),r=Object.create(Reader.prototype);let measured=0;
- r.doc=doc;r.host=outer.querySelector('#host');r.viewport=outer.createElement('div');r.host.append(r.viewport);r.disposed=false;r.measure=()=>measured++;r.positionDocumentTocToggle=()=>{};
- r.installDocumentTocToggle();
- const button=r.host.querySelector('[data-htmlmemo-toc-toggle]');
- assert.ok(button);
- assert.equal(toc.querySelector('[data-htmlmemo-toc-toggle]'),null);
- assert.equal(toc.firstElementChild.localName,'h2');
- assert.equal(toc.querySelector('a')?.textContent,'첫 장');
- assert.match(doc.querySelector('style').textContent,/\.toc\{position:sticky/);
- assert.equal(doc.querySelector('#htmlmemo-toc-toggle-style'),null);
- button.click();assert.equal(toc.hasAttribute('data-htmlmemo-toc-collapsed'),true);
- button.click();assert.equal(toc.hasAttribute('data-htmlmemo-toc-collapsed'),false);
- assert.equal(measured,2);
 });
 
 

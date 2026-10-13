@@ -32,12 +32,12 @@ export class Reader {
             // its DOM instead of decoding, parsing and copying the book again.
             await new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done)));
             if (this.disposed) { resolve(this); return; }
-            const openingScroll = {top:this.doc.defaultView.scrollY,left:this.doc.defaultView.scrollX};
             const blockNavigation = event => { if(event.type==='click'||event.key==='Enter')event.preventDefault(); };
             this.doc.addEventListener('click',blockNavigation,true);this.doc.addEventListener('keydown',blockNavigation,true);
             this.frame.style.pointerEvents = '';
             const prepared = await prepareLoadedHTML(this.doc, this.metadata, () => this.disposed);
             this.doc.removeEventListener('click',blockNavigation,true);this.doc.removeEventListener('keydown',blockNavigation,true);
+            const openingScroll = {top:this.doc.defaultView.scrollY,left:this.doc.defaultView.scrollX};
             this.metadata = prepared.metadata; this.history = new History(this.metadata.annotations);
             this.autoFit = !this.metadata.view.zoom;
             this.initialHTML = prepared.html;
@@ -58,7 +58,7 @@ export class Reader {
   }
   bind() {
     const editorStyle = this.doc.createElement('style'); editorStyle.id = 'htmlmemo-editor-style';
-    editorStyle.textContent = `${this.nativeScroll?'':'html{overflow:hidden!important;height:auto!important;min-height:0!important;scroll-behavior:auto!important}body{touch-action:pan-x pan-y;height:auto!important;min-height:0!important}'}html[data-htmlmemo-drawing] *{cursor:crosshair!important;user-select:none!important;touch-action:none!important}`; this.doc.head.append(editorStyle);
+    editorStyle.textContent = `html{overflow:${this.nativeScroll?'auto':'hidden'}!important;height:auto!important;min-height:0!important;scroll-behavior:auto!important}body{touch-action:pan-x pan-y;height:auto!important;min-height:0!important}html[data-htmlmemo-drawing] *{cursor:crosshair!important;user-select:none!important;touch-action:none!important}`; this.doc.head.append(editorStyle);
     this.doc.addEventListener('pointerdown', event => { this.callbacks.onSelectionDismiss?.(); this.pointerDown(event); }, true);
     this.doc.addEventListener('pointermove', event => this.pointerMove(event), true);
     this.doc.addEventListener('pointerup', event => this.pointerUp(event), true);
@@ -85,7 +85,6 @@ export class Reader {
       } else if (/^https?:/.test(href)) this.callbacks.onLink?.(href);
     }, true);
     (this.nativeScroll ? this.doc : this.viewport).addEventListener('scroll', () => {
-      this.positionDocumentTocToggle();
       clearTimeout(this.positionTimer);
       this.positionTimer = setTimeout(() => {
         if (this.disposed) return;
@@ -95,49 +94,17 @@ export class Reader {
     }, {passive:true});
     this.resizeObserver = new ResizeObserver(() => { if (!this.disposed) { this.measure(); this.renderDrawingLayer(); } });
     this.resizeObserver.observe(this.doc.body);
-    this.hostObserver = new ResizeObserver(() => { if (!this.disposed) { if(this.autoFit)this.zoom = this.fitZoom(); if(this.nativeScroll || this.autoFit)this.applyZoom(); this.positionDocumentTocToggle(); } }); this.hostObserver.observe(this.viewport);
+    this.hostObserver = new ResizeObserver(() => { if (!this.disposed) { if(this.autoFit)this.zoom = this.fitZoom(); if(this.nativeScroll || this.autoFit)this.applyZoom(); } }); this.hostObserver.observe(this.viewport);
     this.doc.fonts.ready.then(() => { if (!this.disposed) { this.measure(); this.renderDrawingLayer(); } });
-    this.installDocumentTocToggle();
-    this.tocTimers=[250,1000,3000].map(delay=>setTimeout(()=>this.installDocumentTocToggle(),delay));
     if (this.metadata.execution?.allowScripts) {
       this.dynamicAnchor = 0;
       this.dynamicObserver = new MutationObserver(records => {
-        const editor = node => (node.nodeType===3?node.parentElement:node)?.closest?.('#'+LAYER_ID+',#htmlmemo-annotation-style,#htmlmemo-editor-style,#htmlmemo-toc-toggle-style,[data-htmlmemo-ui],[data-htmlmemo-mark],[data-htmlmemo-search]');
+        const editor = node => (node.nodeType===3?node.parentElement:node)?.closest?.('#'+LAYER_ID+',#htmlmemo-annotation-style,#htmlmemo-editor-style,[data-htmlmemo-mark],[data-htmlmemo-search]');
         if(records.some(record=>!editor(record.target) && (record.type==='characterData' || [...record.addedNodes,...record.removedNodes].some(node=>!editor(node)))))this.scheduleDynamicRefresh();
       });
       this.observeDynamicDocument();
       this.scheduleDynamicRefresh();
     }
-  }
-  installDocumentTocToggle() {
-    if (this.disposed || !this.doc) return;
-    const toc=this.doc.querySelector('.toc,#toc,.table-of-contents,#table-of-contents,.book-toc,#book-toc,[data-toc]');
-    if (!toc) { if (this.tocButton) this.tocButton.hidden=true; return; }
-    this.documentToc=toc;
-    if (!this.tocButton) {
-      const button=this.host.ownerDocument.createElement('button');button.type='button';button.className='document-toc-toggle';button.dataset.htmlmemoTocToggle='';button.setAttribute('aria-label','목차 사이드바 접기');button.setAttribute('aria-expanded','true');button.textContent='‹';
-      button.addEventListener('click',event=>{
-        event.preventDefault();event.stopPropagation();
-        let style=this.doc.getElementById('htmlmemo-toc-toggle-style');
-        if(!style){style=this.doc.createElement('style');style.id='htmlmemo-toc-toggle-style';style.dataset.htmlmemoUi='';style.textContent='[data-htmlmemo-toc-collapsed]{width:48px!important;min-width:48px!important;padding:0!important}[data-htmlmemo-toc-collapsed]>:not([data-htmlmemo-ui]){display:none!important}';this.doc.head.append(style);}
-        const collapsed=this.documentToc.toggleAttribute('data-htmlmemo-toc-collapsed');
-        button.textContent=collapsed?'›':'‹';button.setAttribute('aria-label',collapsed?'목차 사이드바 펼치기':'목차 사이드바 접기');button.setAttribute('aria-expanded',String(!collapsed));
-        this.measure();this.positionDocumentTocToggle();
-      });
-      this.host.append(button);this.tocButton=button;
-      this.viewport.addEventListener('scroll',()=>this.positionDocumentTocToggle(),{passive:true});
-      this.doc.defaultView.addEventListener('resize',()=>this.positionDocumentTocToggle());
-    }
-    this.tocButton.hidden=false;
-    this.positionDocumentTocToggle();
-  }
-  positionDocumentTocToggle() {
-    if (!this.tocButton || !this.documentToc?.isConnected || !this.frame?.isConnected) return;
-    const toc=this.documentToc.getBoundingClientRect(),frame=this.frame.getBoundingClientRect(),host=this.host.getBoundingClientRect();
-    const x=frame.left-host.left+toc.right*this.zoom-38;
-    const y=frame.top-host.top+Math.max(0,toc.top*this.zoom)+8;
-    this.tocButton.style.left=Math.max(4,Math.min(this.host.clientWidth-34,x))+'px';
-    this.tocButton.style.top=Math.max(4,Math.min(this.host.clientHeight-34,y))+'px';
   }
   observeDynamicDocument() {
     if (!this.disposed) this.dynamicObserver?.observe(this.doc.documentElement,{childList:true,subtree:true,characterData:true});
@@ -205,7 +172,6 @@ export class Reader {
     if (this.nativeScroll) this.frame.style.height = Math.max(200, this.viewport.clientHeight / this.zoom) + 'px';
     this.frame.style.transform = `scale(${this.zoom})`;
     this.sizer.style.width = this.naturalWidth * this.zoom + 'px'; this.sizer.style.height = this.nativeScroll ? Math.max(200 * this.zoom, this.viewport.clientHeight) + 'px' : (this.naturalHeight || 800) * this.zoom + 'px';
-    this.positionDocumentTocToggle();
   }
   get scrollTop() { return this.nativeScroll ? (this.doc.defaultView.scrollY || 0) * this.zoom : this.viewport.scrollTop; }
   set scrollTop(value) { if(this.nativeScroll)this.doc.defaultView.scrollTo(this.doc.defaultView.scrollX, value / this.zoom);else this.viewport.scrollTop=value; }
@@ -411,5 +377,5 @@ export class Reader {
     this.readAloud?.toggle();
   }
   stopSpeech() { this.readAloud?.close(); this.host?.ownerDocument?.defaultView?.speechSynthesis?.cancel(); }
-  dispose() { this.readAloud?.dispose();this.readAloud=null;this.stopSpeech(); this.disposed=true; clearTimeout(this.positionTimer);clearTimeout(this.dynamicTimer);this.tocTimers?.forEach(clearTimeout);this.dynamicObserver?.disconnect(); this.resizeObserver?.disconnect(); this.hostObserver?.disconnect(); this.frame.srcdoc=''; if(this.documentURL){URL.revokeObjectURL(this.documentURL);this.documentURL=null;} this.host.remove(); }
+  dispose() { this.readAloud?.dispose();this.readAloud=null;this.stopSpeech(); this.disposed=true; clearTimeout(this.positionTimer);clearTimeout(this.dynamicTimer);this.dynamicObserver?.disconnect(); this.resizeObserver?.disconnect(); this.hostObserver?.disconnect(); this.frame.srcdoc=''; if(this.documentURL){URL.revokeObjectURL(this.documentURL);this.documentURL=null;} this.host.remove(); }
 }
