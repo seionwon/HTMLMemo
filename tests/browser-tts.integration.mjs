@@ -26,6 +26,7 @@ test('real Chrome: MemoSuite TTS toolbar in HTMLMemo',{timeout:90000},async t=>{
     });
     await t.test('MemoSuite toolbar opens without speech and retains original controls and styling',async()=>{try {
       await page.evaluate(`window.__speechCalls=[];window.__utterances=[];window.SpeechSynthesisUtterance=class{constructor(text){this.text=text;this.rate=1;this.pitch=1;this.volume=1;this.voice=null;}};const engine=new EventTarget();engine.getVoices=()=>[{voiceURI:'ko-test',name:'Google 한국어',lang:'ko-KR',localService:false},{voiceURI:'junk',name:'eSpeak',lang:'ko-KR',localService:true},{voiceURI:'en-test',name:'Google English',lang:'en-US',localService:false}];engine.cancel=()=>window.__speechCalls.push(['cancel']);engine.speak=u=>{window.__utterances.push(u);window.__speechCalls.push(['speak',u.text,u.lang,u.rate]);};void Object.defineProperty(window,'speechSynthesis',{configurable:true,value:engine});`);
+      await page.evaluate(`(()=>{const d=document.querySelector('.document-host:not([hidden]) iframe').contentDocument;const sidebar=d.createElement('aside');sidebar.textContent='읽으면 안 되는 사이드바 목차.';d.body.prepend(sidebar);const toc=d.createElement('nav');toc.textContent='읽으면 안 되는 본문 안 목차.';d.querySelector('main').prepend(toc);})()`);
       await page.click('#toolbar [data-action=speak]');
       await page.waitFor('!!document.querySelector("[data-memo-readaloud]")');
       assert.deepEqual(await page.evaluate('window.__speechCalls'),[]);
@@ -44,6 +45,7 @@ test('real Chrome: MemoSuite TTS toolbar in HTMLMemo',{timeout:90000},async t=>{
       assert.equal(await page.evaluate('!!document.querySelector(".mstts-panel")'),false);
       assert.equal(await page.evaluate('!!document.querySelector(".document-host:not([hidden]) iframe").contentWindow.CSS.highlights.get("mstts")'),true);
       const first=await page.evaluate('window.__utterances[0].text');
+      assert.equal(first,'캡처 검증 문서');
       await page.click('.mstts-player [aria-label="일시정지"]');
       await page.evaluate('window.__utterances[0].onend()');
       assert.equal(await page.evaluate('window.__utterances.length'),1);
@@ -92,6 +94,7 @@ test('real Chrome: MemoSuite TTS toolbar in HTMLMemo',{timeout:90000},async t=>{
       await page.waitFor('!document.querySelector("#app").classList.contains("reader-focus")');
       await page.click('#toolbar [data-action=speak]');await page.click('#library-tab');
       assert.equal(await page.evaluate('!!document.querySelector(".mstts-player")'),false);
+      assert.equal(await page.evaluate('window.__utterances.some(u=>u.text.includes("읽으면 안 되는"))'),false);
       assert.equal(chrome.errors.length,0,chrome.errors.join('\n'));
       }catch(error){console.error(error,chrome.errors,await page.evaluate('({toast:document.querySelector("#toast")?.textContent,bar:document.querySelector(".mstts-player")?.outerHTML,calls:window.__speechCalls})'));throw error;}
     });

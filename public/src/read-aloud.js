@@ -50,6 +50,18 @@ const PLAYER_CSS = String.raw`
 .mstts-select-item[aria-selected=true] {background:#7b61ff15;color:#7b61ff;font-weight:600;}
 .mstts-select-item:hover {background:var(--bg,#f8fafc);}
 `;
+// The imported HTML can itself contain an application shell. Read its prose pane,
+// never its navigation, including navigation nested inside <main>.
+const READING_CHROME = 'nav, aside, [role="navigation"], [role="complementary"], [role="menu"], [role="menubar"], [role="toolbar"], #htmlmemo-annotation-layer, .toc, #toc, .sidebar, #sidebar, .book-toc, #book-toc, .book-sidebar, #book-sidebar, .table-of-contents, #table-of-contents, [data-toc], [data-sidebar]';
+export function isReadAloudChrome(element) { return !!element?.closest(READING_CHROME); }
+export function readAloudRoot(doc) {
+  const selectors=['[data-tts-root]', '[data-book-content]', '.wm-doc', 'main, [role="main"]', '#main-content, #book-content, .main-content, .book-content', 'article'];
+  for (const selector of selectors) {
+    const root=[...doc.querySelectorAll(selector)].find(el=>!isReadAloudChrome(el)&&!el.closest('[hidden], [aria-hidden="true"]'));
+    if(root)return root;
+  }
+  return doc.body;
+}
 export function createReadAloud(reader) {
   const U = reader.host.ownerDocument, W = U.defaultView, D = reader.doc, R = D.defaultView;
   const CSS = R.CSS, NodeFilter = R.NodeFilter, SpeechSynthesisUtterance = W.SpeechSynthesisUtterance;
@@ -63,7 +75,7 @@ export function createReadAloud(reader) {
   function viewBounds() {return reader.viewport.getBoundingClientRect();}
 
   if (!('speechSynthesis' in W)) return;                       // no engine → no button at all
-  var ROOT = D.body;
+  var ROOT = readAloudRoot(D);
   if (!ROOT) return;
   var T = {play:'소리내어 읽기',pause:'일시정지',prev:'이전 문장',next:'다음 문장',speed:'읽는 속도',settings:'낭독 설정',stop:'정지',close:'플레이어 닫기',lang:'언어',voice:'음성',voice_auto:'자동 (UI 언어)',voice_none:'이 언어의 설치된 음성이 없어 브라우저 기본 음성으로 읽습니다.',hint:'선택한 언어의 음성 하나로 끝까지 읽습니다 — 본문 속 다른 언어 단어도 포함해서요.'};
   var lb = function (k, d) { return T[k] || d; };
@@ -362,7 +374,8 @@ export function createReadAloud(reader) {
   // marked [data-tts-keep]. The NEAREST marker decides — same rule as the in-app player, kept in
   // sync with it.
   function skipped(el) {
-    if (!el) return true;
+    if (!el || isReadAloudChrome(el) || el.closest('[hidden], [aria-hidden="true"]')) return true;
+    if (ROOT === D.body && el.closest('header, footer')) return true;
     var sk = el.closest(SKIP);
     if (!sk) return false;
     var keep = el.closest('[data-tts-keep]');
@@ -638,6 +651,7 @@ export function createReadAloud(reader) {
     return 0;
   }
   function startReading() {
+    ROOT = readAloudRoot(D);
     var index = buildIndex(ROOT);
     var sents = splitSentences(index.text);
     if (!sents.length) return;
@@ -719,6 +733,7 @@ export function createReadAloud(reader) {
   }
   function jumpBy(delta) {
     if (run) { jump(run.i + delta); return; }
+    ROOT = readAloudRoot(D);
     var index = buildIndex(ROOT);
     var sents = splitSentences(index.text);
     if (!sents.length) return;

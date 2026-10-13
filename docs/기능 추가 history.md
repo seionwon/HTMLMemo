@@ -486,4 +486,28 @@ HTMLMemo 프로젝트에서 구현과 관련 검증을 마친 변경을 기록�
 
 **게시 완료 (2026-10-14 01:48:21 +09:00):** `8a5f42b2ab423c6036f471a37490bcf5fec62ab5`를 main에 push했고 [GitHub Actions 38433316680](https://github.com/seionwon/HTMLMemo/actions/runs/38433316680)의 test·check·build·Pages 배포 성공을 확인했습니다. 운영 주소의 `index.html`·`src/app.js`·`styles.css`가 로컬 빌드와 바이트 단위로 일치하며, 세 파일 모두 `reader-fullscreen`과 `전체 화면` 버튼 표기를 포함하지 않는 것도 확인했습니다.
 
+<a id="hist-20261014-012"></a>
+### 2026-10-14 01:49:00 +09:00 — 문서 목차 사이드바 복원
+
+| ID | change-kind | status |
+|---|---|---|
+| hist-20261014-012 | 문서 열기 시 목차 패널 초기화 | 구현 완료 / 검증·Pages 게시 진행 |
+
+**문제와 사용법:** 로컬 문서를 새로 열 때 Reader 준비 전의 접힘 상태가 남아, 오른쪽 문서 사이드바가 빈 띠처럼 보이거나 보이지 않았습니다. 이제 문서가 준비되는 즉시 오른쪽에 **목차 · 북마크** 사이드바를 표시합니다. 제목 줄의 화살표 버튼으로 접고 다시 펼칠 수 있습니다.
+
+**검증·게시:** check·test·build 및 Pages 게시 결과는 완료 후 이 항목에 보충합니다.
+
 **게시 완료 (2026-10-14 01:46:00 +09:00):** `168380a56e4ba475a9573b0d032588c6fbda7480`을 main에 push하고 [GitHub Actions 38432969103](https://github.com/seionwon/HTMLMemo/actions/runs/38432969103)의 Pages 배포 성공을 확인했습니다. 운영 index.html·app.js·reader.js·read-aloud.js·distribution.js·utils.js·styles.css·manifest가 로컬 빌드와 일치했습니다. 공개 앱을 별도 Chrome 프로필에서 열고 검사용 HTML을 가져온 뒤 TTS 버튼 클릭 → 발화 없이 툴바 열림 → 설정 표시 → 재생/일시정지/재개를 다시 확인했습니다. 런타임 오류는 0건이었습니다. 이 검사도 음성 호출 대역을 사용했으며 실제 스피커 출력 검증을 의미하지 않습니다.
+
+<a id="hist-20261014-012"></a>
+### 2026-10-14 01:52:40 +09:00 — TTS를 본문 영역으로 제한
+
+| ID | change-kind | status |
+|---|---|---|
+| hist-20261014-012 | TTS 읽기 범위 수정 | 구현·검증 완료 / Pages 게시 진행 |
+
+**원인:** MemoSuite TTS를 iframe에 연결하면서 읽기 루트를 문서 전체 body로 지정하여, 가져온 HTML의 목차·사이드바까지 문장 목록에 들어갔습니다.
+
+**수정:** 재생과 문장 이동 시 본문 루트를 다시 선택합니다. 명시적인 낭독·책 본문 영역, MemoSuite의 wm-doc, main/role=main, 일반적인 main-content/book-content, article을 우선하며 숨겨진 본문과 목차 안의 article은 선택하지 않습니다. 본문 내부에 있는 nav·aside·탐색/보조/도구 영역 및 목차·사이드바도 읽기 대상에서 제외합니다. 별도 본문 영역이 없는 단순 HTML은 body에서 본문을 읽되 탐색 영역과 페이지 머리말·꼬리말은 제외합니다. TTS 툴바 모양·재생 조작·설정은 변경하지 않았습니다.
+
+**검증:** check·build·단위 검사 103개 통과. 본문 앞의 목차, 본문 안의 목차, role=main·wm-doc·book-content, 숨겨진 본문, 단순 HTML의 루트 선택을 검사했습니다. 별도 Chrome 검사 3개 통과: 실제 가져온 문서에 앞쪽 사이드바와 본문 안의 목차를 추가한 뒤 첫 발화가 본문 제목임을 확인하고 재생·이동 과정에 목차 문장이 포함되지 않음을 확인했습니다. 발화는 기록용 음성 엔진으로 검사했으며 실제 소리를 들은 검사는 아닙니다.
