@@ -112,6 +112,8 @@ function renderTabs() {
   $$('[data-tab]').forEach(el=>{el.onclick=e=>{if(!e.target.closest('[data-close]'))activate(el.dataset.tab);};el.onkeydown=e=>{if(e.key==='Enter'||e.key===' ')activate(el.dataset.tab);};});
   $$('[data-close]').forEach(button=>button.onclick=safely(e=>{e.stopPropagation();return closeTab(button.dataset.close);}));
   $('#library-tab').classList.toggle('active',activeId==='library');
+  $('#desk-library').setAttribute('aria-current',activeId==='library'?'page':'false');
+  $('#desk-execution').setAttribute('aria-current',activeId==='execution'?'page':'false');
   $('#execution-tab').classList.toggle('active',activeId==='execution');
 }
 function activate(id) {
@@ -420,6 +422,10 @@ async function copyAppURL(){
 }
 function bindUI() {
   [['#library-tab','library'],['#new-tab','plus'],['#back','back'],['#forward','forward'],['#reload','reload'],['#import-button','folder'],['#save-page','save'],['#app-menu-button','more'],['#settings-button','settings'],['#library-search-icon','search'],['#empty-icon','file']].forEach(([id,name])=>setButton(id,name));
+  $('#desk-library').onclick=()=>activate('library');
+  $('#desk-execution').onclick=()=>activate('execution');
+  $('#desk-browse').onclick=()=>{activate('library');$('#address').focus();};
+  $('#desk-import').onclick=safely(importFiles);
   $('#home-button').onclick=e=>{e.preventDefault();activate('library');};$('#library-tab').onclick=()=>activate('library');$('#new-tab').onclick=()=>{activate('library');$('#address').focus();};$('#browse-start').onclick=()=>$('#address').focus();
   $('#execution-tab').onclick=()=>activate('execution');$('#execution-import').onclick=safely(importFiles);$('#execution-chrome').onclick=connectionDialog;$('#execution-settings').onclick=settingsDialog;
   $('#share-url').value=PUBLIC_APP_URL;$('#shared-app-link').href=PUBLIC_APP_URL;

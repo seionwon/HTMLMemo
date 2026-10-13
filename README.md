@@ -117,3 +117,10 @@ npm run test:browser
 ```
 
 별도 Chrome 프로필과 localhost 테스트 서버로 웹 탐색 → 캡처 → 로컬 주석 → 실제 파일 핸들 저장 → 파일 가져오기 → 다시 열기 → 오프라인 흐름을 검사합니다. Chrome 경로가 자동 감지되지 않으면 `CHROME_PATH`를 지정합니다. 현재 작업 환경에서는 localhost 포트와 Chrome 실행이 차단되어 이 실제 브라우저 검사는 수행하지 못했습니다. 설치된 Chrome 확장 기능의 실사용 검증도 별도로 필요합니다.
+
+
+## 라이브러리 데스크 디자인
+
+앱은 `public/design.tailwind.css`의 CSS-first `@theme`와 실제 HTML·JavaScript에서 사용하는 유틸리티를 Tailwind CSS **4.3.3**으로 로컬 컴파일합니다. `npm ci` 후 `npm run build` 또는 `npm run dev`를 실행하면 `public/styles.css`를 갱신합니다. 브라우저에서 Tailwind 런타임이나 CDN을 사용하지 않습니다. GitHub Actions도 같은 고정 버전 의존성과 빌드 단계를 사용합니다.
+
+데스크톱에서는 왼쪽 서재 탐색 메뉴, 모바일에서는 상단에 줄바꿈되는 메뉴를 사용합니다. 기존 설정의 시스템·밝게·어둡게 선택을 유지합니다. SVG favicon과 앱 브랜드, 192·512px PWA 설치 아이콘에 새 문서 심볼을 적용했으며 단일 HTML에도 브랜드 아이콘을 포함합니다.

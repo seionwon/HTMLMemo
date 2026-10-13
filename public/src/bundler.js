@@ -21,6 +21,7 @@ export function standaloneHTML(assets) {
   const app=assets.app;let html=assetText(app['index.html']);
   html=html.replace(/<link rel="manifest"[^>]*>/,'').replace(/<link rel="icon"[^>]*>/,'<link rel="icon" href="data:image/svg+xml;base64,'+btoa(String.fromCharCode(...assetBytes(app['icons/icon.svg'])))+'">').replace(/<link rel="apple-touch-icon"[^>]*>/,'');
   html=html.replace('<link rel="stylesheet" href="./styles.css">',()=>'<style>'+assetText(app['styles.css'])+'</style>').replace(/<script src="\.\/shared\/capture\.js" defer><\/script>\s*/,'').replace(/<script type="module" src="\.\/src\/app\.js"><\/script>/,'');
+  html=html.replaceAll('src="./icons/icon.svg"','src="data:image/svg+xml;base64,'+btoa(String.fromCharCode(...assetBytes(app['icons/icon.svg'])))+'"');
   const json=JSON.stringify(assets).replace(/</g,'\\u003c');
   const script=(assetText(app['shared/capture.js'])+'\n'+bundleModules(app)).replace(/<\/script/gi,'<\\/script');
   return html.replace('</body>',()=>'<script type="application/json" id="htmlmemo-package-assets">'+json+'</script>\n<script>'+script+'</script>\n</body>');

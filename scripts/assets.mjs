@@ -10,12 +10,14 @@ export const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 export { crc32 };
 function pngChunk(type,data){const name=Buffer.from(type);const header=Buffer.alloc(4);header.writeUInt32BE(data.length);const crc=Buffer.alloc(4);crc.writeUInt32BE(crc32(Buffer.concat([name,data])));return Buffer.concat([header,name,data,crc]);}
 function createIcon(size){
-  const data=Buffer.alloc((size*4+1)*size);const green=[39,98,84];const ivory=[255,253,246];const gold=[228,191,131];
+  const data=Buffer.alloc((size*4+1)*size);
   for(let y=0;y<size;y++)for(let x=0;x<size;x++){
-    const nx=x/size*512,ny=y/size*512;let color=green;const cornerX=nx<112?112:nx>400?400:nx;const cornerY=ny<112?112:ny>400?400:ny;
-    const transparent=(nx-cornerX)**2+(ny-cornerY)**2>112**2;
-    if((nx>=147&&nx<=209||nx>=303&&nx<=365)&&ny>=126&&ny<=386||nx>=209&&nx<=303&&ny>=226&&ny<=280)color=ivory;
-    if(nx>=321&&nx<=408&&ny>=63&&ny<=150&&ny-63<=nx-321)color=gold;
+    const nx=x/size*64,ny=y/size*64;let color=[51,65,85];
+    const cornerX=Math.max(15,Math.min(49,nx)),cornerY=Math.max(15,Math.min(49,ny));
+    const transparent=(nx-cornerX)**2+(ny-cornerY)**2>15**2;
+    const segments=[[8,22,32,9],[32,9,56,22],[56,22,32,35],[32,35,8,22],[8,33,32,46],[32,46,56,33],[8,44,32,57],[32,57,56,44]];
+    const px=(nx-6)/.8125,py=(ny-6)/.8125;
+    for(const [ax,ay,bx,by] of segments){const t=Math.max(0,Math.min(1,((px-ax)*(bx-ax)+(py-ay)*(by-ay))/((bx-ax)**2+(by-ay)**2)));if(Math.hypot(px-ax-t*(bx-ax),py-ay-t*(by-ay))<=1.75)color=[255,255,255];}
     const offset=y*(size*4+1)+1+x*4;data.set([...color,transparent?0:255],offset);
   }
   const header=Buffer.alloc(13);header.writeUInt32BE(size,0);header.writeUInt32BE(size,4);header[8]=8;header[9]=6;

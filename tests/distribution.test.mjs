@@ -111,3 +111,22 @@ test('the real app uses the same button for native installation and iPhone Chrom
   iphone.doc.querySelector('#install-button').onclick();await new Promise(resolve=>setImmediate(resolve));assert.match(iphone.doc.querySelector('#dialog-content').textContent,/Chrome/);assert.match(iphone.doc.querySelector('#dialog-content').textContent,/공유/);assert.match(iphone.doc.querySelector('#dialog-content').textContent,/홈 화면에 추가/);
 });
 test('settings can be saved and reloaded through file input when native pickers are unavailable',async()=>{const app=await fileApp();app.doc.querySelector('#settings-button').onclick();app.doc.querySelector('#appearance').value='dark';app.doc.querySelector('#appearance').onchange({target:app.doc.querySelector('#appearance')});app.doc.querySelector('#settings-save').onclick();await new Promise(resolve=>setImmediate(resolve));assert.equal(JSON.parse(await app.blobs[0].text()).preferences.theme,'dark');const input=app.doc.querySelector('#settings-file-input');const file=new File([serializeSettings({theme:'system',librarySort:'title',annotation:{width:8}})],'settings.json');input.onchange({target:{files:[file],value:'settings.json'}});await new Promise(resolve=>setImmediate(resolve));const restored=JSON.parse(app.local.get(PREFERENCES_KEY));assert.equal(restored.theme,'system');assert.equal(restored.librarySort,'title');assert.equal(restored.annotation.width,8);assert.equal(app.doc.querySelector('#library-sort').value,'title');});
+
+
+test('Library Desk navigation preserves routes, file import and offline brand icon',async()=>{
+  const {doc}=await fileApp();
+  const click=id=>doc.querySelector(id).onclick(new Event('click'));
+  assert.equal(doc.querySelector('#desk-library').getAttribute('aria-current'),'page');
+  click('#desk-execution');
+  assert.equal(doc.querySelector('#execution').hidden,false);
+  assert.equal(doc.querySelector('#library').hidden,true);
+  assert.equal(doc.querySelector('#desk-execution').getAttribute('aria-current'),'page');
+  click('#desk-library');
+  assert.equal(doc.querySelector('#library').hidden,false);
+  assert.equal(doc.querySelector('#execution').hidden,true);
+  let focused=false;doc.querySelector('#address').focus=()=>focused=true;
+  click('#desk-browse');assert.equal(focused,true);
+  let picked=false;doc.querySelector('#file-input').click=()=>picked=true;
+  await click('#desk-import');assert.equal(picked,true);
+  assert.match(doc.querySelector('.brand-icon img').getAttribute('src'),/^data:image\/svg\+xml;base64,/);
+});
