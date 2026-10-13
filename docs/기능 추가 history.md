@@ -424,6 +424,8 @@ HTMLMemo 프로젝트에서 구현과 관련 검증을 마친 변경을 기록�
 
 **검증:** npm run check(55개 JavaScript·JSON), npm run build(로컬 Tailwind CSS 4.3.3), npm test(98개)가 통과했습니다. 사이드바 헤더 내부 토글, 접힌 패널의 유지, 마지막 패널 복원을 검사했습니다. 별도 Chrome 통합 검사는 이 실행 환경에서 Chrome이 시작 직후 종료되어 완료하지 못했습니다(`Chrome exited null`). 게시 결과는 같은 항목에 보충합니다.
 
+**게시 결과 (2026-10-14 01:34:30 +09:00):** 변경을 `93d87471dff668d359152047c198f65db843fcbd`에 커밋해 origin/main에 push했습니다. [GitHub Actions 38430271177](https://github.com/seionwon/HTMLMemo/actions/runs/38430271177)의 테스트·검사·빌드와 Pages 배포가 성공했습니다. 운영 주소의 index.html·styles.css·src/app.js·sw.js·manifest.webmanifest가 HTTP 200으로 응답하고 해당 Actions Pages 아티팩트와 바이트 단위로 일치함을 확인했습니다.
+
 <a id="hist-20261014-008"></a>
 ### 2026-10-14 01:25:15 +09:00 — 툴바 TTS 버튼 복원
 
