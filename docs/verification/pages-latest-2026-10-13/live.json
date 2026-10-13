@@ -1,0 +1,14 @@
+{
+  "status": "pass",
+  "url": "https://seionwon.github.io/HTMLMemo/",
+  "verifiedAt": "2026-10-13T11:52:30.505Z",
+  "toolbarHeight": 21,
+  "checks": [
+    "Published reader fullscreen control is present",
+    "Large native File rendered without full JavaScript read; source script/refresh blocked; last paragraph intact; toolbar 20–22px",
+    "Double click opens document fullscreen; every annotation control remains; highlight autosaves",
+    "390px phone header stays in one row; fullscreen entry and exit work",
+    "Saved large document reopens with its annotation"
+  ],
+  "errors": []
+}
