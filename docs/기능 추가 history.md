@@ -484,4 +484,6 @@ HTMLMemo 프로젝트에서 구현과 관련 검증을 마친 변경을 기록�
 
 **검증:** `npm run check`(57개 JavaScript·JSON), `npm test`(99개), `npm run build`(로컬 Tailwind CSS 4.3.3)가 통과했습니다. 전체 화면 버튼이 HTML·앱 코드에서 제거되고 더블클릭 전환 로직은 남아 있는 것을 검사했습니다. 실제 Chrome 통합 검사는 전용 Chrome 프로세스가 시작 직후 종료되어 완료하지 못했습니다(`Chrome exited null`). 해당 검사를 통과했다고 표시하지 않습니다. Pages 게시 결과는 완료 후 이 항목에 보충합니다.
 
+**게시 완료 (2026-10-14 01:48:21 +09:00):** `8a5f42b2ab423c6036f471a37490bcf5fec62ab5`를 main에 push했고 [GitHub Actions 38433316680](https://github.com/seionwon/HTMLMemo/actions/runs/38433316680)의 test·check·build·Pages 배포 성공을 확인했습니다. 운영 주소의 `index.html`·`src/app.js`·`styles.css`가 로컬 빌드와 바이트 단위로 일치하며, 세 파일 모두 `reader-fullscreen`과 `전체 화면` 버튼 표기를 포함하지 않는 것도 확인했습니다.
+
 **게시 완료 (2026-10-14 01:46:00 +09:00):** `168380a56e4ba475a9573b0d032588c6fbda7480`을 main에 push하고 [GitHub Actions 38432969103](https://github.com/seionwon/HTMLMemo/actions/runs/38432969103)의 Pages 배포 성공을 확인했습니다. 운영 index.html·app.js·reader.js·read-aloud.js·distribution.js·utils.js·styles.css·manifest가 로컬 빌드와 일치했습니다. 공개 앱을 별도 Chrome 프로필에서 열고 검사용 HTML을 가져온 뒤 TTS 버튼 클릭 → 발화 없이 툴바 열림 → 설정 표시 → 재생/일시정지/재개를 다시 확인했습니다. 런타임 오류는 0건이었습니다. 이 검사도 음성 호출 대역을 사용했으며 실제 스피커 출력 검증을 의미하지 않습니다.
