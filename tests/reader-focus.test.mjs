@@ -89,6 +89,13 @@ test('reader panes use all available horizontal width without app gutters',async
  assert.match(css,/\.reader-viewport\{padding:15px 0 90px\}/);
 });
 
+test('reader saves whether its zoom follows the available reader width',()=>{
+ const r=Object.create(Reader.prototype);r.metadata={view:{}};r.zoom=.85;r.autoFit=true;r.callbacks={};
+ Object.defineProperties(r,{scrollTop:{get:()=>120},scrollLeft:{get:()=>40}});
+ r.rememberPosition();assert.deepEqual(r.metadata.view,{scrollTop:120,scrollLeft:40,zoom:.85,autoFit:true});
+ r.autoFit=false;r.rememberPosition();assert.equal(r.metadata.view.autoFit,false);
+});
+
 
 test('rapid reentry waits for browser fullscreen exit to settle',async()=>{
  const a=app({native:true,exitDeferred:true});await a.context.toggleReaderFocus();

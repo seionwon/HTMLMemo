@@ -22,6 +22,25 @@ export function cleanAnnotations(doc) {
   // marks, not when opening an unannotated book containing millions of nodes.
   if (unwrapped) doc.body?.normalize();
 }
+function clearReaderSidebarArtifacts(root) {
+  // Several short-lived reader builds added controls and layout overrides to
+  // the source document itself.  Clear only those namespaced artifacts when
+  // opening or exporting a file, leaving the document's real TOC untouched.
+  root.querySelector?.('#htmlmemo-toc-toggle-style')?.remove();
+  root.querySelector?.('#htmlmemo-sidebar-style')?.remove();
+  for (const element of root.querySelectorAll?.('[data-htmlmemo-toc-toggle]') || []) element.remove();
+  for (const element of root.querySelectorAll?.('[data-htmlmemo-toc-collapsed],[data-htmlmemo-sidebar-folded],[data-htmlmemo-sidebar-grid],[data-htmlmemo-sidebar-grid-item],[data-htmlmemo-sidebar-flex],[style*="--htmlmemo-toc-grid-columns"]') || []) {
+    element.removeAttribute('data-htmlmemo-toc-collapsed');
+    element.removeAttribute('data-htmlmemo-sidebar-folded');
+    element.removeAttribute('data-htmlmemo-sidebar-grid');
+    element.removeAttribute('data-htmlmemo-sidebar-grid-item');
+    element.removeAttribute('data-htmlmemo-sidebar-flex');
+    if (/--htmlmemo-toc-grid-columns\s*:/i.test(element.getAttribute('style') || '')) {
+      element.style?.removeProperty('--htmlmemo-toc-grid-columns');
+      if (!element.getAttribute('style')?.trim()) element.removeAttribute('style');
+    }
+  }
+}
 function* sanitizeTree(root, source, depth = 0, allowScripts = false) {
   for (const element of root.querySelectorAll('*')) {
     yield;
@@ -82,6 +101,7 @@ function* prepareHTML(html, defaults, {includeMetadata = false, document: loaded
   let source = embedded.source || defaults.source || '';
   try { const url=new URL(source); source=['http:','https:'].includes(url.protocol)&&!url.username&&!url.password?url.href:''; } catch { source=''; }
   allowScripts = (allowScripts ?? defaults.execution?.allowScripts ?? embedded.execution?.allowScripts ?? false) === true;
+  clearReaderSidebarArtifacts(doc);
   cleanAnnotations(doc);
   yield* sanitizeTree(doc, source,0,allowScripts);
   for(const meta of doc.head.querySelectorAll('meta[charset],meta[http-equiv]'))if(meta.hasAttribute('charset')||/^content-type$/i.test(meta.getAttribute('http-equiv')))meta.remove();
@@ -101,7 +121,7 @@ function* prepareHTML(html, defaults, {includeMetadata = false, document: loaded
   const metadata = {
     version: FORMAT_VERSION, title: String(embedded.title || doc.title || defaults.title || 'HTML 문서').slice(0,1000),
     source, capturedAt: embedded.capturedAt || Date.now(), viewport: {width: Math.min(4096, Math.max(320, Number(viewport.width) || 1100)), height: Number(viewport.height) || 800},
-    execution:{allowScripts:!!allowScripts}, annotations: embedded.annotations || [], view: {scrollTop:Math.max(0,Number(view.scrollTop)||0),scrollLeft:Math.max(0,Number(view.scrollLeft)||0),zoom:Number.isFinite(view.zoom)?Math.min(8,Math.max(.2,view.zoom)):null}, bookmarks,
+    execution:{allowScripts:!!allowScripts}, annotations: embedded.annotations || [], view: {scrollTop:Math.max(0,Number(view.scrollTop)||0),scrollLeft:Math.max(0,Number(view.scrollLeft)||0),zoom:Number.isFinite(view.zoom)?Math.min(8,Math.max(.2,view.zoom)):null,autoFit:view.autoFit!==false}, bookmarks,
     warnings: (Array.isArray(embedded.warnings) ? embedded.warnings : defaults.warnings || []).filter(w=>typeof w==='string').slice(0,5000),
   };
   const nativeScroll = !!allowScripts || !!loadedDocument || html.length >= 4 * 1024 * 1024 || n >= 20000;
@@ -127,11 +147,9 @@ export function serializeHTML(doc, metadata) {
   clone.querySelector('#' + DATA_ID)?.remove();
   for (const mark of [...clone.querySelectorAll('[data-htmlmemo-search]')].reverse()) mark.replaceWith(...mark.childNodes);
   clone.querySelectorAll('[data-htmlmemo-preview], [data-htmlmemo-selected]').forEach(element => element.remove());
-  // A short-lived reader build wrote its TOC collapse control into the source
-  // document. Never carry those controls or their hidden state into a saved
-  // HTML file; the document's own TOC remains entirely under its own CSS.
-  clone.querySelectorAll('#htmlmemo-toc-toggle-style, [data-htmlmemo-toc-toggle]').forEach(element => element.remove());
-  clone.querySelectorAll('[data-htmlmemo-toc-collapsed]').forEach(element => element.removeAttribute('data-htmlmemo-toc-collapsed'));
+  // Reader-only sidebar controls and their grid/flex overrides must never
+  // alter the source document's own TOC after it is saved and reopened.
+  clearReaderSidebarArtifacts(clone);
   // Interactive editor-only styles should never change the standalone file.
   clone.querySelector('#htmlmemo-editor-style')?.remove();
   clone.querySelector('head').append(metadataElement(doc, metadata));

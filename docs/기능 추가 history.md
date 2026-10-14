@@ -679,3 +679,18 @@ HTMLMemo 프로젝트에서 구현과 관련 검증을 마친 변경을 기록�
 **검증과 제한:** `npm run check`(59개 JavaScript·JSON), `npm test`(108개), `npm run build`, `git diff --check`를 통과했습니다. 일반·전체 화면 리더의 자동 맞춤 폭과 데스크톱·모바일 가로 padding이 0인지 단위 검사했습니다. `npm run test:browser`는 이 실행 환경에서 전용 Chrome이 시작 직후 종료되어 실패했습니다(`Chrome exited null`). 따라서 실제 사용자 파일을 Chrome에서 열어 시각적으로 통과했다고 표시하지 않습니다. Pages 게시와 운영 파일 대조 결과는 완료 후 이 항목에 보충합니다.
 
 **게시 완료 (2026-10-14 13:14:45 +09:00):** `3b7e3968a0b201d7ee9b5f4a035cbfa11306defe`를 main에 push했고 [GitHub Actions 38510297905](https://github.com/seionwon/HTMLMemo/actions/runs/38510297905)의 `npm test`·`npm run check`·`npm run build`와 Pages 게시 성공을 확인했습니다. 공개 주소는 HTTP 200으로 응답했으며, 공개 `index.html`·`styles.css`·`src/app.js`·`src/document.js`·`src/reader.js`가 로컬 `dist/`와 바이트 단위로 일치합니다. 서비스 워커도 빌드 환경별 콘텐츠 캐시 식별자를 제외한 본문이 일치해, 기존 캐시가 새 리더 자산으로 교체될 수 있음을 확인했습니다. 실제 사용자 HTML의 화면 검증은 위 Chrome 실행 제한으로 완료하지 못했습니다.
+
+<a id="hist-20261014-023"></a>
+### 2026-10-14 14:20:25 +09:00 — 이전 리더 폭 상태와 사이드바 흔적 복원
+
+| ID | change-kind | status |
+|---|---|---|
+| hist-20261014-023 | 리더 보기 상태·저장 HTML 정리 | 구현·자동 검사·빌드 완료 / Pages 게시 진행 |
+
+**문제와 수정:** 이전 버전은 자동 맞춤으로 계산한 확대율도 숫자 `zoom` 값만 저장했습니다. 이후 창이나 앱 사이드바 폭이 달라진 상태에서 같은 HTML을 다시 열면 그 값을 수동 확대처럼 적용해, 문서 바깥에 가운데 정렬된 빈 띠가 남을 수 있었습니다. 이제 자동 맞춤 여부를 `autoFit`으로 함께 저장합니다. 이 필드가 없던 기존 HTML은 한 번 자동 맞춤으로 열어 현재 사용 가능한 폭을 채우며, 새로 수동 확대를 선택한 경우에만 수동 확대 상태를 유지합니다.
+
+이전 목차 접기 시도가 파일에 남긴 HTMLMemo 전용 스타일, 버튼, 접힘·grid·flex 속성과 `--htmlmemo-toc-grid-columns` 인라인 값도 열기와 저장 모두에서 제거합니다. 문서가 원래 갖고 있던 왼쪽 `목차`, 본문 순서, 스타일 및 여백은 건드리지 않습니다.
+
+**사용 위치와 동작:** GitHub Pages에서 기존 로컬 HTML을 다시 열면 리더가 현재 pane의 전체 폭에 맞춰 표시합니다. 새 버전에서 수동 확대를 바꾸면 그 선택만 이후 열기에도 유지합니다. 이미 저장된 문서의 이전 임시 목차 속성은 읽는 순간 정리되며, 이후 HTML을 저장하면 파일에도 남지 않습니다.
+
+**검증과 제한:** `npm run check`(59개 JavaScript·JSON), `npm test`(111개), `npm run build`, `git diff --check`를 통과했습니다. 이전 sidebar 실험이 남긴 전체 스타일·속성·CSS 변수 제거와 저장 파일 제외, 기존 `zoom`만 든 HTML의 자동 맞춤 복원, 명시적 수동 확대 상태 보존을 검사했습니다. `npm run test:browser`는 이 실행 환경에서 전용 Chrome 프로세스가 시작 직후 종료되어 실패했습니다(`Chrome exited null`). 따라서 실제 사용자 파일의 Chrome 화면을 자동으로 통과했다고 기록하지 않습니다. Pages 게시 결과는 완료 후 이 항목에 보충합니다.

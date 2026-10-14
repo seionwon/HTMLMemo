@@ -10,7 +10,7 @@ export class Reader {
     this.host = host; this.metadata = parsed.metadata; this.callbacks = callbacks; this.history = new History(this.metadata.annotations);
     this.tool = 'select'; this.color = '#edcf67'; this.width = 3; this.opacity = .35; this.penTTL = 0; this.zoom = 1;
     this.nativeScroll = !!parsed.nativeScroll;
-    this.selection = null; this.selectedId = null; this.linkHistory = []; this.searchResults = []; this.searchPosition = -1; this.autoFit = !this.metadata.view.zoom;
+    this.selection = null; this.selectedId = null; this.linkHistory = []; this.searchResults = []; this.searchPosition = -1; this.autoFit = this.metadata.view.autoFit !== false;
     this.middleScroll = null;
     this.viewport = document.createElement('div'); this.viewport.className = 'reader-viewport';
     this.viewport.classList.toggle('reader-native-scroll', this.nativeScroll);
@@ -40,14 +40,14 @@ export class Reader {
             this.doc.removeEventListener('click',blockNavigation,true);this.doc.removeEventListener('keydown',blockNavigation,true);
             const openingScroll = {top:this.doc.defaultView.scrollY,left:this.doc.defaultView.scrollX};
             this.metadata = prepared.metadata; this.history = new History(this.metadata.annotations);
-            this.autoFit = !this.metadata.view.zoom;
+            this.autoFit = this.metadata.view.autoFit !== false;
             this.initialHTML = prepared.html;
             this.naturalWidth = this.metadata.viewport.width;
             this.frame.style.width = this.naturalWidth + 'px';
             this.openingScroll = openingScroll;
           }
           this.bind(); this.frame.style.pointerEvents = ''; this.measure(); this.render();
-          this.zoom = clamp(this.metadata.view.zoom || this.fitZoom(), .2, 8); this.applyZoom();
+          this.zoom = clamp(this.autoFit ? this.fitZoom() : (this.metadata.view.zoom || this.fitZoom()), .2, 8); this.applyZoom();
           requestAnimationFrame(() => { if(this.disposed){resolve(this);return;} this.scrollTop = this.openingScroll?.top ? this.openingScroll.top*this.zoom : Number(this.metadata.view.scrollTop) || 0; this.scrollLeft = this.openingScroll?.left ? this.openingScroll.left*this.zoom : Number(this.metadata.view.scrollLeft) || 0; this.callbacks.onView?.(); resolve(this); });
         } catch (error) { reject(error); }
       }, {once:true});
@@ -91,7 +91,7 @@ export class Reader {
       clearTimeout(this.positionTimer);
       this.positionTimer = setTimeout(() => {
         if (this.disposed) return;
-        this.metadata.view = {scrollTop:this.scrollTop, scrollLeft:this.scrollLeft, zoom:this.zoom};
+        this.metadata.view = {scrollTop:this.scrollTop, scrollLeft:this.scrollLeft, zoom:this.zoom, autoFit:this.autoFit};
         this.callbacks.onPosition?.(); this.callbacks.onView?.();
       }, 250);
     }, {passive:true});
@@ -261,7 +261,7 @@ export class Reader {
     this.rememberPosition(); this.callbacks.onView?.();
   }
   rememberPosition() {
-    this.metadata.view = {scrollTop:this.scrollTop, scrollLeft:this.scrollLeft, zoom:this.zoom};
+    this.metadata.view = {scrollTop:this.scrollTop, scrollLeft:this.scrollLeft, zoom:this.zoom, autoFit:this.autoFit};
     this.callbacks.onPosition?.();
   }
   setTool(tool) {

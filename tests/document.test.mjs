@@ -70,3 +70,25 @@ test('opening a local document preserves its own TOC sidebar and removes older r
   assert.ok(!saved.includes('htmlmemo-toc-toggle-style'));
   assert.ok(!saved.includes('data-htmlmemo-toc-collapsed'));
 });
+test('opening and saving remove every former reader sidebar layout artifact',async()=>{
+  const source='<html><head><style id="htmlmemo-toc-toggle-style">old toc control</style><style id="htmlmemo-sidebar-style">old sidebar layout</style><style>.reader-toc{position:sticky;top:0;width:18rem}.page-grid{display:grid;grid-template-columns:18rem minmax(0,1fr)}</style></head><body><div class="page-grid" data-htmlmemo-sidebar-grid style="color:purple;--htmlmemo-toc-grid-columns:18px minmax(0,1fr)"><aside class="reader-toc" data-htmlmemo-toc-collapsed data-htmlmemo-sidebar-folded data-htmlmemo-sidebar-grid-item data-htmlmemo-sidebar-flex><button data-htmlmemo-toc-toggle>‹</button><h2>목차</h2></aside><main><h1>본문</h1></main></div></body></html>';
+  const parsed=await prepareLoadedHTML(documentFor(source));
+  const opened=documentFor(parsed.html),layout=opened.querySelector('.page-grid'),toc=opened.querySelector('.reader-toc');
+  assert.equal(opened.querySelector('#htmlmemo-toc-toggle-style'),null);
+  assert.equal(opened.querySelector('#htmlmemo-sidebar-style'),null);
+  assert.equal(opened.querySelector('[data-htmlmemo-toc-toggle]'),null);
+  for(const attribute of ['data-htmlmemo-toc-collapsed','data-htmlmemo-sidebar-folded','data-htmlmemo-sidebar-grid','data-htmlmemo-sidebar-grid-item','data-htmlmemo-sidebar-flex']) assert.equal(opened.querySelector('['+attribute+']'),null);
+  assert.equal((layout.getAttribute('style')||'').includes('--htmlmemo-toc-grid-columns'),false);
+  assert.match(layout.getAttribute('style')||'',/color\s*:\s*purple/);
+  assert.ok(toc);
+  const saved=serializeHTML(opened,parsed.metadata);
+  assert.doesNotMatch(saved,/htmlmemo-(toc-toggle-style|sidebar-style|toc-grid-columns)|data-htmlmemo-(toc-toggle|toc-collapsed|sidebar-folded|sidebar-grid)/);
+});
+test('legacy saved zoom reopens in automatic fit while explicit manual zoom remains manual',()=>{
+  const source=view=>`<html><head><script id="htmlmemo-data" type="application/json">${JSON.stringify({version:1,annotations:[],view})}</script></head><body>본문</body></html>`;
+  const legacy=parseHTML(source({scrollTop:12,scrollLeft:4,zoom:.75}));
+  assert.equal(legacy.metadata.view.zoom,.75);
+  assert.equal(legacy.metadata.view.autoFit,true);
+  const manual=parseHTML(source({scrollTop:12,scrollLeft:4,zoom:.75,autoFit:false}));
+  assert.equal(manual.metadata.view.autoFit,false);
+});
