@@ -17,3 +17,9 @@
 `npm run check`, `npm test`, `npm run build`로 검사합니다. 문서 화면·파일 저장·리더 동작을 바꾸면 가능한 환경에서 `npm run test:browser`로 실제 Chrome 동작을 확인합니다. 실행하지 못한 검사를 통과했다고 쓰지 않습니다.
 
 사용자에게 영향을 주는 변경과 운영 반영 결과는 `docs/기능 추가 history.md`에 한국어로 기록합니다. 이전 실패 기록을 삭제하지 말고 같은 항목에 실제 후속 검증·게시 결과를 보충합니다. 다른 작업의 변경과 `codememo-integration/`의 미적용 패치는 자동으로 커밋하지 않습니다.
+
+## macOS 자동 브라우저 검사
+
+`CODEX_SANDBOX=seatbelt` 또는 `CODEMEMO_BROWSER_AUTOMATION=unavailable`인 macOS 실행 환경에서는 Chrome을 직접 실행하지 않습니다. macOS 앱 등록/Mach 서비스 등록 거부가 시스템 충돌 알림을 만듭니다. CHROME_PATH·CHROME_BIN·PUPPETEER_EXECUTABLE_PATH를 존중하며, `/Applications/Google Chrome.app`을 하드코딩하거나 다른 플래그로 반복 실행하지 않습니다. 실행 가능한 CI 또는 신뢰된 검증 환경에서 브라우저 검사를 수행하고, 수행하지 못한 검사는 성공으로 기록하지 않습니다. 개인 프로필·시스템 충돌 알림 설정·샌드박스 권한을 변경하여 해결하지 않습니다.
+
+CodeMemo의 온라인 쓰기 턴에서는 `codememo-browser request.json`으로 별도 검증 서비스를 사용할 수 있습니다. 프로젝트 개발 서버를 먼저 실행하고 요청 파일에 `url`(예: http://127.0.0.1:4173), `actions`(click/type/wait/text 및 selector), `screenshot: true`를 적습니다. 결과는 JSON, 스크린샷은 요청 파일명 뒤 `.png`로 반환됩니다. 이 서비스는 임시 브라우저 프로필을 사용하며 임의 셸·JavaScript 실행 기능은 제공하지 않습니다. CODEMEMO_BROWSER_TOKEN을 출력하거나 파일·로그에 저장하지 않습니다. 기존 전체 브라우저 테스트와 이 제한된 검사를 구분하여 기록합니다.

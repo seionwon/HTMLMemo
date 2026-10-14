@@ -696,3 +696,7 @@ HTMLMemo 프로젝트에서 구현과 관련 검증을 마친 변경을 기록�
 **검증과 제한:** `npm run check`(59개 JavaScript·JSON), `npm test`(111개), `npm run build`, `git diff --check`를 통과했습니다. 이전 sidebar 실험이 남긴 전체 스타일·속성·CSS 변수 제거와 저장 파일 제외, 기존 `zoom`만 든 HTML의 자동 맞춤 복원, 명시적 수동 확대 상태 보존을 검사했습니다. `npm run test:browser`는 이 실행 환경에서 전용 Chrome 프로세스가 시작 직후 종료되어 실패했습니다(`Chrome exited null`). 따라서 실제 사용자 파일의 Chrome 화면을 자동으로 통과했다고 기록하지 않습니다. Pages 게시 결과는 완료 후 이 항목에 보충합니다.
 
 **게시 완료 (2026-10-14 14:22:15 +09:00):** `7530addaf9832dc0580b50704a34a812ec9bb4db`를 main에 push했고 [GitHub Actions 38516145677](https://github.com/seionwon/HTMLMemo/actions/runs/38516145677)의 `npm test`·`npm run check`·`npm run build`와 Pages 게시가 모두 성공했습니다. 공개 주소는 HTTP 200으로 응답했으며, 공개 `index.html`·`styles.css`·`src/app.js`·`src/document.js`·`src/reader.js`는 로컬 `dist/`와 바이트 단위로 일치합니다. 공개 서비스 워커는 배포 환경에서 생성한 캐시 식별자만 다르고 나머지 본문이 일치합니다.
+
+## 2026-10-14 14:34:53 +09:00 — 제한 환경의 Chrome 반복 충돌 방지
+
+ID: hist-20261014-024. tests/chrome.mjs가 macOS Codex/CodeMemo 제한 환경을 감지하면 Chrome 생성 전에 명확한 오류로 종료합니다. Chrome 실행·재시도로 시스템 충돌 알림을 반복하지 않으며 실패를 성공으로 숨기지 않습니다. 해당 환경의 브라우저 확인은 CodeMemo의 codememo-browser 전용 검증 명령으로 수행하도록 AGENTS.md에 기록했습니다. 개인 Chrome 프로필과 서비스 웹 UI는 변경하지 않았습니다. 문법 검사 60개 및 단위 검사 112개 통과. 가드 단위 검사로 제한 환경의 실행 거부를 확인했습니다. 로컬 개발 검사 도구에 반영한 변경이며 GitHub Pages 공개 파일 변경은 없습니다.

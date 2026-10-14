@@ -19,6 +19,8 @@ export class CDP {
   async close(){this.socket.close();for(const pending of this.pending.values()){clearTimeout(pending.timer);pending.reject(new Error('CDP closed'));}this.pending.clear();}
 }
 export async function launchChrome(){
+  if(process.platform==='darwin'&&(process.env.CODEX_SANDBOX==='seatbelt'||process.env.CODEMEMO_BROWSER_AUTOMATION==='unavailable'))
+    throw new Error('Browser verification is unavailable in the macOS agent sandbox. Run in CI or a trusted verification environment; do not retry desktop Chrome.');
   const paths=[process.env.CHROME_PATH,'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome','/usr/bin/google-chrome','/usr/bin/chromium','/usr/bin/chromium-browser'].filter(Boolean);let executable;
   for(const path of paths){try{await access(path);executable=path;break;}catch{/* try next platform */}}
   if(!executable)throw new Error('Chrome is required for browser tests. Set CHROME_PATH to its executable.');
