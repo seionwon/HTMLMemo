@@ -54,7 +54,7 @@ test('local JavaScript mode preserves scripts, handlers and executable links thr
   assert.equal(reopened.metadata.execution.allowScripts,true);assert.deepEqual(reopened.metadata.annotations,[annotation]);assert.ok(reopened.html.includes('function renderBook()'));
 });
 test('opening a local document preserves its own TOC sidebar and removes older reader TOC artifacts',async()=>{
-  const source='<html><head><style id="htmlmemo-toc-toggle-style">[data-htmlmemo-toc-collapsed]>:not([data-htmlmemo-ui]){display:none!important}</style><style>.reader-toc{position:sticky;top:0;height:100vh;width:18rem}.page{min-height:100dvh}</style></head><body><aside class="reader-toc" data-htmlmemo-toc-collapsed><button data-htmlmemo-toc-toggle>‹</button><h2>목차</h2><a href="#chapter">첫 장</a></aside><main class="page"><h1 id="chapter">본문</h1></main></body></html>';
+  const source='<html><head><style id="htmlmemo-toc-toggle-style">[data-htmlmemo-toc-collapsed]>:not([data-htmlmemo-ui]){display:none!important}</style><style>.reader-toc{position:sticky;top:0;height:100vh;width:18rem}.page{min-height:100dvh}</style></head><body data-htmlmemo-sidebar-grid style="--htmlmemo-toc-grid-columns:18px minmax(0,1fr)"><aside class="reader-toc" data-htmlmemo-toc-collapsed><button data-htmlmemo-toc-toggle>‹</button><h2>목차</h2><a href="#chapter">첫 장</a></aside><main class="page"><h1 id="chapter">본문</h1></main></body></html>';
   const parsed=await prepareLoadedHTML(documentFor(source));
   const opened=documentFor(parsed.html);
   assert.equal(parsed.nativeScroll,true);
@@ -64,9 +64,12 @@ test('opening a local document preserves its own TOC sidebar and removes older r
   assert.equal(opened.querySelector('.reader-toc').hasAttribute('data-htmlmemo-toc-collapsed'),false);
   assert.equal(opened.querySelector('[data-htmlmemo-toc-toggle]'),null);
   assert.equal(opened.querySelector('#htmlmemo-toc-toggle-style'),null);
+  assert.equal(opened.body.hasAttribute('data-htmlmemo-sidebar-grid'),false);
+  assert.doesNotMatch(opened.body.getAttribute('style')||'',/--htmlmemo-toc-grid-columns/);
   opened.querySelector('.reader-toc').setAttribute('data-htmlmemo-toc-collapsed','');
   const oldStyle=opened.createElement('style');oldStyle.id='htmlmemo-toc-toggle-style';opened.head.append(oldStyle);
   const saved=serializeHTML(opened,parsed.metadata);
   assert.ok(!saved.includes('htmlmemo-toc-toggle-style'));
   assert.ok(!saved.includes('data-htmlmemo-toc-collapsed'));
+  assert.ok(!saved.includes('--htmlmemo-toc-grid-columns'));
 });

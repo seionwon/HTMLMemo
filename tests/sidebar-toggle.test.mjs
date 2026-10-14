@@ -4,15 +4,16 @@ import vm from 'node:vm';
 import {readFile} from 'node:fs/promises';
 import {Reader} from '../public/src/reader.js';
 import {icon} from '../public/src/utils.js';
-import {serializeHTML,textIndex,parseHTML} from '../public/src/document.js';
+import {serializeHTML,textIndex,parseHTML,cleanAnnotations} from '../public/src/document.js';
 import {documentFor,installDOM} from './dom.mjs';
 installDOM();
 
 const source='<html><head><style>body{display:grid;grid-template-columns:240px 1fr}.toc{position:sticky;top:0;height:100dvh;overflow:auto;width:240px}.page{min-height:4000px}</style></head><body><aside class="toc" style="color:navy" data-htmlmemo-anchor="toc"><h2>목차</h2><a href="#chapter">첫 장</a></aside><main class="page"><h1 id="chapter">본문</h1><p>읽기와 메모</p></main></body></html>';
-function sidebarReader({layout='grid',native=true,html=source}={}) {
+function sidebarReader({layout='grid',native=true,html=source,layoutSelector='body',gridColumns='240px 860px'}={}) {
   const doc=documentFor(html),app=documentFor('<html><body><section id="host"></section></body></html>');
   const frames=[],listeners=[],moves=[];
-  const view={scrollX:0,scrollY:800,scrollTo(x,y){this.scrollX=x;this.scrollY=y;},requestAnimationFrame(fn){frames.push(fn);},addEventListener(name,fn){listeners.push([name,fn]);},getComputedStyle(node){return {display:node===doc.body?layout:'block',gridTemplateColumns:'240px 860px',overflowX:'visible',overflowY:'visible'};}};
+  const layoutRoot=doc.querySelector(layoutSelector)||doc.body;
+  const view={scrollX:0,scrollY:800,scrollTo(x,y){this.scrollX=x;this.scrollY=y;},requestAnimationFrame(fn){frames.push(fn);},addEventListener(name,fn){listeners.push([name,fn]);},getComputedStyle(node){return {display:node===layoutRoot?layout:'block',gridTemplateColumns:gridColumns,overflowX:'visible',overflowY:'visible'};}};
   Object.defineProperty(doc,'defaultView',{value:view,configurable:true});
   const host=app.querySelector('#host');host.getBoundingClientRect=()=>({left:180,top:100,width:1000,height:700});
   const frame={style:{},getBoundingClientRect:()=>({left:180,top:100,width:825,height:700})};
@@ -25,7 +26,7 @@ function sidebarReader({layout='grid',native=true,html=source}={}) {
   const viewport=app.createElement('div');Object.assign(viewport,{clientWidth:1000,clientHeight:700,scrollTop:600,scrollLeft:0,scrollBy(move){moves.push(move);this.scrollTop+=move.top;}});
   const r=Object.create(Reader.prototype);
   Object.assign(r,{doc,host,frame,viewport,nativeScroll:native,zoom:.75,naturalWidth:1100,sizer:{style:{}},metadata:parseHTML(source,{}, {allowScripts:native}).metadata,renderDrawingLayer(){},callbacks:{}});
-  return {r,doc,sidebar,app,moves,flush(){while(frames.length)frames.shift()();}};
+  return {r,doc,sidebar,layoutRoot,app,moves,flush(){while(frames.length)frames.shift()();}};
 }
 
 test('the document TOC receives one direct-child toggle without creating an app-owned outline',()=>{
@@ -64,6 +65,30 @@ test('the TOC folds to an 18px vertical tab and restores source layout and scrol
   }
 });
 
+test('a wrapped TOC shrinks its actual ancestor grid track and gives the reading pane the width',()=>{
+  const nested='<html><head><style>.reader-layout{display:grid;grid-template-columns:240px minmax(0,1fr)}.toc{width:240px}.page{min-width:0}</style></head><body><div class="reader-layout"><div class="toc-slot"><div class="toc"><div>목차</div><ol><li><a href="#chapter">첫 장</a></li></ol></div></div><main class="page"><h1 id="chapter">본문</h1></main></div></body></html>';
+  const {r,doc,sidebar,layoutRoot,flush}=sidebarReader({html:nested,layoutSelector:'.reader-layout'});
+  r.installDocumentSidebarToggle();assert.ok(r.tocToggle,'a document-owned TOC is found even when its label is a plain div');
+  r.toggleDocumentSidebar();flush();
+  assert.equal(sidebar.hasAttribute('data-htmlmemo-toc-collapsed'),true);
+  assert.equal(layoutRoot.hasAttribute('data-htmlmemo-sidebar-grid'),true);
+  assert.equal(doc.querySelector('.toc-slot').hasAttribute('data-htmlmemo-sidebar-grid-item'),true);
+  assert.equal(layoutRoot.style.getPropertyValue('--htmlmemo-toc-grid-columns'),'18px minmax(0,1fr)');
+  assert.match(doc.querySelector('#htmlmemo-toc-toggle-style').textContent,/var\(--htmlmemo-toc-grid-columns\)/);
+  r.toggleDocumentSidebar();flush();
+  assert.equal(layoutRoot.hasAttribute('data-htmlmemo-sidebar-grid'),false);
+  assert.equal(doc.querySelector('.toc-slot').hasAttribute('data-htmlmemo-sidebar-grid-item'),false);
+  assert.equal(layoutRoot.style.getPropertyValue('--htmlmemo-toc-grid-columns')||'','');
+});
+
+test('annotation rendering cleanup does not remove the live document TOC tab',()=>{
+  const {r,doc,sidebar,flush}=sidebarReader();r.installDocumentSidebarToggle();r.toggleDocumentSidebar();flush();
+  cleanAnnotations(doc);
+  assert.equal(sidebar.hasAttribute('data-htmlmemo-toc-collapsed'),true);
+  assert.equal(sidebar.querySelector('[data-htmlmemo-toc-toggle]'),r.tocToggle);
+  assert.ok(doc.querySelector('#htmlmemo-toc-toggle-style'));
+});
+
 test('wheel scrolling uses the same scroll owner with the TOC expanded and folded',()=>{
   for(const native of [true,false]){
     const {r,doc,moves,flush}=sidebarReader({native});r.installDocumentSidebarToggle();
@@ -81,7 +106,7 @@ test('wheel scrolling uses the same scroll owner with the TOC expanded and folde
 test('saving while folded excludes the temporary TOC button and reopens the TOC expanded',()=>{
   const {r,doc,flush}=sidebarReader();r.installDocumentSidebarToggle();r.toggleDocumentSidebar();flush();
   const saved=serializeHTML(doc,r.metadata);
-  assert.doesNotMatch(saved,/htmlmemo-toc-toggle-style|data-htmlmemo-toc-toggle|data-htmlmemo-toc-collapsed|data-htmlmemo-sidebar-grid|document-sidebar-toggle/);
+  assert.doesNotMatch(saved,/htmlmemo-toc-toggle-style|data-htmlmemo-toc-toggle|data-htmlmemo-toc-collapsed|data-htmlmemo-sidebar-grid(?:-item)?|data-htmlmemo-sidebar-flex|--htmlmemo-toc-grid-columns|document-sidebar-toggle/);
   const reopened=documentFor(parseHTML(saved).html);
   assert.equal(reopened.querySelector('.toc').getAttribute('style'),'color:navy');
   assert.equal(reopened.querySelector('.toc a').getAttribute('href'),'#chapter');

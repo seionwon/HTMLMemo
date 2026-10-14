@@ -29,6 +29,8 @@ test('the PWA is published at the app root with every offline resource and no in
   const files=webFiles(assets);assert.equal(files.size,APP_FILES.length+3);assert.ok(files.has('.nojekyll'));assert.ok(files.has('index.html'));
   assert.ok(![...files.keys()].some(name=>/^(docs|pages)\//.test(name)||/HTMLMemo-(pages\.zip|install\.html|local\.zip)|HTMLMemo\.html/.test(name)));
   const manifest=JSON.parse(text(files,'manifest.webmanifest'));assert.equal(manifest.start_url,'./');assert.equal(manifest.scope,'./');
+  assert.match(assets.app['sw.js'].text,/const CACHE = 'htmlmemo-v4';/,'the reader release replaces the prior local cache');
+  assert.match(text(files,'sw.js'),/const CACHE = 'htmlmemo-[a-f0-9]+';/,'the published package has its own content cache key');
   const shell=JSON.parse(text(files,'sw.js').match(/const SHELL = (\[[^;]+\]);/)[1].replaceAll("'",'"'));
   for(const path of shell)assert.ok(files.has(path==='./'?'index.html':path.slice(2)),path);
   const copy=JSON.parse(text(files,'distribution.json'));assert.equal(copy.app['sw.js'].text,text(files,'sw.js'));
