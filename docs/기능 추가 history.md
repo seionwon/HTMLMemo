@@ -706,7 +706,7 @@ ID: hist-20261014-024. tests/chrome.mjs가 macOS Codex/CodeMemo 제한 환경을
 
 | ID | change-kind | status |
 |---|---|---|
-| hist-20261014-025 | 사이드바 경계선 드래그 리사이저·최소 폭 띠(`8px`) 축소·서비스 워커 캐시 갱신 | 구현·단위 검사·빌드·`codememo-browser` 검증·Pages 게시 진행 |
+| hist-20261014-025 | 사이드바 경계선 드래그 리사이저·최소 폭 띠(`8px`) 축소·서비스 워커 캐시 갱신 | 구현·단위 검사·빌드·`codememo-browser` 검증·Pages 게시 완료 |
 
 **목적과 변경 내용:** 왼쪽 `나만의 웹 서재` 사이드바(`nav.desk-nav`)와 오른쪽 본문 영역(`main#main`) 사이의 세로 경계선을 마우스로 잡고 좌우로 옮겨 사이드바 폭을 자유롭게 조절할 수 있도록 `#desk-resizer`(`role="separator"`, `aria-orientation="vertical"`)를 추가했습니다. 최대로 왼쪽으로 축소하면 사이드바가 완전히 사라지지 않고 `8px` 너비의 아주 좁은 세로 띠(`.desk-nav.is-strip`)만 남도록 구현했습니다. 불러온 원본 HTML 문서 내부의 DOM·목차·스타일은 일절 수정하지 않습니다.
 
@@ -727,4 +727,6 @@ ID: hist-20261014-024. tests/chrome.mjs가 macOS Codex/CodeMemo 제한 환경을
 **검증과 배포 상태:**
 - `npm run check`(60개 파일 문법·JSON 검사), `npm test`(113개 단위 검사 통과 — 사이드바 폭 드래그, 중간 폭 경유 `8px` 축소 뒤 원래 폭 복원, `releasePointerCapture` 예외 내성, `pointercancel` 복구, 리더 자동 맞춤 재계산, 배포 번들 포함 검사), `npm run build`를 모두 통과했습니다.
 - `PORT=4173 node scripts/server.mjs --production` 실행 후 `codememo-browser` 헤드리스 검증으로 샘플 문서를 연 상태에서 `#desk-resizer` 조작 시 사이드바가 `8px` 좁은 띠(`is-strip`)로 축소되고 리더 자동 맞춤 배율이 `115%`에서 `133%`로 확대되는 것, 다시 `180px` 기본 폭과 `115%` 배율로 복원되는 것을 실제 렌더링 스크린샷과 함께 확인했습니다.
-- macOS 제한 실행 환경에서는 `npm run test:browser`의 데스크톱 Chrome 직접 기동이 차단되어 있으므로(`tests/chrome.mjs` 가드 동작), 제한된 `codememo-browser` 검증과 단위 검사로 확인했습니다. GitHub Pages 게시 결과는 완료 후 아래에 보충합니다.
+- macOS 제한 실행 환경에서는 `npm run test:browser`의 데스크톱 Chrome 직접 기동이 차단되어 있으므로(`tests/chrome.mjs` 가드 동작), 제한된 `codememo-browser` 검증과 단위 검사로 확인했습니다.
+
+**게시 완료 (2026-10-14 16:02:53 +09:00):** `61ccaa2c0384dee56ba3be10e1c741f6e6139932`를 `main`에 push했고 [GitHub Actions 38525721419](https://github.com/seionwon/HTMLMemo/actions/runs/38525721419)의 `npm test`·`npm run check`·`npm run build`와 Pages 게시가 모두 성공했습니다. 공개 주소(`https://seionwon.github.io/HTMLMemo/`)가 HTTP 200으로 응답하며, 공개 `index.html`·`styles.css`·`src/app.js`가 로컬 `dist/`와 바이트 단위로 일치하고 `sw.js`도 새 캐시 버전과 네트워크 우선 갱신 로직으로 배포된 것을 확인했습니다.
