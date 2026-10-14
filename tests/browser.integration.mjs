@@ -33,6 +33,19 @@ test('real Chrome: browsing, capture, local annotation, file writes, reopen and 
     await t.test('local file import activates annotation independent of original website URL',async()=>{
       await page.evaluate(`window.showOpenFilePicker=async()=>{const root=await navigator.storage.getDirectory();return [await root.getFileHandle('picked-document.html')];};`);await page.click('#import-button');await page.waitFor('document.querySelectorAll(".tab.document").length === 2 && !document.querySelector("#toolbar").hidden');assert.equal(await page.evaluate('document.querySelector("#local-label").hidden'),false);assert.equal(await page.evaluate('document.querySelector(".document-host:not([hidden]) iframe").contentDocument.querySelectorAll("[data-htmlmemo-mark]").length > 0'),true);
     });
+    await t.test('sidebar vertical boundary line drags down to a narrow strip and expands back',async()=>{
+      const start=await page.evaluate(`(()=>{const r=document.querySelector('#desk-resizer').getBoundingClientRect(),m=document.querySelector('#main').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2,mainWidth:m.width};})()`);
+      await page.send('Input.dispatchMouseEvent',{type:'mousePressed',x:start.x,y:start.y,button:'left',clickCount:1});
+      await page.send('Input.dispatchMouseEvent',{type:'mouseMoved',x:4,y:start.y,button:'left',buttons:1});
+      await page.send('Input.dispatchMouseEvent',{type:'mouseReleased',x:4,y:start.y,button:'left',clickCount:1});
+      const collapsed=await page.evaluate(`(()=>{const n=document.querySelector('.desk-nav'),m=document.querySelector('#main');return {navWidth:Math.round(n.getBoundingClientRect().width),strip:n.classList.contains('is-strip'),mainWidth:m.getBoundingClientRect().width};})()`);
+      assert.equal(collapsed.navWidth,8);assert.equal(collapsed.strip,true);assert.ok(collapsed.mainWidth>start.mainWidth+160);
+      await page.send('Input.dispatchMouseEvent',{type:'mousePressed',x:8,y:start.y,button:'left',clickCount:1});
+      await page.send('Input.dispatchMouseEvent',{type:'mouseMoved',x:180,y:start.y,button:'left',buttons:1});
+      await page.send('Input.dispatchMouseEvent',{type:'mouseReleased',x:180,y:start.y,button:'left',clickCount:1});
+      const expanded=await page.evaluate(`(()=>{const n=document.querySelector('.desk-nav');return {navWidth:Math.round(n.getBoundingClientRect().width),strip:n.classList.contains('is-strip')};})()`);
+      assert.equal(expanded.navWidth,180);assert.equal(expanded.strip,false);
+    });
     await t.test('document fullscreen retains every compact toolbar button and saves annotations',async()=>{
       const buttons=await page.evaluate('[...document.querySelectorAll("#toolbar [data-action]")].map(button=>button.dataset.action)');
       await page.evaluate(`document.querySelector('.document-host:not([hidden]) iframe').contentDocument.body.dispatchEvent(new MouseEvent('dblclick',{bubbles:true,button:0,cancelable:true}));`);await page.waitFor('document.querySelector("#app").classList.contains("reader-focus")');

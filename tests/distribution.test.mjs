@@ -131,3 +131,66 @@ test('Library Desk navigation preserves routes, file import and offline brand ic
   await click('#desk-import');assert.equal(picked,true);
   assert.match(doc.querySelector('.brand-icon img').getAttribute('src'),/^data:image\/svg\+xml;base64,/);
 });
+
+test('Library Desk vertical boundary line can be dragged with the mouse down to a narrow strip and expanded back',async()=>{
+  const {doc,local}=await fileApp();
+  const nav=doc.querySelector('.desk-nav'),resizer=doc.querySelector('#desk-resizer'),appRoot=doc.querySelector('#app');
+  const makeEvent=(type,props={})=>Object.assign(new doc.defaultView.Event(type,{bubbles:true,cancelable:true}),props);
+  assert.ok(resizer);
+  assert.equal(resizer.getAttribute('role'),'separator');
+  assert.equal(resizer.getAttribute('aria-orientation'),'vertical');
+  assert.equal(nav.style.width,'180px');
+  assert.equal(nav.classList.contains('is-strip'),false);
+
+  // Drag the boundary line wider (180px -> 240px)
+  resizer.onpointerdown({button:0,pointerId:1,clientX:180,currentTarget:resizer,preventDefault(){}});
+  assert.equal(appRoot.hasAttribute('data-resizing-desk'),true);
+  assert.equal(resizer.classList.contains('is-dragging'),true);
+  resizer.dispatchEvent(makeEvent('pointermove',{pointerId:1,clientX:240}));
+  assert.equal(nav.style.width,'240px');
+  resizer.dispatchEvent(makeEvent('pointerup',{pointerId:1,clientX:240}));
+  assert.equal(appRoot.hasAttribute('data-resizing-desk'),false);
+  assert.equal(resizer.classList.contains('is-dragging'),false);
+  assert.equal(local.get('htmlmemo-desk-nav-width-v1'),'240');
+
+  // Drag the boundary line all the way to the left -> collapses to 8px narrow strip
+  resizer.onpointerdown({button:0,pointerId:2,clientX:240,currentTarget:resizer,preventDefault(){}});
+  resizer.dispatchEvent(makeEvent('pointermove',{pointerId:2,clientX:4}));
+  assert.equal(nav.style.width,'8px');
+  assert.equal(nav.classList.contains('is-strip'),true);
+  assert.equal(nav.dataset.collapsed,'true');
+  resizer.dispatchEvent(makeEvent('pointerup',{pointerId:2,clientX:4}));
+  assert.equal(nav.style.width,'8px');
+  assert.equal(resizer.getAttribute('aria-valuenow'),'8');
+  assert.equal(local.get('htmlmemo-desk-nav-width-v1'),'8');
+  for(const button of nav.querySelectorAll('button')){
+    assert.equal(button.getAttribute('tabindex'),'-1');
+    assert.equal(button.getAttribute('aria-hidden'),'true');
+  }
+
+  // Drag from the narrow strip itself back to the right -> expands to 165px
+  nav.dispatchEvent(makeEvent('mousedown',{button:0,clientX:6}));
+  doc.dispatchEvent(makeEvent('mousemove',{clientX:163}));
+  doc.dispatchEvent(makeEvent('mouseup',{clientX:163}));
+  assert.equal(nav.style.width,'165px');
+  assert.equal(nav.classList.contains('is-strip'),false);
+  assert.equal(nav.dataset.collapsed,'false');
+  for(const button of nav.querySelectorAll('button')){
+    assert.equal(button.hasAttribute('tabindex'),false);
+    assert.equal(button.hasAttribute('aria-hidden'),false);
+  }
+
+  // Stationary click and keyboard separator controls toggle and step cleanly
+  resizer.onpointerdown({button:0,pointerId:3,clientX:165,currentTarget:resizer,preventDefault(){}});
+  resizer.dispatchEvent(makeEvent('pointerup',{pointerId:3,clientX:165}));
+  assert.equal(nav.style.width,'8px');
+  assert.equal(nav.classList.contains('is-strip'),true);
+  resizer.onpointerdown({button:0,pointerId:4,clientX:8,currentTarget:resizer,preventDefault(){}});
+  resizer.dispatchEvent(makeEvent('pointerup',{pointerId:4,clientX:8}));
+  assert.equal(nav.style.width,'165px');
+  assert.equal(nav.classList.contains('is-strip'),false);
+  resizer.onkeydown({key:'Home',preventDefault(){}});
+  assert.equal(nav.style.width,'8px');
+  resizer.onkeydown({key:'End',preventDefault(){}});
+  assert.equal(nav.style.width,'180px');
+});
