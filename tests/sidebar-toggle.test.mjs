@@ -42,7 +42,7 @@ test('the document toggle stays outside source HTML and open layout/style/conten
 test('repeated folding restores source CSS, grid tracks, TOC content and both scroll positions',()=>{
   for(const layout of ['grid','flex']){
     const {r,doc,sidebar,flush}=sidebarReader({layout});r.installDocumentSidebarToggle();
-    const original=sidebar.outerHTML,css=doc.querySelector('style').textContent,index=textIndex(doc).text;
+    const original=sidebar.outerHTML,originalDocument=doc.documentElement.outerHTML,css=doc.querySelector('style').textContent,index=textIndex(doc).text;
     for(let count=0;count<3;count++){
       const position=r.scrollTop;r.toggleDocumentSidebar();flush();
       assert.equal(r.scrollTop,position);assert.equal(r.sidebarToggle.getAttribute('aria-expanded'),'false');
@@ -52,6 +52,7 @@ test('repeated folding restores source CSS, grid tracks, TOC content and both sc
       sidebar.scrollTop=0;r.toggleDocumentSidebar();flush();
       assert.equal(sidebar.scrollTop,125);assert.equal(r.scrollTop,position);
       assert.equal(sidebar.outerHTML,original);assert.equal(doc.querySelector('style').textContent,css);
+      assert.equal(doc.documentElement.outerHTML,originalDocument,'expansion restores the full source DOM');
       assert.equal(doc.body.hasAttribute('data-htmlmemo-sidebar-grid'),false);
       assert.equal(r.sidebarToggle.getAttribute('aria-expanded'),'true');
     }
@@ -79,10 +80,7 @@ test('saving while folded excludes transient controls and grid overrides, and re
   const reopened=documentFor(parseHTML(saved).html);
   assert.equal(reopened.querySelector('.toc').getAttribute('style'),'color:navy');
   assert.equal(reopened.querySelector('.toc a').getAttribute('href'),'#chapter');
-  // linkedom preserves the authored `100dvh` on macOS but resolves it to the
-  // test viewport's 800px height on the Linux Actions runner.  Either form
-  // proves that the original sticky sidebar rule survived export unchanged.
-  assert.match(reopened.querySelector('style').textContent,/position:sticky;top:0;height:(?:100dvh|800px);overflow:auto;width:240px/);
+  assert.match(reopened.querySelector('style').textContent,/position:sticky;top:0;height:100dvh;overflow:auto;width:240px/);
   assert.equal(doc.querySelector('.toc').hasAttribute('data-htmlmemo-sidebar-folded'),true,'exporting does not expand the live document');
 });
 
