@@ -83,6 +83,8 @@ function* prepareHTML(html, defaults, {includeMetadata = false, document: loaded
   try { const url=new URL(source); source=['http:','https:'].includes(url.protocol)&&!url.username&&!url.password?url.href:''; } catch { source=''; }
   allowScripts = (allowScripts ?? defaults.execution?.allowScripts ?? embedded.execution?.allowScripts ?? false) === true;
   cleanAnnotations(doc);
+  doc.getElementById('htmlmemo-sidebar-style')?.remove();
+  doc.querySelectorAll('[data-htmlmemo-sidebar-folded],[data-htmlmemo-sidebar-grid]').forEach(element=>{element.removeAttribute('data-htmlmemo-sidebar-folded');element.removeAttribute('data-htmlmemo-sidebar-grid');});
   yield* sanitizeTree(doc, source,0,allowScripts);
   for(const meta of doc.head.querySelectorAll('meta[charset],meta[http-equiv]'))if(meta.hasAttribute('charset')||/^content-type$/i.test(meta.getAttribute('http-equiv')))meta.remove();
   const charset=doc.createElement('meta');charset.setAttribute('charset','utf-8');doc.head.prepend(charset);
@@ -132,6 +134,8 @@ export function serializeHTML(doc, metadata) {
   // HTML file; the document's own TOC remains entirely under its own CSS.
   clone.querySelectorAll('#htmlmemo-toc-toggle-style, [data-htmlmemo-toc-toggle]').forEach(element => element.remove());
   clone.querySelectorAll('[data-htmlmemo-toc-collapsed]').forEach(element => element.removeAttribute('data-htmlmemo-toc-collapsed'));
+  clone.querySelector('#htmlmemo-sidebar-style')?.remove();
+  clone.querySelectorAll('[data-htmlmemo-sidebar-folded],[data-htmlmemo-sidebar-grid]').forEach(element=>{element.removeAttribute('data-htmlmemo-sidebar-folded');element.removeAttribute('data-htmlmemo-sidebar-grid');});
   // Interactive editor-only styles should never change the standalone file.
   clone.querySelector('#htmlmemo-editor-style')?.remove();
   clone.querySelector('head').append(metadataElement(doc, metadata));

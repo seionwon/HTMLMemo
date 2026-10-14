@@ -47,12 +47,17 @@
       </div>
     </header>
     <div class="desk-shell">
-      <nav class="desk-nav" aria-label="서재 탐색">
-        <strong class="text-sm font-semibold">나만의 웹 서재</strong>
+      <nav id="desk-nav" class="desk-nav" aria-label="서재 탐색">
+        <div class="desk-nav-heading">
+          <strong class="text-sm font-semibold">나만의 웹 서재</strong>
+          <button id="desk-nav-toggle" class="icon-button" type="button" aria-label="서재 사이드바 접기" title="서재 사이드바 접기" aria-controls="desk-nav-content" aria-expanded="true">‹</button>
+        </div>
+        <div id="desk-nav-content">
         <button id="desk-library" aria-current="page">내 서재</button>
         <button id="desk-browse">웹 페이지 열기</button>
         <button id="desk-import">HTML 파일 가져오기</button>
         <button id="desk-execution">실행과 앱 전달</button>
+        </div>
       </nav>
     <main id="main">
       <section id="library" class="library">

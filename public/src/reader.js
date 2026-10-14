@@ -97,12 +97,13 @@ export class Reader {
     }, {passive:true});
     this.resizeObserver = new ResizeObserver(() => { if (!this.disposed) { this.measure(); this.renderDrawingLayer(); } });
     this.resizeObserver.observe(this.doc.body);
-    this.hostObserver = new ResizeObserver(() => { if (!this.disposed) { if(this.autoFit)this.zoom = this.fitZoom(); if(this.nativeScroll || this.autoFit)this.applyZoom(); } }); this.hostObserver.observe(this.viewport);
+    this.hostObserver = new ResizeObserver(() => { if (!this.disposed) { if(this.autoFit)this.zoom = this.fitZoom(); if(this.nativeScroll || this.autoFit)this.applyZoom(); this.positionDocumentSidebarToggle(); } }); this.hostObserver.observe(this.viewport);
     this.doc.fonts.ready.then(() => { if (!this.disposed) { this.measure(); this.renderDrawingLayer(); } });
+    this.installDocumentSidebarToggle();
     if (this.metadata.execution?.allowScripts) {
       this.dynamicAnchor = 0;
       this.dynamicObserver = new MutationObserver(records => {
-        const editor = node => (node.nodeType===3?node.parentElement:node)?.closest?.('#'+LAYER_ID+',#htmlmemo-annotation-style,#htmlmemo-editor-style,[data-htmlmemo-mark],[data-htmlmemo-search]');
+        const editor = node => (node.nodeType===3?node.parentElement:node)?.closest?.('#'+LAYER_ID+',#htmlmemo-annotation-style,#htmlmemo-editor-style,#htmlmemo-sidebar-style,[data-htmlmemo-mark],[data-htmlmemo-search]');
         if(records.some(record=>!editor(record.target) && (record.type==='characterData' || [...record.addedNodes,...record.removedNodes].some(node=>!editor(node)))))this.scheduleDynamicRefresh();
       });
       this.observeDynamicDocument();
@@ -182,6 +183,80 @@ export class Reader {
     this.middleScroll.target?.releasePointerCapture?.(this.middleScroll.pointerId);
     this.middleScroll=null;
   }
+  installDocumentSidebarToggle() {
+    if (this.disposed || !this.doc) return;
+    const named='.toc,#toc,.table-of-contents,#table-of-contents,.book-toc,#book-toc,.reader-toc,[data-toc]';
+    const candidates=[...this.doc.querySelectorAll(named+',aside,nav,[role="navigation"],#sidebar,.sidebar')];
+    const sidebar=candidates.find(node=>node.querySelector('a[href^="#"]') && (node.matches(named) || /목차|table of contents|contents/i.test(node.querySelector('h1,h2,h3,header')?.textContent||node.getAttribute('aria-label')||'')));
+    if (!sidebar) { if(this.sidebarToggle)this.sidebarToggle.hidden=true;return; }
+    if (this.documentSidebar!==sidebar) {
+      this.documentSidebar?.removeAttribute('data-htmlmemo-sidebar-folded');
+      this.sidebarGrid?.removeAttribute('data-htmlmemo-sidebar-grid');
+      this.documentSidebar=sidebar;this.sidebarFolded=false;this.sidebarGrid=null;
+    }
+    if (!this.sidebarToggle) {
+      const button=this.host.ownerDocument.createElement('button');button.type='button';button.className='document-sidebar-toggle';
+      button.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();this.toggleDocumentSidebar();});
+      this.sidebarToggle=button;this.host.append(button);
+      this.sidebarPositionListener=()=>this.positionDocumentSidebarToggle();
+      this.viewport.addEventListener('scroll',this.sidebarPositionListener,{passive:true});
+      this.doc.addEventListener('scroll',this.sidebarPositionListener,{capture:true,passive:true});
+      this.doc.defaultView.addEventListener('resize',this.sidebarPositionListener);
+    }
+    this.positionDocumentSidebarToggle();
+  }
+  toggleDocumentSidebar() {
+    if (this.disposed || !this.documentSidebar?.isConnected) return;
+    const sidebar=this.documentSidebar,position={top:this.scrollTop,left:this.scrollLeft};
+    const folded=!this.sidebarFolded;
+    if (folded) {
+      this.sidebarScroll={top:sidebar.scrollTop,left:sidebar.scrollLeft};
+      let style=this.doc.getElementById('htmlmemo-sidebar-style');
+      if (!style) {
+        style=this.doc.createElement('style');style.id='htmlmemo-sidebar-style';
+        // These rules exist only while folded. Source position, height and
+        // overflow rules, including the document's scroll owner, stay intact.
+        style.textContent='[data-htmlmemo-sidebar-folded]{box-sizing:border-box!important;width:48px!important;min-width:48px!important;max-width:48px!important;flex-basis:48px!important;padding:0!important;font-size:0!important}[data-htmlmemo-sidebar-folded]>*{display:none!important}[data-htmlmemo-sidebar-grid="left"]{grid-template-columns:48px minmax(0,1fr)!important}[data-htmlmemo-sidebar-grid="right"]{grid-template-columns:minmax(0,1fr) 48px!important}';
+        this.doc.head.append(style);
+      }
+      // A two-column grid reserves a track even after its sidebar narrows.
+      // Adjust only that parent, and remove the override on expansion.
+      const parent=sidebar.parentElement,layout=this.doc.defaultView.getComputedStyle(parent);
+      if (/grid/.test(layout.display) && /^\d+(?:\.\d+)?px \d+(?:\.\d+)?px$/.test(layout.gridTemplateColumns)) {
+        const side=sidebar.getBoundingClientRect(),box=parent.getBoundingClientRect();
+        parent.setAttribute('data-htmlmemo-sidebar-grid',side.left+side.width/2<box.left+box.width/2?'left':'right');
+        this.sidebarGrid=parent;
+      }
+      sidebar.setAttribute('data-htmlmemo-sidebar-folded','');
+    } else {
+      sidebar.removeAttribute('data-htmlmemo-sidebar-folded');
+      this.sidebarGrid?.removeAttribute('data-htmlmemo-sidebar-grid');this.sidebarGrid=null;
+      sidebar.scrollTop=this.sidebarScroll?.top||0;sidebar.scrollLeft=this.sidebarScroll?.left||0;
+      // Do not leave an editor stylesheet in an expanded source document.
+      // It is also stripped on save, but removing it here keeps the live DOM
+      // exactly as the source page supplied it.
+      if (!this.doc.querySelector('[data-htmlmemo-sidebar-folded]')) this.doc.getElementById('htmlmemo-sidebar-style')?.remove();
+    }
+    this.sidebarFolded=folded;
+    this.measure();this.renderDrawingLayer();
+    this.scrollTop=position.top;this.scrollLeft=position.left;
+    this.positionDocumentSidebarToggle();
+    this.doc.defaultView.requestAnimationFrame(()=>{
+      if(this.disposed)return;
+      this.scrollTop=position.top;this.scrollLeft=position.left;this.positionDocumentSidebarToggle();
+    });
+  }
+  positionDocumentSidebarToggle() {
+    if (this.disposed || !this.sidebarToggle || !this.documentSidebar?.isConnected || this.host.hidden) return;
+    const button=this.sidebarToggle,sidebar=this.documentSidebar.getBoundingClientRect();
+    button.hidden=sidebar.width<=0 || (!this.sidebarFolded && sidebar.height<=0);
+    const frame=this.frame.getBoundingClientRect(),host=this.host.getBoundingClientRect();
+    button.style.left=Math.max(4,Math.min(host.width-36,frame.left-host.left+sidebar.right*this.zoom-40))+'px';
+    button.style.top=Math.max(4,Math.min(host.height-36,frame.top-host.top+sidebar.top*this.zoom+4))+'px';
+    const label=this.sidebarFolded?'목차 사이드바 펼치기':'목차 사이드바 접기';
+    button.textContent=this.sidebarFolded?'›':'‹';button.title=label;
+    button.setAttribute('aria-label',label);button.setAttribute('aria-expanded',String(!this.sidebarFolded));
+  }
   observeDynamicDocument() {
     if (!this.disposed) this.dynamicObserver?.observe(this.doc.documentElement,{childList:true,subtree:true,characterData:true});
   }
@@ -203,7 +278,7 @@ export class Reader {
         if (++count % 1000 === 0) {await new Promise(resolve=>setTimeout(resolve,0));if(this.disposed)return;}
       }
       this.initialHTML = null;
-      this.measure();this.render();
+      this.measure();this.render();this.installDocumentSidebarToggle();
       this.callbacks.onChange?.();this.callbacks.onView?.();
     } finally {
       this.dynamicRunning = false;
@@ -248,6 +323,10 @@ export class Reader {
     if (this.nativeScroll) this.frame.style.height = Math.max(200, this.viewport.clientHeight / this.zoom) + 'px';
     this.frame.style.transform = `scale(${this.zoom})`;
     this.sizer.style.width = this.naturalWidth * this.zoom + 'px'; this.sizer.style.height = this.nativeScroll ? Math.max(200 * this.zoom, this.viewport.clientHeight) + 'px' : (this.naturalHeight || 800) * this.zoom + 'px';
+    // The document sidebar control lives in the app shell, while its target
+    // lives in the iframe. Reposition it after every size or zoom update so
+    // it is already at the TOC on the first painted frame.
+    this.positionDocumentSidebarToggle?.();
   }
   get scrollTop() { return this.nativeScroll ? (this.doc.defaultView.scrollY || 0) * this.zoom : this.viewport.scrollTop; }
   set scrollTop(value) { if(this.nativeScroll)this.doc.defaultView.scrollTo(this.doc.defaultView.scrollX, value / this.zoom);else this.viewport.scrollTop=value; }
