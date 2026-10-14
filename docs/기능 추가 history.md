@@ -626,7 +626,7 @@ HTMLMemo 프로젝트에서 구현과 관련 검증을 마친 변경을 기록�
 
 | ID | change-kind | status |
 |---|---|---|
-| hist-20261014-020 | 로컬 문서 목차 사이드바 접기 UI | 구현·자동 검사·빌드 완료 / Pages 게시 대기 / 실제 Chrome 확인 제한 |
+| hist-20261014-020 | 로컬 문서 목차 사이드바 접기 UI | 구현·자동 검사·Pages 게시 완료 / 실제 Chrome 확인 제한 |
 
 **목적과 사용 위치:** GitHub Pages 앱에서 로컬 HTML을 열면, 본문 왼쪽의 문서 자체 `목차` 사이드바 안쪽 맨 위에 접기 버튼을 표시합니다. 앱 바깥에 떠 있던 별도 버튼과 빈 `목차 · 북마크` 패널은 만들지 않습니다.
 
@@ -636,4 +636,4 @@ HTMLMemo 프로젝트에서 구현과 관련 검증을 마친 변경을 기록�
 
 **검증:** `npm run check`(60개 JavaScript·JSON), `npm test`(115개), `npm run build`, `git diff --check`를 통과했습니다. 실제 목차 안의 버튼 삽입, 18px 접힘, 세로 재열기 탭, grid·flex 복원, 읽기/목차 스크롤 보존, 저장 파일의 임시 UI 제거, 목차 없는 문서 처리와 서재 토글 독립 동작을 검사했습니다. `npm run test:browser`는 전용 Chrome이 시작 직후 종료되어 실패했습니다(`Chrome exited null`); 이 환경에서는 실제 Chrome 화면을 통과했다고 기록하지 않습니다.
 
-**배포 상태:** 이 항목을 포함한 커밋을 `main`에 게시하고 GitHub Actions·Pages 성공 및 운영 파일 확인을 마치면 여기에 결과를 보충합니다.
+**게시 완료 (2026-10-14 11:29:48 +09:00):** `e3643f754edc529226a63432ae0b027c8fbb052f`를 `main`에 push했고 [GitHub Actions 38501233770](https://github.com/seionwon/HTMLMemo/actions/runs/38501233770)의 `npm test`·`npm run check`·`npm run build`와 Pages 게시 성공을 확인했습니다. 공개 `index.html`·`src/reader.js`·`styles.css`를 다시 받아 로컬 `dist/`와 SHA-256으로 대조해 모두 일치했고, 운영 `reader.js`에 목차 안쪽 버튼·18px 폭·96px 세로 탭 코드가 포함된 것을 확인했습니다. 이 환경에서는 브라우저 제어 연결을 사용할 수 없고 전용 Chrome도 시작 직후 종료되어, 실제 운영 화면을 자동으로 통과했다고 표시하지 않습니다.
