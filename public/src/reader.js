@@ -103,7 +103,7 @@ export class Reader {
     if (this.metadata.execution?.allowScripts) {
       this.dynamicAnchor = 0;
       this.dynamicObserver = new MutationObserver(records => {
-        const editor = node => (node.nodeType===3?node.parentElement:node)?.closest?.('#'+LAYER_ID+',#htmlmemo-annotation-style,#htmlmemo-editor-style,#htmlmemo-sidebar-style,[data-htmlmemo-mark],[data-htmlmemo-search]');
+        const editor = node => (node.nodeType===3?node.parentElement:node)?.closest?.('#'+LAYER_ID+',#htmlmemo-annotation-style,#htmlmemo-editor-style,#htmlmemo-sidebar-style,#htmlmemo-toc-toggle-style,[data-htmlmemo-ui],[data-htmlmemo-mark],[data-htmlmemo-search]');
         if(records.some(record=>!editor(record.target) && (record.type==='characterData' || [...record.addedNodes,...record.removedNodes].some(node=>!editor(node)))))this.scheduleDynamicRefresh();
       });
       this.observeDynamicDocument();
@@ -188,22 +188,41 @@ export class Reader {
     const named='.toc,#toc,.table-of-contents,#table-of-contents,.book-toc,#book-toc,.reader-toc,[data-toc]';
     const candidates=[...this.doc.querySelectorAll(named+',aside,nav,[role="navigation"],#sidebar,.sidebar')];
     const sidebar=candidates.find(node=>node.querySelector('a[href^="#"]') && (node.matches(named) || /목차|table of contents|contents/i.test(node.querySelector('h1,h2,h3,header')?.textContent||node.getAttribute('aria-label')||'')));
-    if (!sidebar) { if(this.sidebarToggle)this.sidebarToggle.hidden=true;return; }
+    if (!sidebar) { this.clearDocumentSidebarToggle();return; }
     if (this.documentSidebar!==sidebar) {
-      this.documentSidebar?.removeAttribute('data-htmlmemo-sidebar-folded');
-      this.sidebarGrid?.removeAttribute('data-htmlmemo-sidebar-grid');
+      this.clearDocumentSidebarToggle();
       this.documentSidebar=sidebar;this.sidebarFolded=false;this.sidebarGrid=null;
     }
-    if (!this.sidebarToggle) {
-      const button=this.host.ownerDocument.createElement('button');button.type='button';button.className='document-sidebar-toggle';
-      button.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();this.toggleDocumentSidebar();});
-      this.sidebarToggle=button;this.host.append(button);
-      this.sidebarPositionListener=()=>this.positionDocumentSidebarToggle();
-      this.viewport.addEventListener('scroll',this.sidebarPositionListener,{passive:true});
-      this.doc.addEventListener('scroll',this.sidebarPositionListener,{capture:true,passive:true});
-      this.doc.defaultView.addEventListener('resize',this.sidebarPositionListener);
+    this.ensureDocumentSidebarToggleStyle();
+    let button=[...sidebar.children].find(node=>node.hasAttribute?.('data-htmlmemo-toc-toggle'));
+    if (!button) {
+      button=this.doc.createElement('button');button.type='button';button.setAttribute('data-htmlmemo-toc-toggle','');
+      sidebar.prepend(button);
     }
+    if (this.tocToggle!==button) {
+      this.tocToggle?.remove();
+      button.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();this.toggleDocumentSidebar();});
+    }
+    button.setAttribute('data-htmlmemo-ui','');
+    this.tocToggle=button;
     this.positionDocumentSidebarToggle();
+  }
+  ensureDocumentSidebarToggleStyle() {
+    if (this.doc.getElementById('htmlmemo-toc-toggle-style')) return;
+    const style=this.doc.createElement('style');style.id='htmlmemo-toc-toggle-style';
+    // The button is a temporary direct child of the source TOC.  Keeping it
+    // inside the panel means the same control becomes the narrow visible tab
+    // after folding, without creating an app-owned outline or touching scroll
+    // containers outside the source document.
+    style.textContent='[data-htmlmemo-toc-toggle]{box-sizing:border-box!important;float:right!important;display:flex!important;align-items:center!important;justify-content:center!important;width:26px!important;min-width:26px!important;height:26px!important;margin:2px!important;padding:0!important;border:1px solid #94a3b8!important;border-radius:5px!important;background:#fff!important;color:#334155!important;font:600 18px/1 system-ui,sans-serif!important;cursor:pointer!important;position:relative!important;z-index:2147483646!important}[data-htmlmemo-toc-toggle]:hover{background:#f1f5f9!important}[data-htmlmemo-toc-toggle]:focus-visible{outline:2px solid #334155!important;outline-offset:1px!important}[data-htmlmemo-toc-collapsed]{box-sizing:border-box!important;width:18px!important;min-width:18px!important;max-width:18px!important;flex:0 0 18px!important;padding:0!important;margin:0!important;overflow:hidden!important;font-size:0!important}[data-htmlmemo-toc-collapsed]>:not([data-htmlmemo-toc-toggle]){display:none!important}[data-htmlmemo-toc-collapsed]>[data-htmlmemo-toc-toggle]{float:none!important;display:flex!important;width:18px!important;min-width:18px!important;max-width:18px!important;height:96px!important;min-height:96px!important;margin:0!important;padding:0!important;border-width:0 1px 0 0!important;border-radius:0 5px 5px 0!important;font-size:17px!important;line-height:1!important}[data-htmlmemo-sidebar-grid="left"]{grid-template-columns:18px minmax(0,1fr)!important}[data-htmlmemo-sidebar-grid="right"]{grid-template-columns:minmax(0,1fr) 18px!important}';
+    this.doc.head.append(style);
+  }
+  clearDocumentSidebarToggle() {
+    this.documentSidebar?.removeAttribute('data-htmlmemo-toc-collapsed');
+    this.sidebarGrid?.removeAttribute('data-htmlmemo-sidebar-grid');
+    this.tocToggle?.remove();
+    this.doc?.getElementById('htmlmemo-toc-toggle-style')?.remove();
+    this.tocToggle=null;this.documentSidebar=null;this.sidebarGrid=null;this.sidebarFolded=false;this.sidebarScroll=null;
   }
   toggleDocumentSidebar() {
     if (this.disposed || !this.documentSidebar?.isConnected) return;
@@ -211,31 +230,20 @@ export class Reader {
     const folded=!this.sidebarFolded;
     if (folded) {
       this.sidebarScroll={top:sidebar.scrollTop,left:sidebar.scrollLeft};
-      let style=this.doc.getElementById('htmlmemo-sidebar-style');
-      if (!style) {
-        style=this.doc.createElement('style');style.id='htmlmemo-sidebar-style';
-        // These rules exist only while folded. Source position, height and
-        // overflow rules, including the document's scroll owner, stay intact.
-        style.textContent='[data-htmlmemo-sidebar-folded]{box-sizing:border-box!important;width:48px!important;min-width:48px!important;max-width:48px!important;flex-basis:48px!important;padding:0!important;font-size:0!important}[data-htmlmemo-sidebar-folded]>*{display:none!important}[data-htmlmemo-sidebar-grid="left"]{grid-template-columns:48px minmax(0,1fr)!important}[data-htmlmemo-sidebar-grid="right"]{grid-template-columns:minmax(0,1fr) 48px!important}';
-        this.doc.head.append(style);
-      }
+      this.ensureDocumentSidebarToggleStyle();
       // A two-column grid reserves a track even after its sidebar narrows.
-      // Adjust only that parent, and remove the override on expansion.
+      // Adjust only that track and restore it when reopening the TOC.
       const parent=sidebar.parentElement,layout=this.doc.defaultView.getComputedStyle(parent);
       if (/grid/.test(layout.display) && /^\d+(?:\.\d+)?px \d+(?:\.\d+)?px$/.test(layout.gridTemplateColumns)) {
         const side=sidebar.getBoundingClientRect(),box=parent.getBoundingClientRect();
         parent.setAttribute('data-htmlmemo-sidebar-grid',side.left+side.width/2<box.left+box.width/2?'left':'right');
         this.sidebarGrid=parent;
       }
-      sidebar.setAttribute('data-htmlmemo-sidebar-folded','');
+      sidebar.setAttribute('data-htmlmemo-toc-collapsed','');
     } else {
-      sidebar.removeAttribute('data-htmlmemo-sidebar-folded');
+      sidebar.removeAttribute('data-htmlmemo-toc-collapsed');
       this.sidebarGrid?.removeAttribute('data-htmlmemo-sidebar-grid');this.sidebarGrid=null;
       sidebar.scrollTop=this.sidebarScroll?.top||0;sidebar.scrollLeft=this.sidebarScroll?.left||0;
-      // Do not leave an editor stylesheet in an expanded source document.
-      // It is also stripped on save, but removing it here keeps the live DOM
-      // exactly as the source page supplied it.
-      if (!this.doc.querySelector('[data-htmlmemo-sidebar-folded]')) this.doc.getElementById('htmlmemo-sidebar-style')?.remove();
     }
     this.sidebarFolded=folded;
     this.measure();this.renderDrawingLayer();
@@ -247,15 +255,10 @@ export class Reader {
     });
   }
   positionDocumentSidebarToggle() {
-    if (this.disposed || !this.sidebarToggle || !this.documentSidebar?.isConnected || this.host.hidden) return;
-    const button=this.sidebarToggle,sidebar=this.documentSidebar.getBoundingClientRect();
-    button.hidden=sidebar.width<=0 || (!this.sidebarFolded && sidebar.height<=0);
-    const frame=this.frame.getBoundingClientRect(),host=this.host.getBoundingClientRect();
-    button.style.left=Math.max(4,Math.min(host.width-36,frame.left-host.left+sidebar.right*this.zoom-40))+'px';
-    button.style.top=Math.max(4,Math.min(host.height-36,frame.top-host.top+sidebar.top*this.zoom+4))+'px';
+    if (this.disposed || !this.tocToggle || !this.documentSidebar?.isConnected) return;
     const label=this.sidebarFolded?'목차 사이드바 펼치기':'목차 사이드바 접기';
-    button.textContent=this.sidebarFolded?'›':'‹';button.title=label;
-    button.setAttribute('aria-label',label);button.setAttribute('aria-expanded',String(!this.sidebarFolded));
+    this.tocToggle.hidden=false;this.tocToggle.textContent=this.sidebarFolded?'›':'‹';this.tocToggle.title=label;
+    this.tocToggle.setAttribute('aria-label',label);this.tocToggle.setAttribute('aria-expanded',String(!this.sidebarFolded));
   }
   observeDynamicDocument() {
     if (!this.disposed) this.dynamicObserver?.observe(this.doc.documentElement,{childList:true,subtree:true,characterData:true});
@@ -274,7 +277,7 @@ export class Reader {
       body.setAttribute('data-htmlmemo-anchor','body');
       let count=0;
       for (const element of body.querySelectorAll('*')) {
-        if (!element.closest('#'+LAYER_ID) && !['script','style','meta','link','template'].includes(element.localName) && !element.hasAttribute('data-htmlmemo-anchor')) element.setAttribute('data-htmlmemo-anchor','js'+this.dynamicAnchor++);
+        if (!element.closest('#'+LAYER_ID+',[data-htmlmemo-ui]') && !['script','style','meta','link','template'].includes(element.localName) && !element.hasAttribute('data-htmlmemo-anchor')) element.setAttribute('data-htmlmemo-anchor','js'+this.dynamicAnchor++);
         if (++count % 1000 === 0) {await new Promise(resolve=>setTimeout(resolve,0));if(this.disposed)return;}
       }
       this.initialHTML = null;

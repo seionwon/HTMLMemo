@@ -4,7 +4,7 @@ import vm from 'node:vm';
 import {readFile} from 'node:fs/promises';
 import {Reader} from '../public/src/reader.js';
 import {icon} from '../public/src/utils.js';
-import {cleanAnnotations,serializeHTML,textIndex,parseHTML} from '../public/src/document.js';
+import {serializeHTML,textIndex,parseHTML} from '../public/src/document.js';
 import {documentFor,installDOM} from './dom.mjs';
 installDOM();
 
@@ -20,7 +20,7 @@ function sidebarReader({layout='grid',native=true,html=source}={}) {
   Object.defineProperties(doc.body,{scrollHeight:{value:4000},offsetHeight:{value:4000},offsetTop:{value:0}});
   for(const child of doc.body.children)child.getBoundingClientRect=doc.body.getBoundingClientRect;
   const sidebar=doc.querySelector('.toc');
-  if(sidebar){sidebar.scrollTop=125;sidebar.scrollLeft=0;sidebar.getBoundingClientRect=()=>({left:0,top:0,right:sidebar.hasAttribute('data-htmlmemo-sidebar-folded')?48:240,bottom:600,width:sidebar.hasAttribute('data-htmlmemo-sidebar-folded')?48:240,height:600});}
+  if(sidebar){sidebar.scrollTop=125;sidebar.scrollLeft=0;sidebar.getBoundingClientRect=()=>({left:0,top:0,right:sidebar.hasAttribute('data-htmlmemo-toc-collapsed')?18:240,bottom:600,width:sidebar.hasAttribute('data-htmlmemo-toc-collapsed')?18:240,height:600});}
   doc.documentElement.scrollBy=move=>{moves.push(move);view.scrollY+=move.top;};
   const viewport=app.createElement('div');Object.assign(viewport,{clientWidth:1000,clientHeight:700,scrollTop:600,scrollLeft:0,scrollBy(move){moves.push(move);this.scrollTop+=move.top;}});
   const r=Object.create(Reader.prototype);
@@ -28,33 +28,38 @@ function sidebarReader({layout='grid',native=true,html=source}={}) {
   return {r,doc,sidebar,app,moves,flush(){while(frames.length)frames.shift()();}};
 }
 
-test('the document toggle stays outside source HTML and open layout/style/content stay unchanged',()=>{
+test('the document TOC receives one direct-child toggle without creating an app-owned outline',()=>{
   const {r,doc,sidebar,app}=sidebarReader();
-  const original=doc.documentElement.outerHTML;
   r.installDocumentSidebarToggle();r.installDocumentSidebarToggle();
-  assert.equal(doc.documentElement.outerHTML,original);
-  assert.equal(app.querySelectorAll('.document-sidebar-toggle').length,1);
-  assert.equal(sidebar.querySelector('button'),null);
-  assert.equal(r.sidebarToggle.getAttribute('aria-expanded'),'true');
-  assert.equal(r.sidebarToggle.getAttribute('aria-label'),'목차 사이드바 접기');
+  const button=[...sidebar.children].find(node=>node.hasAttribute('data-htmlmemo-toc-toggle'));
+  assert.equal(button.parentElement,sidebar);
+  assert.equal(button.getAttribute('data-htmlmemo-ui'),'');
+  assert.equal(app.querySelector('.document-sidebar-toggle'),null);
+  assert.equal(doc.querySelector('#htmlmemo-toc-toggle-style')?.parentElement,doc.head);
+  assert.equal(sidebar.querySelector('h2').textContent,'목차');
+  assert.equal(button.getAttribute('aria-expanded'),'true');
+  assert.equal(button.getAttribute('aria-label'),'목차 사이드바 접기');
 });
 
-test('repeated folding restores source CSS, grid tracks, TOC content and both scroll positions',()=>{
+test('the TOC folds to an 18px vertical tab and restores source layout and scrolling',()=>{
   for(const layout of ['grid','flex']){
     const {r,doc,sidebar,flush}=sidebarReader({layout});r.installDocumentSidebarToggle();
-    const original=sidebar.outerHTML,originalDocument=doc.documentElement.outerHTML,css=doc.querySelector('style').textContent,index=textIndex(doc).text;
+    const original=sidebar.innerHTML,css=doc.querySelector('style').textContent,index=textIndex(doc).text;
     for(let count=0;count<3;count++){
       const position=r.scrollTop;r.toggleDocumentSidebar();flush();
-      assert.equal(r.scrollTop,position);assert.equal(r.sidebarToggle.getAttribute('aria-expanded'),'false');
+      const button=r.tocToggle;
+      assert.equal(r.scrollTop,position);assert.equal(button.getAttribute('aria-expanded'),'false');
       assert.equal(doc.body.hasAttribute('data-htmlmemo-sidebar-grid'),layout==='grid');
-      cleanAnnotations(doc);assert.equal(sidebar.hasAttribute('data-htmlmemo-sidebar-folded'),true);
+      assert.equal(sidebar.hasAttribute('data-htmlmemo-toc-collapsed'),true);
+      assert.equal(sidebar.getBoundingClientRect().width,18);
+      assert.equal(button.parentElement,sidebar);
       assert.equal(textIndex(doc).text,index,'folding does not move text annotation offsets');
       sidebar.scrollTop=0;r.toggleDocumentSidebar();flush();
       assert.equal(sidebar.scrollTop,125);assert.equal(r.scrollTop,position);
-      assert.equal(sidebar.outerHTML,original);assert.equal(doc.querySelector('style').textContent,css);
-      assert.equal(doc.documentElement.outerHTML,originalDocument,'expansion restores the full source DOM');
+      assert.equal(sidebar.innerHTML,original);assert.equal(doc.querySelector('style').textContent,css);
+      assert.equal(sidebar.hasAttribute('data-htmlmemo-toc-collapsed'),false);
       assert.equal(doc.body.hasAttribute('data-htmlmemo-sidebar-grid'),false);
-      assert.equal(r.sidebarToggle.getAttribute('aria-expanded'),'true');
+      assert.equal(button.getAttribute('aria-expanded'),'true');
     }
   }
 });
@@ -73,15 +78,15 @@ test('wheel scrolling uses the same scroll owner with the TOC expanded and folde
   }
 });
 
-test('saving while folded excludes transient controls and grid overrides, and reopens the TOC expanded',()=>{
+test('saving while folded excludes the temporary TOC button and reopens the TOC expanded',()=>{
   const {r,doc,flush}=sidebarReader();r.installDocumentSidebarToggle();r.toggleDocumentSidebar();flush();
   const saved=serializeHTML(doc,r.metadata);
-  assert.doesNotMatch(saved,/htmlmemo-sidebar-style|data-htmlmemo-sidebar-folded|data-htmlmemo-sidebar-grid|document-sidebar-toggle/);
+  assert.doesNotMatch(saved,/htmlmemo-toc-toggle-style|data-htmlmemo-toc-toggle|data-htmlmemo-toc-collapsed|data-htmlmemo-sidebar-grid|document-sidebar-toggle/);
   const reopened=documentFor(parseHTML(saved).html);
   assert.equal(reopened.querySelector('.toc').getAttribute('style'),'color:navy');
   assert.equal(reopened.querySelector('.toc a').getAttribute('href'),'#chapter');
   assert.match(reopened.querySelector('style').textContent,/position:sticky;top:0;height:100dvh;overflow:auto;width:240px/);
-  assert.equal(doc.querySelector('.toc').hasAttribute('data-htmlmemo-sidebar-folded'),true,'exporting does not expand the live document');
+  assert.equal(doc.querySelector('.toc').hasAttribute('data-htmlmemo-toc-collapsed'),true,'exporting does not expand the live document');
 });
 
 test('documents without a TOC do not acquire an unrelated navigation toggle',()=>{
@@ -89,7 +94,7 @@ test('documents without a TOC do not acquire an unrelated navigation toggle',()=
   r.installDocumentSidebarToggle();assert.equal(app.querySelector('.document-sidebar-toggle'),null);
   const sidebar=doc.createElement('aside');sidebar.className='toc';sidebar.innerHTML='<h2>목차</h2><a href="#chapter">첫 장</a>';
   sidebar.getBoundingClientRect=()=>({left:0,top:0,right:240,width:240,height:600});doc.body.prepend(sidebar);
-  r.installDocumentSidebarToggle();assert.ok(app.querySelector('.document-sidebar-toggle'),'a later generated TOC is discovered');
+  r.installDocumentSidebarToggle();assert.ok(sidebar.querySelector('[data-htmlmemo-toc-toggle]'),'a later generated TOC is discovered');
 });
 
 const appSource=await readFile(new URL('../public/src/app.js',import.meta.url),'utf8');
@@ -117,6 +122,6 @@ test('library resize keeps reading position across auto-fit zoom without changin
   r.autoFit=true;r.fitZoom=()=>1;const naturalPosition=r.scrollTop/r.zoom;
   const library=libraryToggle(r);library.toggle();library.flush();
   assert.equal(r.zoom,1);assert.equal(r.scrollTop/r.zoom,naturalPosition);
-  assert.equal(r.sidebarFolded,true);assert.equal(r.doc.querySelector('.toc').hasAttribute('data-htmlmemo-sidebar-folded'),true);
+  assert.equal(r.sidebarFolded,true);assert.equal(r.doc.querySelector('.toc').hasAttribute('data-htmlmemo-toc-collapsed'),true);
   r.toggleDocumentSidebar();flushDocument();assert.equal(library.doc.querySelector('#desk-nav-content').hidden,true);
 });

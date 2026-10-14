@@ -106,7 +106,7 @@ body[data-codememo-design]{margin:0;font-family:var(--app-font);background:var(-
 #tool-popover.selection[hidden] { display:none; }
 #tool-popover.selection button { font-size:11px;padding:4px 9px; }
 
-/* Sidebar controls leave the reader's height and scroll owners unchanged. */
+/* The library control leaves the reader's height and scroll owners unchanged. */
 @theme {--spacing-sidebar-rail:48px;--spacing-sidebar-toggle:32px;}
 .desk-nav-heading{display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:12px}
 .desk-nav .desk-nav-heading strong{margin:0;font-size:12px}
@@ -114,7 +114,5 @@ body[data-codememo-design]{margin:0;font-family:var(--app-font);background:var(-
 #desk-nav-content{display:flex;flex-direction:column;gap:10px}
 .desk-nav.is-collapsed{width:var(--spacing-sidebar-rail);padding-inline:8px}
 .desk-nav.is-collapsed .desk-nav-heading strong{display:none}
-.document-sidebar-toggle{position:absolute;z-index:12;display:flex;align-items:center;justify-content:center;width:var(--spacing-sidebar-toggle);height:var(--spacing-sidebar-toggle);padding:0;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--text);box-shadow:0 2px 6px #0001;font-size:20px;line-height:1}
-.document-sidebar-toggle:hover{background:var(--surface-muted)}
-.document-sidebar-toggle:focus-visible,#desk-nav-toggle:focus-visible{outline:2px solid var(--green);outline-offset:2px}
+#desk-nav-toggle:focus-visible{outline:2px solid var(--green);outline-offset:2px}
 @media(max-width:767px){.desk-nav-heading{margin-bottom:0}.desk-nav #desk-nav-content{flex:1;flex-direction:row;flex-wrap:wrap;gap:4px}.desk-nav.is-collapsed{width:100%;padding:8px 12px}}

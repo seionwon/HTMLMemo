@@ -8,9 +8,9 @@ export function cleanAnnotations(doc) {
   doc.getElementById(LAYER_ID)?.remove();
   doc.getElementById(DATA_ID)?.remove();
   doc.getElementById('htmlmemo-annotation-style')?.remove();
-  // Older HTMLMemo builds temporarily added a control and a collapsed-state
-  // attribute to the document's own table of contents.  Those editor-only
-  // artifacts must never hide the source document's sidebar after reopening.
+  // The reader temporarily adds its compact TOC control in the source
+  // document. Editor-only state must never be written into a saved file or
+  // hide the document's own sidebar after reopening.
   doc.getElementById('htmlmemo-toc-toggle-style')?.remove();
   doc.querySelectorAll('[data-htmlmemo-toc-toggle]').forEach(element => element.remove());
   doc.querySelectorAll('[data-htmlmemo-toc-collapsed]').forEach(element => element.removeAttribute('data-htmlmemo-toc-collapsed'));
@@ -129,9 +129,8 @@ export function serializeHTML(doc, metadata) {
   clone.querySelector('#' + DATA_ID)?.remove();
   for (const mark of [...clone.querySelectorAll('[data-htmlmemo-search]')].reverse()) mark.replaceWith(...mark.childNodes);
   clone.querySelectorAll('[data-htmlmemo-preview], [data-htmlmemo-selected]').forEach(element => element.remove());
-  // A short-lived reader build wrote its TOC collapse control into the source
-  // document. Never carry those controls or their hidden state into a saved
-  // HTML file; the document's own TOC remains entirely under its own CSS.
+  // The runtime TOC control is never carried into a saved HTML file; a saved
+  // document always reopens with its original TOC fully expanded.
   clone.querySelectorAll('#htmlmemo-toc-toggle-style, [data-htmlmemo-toc-toggle]').forEach(element => element.remove());
   clone.querySelectorAll('[data-htmlmemo-toc-collapsed]').forEach(element => element.removeAttribute('data-htmlmemo-toc-collapsed'));
   clone.querySelector('#htmlmemo-sidebar-style')?.remove();
