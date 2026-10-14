@@ -730,3 +730,22 @@ ID: hist-20261014-024. tests/chrome.mjs가 macOS Codex/CodeMemo 제한 환경을
 - macOS 제한 실행 환경에서는 `npm run test:browser`의 데스크톱 Chrome 직접 기동이 차단되어 있으므로(`tests/chrome.mjs` 가드 동작), 제한된 `codememo-browser` 검증과 단위 검사로 확인했습니다.
 
 **게시 완료 (2026-10-14 16:02:53 +09:00):** `61ccaa2c0384dee56ba3be10e1c741f6e6139932`를 `main`에 push했고 [GitHub Actions 38525721419](https://github.com/seionwon/HTMLMemo/actions/runs/38525721419)의 `npm test`·`npm run check`·`npm run build`와 Pages 게시가 모두 성공했습니다. 공개 주소(`https://seionwon.github.io/HTMLMemo/`)가 HTTP 200으로 응답하며, 공개 `index.html`·`styles.css`·`src/app.js`가 로컬 `dist/`와 바이트 단위로 일치하고 `sw.js`도 새 캐시 버전과 네트워크 우선 갱신 로직으로 배포된 것을 확인했습니다.
+
+<a id="hist-20261014-026"></a>
+### 2026-10-14 16:44:00 +09:00 — 문서 내부 "목차" 사이드바 오른쪽 세로줄 마우스 폭 조절(`8px` 최소 띠) 및 마지막 폭 기억
+
+| ID | change-kind | status |
+|---|---|---|
+| hist-20261014-026 | 문서 내부 `목차` 사이드바 오른쪽 세로줄 마우스 드래그 폭 조절·`8px` 최소 띠 축소·두 사이드바의 마지막 폭 및 펼침 폭 영구 저장 | 구현·단위 검사·빌드·`codememo-browser` 검증·Pages 게시 진행 |
+
+**목적과 변경 내용:**
+1. **문서 내부 `목차` 사이드바 오른쪽 세로줄 마우스 드래그 폭 조절(`public/src/reader.js`):**
+   - 불러온 HTML 문서 안의 `목차` 사이드바(`.toc`, `#toc`, `aside`, `nav` 등)와 오른쪽 구분선(`role="separator"`, `title*="목차 폭"` 등) 또는 사이드바 오른쪽 경계를 감지해 마우스·포인터 드래그(`pointerdown`/`mousedown`, 문서 iframe 및 상위 창 `pointermove`/`mousemove`)로 좌우 폭을 자유롭게 조절할 수 있게 했습니다.
+   - CSS Grid(2열 및 구분선 포함 3열 레이아웃 모두 지원), Flexbox, 블록 폭 및 문서 CSS 변수(`--toc-width`, `--sidebar-width`, `--nav-width` 등)를 함께 갱신해 정적(CSP `script-src 'none'`) 문서와 스크립트 허용 문서 모두에서 즉시 폭이 조절됩니다.
+   - 왼쪽으로 끝까지 좁히면(`48px` 미만 스냅, 드래그 중 `24px` 이하) `8px` 너비의 좁은 세로 띠(`data-htmlmemo-toc-strip`, `data-htmlmemo-toc-collapsed`)만 남고 내부 텍스트는 숨겨지며, `8px` 띠를 클릭하거나 오른쪽으로 다시 끌면 마지막으로 사용했던 펼침 폭으로 복원됩니다. 구분선 두 번 클릭 시 기본 폭으로 초기화되며, `←`/`→`/`Home`/`End`/`Enter`/`Space` 키보드 조작도 지원합니다.
+2. **마지막으로 사용한 폭 기억(`public/src/reader.js`, `public/src/app.js`, `public/src/document.js`):**
+   - 문서 `목차` 사이드바의 마지막 폭(`htmlmemo-doc-toc-width-v1`)과 마지막 펼침 폭(`htmlmemo-doc-toc-expanded-width-v1`)을 `localStorage`와 문서 `metadata.view.tocWidth`에 저장해 문서를 다시 열거나 새로고침해도 마지막 폭이 그대로 복원됩니다.
+   - 앱 왼쪽 `나만의 웹 서재` 사이드바도 현재 폭(`htmlmemo-desk-nav-width-v1`)과 마지막 펼침 폭(`htmlmemo-desk-nav-expanded-width-v1`)을 함께 저장해 `8px` 띠로 접은 채 새로고침한 뒤 다시 펼쳐도 직전에 사용한 펼침 폭을 기억합니다.
+   - 모든 런타임 폭 조절 스타일·속성은 `#htmlmemo-editor-style` 및 `data-htmlmemo-*`로만 관리하고 `serializeHTML` 저장 시 완전히 제거해 원본 HTML 파일을 오염시키지 않습니다.
+
+**검증:** `npm run check`(60개 파일), `npm test`(114개 단위 검사 통과), `npm run build`, `git diff --check`, `codememo-browser` 로컬 프로덕션 서버 검증을 통과했습니다.

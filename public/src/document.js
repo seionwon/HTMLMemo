@@ -28,15 +28,14 @@ function clearReaderSidebarArtifacts(root) {
   // opening or exporting a file, leaving the document's real TOC untouched.
   root.querySelector?.('#htmlmemo-toc-toggle-style')?.remove();
   root.querySelector?.('#htmlmemo-sidebar-style')?.remove();
-  for (const element of root.querySelectorAll?.('[data-htmlmemo-toc-toggle]') || []) element.remove();
-  for (const element of root.querySelectorAll?.('[data-htmlmemo-toc-collapsed],[data-htmlmemo-sidebar-folded],[data-htmlmemo-sidebar-grid],[data-htmlmemo-sidebar-grid-item],[data-htmlmemo-sidebar-flex],[style*="--htmlmemo-toc-grid-columns"]') || []) {
-    element.removeAttribute('data-htmlmemo-toc-collapsed');
-    element.removeAttribute('data-htmlmemo-sidebar-folded');
-    element.removeAttribute('data-htmlmemo-sidebar-grid');
-    element.removeAttribute('data-htmlmemo-sidebar-grid-item');
-    element.removeAttribute('data-htmlmemo-sidebar-flex');
-    if (/--htmlmemo-toc-grid-columns\s*:/i.test(element.getAttribute('style') || '')) {
+  root.querySelector?.('#htmlmemo-toc-resize-style')?.remove();
+  for (const element of root.querySelectorAll?.('[data-htmlmemo-toc-toggle],[data-htmlmemo-toc-resizer]') || []) element.remove();
+  for (const element of root.querySelectorAll?.('[data-htmlmemo-toc-collapsed],[data-htmlmemo-sidebar-folded],[data-htmlmemo-sidebar-grid],[data-htmlmemo-sidebar-grid-item],[data-htmlmemo-sidebar-flex],[data-htmlmemo-toc-sidebar],[data-htmlmemo-toc-item],[data-htmlmemo-toc-strip],[data-htmlmemo-toc-item-strip],[data-htmlmemo-toc-resizer-bound],[data-htmlmemo-toc-resizing],[style*="--htmlmemo-toc-grid-columns"],[style*="--htmlmemo-toc-width"]') || []) {
+    for (const attr of ['data-htmlmemo-toc-collapsed','data-htmlmemo-sidebar-folded','data-htmlmemo-sidebar-grid','data-htmlmemo-sidebar-grid-item','data-htmlmemo-sidebar-flex','data-htmlmemo-toc-sidebar','data-htmlmemo-toc-item','data-htmlmemo-toc-strip','data-htmlmemo-toc-item-strip','data-htmlmemo-toc-resizer-bound','data-htmlmemo-toc-resizing']) element.removeAttribute(attr);
+    const inline = element.getAttribute('style') || '';
+    if (/--htmlmemo-toc-(?:grid-columns|width)\s*:/i.test(inline)) {
       element.style?.removeProperty('--htmlmemo-toc-grid-columns');
+      element.style?.removeProperty('--htmlmemo-toc-width');
       if (!element.getAttribute('style')?.trim()) element.removeAttribute('style');
     }
   }
@@ -121,7 +120,7 @@ function* prepareHTML(html, defaults, {includeMetadata = false, document: loaded
   const metadata = {
     version: FORMAT_VERSION, title: String(embedded.title || doc.title || defaults.title || 'HTML 문서').slice(0,1000),
     source, capturedAt: embedded.capturedAt || Date.now(), viewport: {width: Math.min(4096, Math.max(320, Number(viewport.width) || 1100)), height: Number(viewport.height) || 800},
-    execution:{allowScripts:!!allowScripts}, annotations: embedded.annotations || [], view: {scrollTop:Math.max(0,Number(view.scrollTop)||0),scrollLeft:Math.max(0,Number(view.scrollLeft)||0),zoom:Number.isFinite(view.zoom)?Math.min(8,Math.max(.2,view.zoom)):null,autoFit:view.autoFit!==false}, bookmarks,
+    execution:{allowScripts:!!allowScripts}, annotations: embedded.annotations || [], view: {scrollTop:Math.max(0,Number(view.scrollTop)||0),scrollLeft:Math.max(0,Number(view.scrollLeft)||0),zoom:Number.isFinite(view.zoom)?Math.min(8,Math.max(.2,view.zoom)):null,autoFit:view.autoFit!==false,...(Number.isFinite(view.tocWidth)?{tocWidth:Math.min(640,Math.max(8,Math.round(Number(view.tocWidth))))}:{})}, bookmarks,
     warnings: (Array.isArray(embedded.warnings) ? embedded.warnings : defaults.warnings || []).filter(w=>typeof w==='string').slice(0,5000),
   };
   const nativeScroll = !!allowScripts || !!loadedDocument || html.length >= 4 * 1024 * 1024 || n >= 20000;

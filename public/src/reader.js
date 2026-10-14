@@ -4,6 +4,7 @@ import { History, TEXT_TOOLS, DRAW_TOOLS } from './model.js';
 import { LAYER_ID, prepareLoadedHTML, cleanAnnotations, textIndex, selectionAnchor, resolveTextAnchor, wrapOffsets, rangeFromOffsets, serializeHTML } from './document.js';
 
 const NS = 'http://www.w3.org/2000/svg';
+const TOC_WIDTH_KEY = 'htmlmemo-doc-toc-width-v1', TOC_EXPANDED_WIDTH_KEY = 'htmlmemo-doc-toc-expanded-width-v1', TOC_MIN = 8, TOC_STRIP_SNAP = 48, TOC_MAX = 640, TOC_DEFAULT = 260;
 const svg = (doc, tag, attrs = {}) => { const node = doc.createElementNS(NS, tag); for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, String(value)); return node; };
 export class Reader {
   constructor(host, parsed, callbacks) {
@@ -11,7 +12,7 @@ export class Reader {
     this.tool = 'select'; this.color = '#edcf67'; this.width = 3; this.opacity = .35; this.penTTL = 0; this.zoom = 1;
     this.nativeScroll = !!parsed.nativeScroll;
     this.selection = null; this.selectedId = null; this.linkHistory = []; this.searchResults = []; this.searchPosition = -1; this.autoFit = this.metadata.view.autoFit !== false;
-    this.middleScroll = null;
+    this.middleScroll = null; this.tocResize = null; this.tocDrag = null;
     this.viewport = document.createElement('div'); this.viewport.className = 'reader-viewport';
     this.viewport.classList.toggle('reader-native-scroll', this.nativeScroll);
     this.sizer = document.createElement('div'); this.sizer.className = 'reader-sizer';
@@ -57,20 +58,34 @@ export class Reader {
       this.frame.src = this.documentURL;
     } else this.frame.srcdoc = parsed.html;
   }
+  baseEditorStyle() {
+    return `${this.nativeScroll ? '' : 'html{overflow:hidden!important;height:auto!important;min-height:0!important;scroll-behavior:auto!important}body{touch-action:pan-x pan-y;height:auto!important;min-height:0!important}'}html[data-htmlmemo-drawing] *{cursor:crosshair!important;user-select:none!important;touch-action:none!important}html[data-htmlmemo-toc-resizing],html[data-htmlmemo-toc-resizing] *{cursor:col-resize!important;user-select:none!important;-webkit-user-select:none!important}[data-htmlmemo-sidebar-grid]{grid-template-columns:var(--htmlmemo-toc-grid-columns)!important}[data-htmlmemo-toc-sidebar],[data-htmlmemo-toc-item],[data-htmlmemo-sidebar-flex]{width:var(--htmlmemo-toc-width)!important;min-width:var(--htmlmemo-toc-width)!important;max-width:var(--htmlmemo-toc-width)!important;flex:0 0 var(--htmlmemo-toc-width)!important;box-sizing:border-box!important}[data-htmlmemo-toc-sidebar]{overflow-x:hidden!important}[data-htmlmemo-toc-item-strip]{width:8px!important;min-width:8px!important;max-width:8px!important;flex:0 0 8px!important;padding-left:0!important;padding-right:0!important;overflow:hidden!important;box-sizing:border-box!important}[data-htmlmemo-toc-strip]{width:8px!important;min-width:8px!important;max-width:8px!important;flex:0 0 8px!important;padding-left:0!important;padding-right:0!important;overflow:hidden!important;box-sizing:border-box!important;cursor:col-resize!important;user-select:none!important}[data-htmlmemo-toc-strip]>:not([data-htmlmemo-toc-resizer]):not([data-htmlmemo-toc-resizer-bound]){opacity:0!important;visibility:hidden!important;pointer-events:none!important}[data-htmlmemo-toc-resizer],[data-htmlmemo-toc-resizer-bound]{cursor:col-resize!important;touch-action:none!important;user-select:none!important;-webkit-user-select:none!important}`;
+  }
+  updateEditorStyle(customVars, width) {
+    const editorStyle = this.doc?.getElementById('htmlmemo-editor-style');
+    if (!editorStyle) return;
+    if (!Number.isFinite(width)) { editorStyle.textContent = this.baseEditorStyle(); return; }
+    const vars = (customVars?.length ? customVars : ['--toc-width', '--sidebar-width', '--nav-width']).map(name => `${name}:${width}px!important`).join(';');
+    editorStyle.textContent = this.baseEditorStyle() + `:root,body,[data-htmlmemo-sidebar-grid],[data-htmlmemo-toc-sidebar],[data-htmlmemo-toc-item]{${vars};--htmlmemo-toc-width:${width}px!important}`;
+  }
   bind() {
     const editorStyle = this.doc.createElement('style'); editorStyle.id = 'htmlmemo-editor-style';
-    editorStyle.textContent = `${this.nativeScroll ? '' : 'html{overflow:hidden!important;height:auto!important;min-height:0!important;scroll-behavior:auto!important}body{touch-action:pan-x pan-y;height:auto!important;min-height:0!important}'}html[data-htmlmemo-drawing] *{cursor:crosshair!important;user-select:none!important;touch-action:none!important}`; this.doc.head.append(editorStyle);
+    editorStyle.textContent = this.baseEditorStyle(); this.doc.head.append(editorStyle);
+    this.setupDocumentTocResize();
     this.doc.addEventListener('wheel', event => this.forwardWheel(event), {capture:true,passive:false});
-    this.doc.addEventListener('pointerdown', event => { if(this.startMiddleScroll(event))return;this.stopMiddleScroll();this.callbacks.onSelectionDismiss?.(); this.pointerDown(event); }, true);
-    this.doc.addEventListener('pointermove', event => { if(this.moveMiddleScroll(event))return;this.pointerMove(event); }, true);
-    this.doc.addEventListener('pointerup', event => { if(this.endMiddleScroll(event))return;this.pointerUp(event); }, true);
+    this.doc.addEventListener('pointerdown', event => { if(this.startTocResize(event))return; if(this.startMiddleScroll(event))return;this.stopMiddleScroll();this.callbacks.onSelectionDismiss?.(); this.pointerDown(event); }, true);
+    this.doc.addEventListener('mousedown', event => { if(this.startTocResize(event))return; }, true);
+    this.doc.addEventListener('dragstart', event => { if(this.tocDrag||this.isTocResizeTarget(event))event.preventDefault(); }, true);
+    this.doc.addEventListener('pointermove', event => { if(this.tocDrag)return; if(this.moveMiddleScroll(event))return;this.pointerMove(event); }, true);
+    this.doc.addEventListener('pointerup', event => { if(this.tocDrag)return; if(this.endMiddleScroll(event))return;this.pointerUp(event); }, true);
     this.doc.addEventListener('pointercancel', () => { this.stopMiddleScroll();this.gesture = null; this.preview?.remove(); this.preview = null; });
     this.doc.addEventListener('auxclick', event => {if(event.button===1&&!event.target.closest?.('a,button,input,textarea,select,[contenteditable]'))event.preventDefault();}, true);
     this.doc.addEventListener('selectionchange', () => { const s = this.doc.getSelection(); if (s?.rangeCount && !s.isCollapsed) this.selection = selectionAnchor(this.doc, s.getRangeAt(0)); });
-    this.doc.addEventListener('keydown', event => {if(event.key==='Escape'&&this.middleScroll){this.stopMiddleScroll();event.preventDefault();return;}this.callbacks.onKey?.(event);});
-    this.doc.addEventListener('dblclick', event => this.focusDocument(event));
+    this.doc.addEventListener('keydown', event => {if(this.handleTocKeydown(event))return; if(event.key==='Escape'&&this.middleScroll){this.stopMiddleScroll();event.preventDefault();return;}this.callbacks.onKey?.(event);}, true);
+    this.doc.addEventListener('dblclick', event => {if(this.handleTocDblClick(event))return; this.focusDocument(event);}, true);
     this.viewport.addEventListener('dblclick', event => this.focusDocument(event));
     this.doc.addEventListener('click', event => {
+      if (this.tocResizeJustEnded || this.isTocResizerNode(event.target)) { this.tocResizeJustEnded = false; event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation?.(); return; }
       const annotation = event.target.closest?.('[data-htmlmemo-id]');
       if (annotation && this.tool === 'select') { event.preventDefault(); event.stopPropagation(); this.selectedId = annotation.dataset.htmlmemoId; this.callbacks.onSelect?.(this.selectedId); return; }
       const link = event.target.closest?.('a[href]');
@@ -91,8 +106,7 @@ export class Reader {
       clearTimeout(this.positionTimer);
       this.positionTimer = setTimeout(() => {
         if (this.disposed) return;
-        this.metadata.view = {scrollTop:this.scrollTop, scrollLeft:this.scrollLeft, zoom:this.zoom, autoFit:this.autoFit};
-        this.callbacks.onPosition?.(); this.callbacks.onView?.();
+        this.rememberPosition(); this.callbacks.onView?.();
       }, 250);
     }, {passive:true});
     this.resizeObserver = new ResizeObserver(() => { if (!this.disposed) { this.measure(); this.renderDrawingLayer(); } });
@@ -108,6 +122,428 @@ export class Reader {
       this.observeDynamicDocument();
       this.scheduleDynamicRefresh();
     }
+  }
+  storage() {
+    try { return this.host?.ownerDocument?.defaultView?.localStorage || (typeof localStorage !== 'undefined' ? localStorage : null); } catch { return null; }
+  }
+  maxTocWidth() {
+    const docWidth = this.doc?.documentElement?.clientWidth || this.naturalWidth || 1100;
+    return Math.max(120, Math.min(TOC_MAX, docWidth - 180));
+  }
+  clampTocWidth(value, snapStrip = true) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return this.tocDefaultWidth || TOC_DEFAULT;
+    if (numeric <= 24 || (snapStrip && numeric < TOC_STRIP_SNAP)) return TOC_MIN;
+    return Math.max(TOC_MIN, Math.min(this.maxTocWidth(), Math.round(numeric)));
+  }
+  gridTrackTokens(value) {
+    const tokens = []; let current = '', depth = 0;
+    for (const ch of String(value || '').trim()) {
+      if (ch === '(') { depth++; current += ch; }
+      else if (ch === ')') { depth = Math.max(0, depth - 1); current += ch; }
+      else if (/\s/.test(ch) && depth === 0) { if (current) { tokens.push(current); current = ''; } }
+      else current += ch;
+    }
+    if (current) tokens.push(current);
+    return tokens.length >= 2 && !tokens.includes('none') ? tokens : [];
+  }
+  gridTracks(value) {
+    const values = String(value || '').trim().split(/\s+/).filter(Boolean);
+    if (values.length < 2 || values.some(v => !/^\d+(?:\.\d+)?px$/i.test(v))) return [];
+    return values.map(v => Number.parseFloat(v));
+  }
+  gridTrackIndex(parent, item, tracks, layout) {
+    const box = parent?.getBoundingClientRect?.(), cell = item?.getBoundingClientRect?.();
+    if (!box?.width || !cell?.width) return -1;
+    const left = box.left + (Number.parseFloat(layout.borderLeftWidth) || 0) + (Number.parseFloat(layout.paddingLeft) || 0);
+    const right = (box.right ?? box.left + box.width) - (Number.parseFloat(layout.borderRightWidth) || 0) - (Number.parseFloat(layout.paddingRight) || 0);
+    const gap = Number.parseFloat(layout.columnGap || layout.gap) || 0, x = cell.left + cell.width / 2;
+    const rtl = String(layout.direction || '').toLowerCase() === 'rtl';
+    let cursor = rtl ? right : left;
+    for (let index = 0; index < tracks.length; index++) {
+      const start = rtl ? cursor - tracks[index] : cursor, end = rtl ? cursor : cursor + tracks[index];
+      if (x >= start - 2 && x <= end + 2) return index;
+      cursor = rtl ? start - gap : end + gap;
+    }
+    return -1;
+  }
+  gridItem(parent, node) {
+    for (let item = node; item && item !== parent; item = item.parentElement) if (item.parentElement === parent) return item;
+    return null;
+  }
+  documentMainTrack(parent, sidebarItem, tracks, layout, resizerItem = null) {
+    const mainNodes = [...parent.querySelectorAll('main,[role="main"],article,#main,#content,.page,.content')];
+    const candidates = [];
+    for (const node of mainNodes) {
+      const item = this.gridItem(parent, node);
+      if (!item || item === sidebarItem || item === resizerItem || sidebarItem.contains(node) || node.contains(sidebarItem)) continue;
+      const index = this.gridTrackIndex(parent, item, tracks, layout);
+      if (index < 0) continue;
+      const box = item.getBoundingClientRect(), main = node.matches('main,[role="main"]') ? 3 : node.matches('article,#main,#content') ? 2 : 1;
+      candidates.push({index, score: main * 1e9 + Math.max(0, box.width) * Math.max(0, box.height)});
+    }
+    if (candidates.length) return candidates.sort((a, b) => b.score - a.score)[0].index;
+    const siblings = [];
+    for (const item of parent.children) {
+      if (item === sidebarItem || item === resizerItem) continue;
+      const index = this.gridTrackIndex(parent, item, tracks, layout);
+      if (index < 0) continue;
+      const box = item.getBoundingClientRect(); siblings.push({index, score: Math.max(0, box.width) * Math.max(0, box.height)});
+    }
+    if (siblings.length) return siblings.sort((a, b) => b.score - a.score)[0].index;
+    return -1;
+  }
+  detectTocCSSVariables() {
+    const vars = new Set(['--toc-width', '--sidebar-width', '--nav-width', '--toc-w', '--sidebar-w']);
+    for (const style of this.doc?.querySelectorAll?.('style') || []) {
+      if (style.id?.startsWith('htmlmemo-')) continue;
+      const css = style.textContent || '';
+      for (const match of css.matchAll(/--([a-z0-9_-]*(?:toc|sidebar|nav|aside)[a-z0-9_-]*(?:width|size|w|col)[a-z0-9_-]*)/gi)) vars.add('--' + match[1]);
+      for (const match of css.matchAll(/grid-template-columns\s*:\s*var\(\s*(--[a-z0-9_-]+)/gi)) vars.add(match[1]);
+    }
+    return [...vars];
+  }
+  findDocumentTocParts() {
+    if (!this.doc?.body) return null;
+    const named = '.toc,#toc,.table-of-contents,#table-of-contents,.book-toc,#book-toc,.reader-toc,[data-toc],.toc-sidebar,#toc-sidebar,.toc-panel,#toc-panel,.toc-pane,#toc-pane';
+    const label = value => /목차|차례|table of contents|\btoc\b|contents/i.test(String(value || ''));
+    const isMain = node => !!node?.closest?.('main,article,[role="main"]');
+    const nodeName = node => `${node?.id || ''} ${typeof node?.className === 'string' ? node.className : ''} ${node?.getAttribute?.('role') || ''} ${node?.getAttribute?.('data-toc') || ''} ${node?.getAttribute?.('title') || ''} ${node?.getAttribute?.('aria-label') || ''}`;
+    const isResizerNode = node => {
+      if (!node || node.nodeType !== 1 || ['hr', 'main', 'article'].includes(node.localName)) return false;
+      if (node.getAttribute('aria-orientation') === 'horizontal') return false;
+      const info = nodeName(node);
+      if (/목차\s*폭|사이드바\s*폭|toc[-_\s]*resiz|sidebar[-_\s]*resiz|resizer|splitter|sash/i.test(info)) return true;
+      return node.getAttribute('role') === 'separator';
+    };
+    const explicitResizers = [...this.doc.querySelectorAll('[role="separator"],[title*="목차"],[aria-label*="목차"],[title*="사이드바"],[aria-label*="사이드바"],.toc-resizer,#toc-resizer,.sidebar-resizer,#sidebar-resizer,[class*="resiz"],[id*="resiz"],[class*="split"],[id*="split"],[data-toc-resizer]')].filter(node => !isMain(node) && isResizerNode(node));
+    const navigation = node => !!node?.querySelector?.('a[href],ol,ul,li,details,summary,button,[role="list"],[role="tree"],input[type="search"],input[placeholder*="검색"]');
+    const namedNode = node => node?.matches?.(named) || /(?:^|[\s_-])(toc|contents?|목차)(?:$|[\s_-])/i.test(nodeName(node));
+    const titled = node => {
+      if (!node) return false;
+      if (label(node.getAttribute?.('aria-label')) || label(node.getAttribute?.('data-title')) || label(node.getAttribute?.('title'))) return true;
+      return [...(node.querySelectorAll?.('h1,h2,h3,h4,h5,h6,header,strong,div,span,[role="heading"],[data-toc-title],[data-title]') || [])].some(h => (h.childNodes?.length <= 3 && label(h.textContent)) || label(h.getAttribute?.('aria-label')));
+    };
+    let sidebar = null, resizer = null;
+    for (const candidate of explicitResizers) {
+      const prev = candidate.previousElementSibling;
+      if (prev && !isMain(prev) && (namedNode(prev) || titled(prev) || navigation(prev))) {
+        const inner = !namedNode(prev) && prev.children?.length === 1 && (namedNode(prev.firstElementChild) || titled(prev.firstElementChild)) ? prev.firstElementChild : prev;
+        sidebar = inner; resizer = candidate; break;
+      }
+      const ancestor = candidate.parentElement?.closest?.(named + ',aside,nav,[role="navigation"],[role="complementary"],#sidebar,.sidebar');
+      if (ancestor && !isMain(ancestor) && (namedNode(ancestor) || titled(ancestor) || navigation(ancestor))) {
+        sidebar = ancestor; resizer = candidate; break;
+      }
+    }
+    if (!sidebar) {
+      const candidates = [...this.doc.querySelectorAll(named + ',aside,nav,[role="navigation"],[role="complementary"],#sidebar,.sidebar')];
+      sidebar = candidates.find(node => !isMain(node) && !isResizerNode(node) && navigation(node) && (namedNode(node) || titled(node))) || null;
+    }
+    if (!sidebar) {
+      const headings = [...this.doc.querySelectorAll('h1,h2,h3,h4,h5,h6,header,strong,div,span,[role="heading"],[data-toc-title],[data-title],[aria-label]')].filter(node => {
+        const text = (node.childNodes?.length <= 3 ? node.textContent : '') || '';
+        return /^\s*(?:목차|차례|table of contents|contents)\s*$/i.test(text) || label(node.getAttribute?.('aria-label')) || label(node.getAttribute?.('data-title'));
+      });
+      for (const heading of headings) {
+        for (let node = heading.parentElement, depth = 0; node && node !== this.doc.body && depth < 6; node = node.parentElement, depth++) {
+          if (isMain(node) || node.querySelector?.('main,[role="main"]')) break;
+          if (explicitResizers.some(r => node.contains(r) && r !== node && !heading.parentElement?.contains(r) && node.children.length >= 2)) break;
+          if (navigation(node) && (namedNode(node) || ['aside', 'nav', 'section'].includes(node.localName) || node.parentElement === this.doc.body || node.nextElementSibling)) {
+            sidebar = node; break;
+          }
+        }
+        if (sidebar) break;
+      }
+    }
+    if (!sidebar) return null;
+    if (!resizer) {
+      const internal = explicitResizers.find(r => sidebar.contains(r));
+      if (internal) resizer = internal;
+      else {
+        for (let item = sidebar, depth = 0; item && item !== this.doc.body && depth < 4; item = item.parentElement, depth++) {
+          const next = item.nextElementSibling;
+          if (next && isResizerNode(next)) { resizer = next; break; }
+        }
+      }
+    }
+    return {sidebar, resizer};
+  }
+  analyzeTocLayout(sidebar, resizer) {
+    let layoutParent = null, layoutKind = 'block', sidebarItem = sidebar, resizerItem = null, mainItem = null;
+    let initialTokens = [], sidebarTrackIndex = -1, mainTrackIndex = -1;
+    for (let item = sidebar, depth = 0; item?.parentElement && depth < 10; item = item.parentElement, depth++) {
+      const parent = item.parentElement;
+      if (resizer && item.contains(resizer) && item !== sidebar) break;
+      const style = this.doc.defaultView?.getComputedStyle?.(parent);
+      const display = style?.display || '';
+      if (/grid/.test(display)) {
+        const tokens = this.gridTrackTokens(style.gridTemplateColumns);
+        if (tokens.length >= 2) {
+          layoutParent = parent; layoutKind = 'grid'; sidebarItem = item;
+          resizerItem = resizer ? this.gridItem(parent, resizer) : null;
+          if (resizerItem === sidebarItem) resizerItem = null;
+          initialTokens = tokens;
+          const numericTracks = this.gridTracks(style.gridTemplateColumns);
+          const rtl = String(style.direction || '').toLowerCase() === 'rtl';
+          if (numericTracks.length === tokens.length) {
+            sidebarTrackIndex = this.gridTrackIndex(parent, sidebarItem, numericTracks, style);
+            mainTrackIndex = this.documentMainTrack(parent, sidebarItem, numericTracks, style, resizerItem);
+          }
+          if (sidebarTrackIndex < 0) sidebarTrackIndex = rtl ? tokens.length - 1 : 0;
+          if (mainTrackIndex < 0 || mainTrackIndex === sidebarTrackIndex) mainTrackIndex = rtl ? 0 : tokens.length - 1;
+          break;
+        }
+      }
+      if (/flex/.test(display) && !layoutParent && parent.children.length >= 2) {
+        layoutParent = parent; layoutKind = 'flex'; sidebarItem = item;
+        resizerItem = resizer ? this.gridItem(parent, resizer) : null;
+        if (resizerItem === sidebarItem) resizerItem = null;
+        mainItem = [...parent.children].find(c => c !== sidebarItem && c !== resizerItem) || null;
+        break;
+      }
+    }
+    const rectWidth = sidebarItem.getBoundingClientRect?.().width || sidebar.getBoundingClientRect?.().width || 0;
+    const styleWidth = Number.parseFloat(this.doc.defaultView?.getComputedStyle?.(sidebarItem)?.width) || Number.parseFloat(this.doc.defaultView?.getComputedStyle?.(sidebar)?.width) || (sidebarTrackIndex >= 0 ? Number.parseFloat(initialTokens[sidebarTrackIndex]) : 0) || 0;
+    const defaultWidth = Math.round(rectWidth >= 48 ? rectWidth : styleWidth >= 48 ? styleWidth : TOC_DEFAULT);
+    const customVars = this.detectTocCSSVariables();
+    return {sidebar, resizer, layoutParent, layoutKind, sidebarItem, resizerItem, mainItem, initialTokens, sidebarTrackIndex, mainTrackIndex, defaultWidth, customVars};
+  }
+  ensureDocumentTocResize() {
+    if (this.disposed || !this.doc?.body) return null;
+    if (this.tocResize?.sidebar?.isConnected && (!this.tocResize.resizer || this.tocResize.resizer.isConnected)) return this.tocResize;
+    return this.setupDocumentTocResize();
+  }
+  setupDocumentTocResize() {
+    if (this.disposed || !this.doc?.body) return null;
+    const parts = this.findDocumentTocParts();
+    if (!parts) { this.tocResize = null; return null; }
+    const info = this.analyzeTocLayout(parts.sidebar, parts.resizer);
+    this.tocResize = info;
+    this.tocDefaultWidth = info.defaultWidth;
+    if (info.resizer) info.resizer.setAttribute('data-htmlmemo-toc-resizer-bound', '');
+    const store = this.storage();
+    let savedExpanded = null, savedWidth = null;
+    try { savedExpanded = store?.getItem(TOC_EXPANDED_WIDTH_KEY); savedWidth = store?.getItem(TOC_WIDTH_KEY); } catch { /* ignore */ }
+    const parsedExpanded = savedExpanded !== null && savedExpanded !== '' ? Number(savedExpanded) : NaN;
+    this.tocExpandedWidth = Number.isFinite(parsedExpanded) && parsedExpanded >= TOC_STRIP_SNAP ? this.clampTocWidth(parsedExpanded, true) : info.defaultWidth;
+    const initialSaved = savedWidth !== null && savedWidth !== '' ? Number(savedWidth) : Number.isFinite(this.metadata?.view?.tocWidth) ? Number(this.metadata.view.tocWidth) : null;
+    if (initialSaved !== null && Number.isFinite(initialSaved)) {
+      this.applyTocWidth(initialSaved, {persist: false, snapStrip: true});
+    } else {
+      this.tocWidth = info.defaultWidth;
+      if (info.resizer) {
+        info.resizer.setAttribute('aria-valuemin', String(TOC_MIN));
+        info.resizer.setAttribute('aria-valuemax', String(this.maxTocWidth()));
+        info.resizer.setAttribute('aria-valuenow', String(this.tocWidth));
+      }
+    }
+    return info;
+  }
+  applyTocWidth(value, {persist = false, snapStrip = true} = {}) {
+    const info = this.ensureDocumentTocResize();
+    if (!info?.sidebar?.isConnected) return TOC_DEFAULT;
+    const width = this.clampTocWidth(value, snapStrip);
+    const strip = width < TOC_STRIP_SNAP;
+    const prevStrip = info.sidebar.hasAttribute('data-htmlmemo-toc-strip');
+    if (strip && !prevStrip) this.tocScrollTop = info.sidebar.scrollTop || 0;
+    if (!strip && (persist || width >= 96)) {
+      this.tocExpandedWidth = width;
+      if (persist) { try { this.storage()?.setItem(TOC_EXPANDED_WIDTH_KEY, String(width)); } catch { /* ignore */ } }
+    }
+    this.tocWidth = width;
+    this.tocResizedWidth = width;
+    const {sidebar, sidebarItem, resizer, layoutParent, layoutKind, initialTokens, sidebarTrackIndex, mainTrackIndex, customVars} = info;
+    sidebar.setAttribute('data-htmlmemo-toc-sidebar', '');
+    sidebar.style?.setProperty?.('--htmlmemo-toc-width', width + 'px');
+    if (sidebarItem && sidebarItem !== sidebar) {
+      sidebarItem.setAttribute('data-htmlmemo-toc-item', '');
+      sidebarItem.style?.setProperty?.('--htmlmemo-toc-width', width + 'px');
+      sidebarItem.toggleAttribute('data-htmlmemo-toc-item-strip', strip);
+    }
+    sidebar.toggleAttribute('data-htmlmemo-toc-strip', strip);
+    sidebar.toggleAttribute('data-htmlmemo-toc-collapsed', strip);
+    if (layoutKind === 'grid' && layoutParent && initialTokens.length >= 2 && sidebarTrackIndex >= 0) {
+      const columns = initialTokens.map((token, idx) => idx === sidebarTrackIndex ? `${width}px` : idx === mainTrackIndex ? 'minmax(0,1fr)' : token).join(' ');
+      layoutParent.setAttribute('data-htmlmemo-sidebar-grid', '');
+      layoutParent.style?.setProperty?.('--htmlmemo-toc-grid-columns', columns);
+    } else if (layoutKind === 'flex' && sidebarItem) {
+      sidebarItem.setAttribute('data-htmlmemo-sidebar-flex', '');
+    }
+    this.updateEditorStyle(customVars, width);
+    if (resizer) {
+      resizer.setAttribute('data-htmlmemo-toc-resizer-bound', '');
+      resizer.setAttribute('aria-valuemin', String(TOC_MIN));
+      resizer.setAttribute('aria-valuemax', String(this.maxTocWidth()));
+      resizer.setAttribute('aria-valuenow', String(width));
+    }
+    if (!strip && prevStrip && this.tocScrollTop != null) info.sidebar.scrollTop = this.tocScrollTop;
+    if (persist) {
+      try { this.storage()?.setItem(TOC_WIDTH_KEY, String(width)); } catch { /* ignore */ }
+      this.rememberPosition();
+    }
+    return width;
+  }
+  resetTocWidth() {
+    const info = this.ensureDocumentTocResize();
+    if (!info?.sidebar?.isConnected) return;
+    const target = this.tocDefaultWidth || info.defaultWidth || TOC_DEFAULT;
+    this.applyTocWidth(target, {persist: true, snapStrip: true});
+    this.measure(); this.renderDrawingLayer();
+  }
+  eventDocX(event) {
+    if (!event || !Number.isFinite(event.clientX)) return NaN;
+    const hostDoc = this.host?.ownerDocument;
+    const fromHost = hostDoc && hostDoc !== this.doc && (event.view === hostDoc.defaultView || event.target?.ownerDocument === hostDoc);
+    if (fromHost) {
+      const rect = this.frame?.getBoundingClientRect?.();
+      if (rect) return (event.clientX - rect.left) / (this.zoom || 1);
+    }
+    return event.clientX;
+  }
+  isTocResizerNode(node) {
+    const el = node?.nodeType === 1 ? node : node?.parentElement;
+    if (!el) return false;
+    const resizer = this.tocResize?.resizer;
+    if (resizer && (el === resizer || resizer.contains?.(el))) return true;
+    return !!el.closest?.('[data-htmlmemo-toc-resizer],[data-htmlmemo-toc-resizer-bound],.toc-resizer,#toc-resizer,[title*="목차 폭"],[aria-label*="목차 폭"]');
+  }
+  isTocResizeTarget(event) {
+    const info = this.ensureDocumentTocResize();
+    if (!info?.sidebar?.isConnected) return false;
+    const {sidebar, sidebarItem} = info;
+    const target = event?.target?.nodeType === 1 ? event.target : event?.target?.parentElement;
+    if (this.isTocResizerNode(target)) return true;
+    const isStrip = sidebar.hasAttribute('data-htmlmemo-toc-strip');
+    if (isStrip && target && (target === sidebar || sidebar.contains?.(target) || (sidebarItem && (target === sidebarItem || sidebarItem.contains?.(target))))) return true;
+    if (target?.closest?.('a,button,input,textarea,select,summary,[contenteditable],[data-htmlmemo-id]')) return false;
+    const rect = (sidebarItem || sidebar).getBoundingClientRect?.();
+    const clientX = this.eventDocX(event);
+    return !!(rect && rect.width > 0 && Number.isFinite(clientX) && clientX >= rect.right - 10 && clientX <= rect.right + 12 && (!rect.height || event.clientY == null || (event.clientY >= rect.top - 4 && event.clientY <= rect.bottom + 4)));
+  }
+  startTocResize(event) {
+    if (this.disposed || (event.button != null && event.button !== 0)) return false;
+    if (!this.isTocResizeTarget(event)) return false;
+    event.preventDefault?.();
+    event.stopPropagation?.();
+    event.stopImmediatePropagation?.();
+    if (this.tocDrag) return true;
+    const info = this.tocResize;
+    const {sidebar, sidebarItem, resizer} = info;
+    try { resizer?.focus?.({preventScroll: true}); } catch { /* ignore */ }
+    const boxNode = sidebarItem || sidebar;
+    const rect = boxNode.getBoundingClientRect?.();
+    const sidebarLeft = rect?.left || 0;
+    const initialWidth = Number.isFinite(this.tocWidth) ? this.tocWidth : (rect?.width >= TOC_MIN ? Math.round(rect.width) : info.defaultWidth);
+    const clientX = this.eventDocX(event);
+    const startX = Number.isFinite(clientX) ? clientX : sidebarLeft + initialWidth;
+    const offset = Math.abs(startX - (sidebarLeft + initialWidth)) <= 24 ? startX - (sidebarLeft + initialWidth) : 0;
+    const captureTarget = resizer || sidebar;
+    const state = {pointerId: event.pointerId, startX, initialWidth, offset, moved: false, target: captureTarget};
+    this.tocDrag = state;
+    this.doc.documentElement.setAttribute('data-htmlmemo-toc-resizing', '');
+    try { if (event.pointerId != null) captureTarget?.setPointerCapture?.(event.pointerId); } catch { /* ignore */ }
+    const hostDoc = this.host?.ownerDocument, hostWin = hostDoc?.defaultView, docWin = this.doc.defaultView;
+    const targets = [resizer, sidebar, this.doc, docWin, hostDoc, hostWin].filter(Boolean);
+    const cleanup = () => {
+      this.tocDrag = null;
+      this.doc?.documentElement?.removeAttribute('data-htmlmemo-toc-resizing');
+      try { if (state.pointerId != null) state.target?.releasePointerCapture?.(state.pointerId); } catch { /* ignore */ }
+      for (const t of targets) {
+        t.removeEventListener?.('pointermove', move, true); t.removeEventListener?.('mousemove', move, true);
+        t.removeEventListener?.('pointerup', end, true); t.removeEventListener?.('mouseup', end, true);
+        t.removeEventListener?.('pointercancel', cancel, true);
+      }
+    };
+    const move = e => {
+      if (this.tocDrag !== state) return;
+      if (state.pointerId != null && e.pointerId != null && e.pointerId !== state.pointerId) return;
+      if (state.moved && e.buttons === 0) { end(e); return; }
+      const x = this.eventDocX(e);
+      const currentX = Number.isFinite(x) ? x : state.startX;
+      if (Math.abs(currentX - state.startX) >= 1) state.moved = true;
+      if (!state.moved) return;
+      e.preventDefault?.();
+      const currentLeft = (info.sidebarItem || info.sidebar).getBoundingClientRect?.().left || 0;
+      this.applyTocWidth(currentX - currentLeft - state.offset, {persist: false, snapStrip: false});
+    };
+    const end = e => {
+      if (this.tocDrag !== state) return;
+      if (state.pointerId != null && e?.pointerId != null && e.pointerId !== state.pointerId) return;
+      cleanup();
+      this.tocResizeJustEnded = true;
+      setTimeout(() => { this.tocResizeJustEnded = false; }, 0);
+      if (!state.moved) {
+        if (state.initialWidth <= TOC_MIN) {
+          const restored = Math.max(TOC_STRIP_SNAP, this.tocExpandedWidth || this.tocDefaultWidth || TOC_DEFAULT);
+          this.applyTocWidth(restored, {persist: true, snapStrip: true});
+          this.measure(); this.renderDrawingLayer();
+        }
+        return;
+      }
+      let next = this.tocWidth;
+      if (state.initialWidth <= TOC_MIN && next > TOC_MIN + 8 && next < TOC_STRIP_SNAP) {
+        next = Math.max(TOC_STRIP_SNAP, this.tocExpandedWidth || this.tocDefaultWidth || TOC_DEFAULT);
+      }
+      this.applyTocWidth(next, {persist: true, snapStrip: true});
+      this.measure(); this.renderDrawingLayer();
+    };
+    const cancel = e => {
+      if (this.tocDrag !== state) return;
+      if (state.pointerId != null && e?.pointerId != null && e.pointerId !== state.pointerId) return;
+      cleanup();
+      if (state.moved) {
+        this.applyTocWidth(this.tocWidth, {persist: true, snapStrip: true});
+        this.measure(); this.renderDrawingLayer();
+      }
+    };
+    for (const t of targets) {
+      t.addEventListener?.('pointermove', move, true); t.addEventListener?.('mousemove', move, true);
+      t.addEventListener?.('pointerup', end, true); t.addEventListener?.('mouseup', end, true);
+      t.addEventListener?.('pointercancel', cancel, true);
+    }
+    return true;
+  }
+  handleTocDblClick(event) {
+    if (!this.isTocResizeTarget(event)) return false;
+    event.preventDefault?.();
+    event.stopPropagation?.();
+    event.stopImmediatePropagation?.();
+    this.resetTocWidth();
+    return true;
+  }
+  handleTocKeydown(event) {
+    if (!this.isTocResizerNode(event.target)) return false;
+    const info = this.ensureDocumentTocResize();
+    if (!info?.sidebar?.isConnected) return false;
+    const current = Number.isFinite(this.tocWidth) ? this.tocWidth : info.defaultWidth;
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation?.();
+      this.applyTocWidth(current - 16, {persist: true, snapStrip: true});
+      this.measure(); this.renderDrawingLayer(); return true;
+    }
+    if (event.key === 'ArrowRight') {
+      event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation?.();
+      const base = current < TOC_STRIP_SNAP ? Math.max(TOC_STRIP_SNAP, this.tocExpandedWidth || this.tocDefaultWidth || TOC_DEFAULT) : current + 16;
+      this.applyTocWidth(base, {persist: true, snapStrip: true});
+      this.measure(); this.renderDrawingLayer(); return true;
+    }
+    if (event.key === 'Home') {
+      event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation?.();
+      this.applyTocWidth(TOC_MIN, {persist: true, snapStrip: true});
+      this.measure(); this.renderDrawingLayer(); return true;
+    }
+    if (event.key === 'End') {
+      event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation?.();
+      this.resetTocWidth(); return true;
+    }
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation?.();
+      const next = current <= TOC_MIN ? Math.max(TOC_STRIP_SNAP, this.tocExpandedWidth || this.tocDefaultWidth || TOC_DEFAULT) : TOC_MIN;
+      this.applyTocWidth(next, {persist: true, snapStrip: true});
+      this.measure(); this.renderDrawingLayer(); return true;
+    }
+    return false;
   }
   forwardWheel(event) {
     // The iframe is a separate event tree.  Move its actual scroll owner
@@ -202,6 +638,7 @@ export class Reader {
         if (!element.closest('#'+LAYER_ID) && !['script','style','meta','link','template'].includes(element.localName) && !element.hasAttribute('data-htmlmemo-anchor')) element.setAttribute('data-htmlmemo-anchor','js'+this.dynamicAnchor++);
         if (++count % 1000 === 0) {await new Promise(resolve=>setTimeout(resolve,0));if(this.disposed)return;}
       }
+      this.ensureDocumentTocResize();
       this.initialHTML = null;
       this.measure();this.render();
       this.callbacks.onChange?.();this.callbacks.onView?.();
@@ -212,7 +649,7 @@ export class Reader {
   }
   focusDocument(event) {
     if (this.disposed || event.button != null && event.button !== 0) return;
-    if (event.target.closest?.('a,button,input,textarea,select,[contenteditable],[data-htmlmemo-id]')) return;
+    if (event.target.closest?.('a,button,input,textarea,select,[contenteditable],[data-htmlmemo-id],[role="separator"],[data-htmlmemo-toc-resizer],[data-htmlmemo-toc-resizer-bound],[data-htmlmemo-toc-strip]')) return;
     event.preventDefault();
     this.callbacks.onDocumentFocus?.();
   }
@@ -261,7 +698,7 @@ export class Reader {
     this.rememberPosition(); this.callbacks.onView?.();
   }
   rememberPosition() {
-    this.metadata.view = {scrollTop:this.scrollTop, scrollLeft:this.scrollLeft, zoom:this.zoom, autoFit:this.autoFit};
+    this.metadata.view = {scrollTop:this.scrollTop, scrollLeft:this.scrollLeft, zoom:this.zoom, autoFit:this.autoFit, ...(Number.isFinite(this.tocResizedWidth)?{tocWidth:this.tocResizedWidth}:{})};
     this.callbacks.onPosition?.();
   }
   setTool(tool) {

@@ -140,7 +140,7 @@ function updateChrome() {
 function createHost(id,type) { const host=document.createElement('div');host.id='workspace-'+id;host.className='workspace-host '+type+'-host';host.hidden=true;$('#workspaces').append(host);return host; }
 async function openRecord(record, prepared = null) {
   const existing=tabs.find(tab=>tab.record?.id===record.id);if(existing){activate(existing.id);return existing;}
-  const parsed=prepared || parseHTML(record.html,{title:record.title,source:record.source});
+  const parsed=prepared || parseHTML(record.html,{title:record.title,source:record.source,viewport:record.metadata?.viewport,execution:record.metadata?.execution});
   const tab={id:uid(),type:'document',title:record.title,record:{...record},host:null};tab.host=createHost(tab.id,'document');
   // The initial standalone copy is already sanitized and contains metadata.
   // Reuse it until editing or moving, avoiding a second full DOM clone on import.
@@ -517,7 +517,7 @@ function bindUI() {
   bindDeskResize();
 }
 function network() {$('#network-status').textContent=navigator.onLine?'온라인':'오프라인';$('#network-status').classList.toggle('offline',!navigator.onLine);}
-const DESK_NAV_WIDTH_KEY='htmlmemo-desk-nav-width-v1',DESK_NAV_DEFAULT=180,DESK_NAV_MIN=8,DESK_NAV_STRIP_SNAP=48,DESK_NAV_MAX=360;
+const DESK_NAV_WIDTH_KEY='htmlmemo-desk-nav-width-v1',DESK_NAV_EXPANDED_WIDTH_KEY='htmlmemo-desk-nav-expanded-width-v1',DESK_NAV_DEFAULT=180,DESK_NAV_MIN=8,DESK_NAV_STRIP_SNAP=48,DESK_NAV_MAX=360;
 let deskNavWidth=DESK_NAV_DEFAULT,deskNavExpandedWidth=DESK_NAV_DEFAULT,deskDrag=null;
 function maxDeskNavWidth() {
   const shellWidth=$('.desk-shell')?.clientWidth||innerWidth||1280;
@@ -532,7 +532,10 @@ function clampDeskNavWidth(value,snapStrip=true) {
 function applyDeskNavWidth(value,{persist=false,snapStrip=true}={}) {
   const nav=$('.desk-nav'),resizer=$('#desk-resizer');if(!nav)return DESK_NAV_DEFAULT;
   const width=clampDeskNavWidth(value,snapStrip),strip=width<DESK_NAV_STRIP_SNAP;
-  if(!strip&&(persist||width>=96))deskNavExpandedWidth=width;
+  if(!strip&&(persist||width>=96)){
+    deskNavExpandedWidth=width;
+    if(persist){try{localStorage?.setItem(DESK_NAV_EXPANDED_WIDTH_KEY,String(width));}catch{/* Ignore storage quota/privacy errors. */}}
+  }
   if(width===deskNavWidth&&!persist&&nav.style.width===width+'px'&&nav.classList.contains('is-strip')===strip)return width;
   deskNavWidth=width;
   nav.style.setProperty?.('--desk-nav-width',width+'px');
@@ -552,7 +555,8 @@ function applyDeskNavWidth(value,{persist=false,snapStrip=true}={}) {
 }
 function bindDeskResize() {
   const nav=$('.desk-nav'),resizer=$('#desk-resizer'),main=$('#main');if(!nav||!resizer)return;
-  let saved=null;try{saved=localStorage?.getItem(DESK_NAV_WIDTH_KEY);}catch{saved=null;}
+  let saved=null,savedExpanded=null;try{saved=localStorage?.getItem(DESK_NAV_WIDTH_KEY);savedExpanded=localStorage?.getItem(DESK_NAV_EXPANDED_WIDTH_KEY);}catch{saved=null;savedExpanded=null;}
+  if(savedExpanded!==null&&savedExpanded!==''&&Number.isFinite(Number(savedExpanded))&&Number(savedExpanded)>=DESK_NAV_STRIP_SNAP)deskNavExpandedWidth=clampDeskNavWidth(Number(savedExpanded),true);
   applyDeskNavWidth(saved!==null&&saved!==''?Number(saved):DESK_NAV_DEFAULT,{persist:false,snapStrip:true});
   const startDrag=event=>{
     if(event.button!=null&&event.button!==0)return;
