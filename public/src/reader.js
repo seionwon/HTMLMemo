@@ -11,6 +11,7 @@ export class Reader {
     this.tool = 'select'; this.color = '#edcf67'; this.width = 3; this.opacity = .35; this.penTTL = 0; this.zoom = 1;
     this.nativeScroll = !!parsed.nativeScroll;
     this.selection = null; this.selectedId = null; this.linkHistory = []; this.searchResults = []; this.searchPosition = -1; this.autoFit = !this.metadata.view.zoom;
+    this.middleScroll = null;
     this.viewport = document.createElement('div'); this.viewport.className = 'reader-viewport';
     this.viewport.classList.toggle('reader-native-scroll', this.nativeScroll);
     this.sizer = document.createElement('div'); this.sizer.className = 'reader-sizer';
@@ -59,12 +60,14 @@ export class Reader {
   bind() {
     const editorStyle = this.doc.createElement('style'); editorStyle.id = 'htmlmemo-editor-style';
     editorStyle.textContent = `html{overflow:${this.nativeScroll?'auto':'hidden'}!important;height:auto!important;min-height:0!important;scroll-behavior:auto!important}body{touch-action:pan-x pan-y;height:auto!important;min-height:0!important}html[data-htmlmemo-drawing] *{cursor:crosshair!important;user-select:none!important;touch-action:none!important}`; this.doc.head.append(editorStyle);
-    this.doc.addEventListener('pointerdown', event => { this.callbacks.onSelectionDismiss?.(); this.pointerDown(event); }, true);
-    this.doc.addEventListener('pointermove', event => this.pointerMove(event), true);
-    this.doc.addEventListener('pointerup', event => this.pointerUp(event), true);
-    this.doc.addEventListener('pointercancel', () => { this.gesture = null; this.preview?.remove(); this.preview = null; });
+    this.doc.addEventListener('wheel', event => this.forwardWheel(event), {capture:true,passive:false});
+    this.doc.addEventListener('pointerdown', event => { if(this.startMiddleScroll(event))return;this.stopMiddleScroll();this.callbacks.onSelectionDismiss?.(); this.pointerDown(event); }, true);
+    this.doc.addEventListener('pointermove', event => { this.moveMiddleScroll(event);this.pointerMove(event); }, true);
+    this.doc.addEventListener('pointerup', event => { if(this.endMiddleScroll(event))return;this.pointerUp(event); }, true);
+    this.doc.addEventListener('pointercancel', () => { this.stopMiddleScroll();this.gesture = null; this.preview?.remove(); this.preview = null; });
+    this.doc.addEventListener('auxclick', event => {if(event.button===1&&!event.target.closest?.('a,button,input,textarea,select,[contenteditable]'))event.preventDefault();}, true);
     this.doc.addEventListener('selectionchange', () => { const s = this.doc.getSelection(); if (s?.rangeCount && !s.isCollapsed) this.selection = selectionAnchor(this.doc, s.getRangeAt(0)); });
-    this.doc.addEventListener('keydown', event => this.callbacks.onKey?.(event));
+    this.doc.addEventListener('keydown', event => {if(event.key==='Escape'&&this.middleScroll){this.stopMiddleScroll();event.preventDefault();return;}this.callbacks.onKey?.(event);});
     this.doc.addEventListener('dblclick', event => this.focusDocument(event));
     this.viewport.addEventListener('dblclick', event => this.focusDocument(event));
     this.doc.addEventListener('click', event => {
@@ -105,6 +108,61 @@ export class Reader {
       this.observeDynamicDocument();
       this.scheduleDynamicRefresh();
     }
+  }
+  forwardWheel(event) {
+    // Static documents scroll in the outer pane; wheel events inside an iframe
+    // cannot bubble there. Native documents retain Chrome's own scrolling.
+    if (this.nativeScroll || event.ctrlKey || event.defaultPrevented) return;
+    const scale=event.deltaMode===1?16:event.deltaMode===2?this.viewport.clientHeight:1;
+    for(let node=event.target;node?.nodeType===1&&node!==this.doc.body;node=node.parentElement){
+      const style=this.doc.defaultView.getComputedStyle(node);
+      if(/auto|scroll/.test(style.overflowY)&&node.scrollHeight>node.clientHeight&&
+        (event.deltaY<0&&node.scrollTop>0 || event.deltaY>0&&node.scrollTop<node.scrollHeight-node.clientHeight))return;
+      if(/auto|scroll/.test(style.overflowX)&&node.scrollWidth>node.clientWidth&&
+        (event.deltaX<0&&node.scrollLeft>0 || event.deltaX>0&&node.scrollLeft<node.scrollWidth-node.clientWidth))return;
+    }
+    this.viewport.scrollBy({left:event.deltaX*scale,top:event.deltaY*scale});
+    event.preventDefault();
+  }
+  startMiddleScroll(event) {
+    if (event.button!==1) return false;
+    if (event.target.closest?.('a,button,input,textarea,select,[contenteditable]')) return false;
+    event.preventDefault();
+    if (this.middleScroll) {this.stopMiddleScroll();return true;}
+    const state={pointerId:event.pointerId,x:event.clientX,y:event.clientY,dx:0,dy:0,moved:false,frame:0};
+    this.middleScroll=state;
+    const tick=()=>{
+      if (this.middleScroll!==state || this.disposed) return;
+      const speed=value=>Math.abs(value)<8?0:Math.sign(value)*Math.min(48,(Math.abs(value)-8)/4);
+      const left=speed(state.dx),top=speed(state.dy);
+      if (left||top) {
+        if(this.nativeScroll)this.doc.defaultView.scrollBy(left/this.zoom,top/this.zoom);
+        else this.viewport.scrollBy(left,top);
+      }
+      state.frame=this.doc.defaultView.requestAnimationFrame(tick);
+    };
+    state.frame=this.doc.defaultView.requestAnimationFrame(tick);
+    return true;
+  }
+  moveMiddleScroll(event) {
+    const state=this.middleScroll;
+    if(!state || event.pointerId!==state.pointerId)return;
+    state.dx=event.clientX-state.x;state.dy=event.clientY-state.y;
+    if(Math.abs(state.dx)>8 || Math.abs(state.dy)>8)state.moved=true;
+  }
+  endMiddleScroll(event) {
+    const state=this.middleScroll;
+    if(!state || event.button!==1 || event.pointerId!==state.pointerId)return false;
+    event.preventDefault();
+    // Press-and-drag stops on release; a plain middle click latches until the
+    // next click or Escape, matching the familiar browser auto-scroll gesture.
+    if(state.moved)this.stopMiddleScroll();
+    return true;
+  }
+  stopMiddleScroll() {
+    if(!this.middleScroll)return;
+    this.doc?.defaultView?.cancelAnimationFrame(this.middleScroll.frame);
+    this.middleScroll=null;
   }
   observeDynamicDocument() {
     if (!this.disposed) this.dynamicObserver?.observe(this.doc.documentElement,{childList:true,subtree:true,characterData:true});
@@ -377,5 +435,5 @@ export class Reader {
     this.readAloud?.toggle();
   }
   stopSpeech() { this.readAloud?.close(); this.host?.ownerDocument?.defaultView?.speechSynthesis?.cancel(); }
-  dispose() { this.readAloud?.dispose();this.readAloud=null;this.stopSpeech(); this.disposed=true; clearTimeout(this.positionTimer);clearTimeout(this.dynamicTimer);this.dynamicObserver?.disconnect(); this.resizeObserver?.disconnect(); this.hostObserver?.disconnect(); this.frame.srcdoc=''; if(this.documentURL){URL.revokeObjectURL(this.documentURL);this.documentURL=null;} this.host.remove(); }
+  dispose() { this.stopMiddleScroll();this.readAloud?.dispose();this.readAloud=null;this.stopSpeech(); this.disposed=true; clearTimeout(this.positionTimer);clearTimeout(this.dynamicTimer);this.dynamicObserver?.disconnect(); this.resizeObserver?.disconnect(); this.hostObserver?.disconnect(); this.frame.srcdoc=''; if(this.documentURL){URL.revokeObjectURL(this.documentURL);this.documentURL=null;} this.host.remove(); }
 }
