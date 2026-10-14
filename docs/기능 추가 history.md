@@ -653,7 +653,7 @@ HTMLMemo 프로젝트에서 구현과 관련 검증을 마친 변경을 기록�
 
 | ID | change-kind | status |
 |---|---|---|
-| hist-20261014-021 | 서재·문서 목차 접기 기능 롤백 | 구현·자동 검사·빌드 완료 / Pages 게시 진행 / 실제 Chrome 확인 제한 |
+| hist-20261014-021 | 서재·문서 목차 접기 기능 롤백 | 구현·자동 검사·Pages 게시 완료 / 실제 Chrome 확인 제한 |
 
 **목적과 범위:** 사이드바 접기 기능이 문서의 원래 목차와 본문 배치를 바꾸거나 화면 폭을 잘못 차지하던 문제를 해결하기 위해, 정상 스크롤 상태로 보관한 기준 커밋 `e8b9295`의 리더·서재 UI 코드로 복원했습니다. 전체 브랜치를 강제로 되돌리지 않고 사이드바 토글과 그 검사용 코드만 복원했으며, 롤백 직전 상태는 로컬 안전 브랜치 `safety/before-sidebar-toggle-rollback-2465960`에 보관했습니다.
 
@@ -662,3 +662,5 @@ HTMLMemo 프로젝트에서 구현과 관련 검증을 마친 변경을 기록�
 **캐시와 파일 저장:** 서비스 워커 캐시는 `htmlmemo-v5`로 올려 이전 접기 UI 자산을 캐시에서 교체합니다. 이 변경은 원본 HTML 파일을 수정하거나 저장하지 않으며, 기존 주석·TTS·마우스 휠 및 가운데 버튼 스크롤 기능은 기준점에 있던 구현을 유지합니다.
 
 **검증과 제한:** `npm run check`(59개 JavaScript·JSON), `npm test`(108개), `npm run build`를 통과했습니다. `npm run test:browser`는 전용 Chrome이 시작 직후 종료되어 실패했습니다(`Chrome exited null`). 따라서 실제 Chrome 화면에서의 롤백 상태는 이 실행 환경에서 자동 검증하지 못했습니다. Pages 게시·온라인 파일 대조 결과는 완료 후 이 항목에 보충합니다.
+
+**게시 완료 (2026-10-14 12:56:18 +09:00):** 롤백 커밋 `ee932c0be7cf7fe9b1f02ad00a3e8726e7779f7d`를 main에 push했고 [GitHub Actions 38508672709](https://github.com/seionwon/HTMLMemo/actions/runs/38508672709)의 `npm test`·`npm run check`·`npm run build`와 Pages 게시 성공을 확인했습니다. 공개 주소는 HTTP 200으로 응답했고, 공개 `index.html`·`styles.css`·`src/app.js`·`src/document.js`·`src/reader.js`가 로컬 `dist/`와 바이트 단위로 일치합니다. 공개 서비스 워커도 캐시 식별자만 빌드 환경에서 생성된 값으로 다를 뿐 나머지 본문은 로컬 빌드와 일치하며, 공개 리더에는 롤백한 사이드바 토글 코드가 없습니다.
