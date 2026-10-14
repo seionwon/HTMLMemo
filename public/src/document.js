@@ -30,14 +30,21 @@ function clearReaderSidebarArtifacts(root) {
   root.querySelector?.('#htmlmemo-sidebar-style')?.remove();
   root.querySelector?.('#htmlmemo-toc-resize-style')?.remove();
   for (const element of root.querySelectorAll?.('[data-htmlmemo-toc-toggle],[data-htmlmemo-toc-resizer]') || []) element.remove();
-  for (const element of root.querySelectorAll?.('[data-htmlmemo-toc-collapsed],[data-htmlmemo-sidebar-folded],[data-htmlmemo-sidebar-grid],[data-htmlmemo-sidebar-grid-item],[data-htmlmemo-sidebar-flex],[data-htmlmemo-toc-sidebar],[data-htmlmemo-toc-item],[data-htmlmemo-toc-strip],[data-htmlmemo-toc-item-strip],[data-htmlmemo-toc-resizer-bound],[data-htmlmemo-toc-resizing],[style*="--htmlmemo-toc-grid-columns"],[style*="--htmlmemo-toc-width"]') || []) {
-    for (const attr of ['data-htmlmemo-toc-collapsed','data-htmlmemo-sidebar-folded','data-htmlmemo-sidebar-grid','data-htmlmemo-sidebar-grid-item','data-htmlmemo-sidebar-flex','data-htmlmemo-toc-sidebar','data-htmlmemo-toc-item','data-htmlmemo-toc-strip','data-htmlmemo-toc-item-strip','data-htmlmemo-toc-resizer-bound','data-htmlmemo-toc-resizing']) element.removeAttribute(attr);
+  const nodes = [root, ...(root.querySelectorAll?.('[data-htmlmemo-toc-active],[data-htmlmemo-toc-main],[data-htmlmemo-toc-collapsed],[data-htmlmemo-sidebar-folded],[data-htmlmemo-sidebar-grid],[data-htmlmemo-sidebar-grid-item],[data-htmlmemo-sidebar-flex],[data-htmlmemo-toc-sidebar],[data-htmlmemo-toc-item],[data-htmlmemo-toc-strip],[data-htmlmemo-toc-item-strip],[data-htmlmemo-toc-resizer-bound],[data-htmlmemo-toc-resizer-bound-left],[data-htmlmemo-toc-resizing],[style*="--htmlmemo-toc-grid-columns"],[style*="--htmlmemo-toc-width"]') || [])];
+  for (const element of nodes) {
+    if (!element?.removeAttribute) continue;
+    if (element.hasAttribute?.('data-htmlmemo-toc-resizer-bound-left')) {
+      const prevLeft = element.getAttribute('data-htmlmemo-toc-resizer-bound-left');
+      if (prevLeft) element.style?.setProperty('left', prevLeft);
+      else element.style?.removeProperty('left');
+    }
+    for (const attr of ['data-htmlmemo-toc-active','data-htmlmemo-toc-main','data-htmlmemo-toc-collapsed','data-htmlmemo-sidebar-folded','data-htmlmemo-sidebar-grid','data-htmlmemo-sidebar-grid-item','data-htmlmemo-sidebar-flex','data-htmlmemo-toc-sidebar','data-htmlmemo-toc-item','data-htmlmemo-toc-strip','data-htmlmemo-toc-item-strip','data-htmlmemo-toc-resizer-bound','data-htmlmemo-toc-resizer-bound-left','data-htmlmemo-toc-resizing']) element.removeAttribute(attr);
     const inline = element.getAttribute('style') || '';
     if (/--htmlmemo-toc-(?:grid-columns|width)\s*:/i.test(inline)) {
       element.style?.removeProperty('--htmlmemo-toc-grid-columns');
       element.style?.removeProperty('--htmlmemo-toc-width');
-      if (!element.getAttribute('style')?.trim()) element.removeAttribute('style');
     }
+    if (element.hasAttribute?.('style') && !element.getAttribute('style')?.trim()) element.removeAttribute('style');
   }
 }
 function* sanitizeTree(root, source, depth = 0, allowScripts = false) {

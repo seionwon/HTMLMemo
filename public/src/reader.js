@@ -59,7 +59,15 @@ export class Reader {
     } else this.frame.srcdoc = parsed.html;
   }
   baseEditorStyle() {
-    return `@property --htmlmemo-toc-width{syntax:"*";inherits:false;initial-value:260px}@property --htmlmemo-toc-grid-columns{syntax:"*";inherits:false;initial-value:none}${this.nativeScroll ? '' : 'html{overflow:hidden!important;height:auto!important;min-height:0!important;scroll-behavior:auto!important}body{touch-action:pan-x pan-y;height:auto!important;min-height:0!important}'}html[data-htmlmemo-drawing] *{cursor:crosshair!important;user-select:none!important;touch-action:none!important}html[data-htmlmemo-toc-resizing],html[data-htmlmemo-toc-resizing] body{cursor:col-resize!important;user-select:none!important;-webkit-user-select:none!important}[data-htmlmemo-sidebar-grid]{grid-template-columns:var(--htmlmemo-toc-grid-columns)!important;transition:none!important}[data-htmlmemo-toc-sidebar],[data-htmlmemo-toc-item],[data-htmlmemo-sidebar-flex]{width:var(--htmlmemo-toc-width)!important;min-width:var(--htmlmemo-toc-width)!important;max-width:var(--htmlmemo-toc-width)!important;flex:0 0 var(--htmlmemo-toc-width)!important;box-sizing:border-box!important;transition:none!important}[data-htmlmemo-toc-sidebar]{overflow-x:hidden!important}[data-htmlmemo-toc-item-strip]{width:8px!important;min-width:8px!important;max-width:8px!important;flex:0 0 8px!important;padding-left:0!important;padding-right:0!important;overflow:hidden!important;box-sizing:border-box!important}[data-htmlmemo-toc-strip]{width:8px!important;min-width:8px!important;max-width:8px!important;flex:0 0 8px!important;padding-left:0!important;padding-right:0!important;overflow:hidden!important;box-sizing:border-box!important;cursor:col-resize!important;user-select:none!important}[data-htmlmemo-toc-strip]>:not([data-htmlmemo-toc-resizer]):not([data-htmlmemo-toc-resizer-bound]){opacity:0!important;visibility:hidden!important;pointer-events:none!important}[data-htmlmemo-toc-resizer],[data-htmlmemo-toc-resizer-bound]{cursor:col-resize!important;touch-action:none!important;user-select:none!important;-webkit-user-select:none!important;transition:none!important}`;
+    return `${this.nativeScroll ? '' : 'html{overflow:hidden!important;height:auto!important;min-height:0!important;scroll-behavior:auto!important}body{touch-action:pan-x pan-y;height:auto!important;min-height:0!important}'}html[data-htmlmemo-drawing] *{cursor:crosshair!important;user-select:none!important;touch-action:none!important}html[data-htmlmemo-toc-resizing],html[data-htmlmemo-toc-resizing] body{cursor:col-resize!important;user-select:none!important;-webkit-user-select:none!important}[data-htmlmemo-sidebar-grid]{grid-template-columns:var(--htmlmemo-toc-grid-columns)!important;transition:none!important}[data-htmlmemo-toc-sidebar],[data-htmlmemo-toc-item],[data-htmlmemo-sidebar-flex]{width:var(--htmlmemo-toc-width)!important;min-width:var(--htmlmemo-toc-width)!important;max-width:var(--htmlmemo-toc-width)!important;flex:0 0 var(--htmlmemo-toc-width)!important;box-sizing:border-box!important;transition:none!important}[data-htmlmemo-toc-sidebar]{overflow-x:hidden!important}[data-htmlmemo-toc-item-strip]{width:8px!important;min-width:8px!important;max-width:8px!important;flex:0 0 8px!important;padding-left:0!important;padding-right:0!important;overflow:hidden!important;box-sizing:border-box!important}[data-htmlmemo-toc-strip]{width:8px!important;min-width:8px!important;max-width:8px!important;flex:0 0 8px!important;padding-left:0!important;padding-right:0!important;overflow:hidden!important;box-sizing:border-box!important;cursor:col-resize!important;user-select:none!important}[data-htmlmemo-toc-strip]>:not([data-htmlmemo-toc-resizer]):not([data-htmlmemo-toc-resizer-bound]){opacity:0!important;visibility:hidden!important;pointer-events:none!important}[data-htmlmemo-toc-resizer],[data-htmlmemo-toc-resizer-bound]{cursor:col-resize!important;touch-action:none!important;user-select:none!important;-webkit-user-select:none!important;transition:none!important}`;
+  }
+  setupEditorTocVars(customVars, defaultWidth = TOC_DEFAULT) {
+    const editorStyle = this.doc?.getElementById('htmlmemo-editor-style');
+    if (!editorStyle) return;
+    const names = customVars?.length ? customVars : ['--toc-width', '--sidebar-width', '--nav-width'];
+    const mapVars = names.map(name => `${name}:var(--htmlmemo-toc-width)!important`).join(';');
+    const freezeVars = [...names, '--htmlmemo-toc-width'].map(name => `${name}:${defaultWidth}px!important`).join(';');
+    editorStyle.textContent = this.baseEditorStyle() + `html[data-htmlmemo-toc-active],html[data-htmlmemo-toc-active] body,[data-htmlmemo-sidebar-grid],[data-htmlmemo-toc-sidebar],[data-htmlmemo-toc-item],[data-htmlmemo-toc-resizer-bound]{${mapVars}}html[data-htmlmemo-toc-resizing] [data-htmlmemo-toc-main]>:not([role="separator"]):not([data-htmlmemo-toc-resizer-bound]){${freezeVars}}`;
   }
   bind() {
     const editorStyle = this.doc.createElement('style'); editorStyle.id = 'htmlmemo-editor-style';
@@ -210,18 +218,18 @@ export class Reader {
     const titled = node => {
       if (!node) return false;
       if (label(node.getAttribute?.('aria-label')) || label(node.getAttribute?.('data-title')) || label(node.getAttribute?.('title'))) return true;
-      return [...(node.querySelectorAll?.('h1,h2,h3,h4,h5,h6,header,strong,[role="heading"],[data-toc-title],[data-title]') || [])].some(h => (h.childNodes?.length <= 3 && label(h.textContent)) || label(h.getAttribute?.('aria-label')));
+      return [...(node.querySelectorAll?.('h1,h2,h3,h4,h5,h6,header,strong,div,span,[role="heading"],[data-toc-title],[data-title]') || [])].some(h => (h.childNodes?.length <= 3 && label(h.textContent)) || label(h.getAttribute?.('aria-label')));
     };
     let sidebar = null, resizer = null;
     for (const candidate of explicitResizers) {
+      const ancestor = candidate.parentElement?.closest?.(named + ',aside,nav,[role="navigation"],[role="complementary"],#sidebar,.sidebar');
+      if (ancestor && !isMain(ancestor) && !ancestor.querySelector?.('main,[role="main"],article,#main,#content') && (namedNode(ancestor) || titled(ancestor) || navigation(ancestor))) {
+        sidebar = ancestor; resizer = candidate; break;
+      }
       const prev = candidate.previousElementSibling;
       if (prev && !isMain(prev) && (namedNode(prev) || titled(prev) || navigation(prev))) {
-        const inner = !namedNode(prev) && prev.children?.length === 1 && (namedNode(prev.firstElementChild) || titled(prev.firstElementChild)) ? prev.firstElementChild : prev;
+        const inner = !namedNode(prev) && !['aside', 'nav'].includes(prev.localName) && prev.children?.length === 1 && (namedNode(prev.firstElementChild) || titled(prev.firstElementChild)) ? prev.firstElementChild : prev;
         sidebar = inner; resizer = candidate; break;
-      }
-      const ancestor = candidate.parentElement?.closest?.(named + ',aside,nav,[role="navigation"],[role="complementary"],#sidebar,.sidebar');
-      if (ancestor && !isMain(ancestor) && (namedNode(ancestor) || titled(ancestor) || navigation(ancestor))) {
-        sidebar = ancestor; resizer = candidate; break;
       }
     }
     if (!sidebar) {
@@ -229,7 +237,7 @@ export class Reader {
       sidebar = candidates.find(node => !isMain(node) && !isResizerNode(node) && navigation(node) && (namedNode(node) || titled(node))) || null;
     }
     if (!sidebar) {
-      const headings = [...this.doc.querySelectorAll('h1,h2,h3,h4,h5,h6,header,strong,[role="heading"],[data-toc-title],[data-title],[aria-label]')].filter(node => {
+      const headings = [...this.doc.querySelectorAll('h1,h2,h3,h4,h5,h6,header,strong,div,span,[role="heading"],[data-toc-title],[data-title],[aria-label]')].filter(node => {
         const text = (node.childNodes?.length <= 3 ? node.textContent : '') || '';
         return /^\s*(?:목차|차례|table of contents|contents)\s*$/i.test(text) || label(node.getAttribute?.('aria-label')) || label(node.getAttribute?.('data-title'));
       });
@@ -260,9 +268,10 @@ export class Reader {
   analyzeTocLayout(sidebar, resizer) {
     let layoutParent = null, layoutKind = 'block', sidebarItem = sidebar, resizerItem = null, mainItem = null;
     let initialTokens = [], sidebarTrackIndex = -1, mainTrackIndex = -1;
-    for (let item = sidebar, depth = 0; item?.parentElement && depth < 10; item = item.parentElement, depth++) {
+    for (let item = sidebar, depth = 0; item?.parentElement && item !== this.doc.body && depth < 10; item = item.parentElement, depth++) {
+      if (item.matches?.('main,[role="main"],article,#main,#content') || item.querySelector?.('main,[role="main"],article,#main,#content')) break;
+      if (resizer && item !== sidebar && item.contains(resizer) && !sidebar.contains(resizer)) break;
       const parent = item.parentElement;
-      if (resizer && item.contains(resizer) && item !== sidebar) break;
       const style = this.doc.defaultView?.getComputedStyle?.(parent);
       const display = style?.display || '';
       if (/grid/.test(display)) {
@@ -284,7 +293,7 @@ export class Reader {
           break;
         }
       }
-      if (/flex/.test(display) && !layoutParent && parent.children.length >= 2) {
+      if (/flex/.test(display) && !/^column/i.test(style.flexDirection || '') && !layoutParent && parent.children.length >= 2) {
         layoutParent = parent; layoutKind = 'flex'; sidebarItem = item;
         resizerItem = resizer ? this.gridItem(parent, resizer) : null;
         if (resizerItem === sidebarItem) resizerItem = null;
@@ -292,11 +301,22 @@ export class Reader {
         break;
       }
     }
-    const rectWidth = sidebarItem.getBoundingClientRect?.().width || sidebar.getBoundingClientRect?.().width || 0;
+    const chain = [];
+    for (let node = sidebar; node && node !== layoutParent && node !== this.doc.body; node = node.parentElement) {
+      chain.push(node);
+      if (node === sidebarItem) break;
+    }
+    const rawMain = [...this.doc.querySelectorAll('main,[role="main"]')].filter(node => node !== sidebar && node !== sidebarItem && !node.contains(sidebar) && !sidebar.contains(node) && (!resizer || !node.contains(resizer)));
+    const mainNodes = rawMain.length ? rawMain : (mainItem && (!resizer || !mainItem.contains(resizer)) ? [mainItem] : []);
+    const sRect = (sidebarItem || sidebar).getBoundingClientRect?.();
+    const rRect = resizer?.getBoundingClientRect?.();
+    const resizerFollowsRightEdge = !!(resizer && sRect?.width > 0 && rRect && Math.abs((rRect.left + rRect.width / 2) - sRect.right) <= 24);
+    const resizerEdgeOffset = resizerFollowsRightEdge ? Math.round(rRect.left - sRect.right) : 0;
+    const rectWidth = sRect?.width || sidebar.getBoundingClientRect?.().width || 0;
     const styleWidth = Number.parseFloat(this.doc.defaultView?.getComputedStyle?.(sidebarItem)?.width) || Number.parseFloat(this.doc.defaultView?.getComputedStyle?.(sidebar)?.width) || (sidebarTrackIndex >= 0 ? Number.parseFloat(initialTokens[sidebarTrackIndex]) : 0) || 0;
     const defaultWidth = Math.round(rectWidth >= 48 ? rectWidth : styleWidth >= 48 ? styleWidth : TOC_DEFAULT);
     const customVars = this.detectTocCSSVariables();
-    return {sidebar, resizer, layoutParent, layoutKind, sidebarItem, resizerItem, mainItem, initialTokens, sidebarTrackIndex, mainTrackIndex, defaultWidth, customVars};
+    return {sidebar, resizer, layoutParent, layoutKind, sidebarItem, resizerItem, mainItem, chain, mainNodes, resizerFollowsRightEdge, resizerEdgeOffset, resizerLeftChecked: false, syncResizerLeft: false, initialTokens, sidebarTrackIndex, mainTrackIndex, defaultWidth, customVars};
   }
   ensureDocumentTocResize() {
     if (this.disposed || !this.doc?.body) return null;
@@ -313,6 +333,7 @@ export class Reader {
     const info = this.analyzeTocLayout(parts.sidebar, parts.resizer);
     this.tocResize = info;
     this.tocDefaultWidth = info.defaultWidth;
+    this.setupEditorTocVars(info.customVars, info.defaultWidth);
     if (info.resizer) {
       info.resizer.setAttribute('data-htmlmemo-toc-resizer-bound', '');
       info.resizer.setAttribute('aria-valuemin', String(TOC_MIN));
@@ -348,27 +369,50 @@ export class Reader {
     this.tocWidth = width;
     this.tocResizedWidth = width;
     this.tocStrip = strip;
-    const {sidebar, sidebarItem, resizer, layoutParent, layoutKind, initialTokens, sidebarTrackIndex, mainTrackIndex} = info;
+    const {sidebar, sidebarItem, resizer, layoutParent, layoutKind, chain, mainNodes, initialTokens, sidebarTrackIndex, mainTrackIndex} = info;
     if (!this.tocApplied) {
       this.tocApplied = true;
+      this.doc.documentElement.setAttribute('data-htmlmemo-toc-active', '');
       sidebar.setAttribute('data-htmlmemo-toc-sidebar', '');
-      if (sidebarItem && sidebarItem !== sidebar) sidebarItem.setAttribute('data-htmlmemo-toc-item', '');
+      for (const node of chain || []) if (node !== sidebar) node.setAttribute('data-htmlmemo-toc-item', '');
+      for (const node of mainNodes || []) node.setAttribute('data-htmlmemo-toc-main', '');
       if (layoutKind === 'grid' && layoutParent && initialTokens.length >= 2 && sidebarTrackIndex >= 0) layoutParent.setAttribute('data-htmlmemo-sidebar-grid', '');
       else if (layoutKind === 'flex' && sidebarItem) sidebarItem.setAttribute('data-htmlmemo-sidebar-flex', '');
       if (resizer) resizer.setAttribute('data-htmlmemo-toc-resizer-bound', '');
     }
-    sidebar.style?.setProperty?.('--htmlmemo-toc-width', width + 'px');
-    if (sidebarItem && sidebarItem !== sidebar) {
-      sidebarItem.style?.setProperty?.('--htmlmemo-toc-width', width + 'px');
-      if (strip !== prevStrip || persist) sidebarItem.toggleAttribute('data-htmlmemo-toc-item-strip', strip);
+    const px = width + 'px';
+    this.doc.documentElement.style?.setProperty?.('--htmlmemo-toc-width', px);
+    this.doc.body.style?.setProperty?.('--htmlmemo-toc-width', px);
+    if (layoutParent) layoutParent.style?.setProperty?.('--htmlmemo-toc-width', px);
+    for (const node of chain || [sidebar]) node.style?.setProperty?.('--htmlmemo-toc-width', px);
+    if (resizer) resizer.style?.setProperty?.('--htmlmemo-toc-width', px);
+    if (sidebarItem && sidebarItem !== sidebar && (strip !== prevStrip || persist)) {
+      for (const node of chain || []) if (node !== sidebar) node.toggleAttribute('data-htmlmemo-toc-item-strip', strip);
     }
     if (strip !== prevStrip || persist || sidebar.hasAttribute('data-htmlmemo-toc-strip') !== strip) {
       sidebar.toggleAttribute('data-htmlmemo-toc-strip', strip);
       sidebar.toggleAttribute('data-htmlmemo-toc-collapsed', strip);
     }
     if (layoutKind === 'grid' && layoutParent && initialTokens.length >= 2 && sidebarTrackIndex >= 0) {
-      const columns = initialTokens.map((token, idx) => idx === sidebarTrackIndex ? `${width}px` : idx === mainTrackIndex ? 'minmax(0,1fr)' : token).join(' ');
+      const columns = initialTokens.map((token, idx) => idx === sidebarTrackIndex ? px : idx === mainTrackIndex ? 'minmax(0,1fr)' : token).join(' ');
       layoutParent.style?.setProperty?.('--htmlmemo-toc-grid-columns', columns);
+    }
+    if (resizer && info.resizerFollowsRightEdge) {
+      if (!info.resizerLeftChecked && Math.abs(width - info.defaultWidth) >= 2) {
+        info.resizerLeftChecked = true;
+        const sNow = (sidebarItem || sidebar).getBoundingClientRect?.();
+        const rNow = resizer.getBoundingClientRect?.();
+        if (sNow?.width > 0 && rNow && Math.abs((rNow.left + rNow.width / 2) - sNow.right) > 6) {
+          info.syncResizerLeft = true;
+          if (!resizer.hasAttribute('data-htmlmemo-toc-resizer-bound-left')) {
+            resizer.setAttribute('data-htmlmemo-toc-resizer-bound-left', resizer.style?.getPropertyValue?.('left') || '');
+          }
+        }
+      }
+      if (info.syncResizerLeft) {
+        const baseLeft = this.tocDrag ? this.tocDrag.sidebarLeft : ((sidebarItem || sidebar).getBoundingClientRect?.().left || 0);
+        resizer.style?.setProperty?.('left', (baseLeft + width + info.resizerEdgeOffset) + 'px', 'important');
+      }
     }
     if (!strip && prevStrip && this.tocScrollTop != null) info.sidebar.scrollTop = this.tocScrollTop;
     if (persist) {
@@ -439,25 +483,31 @@ export class Reader {
     const startX = Number.isFinite(clientX) ? clientX : sidebarLeft + initialWidth;
     const offset = Math.abs(startX - (sidebarLeft + initialWidth)) <= 24 ? startX - (sidebarLeft + initialWidth) : 0;
     const captureTarget = resizer || sidebar;
-    const state = {pointerId: event.pointerId, startX, sidebarLeft, maxWidth, frameRect, initialWidth, offset, moved: false, target: captureTarget};
+    const usePointer = event.pointerId != null;
+    const state = {pointerId: event.pointerId, usePointer, startX, sidebarLeft, maxWidth, frameRect, initialWidth, offset, moved: false, target: captureTarget};
     this.tocDrag = state;
     this.doc.documentElement.setAttribute('data-htmlmemo-toc-resizing', '');
-    try { if (event.pointerId != null) captureTarget?.setPointerCapture?.(event.pointerId); } catch { /* ignore */ }
+    try { if (usePointer) captureTarget?.setPointerCapture?.(event.pointerId); } catch { /* ignore */ }
     const hostDoc = this.host?.ownerDocument, hostWin = hostDoc?.defaultView, docWin = this.doc.defaultView || this.doc;
     const targets = [docWin, hostWin && hostWin !== docWin ? hostWin : null].filter(Boolean);
     const cleanup = () => {
       this.tocDrag = null;
       this.doc?.documentElement?.removeAttribute('data-htmlmemo-toc-resizing');
-      try { if (state.pointerId != null) state.target?.releasePointerCapture?.(state.pointerId); } catch { /* ignore */ }
+      try { if (usePointer) state.target?.releasePointerCapture?.(state.pointerId); } catch { /* ignore */ }
       for (const t of targets) {
-        t.removeEventListener?.('pointermove', move, true); t.removeEventListener?.('mousemove', move, true);
-        t.removeEventListener?.('pointerup', end, true); t.removeEventListener?.('mouseup', end, true);
-        t.removeEventListener?.('pointercancel', cancel, true);
+        if (usePointer) {
+          t.removeEventListener?.('pointermove', move, true);
+          t.removeEventListener?.('pointerup', end, true);
+          t.removeEventListener?.('pointercancel', cancel, true);
+        } else {
+          t.removeEventListener?.('mousemove', move, true);
+          t.removeEventListener?.('mouseup', end, true);
+        }
       }
     };
     const move = e => {
       if (this.tocDrag !== state) return;
-      if (state.pointerId != null && e.pointerId != null && e.pointerId !== state.pointerId) return;
+      if (usePointer && e.pointerId != null && e.pointerId !== state.pointerId) return;
       if (state.moved && e.buttons === 0) { end(e); return; }
       const x = this.eventDocX(e);
       const currentX = Number.isFinite(x) ? x : state.startX;
@@ -468,7 +518,7 @@ export class Reader {
     };
     const end = e => {
       if (this.tocDrag !== state) return;
-      if (state.pointerId != null && e?.pointerId != null && e.pointerId !== state.pointerId) return;
+      if (usePointer && e?.pointerId != null && e.pointerId !== state.pointerId) return;
       cleanup();
       this.tocResizeJustEnded = true;
       setTimeout(() => { this.tocResizeJustEnded = false; }, 0);
@@ -489,7 +539,7 @@ export class Reader {
     };
     const cancel = e => {
       if (this.tocDrag !== state) return;
-      if (state.pointerId != null && e?.pointerId != null && e.pointerId !== state.pointerId) return;
+      if (usePointer && e?.pointerId != null && e.pointerId !== state.pointerId) return;
       cleanup();
       if (state.moved) {
         this.applyTocWidth(this.tocWidth, {persist: true, snapStrip: true});
@@ -497,9 +547,14 @@ export class Reader {
       }
     };
     for (const t of targets) {
-      t.addEventListener?.('pointermove', move, true); t.addEventListener?.('mousemove', move, true);
-      t.addEventListener?.('pointerup', end, true); t.addEventListener?.('mouseup', end, true);
-      t.addEventListener?.('pointercancel', cancel, true);
+      if (usePointer) {
+        t.addEventListener?.('pointermove', move, true);
+        t.addEventListener?.('pointerup', end, true);
+        t.addEventListener?.('pointercancel', cancel, true);
+      } else {
+        t.addEventListener?.('mousemove', move, true);
+        t.addEventListener?.('mouseup', end, true);
+      }
     }
     return true;
   }

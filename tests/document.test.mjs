@@ -144,3 +144,26 @@ test('document TOC sidebar right separator resizes with mouse down to 8px, remem
   const saved=serializeHTML(doc,r.metadata);
   assert.doesNotMatch(saved,/data-htmlmemo-toc-|--htmlmemo-toc-/);
 });
+test('document TOC separator stays aligned with TOC right edge for both CSS variable and fixed-left separators',()=>{
+  const doc=documentFor('<html><head><style>:root{--toc-width:220px}.toc{width:var(--toc-width)}.sep{position:fixed;left:var(--toc-width);width:6px}</style></head><body><div class="layout" style="display:grid;grid-template-columns:220px minmax(0,1fr)"><aside class="toc"><h2>목차</h2><nav><a href="#s1">1장</a></nav><div class="sep" role="separator" title="목차 폭 조절"></div></aside><main><section><h1 id="s1">본문</h1></section></main></div></body></html>');
+  const style=doc.createElement('style');style.id='htmlmemo-editor-style';doc.head.append(style);
+  const toc=doc.querySelector('.toc'),sep=doc.querySelector('[role="separator"]'),main=doc.querySelector('main');
+  let tocW=220,sepLeft=220;
+  toc.getBoundingClientRect=()=>({left:0,top:0,right:tocW,bottom:600,width:tocW,height:600});
+  sep.getBoundingClientRect=()=>({left:sepLeft,top:0,right:sepLeft+6,bottom:600,width:6,height:600});
+  const r=Object.create(Reader.prototype);
+  r.doc=doc;r.win=doc.defaultView;r.storage=()=>null;r.metadata={version:1,annotations:[],view:{scrollTop:0,scrollLeft:0,zoom:1,autoFit:true}};
+  r.frame={getBoundingClientRect:()=>({left:0,top:0,right:1200,bottom:800,width:1200,height:800})};
+  r.viewport={scrollTop:0,scrollLeft:0,clientWidth:1200};r.zoom=1;r.autoFit=true;r.nativeScroll=true;r.callbacks={};
+  r.measure=()=>{};r.renderDrawingLayer=()=>{};
+  style.textContent=r.baseEditorStyle();
+  r.setupDocumentTocResize();
+  assert.equal(r.tocResize.sidebar,toc);
+  assert.match(style.textContent,/--toc-width:var\(--htmlmemo-toc-width\)!important/);
+  tocW=360;
+  r.applyTocWidth(360,{persist:true,snapStrip:true});
+  assert.equal(main.hasAttribute('data-htmlmemo-toc-main'),true);
+  assert.equal(sep.style.getPropertyValue('left'),'360px');
+  const saved=serializeHTML(doc,r.metadata);
+  assert.doesNotMatch(saved,/data-htmlmemo-toc-|--htmlmemo-toc-|style="left:\s*360px/);
+});

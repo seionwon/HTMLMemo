@@ -752,5 +752,9 @@ ID: hist-20261014-024. tests/chrome.mjs가 macOS Codex/CodeMemo 제한 환경을
    - `@property --htmlmemo-toc-width`와 `@property --htmlmemo-toc-grid-columns`를 `inherits: false`로 등록해 CSS 변수 변경이 하위 본문 수만 개 요소로 전파되지 않게 격리하고, `html[data-htmlmemo-toc-resizing] *` 전체 선택자 대신 레이아웃·사이드바·항목 요소에만 `transition: none !important`를 적용했습니다.
    - 드래그 시작 시점에 사이드바 좌측 좌표(`sidebarLeft` / `shellLeft`), 최대 허용 폭(`maxWidth`), iframe 오프셋(`frameRect`)을 한 번만 계산해 캐시하고, 동일 캡처 체인의 중복 이벤트 리스너(창당 1개로 축소)와 드래그 중 `getBoundingClientRect()`·`clientWidth` 강제 동기 레이아웃 읽기를 완전히 제거했습니다.
    - 드래그 중 `ResizeObserver`·`MutationObserver` 개입을 일시 중지하고, 드래그 종료 시에도 전체 문서 `cloneNode(true)` 직렬화(`rememberPosition` → `SaveQueue`)나 불필요한 전체 높이 재측정을 수행하지 않도록 최적화해 마우스 이동 즉시 지연 없이 폭이 조절됩니다.
+4. **`목차` 사이드바 오른쪽 세로 구분선(`role="separator"`) 위치 어긋남 수정(2026-10-14 20:40:00 +09:00, `public/src/reader.js`, `public/src/document.js`, `public/sw.js`):**
+   - 이전 성능 최적화(`c423a87`)에서 `@property --htmlmemo-toc-width { inherits: false }` 등록과 문서 고유 CSS 변수(`--toc-width`, `--sidebar-width`, `--nav-width` 등) 갱신 제거로 인해, `left: var(--toc-width)` 등으로 위치를 잡는 세로 구분선(`role="separator"`)이 초기 위치에 멈춰 `목차` 사이드바 가운데에 남던 문제를 수정했습니다.
+   - `setupEditorTocVars`에서 `#htmlmemo-editor-style`을 문서 초기화 시 단 한 번만 구성해 `--toc-width` 등 문서 CSS 변수를 `var(--htmlmemo-toc-width) !important`로 연결하고, 드래그 중(`html[data-htmlmemo-toc-resizing]`)에는 본문(`[data-htmlmemo-toc-main] > :not([role="separator"]):not([data-htmlmemo-toc-resizer-bound])`)의 CSS 변수만 초기값으로 고정해 본문 수만 개 노드의 스타일 재계산을 막으면서도 사이드바·레이아웃·세로 구분선은 즉시 함께 이동하도록 개선했습니다.
+   - 또한 고정 픽셀(`left`)로 배치된 구분선이 사이드바 오른쪽 끝과 어긋나는 경우에도 첫 폭 변경 시 이를 감지해 `left` 좌표를 사이드바 우측 경계에 동기화하고, 문서 저장(`serializeHTML`) 시 관련 런타임 속성·스타일을 모두 제거하도록 보강했습니다(`public/sw.js` 캐시 버전 `htmlmemo-v9` 갱신).
 
-**검증:** `npm run check`(60개 파일), `npm test`(114개 단위 검사 통과), `npm run build`, `git diff --check`, `codememo-browser` 로컬 프로덕션 서버 검증을 통과했습니다.
+**검증:** `npm run check`(60개 파일), `npm test`(115개 단위 검사 통과), `npm run build`, `git diff --check`, `codememo-browser` 로컬 프로덕션 서버 검증을 통과했습니다.
