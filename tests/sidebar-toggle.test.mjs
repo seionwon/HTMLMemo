@@ -9,17 +9,18 @@ import {documentFor,installDOM} from './dom.mjs';
 installDOM();
 
 const source='<html><head><style>body{display:grid;grid-template-columns:240px 1fr}.toc{position:sticky;top:0;height:100dvh;overflow:auto;width:240px}.page{min-height:4000px}</style></head><body><aside class="toc" style="color:navy" data-htmlmemo-anchor="toc"><h2>목차</h2><a href="#chapter">첫 장</a></aside><main class="page"><h1 id="chapter">본문</h1><p>읽기와 메모</p></main></body></html>';
-function sidebarReader({layout='grid',native=true,html=source,layoutSelector='body',gridColumns='240px 860px'}={}) {
+function sidebarReader({layout='grid',native=true,html=source,layoutSelector='body',gridColumns='240px 860px',direction='ltr',rects={}}={}) {
   const doc=documentFor(html),app=documentFor('<html><body><section id="host"></section></body></html>');
   const frames=[],listeners=[],moves=[];
   const layoutRoot=doc.querySelector(layoutSelector)||doc.body;
-  const view={scrollX:0,scrollY:800,scrollTo(x,y){this.scrollX=x;this.scrollY=y;},requestAnimationFrame(fn){frames.push(fn);},addEventListener(name,fn){listeners.push([name,fn]);},getComputedStyle(node){return {display:node===layoutRoot?layout:'block',gridTemplateColumns:gridColumns,overflowX:'visible',overflowY:'visible'};}};
+  const view={scrollX:0,scrollY:800,scrollTo(x,y){this.scrollX=x;this.scrollY=y;},requestAnimationFrame(fn){frames.push(fn);},addEventListener(name,fn){listeners.push([name,fn]);},getComputedStyle(node){return {display:node===layoutRoot?layout:'block',gridTemplateColumns:gridColumns,direction,overflowX:'visible',overflowY:'visible'};}};
   Object.defineProperty(doc,'defaultView',{value:view,configurable:true});
   const host=app.querySelector('#host');host.getBoundingClientRect=()=>({left:180,top:100,width:1000,height:700});
   const frame={style:{},getBoundingClientRect:()=>({left:180,top:100,width:825,height:700})};
   doc.body.getBoundingClientRect=()=>({left:0,top:0,right:1100,bottom:4000,width:1100,height:4000});
   Object.defineProperties(doc.body,{scrollHeight:{value:4000},offsetHeight:{value:4000},offsetTop:{value:0}});
   for(const child of doc.body.children)child.getBoundingClientRect=doc.body.getBoundingClientRect;
+  for(const [selector,rect] of Object.entries(rects))doc.querySelector(selector).getBoundingClientRect=()=>rect;
   const sidebar=doc.querySelector('.toc');
   if(sidebar){sidebar.scrollTop=125;sidebar.scrollLeft=0;sidebar.getBoundingClientRect=()=>({left:0,top:0,right:sidebar.hasAttribute('data-htmlmemo-toc-collapsed')?18:240,bottom:600,width:sidebar.hasAttribute('data-htmlmemo-toc-collapsed')?18:240,height:600});}
   doc.documentElement.scrollBy=move=>{moves.push(move);view.scrollY+=move.top;};
@@ -67,7 +68,7 @@ test('the TOC folds to an 18px vertical tab and restores source layout and scrol
 
 test('a wrapped TOC shrinks its actual ancestor grid track and gives the reading pane the width',()=>{
   const nested='<html><head><style>.reader-layout{display:grid;grid-template-columns:240px minmax(0,1fr)}.toc{width:240px}.page{min-width:0}</style></head><body><div class="reader-layout"><div class="toc-slot"><div class="toc"><div>목차</div><ol><li><a href="#chapter">첫 장</a></li></ol></div></div><main class="page"><h1 id="chapter">본문</h1></main></div></body></html>';
-  const {r,doc,sidebar,layoutRoot,flush}=sidebarReader({html:nested,layoutSelector:'.reader-layout'});
+  const {r,doc,sidebar,layoutRoot,flush}=sidebarReader({html:nested,layoutSelector:'.reader-layout',rects:{'.toc-slot':{left:0,top:0,right:240,bottom:600,width:240,height:600},'.page':{left:240,top:0,right:1100,bottom:600,width:860,height:600}}});
   r.installDocumentSidebarToggle();assert.ok(r.tocToggle,'a document-owned TOC is found even when its label is a plain div');
   r.toggleDocumentSidebar();flush();
   assert.equal(sidebar.hasAttribute('data-htmlmemo-toc-collapsed'),true);
@@ -79,6 +80,15 @@ test('a wrapped TOC shrinks its actual ancestor grid track and gives the reading
   assert.equal(layoutRoot.hasAttribute('data-htmlmemo-sidebar-grid'),false);
   assert.equal(doc.querySelector('.toc-slot').hasAttribute('data-htmlmemo-sidebar-grid-item'),false);
   assert.equal(layoutRoot.style.getPropertyValue('--htmlmemo-toc-grid-columns')||'','');
+});
+
+test('a left TOC remains left when its source grid uses right-to-left column lines',()=>{
+  const rtl='<html><head><style>.reader-layout{display:grid;direction:rtl;grid-template-columns:minmax(0,1fr) 240px}.toc{direction:ltr;grid-column:2;width:240px}.page{direction:ltr;grid-column:1;min-width:0}</style></head><body><div class="reader-layout"><aside class="toc"><h2>목차</h2><a href="#chapter">첫 장</a></aside><main class="page"><h1 id="chapter">본문</h1></main></div></body></html>';
+  const {r,doc,layoutRoot,flush}=sidebarReader({html:rtl,layoutSelector:'.reader-layout',gridColumns:'860px 240px',direction:'rtl',rects:{'.toc':{left:0,top:0,right:240,bottom:600,width:240,height:600},'.page':{left:240,top:0,right:1100,bottom:600,width:860,height:600}}});
+  r.installDocumentSidebarToggle();r.toggleDocumentSidebar();flush();
+  assert.equal(layoutRoot.style.getPropertyValue('--htmlmemo-toc-grid-columns'),'minmax(0,1fr) 18px');
+  assert.equal(doc.querySelector('.toc').hasAttribute('data-htmlmemo-toc-collapsed'),true);
+  assert.equal(doc.querySelector('.page').getBoundingClientRect().left,240,'the main pane stays to the right of the left TOC');
 });
 
 test('annotation rendering cleanup does not remove the live document TOC tab',()=>{

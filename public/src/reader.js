@@ -244,28 +244,56 @@ export class Reader {
     if(values.length<2||values.some(value=>!/^\d+(?:\.\d+)?px$/i.test(value)))return [];
     return values.map(value=>Number.parseFloat(value));
   }
-  gridTrackIndex(parent,sidebar,tracks,layout) {
-    const box=parent.getBoundingClientRect(),side=sidebar.getBoundingClientRect();
-    if(!box.width||!side.width)return -1;
-    const start=box.left+(Number.parseFloat(layout.borderLeftWidth)||0)+(Number.parseFloat(layout.paddingLeft)||0);
-    const gap=Number.parseFloat(layout.columnGap||layout.gap)||0,x=side.left+side.width/2;
-    let cursor=start;
+  gridTrackIndex(parent,item,tracks,layout) {
+    const box=parent.getBoundingClientRect(),cell=item.getBoundingClientRect();
+    if(!box.width||!cell.width)return -1;
+    const left=box.left+(Number.parseFloat(layout.borderLeftWidth)||0)+(Number.parseFloat(layout.paddingLeft)||0);
+    const right=(box.right??box.left+box.width)-(Number.parseFloat(layout.borderRightWidth)||0)-(Number.parseFloat(layout.paddingRight)||0);
+    const gap=Number.parseFloat(layout.columnGap||layout.gap)||0,x=cell.left+cell.width/2;
+    const rtl=String(layout.direction||'').toLowerCase()==='rtl';
+    let cursor=rtl?right:left;
     for(let index=0;index<tracks.length;index++){
-      const end=cursor+tracks[index];
-      if(x>=cursor-1&&x<=end+1)return index;
-      cursor=end+gap;
+      const start=rtl?cursor-tracks[index]:cursor,end=rtl?cursor:cursor+tracks[index];
+      if(x>=start-1&&x<=end+1)return index;
+      cursor=rtl?start-gap:end+gap;
     }
-    return tracks.reduce((nearest,width,index)=>Math.abs(x-(start+tracks.slice(0,index).reduce((total,value)=>total+value+gap,0)+width/2))<nearest.distance?{index,distance:Math.abs(x-(start+tracks.slice(0,index).reduce((total,value)=>total+value+gap,0)+width/2))}:nearest,{index:-1,distance:Infinity}).index;
+    return -1;
+  }
+  gridItem(parent,node) {
+    for(let item=node;item&&item!==parent;item=item.parentElement)if(item.parentElement===parent)return item;
+    return null;
+  }
+  documentMainTrack(parent,sidebarItem,tracks,layout) {
+    const mainNodes=[...parent.querySelectorAll('main,[role="main"],article,#main,#content,.page,.content')];
+    const candidates=[];
+    for(const node of mainNodes){
+      const item=this.gridItem(parent,node);
+      if(!item||item===sidebarItem||sidebarItem.contains(node)||node.contains(sidebarItem))continue;
+      const index=this.gridTrackIndex(parent,item,tracks,layout);
+      if(index<0)continue;
+      const box=item.getBoundingClientRect(),main=node.matches('main,[role="main"]')?3:node.matches('article,#main,#content')?2:1;
+      candidates.push({index,score:main*1e9+Math.max(0,box.width)*Math.max(0,box.height)});
+    }
+    if(candidates.length)return candidates.sort((a,b)=>b.score-a.score)[0].index;
+    const siblings=[];
+    for(const item of parent.children){
+      if(item===sidebarItem)continue;
+      const index=this.gridTrackIndex(parent,item,tracks,layout);
+      if(index<0)continue;
+      const box=item.getBoundingClientRect();siblings.push({index,score:Math.max(0,box.width)*Math.max(0,box.height)});
+    }
+    if(siblings.length)return siblings.sort((a,b)=>b.score-a.score)[0].index;
+    return -1;
   }
   findDocumentSidebarLayout(sidebar) {
     let flexLayout=null;
     for(let item=sidebar,depth=0;item?.parentElement&&depth<10;item=item.parentElement,depth++){
       const parent=item.parentElement,layout=this.doc.defaultView.getComputedStyle(parent);
       if(/grid/.test(layout.display||'')){
-        const tracks=this.gridTracks(layout.gridTemplateColumns),index=this.gridTrackIndex(parent,sidebar,tracks,layout);
+        const tracks=this.gridTracks(layout.gridTemplateColumns),index=this.gridTrackIndex(parent,item,tracks,layout);
         if(index>=0){
-          let mainTrack=-1;
-          for(let cursor=0;cursor<tracks.length;cursor++)if(cursor!==index&&(mainTrack<0||tracks[cursor]>tracks[mainTrack]))mainTrack=cursor;
+          let mainTrack=this.documentMainTrack(parent,item,tracks,layout);
+          if(mainTrack===index)mainTrack=-1;
           const columns=tracks.map((width,cursor)=>cursor===index?'18px':cursor===mainTrack?'minmax(0,1fr)':`${width}px`).join(' ');
           return {kind:'grid',element:parent,item,columns};
         }

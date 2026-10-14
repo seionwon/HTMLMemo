@@ -17,14 +17,24 @@ test('real Chrome: independent library and document TOC toggles preserve scrolli
     chrome=await launchChrome();const page=chrome.page;
     await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
     await page.navigate(`http://127.0.0.1:${server.address().port}/`);await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
+    await page.send('Emulation.setDeviceMetricsOverride',{width:654,height:900,deviceScaleFactor:1,mobile:false});
+    const mobileLibrary=`(()=>{const nav=document.querySelector('#desk-nav').getBoundingClientRect(),main=document.querySelector('#main').getBoundingClientRect(),shell=getComputedStyle(document.querySelector('.desk-shell'));return {nav:nav.width,main:main.width,direction:shell.flexDirection};})()`;
+    const mobileOpen=await page.evaluate(mobileLibrary);assert.equal(mobileOpen.direction,'row');assert.equal(mobileOpen.nav,180);
+    await page.click('#desk-nav-toggle');await page.waitFor('document.querySelector("#desk-nav-toggle").getAttribute("aria-expanded")==="false"');
+    const mobileFolded=await page.evaluate(mobileLibrary);assert.equal(mobileFolded.nav,48);assert.ok(mobileFolded.main>mobileOpen.main,'the compact rail gives the reader the released width');
+    await page.click('#desk-nav-toggle');await page.waitFor('document.querySelector("#desk-nav-toggle").getAttribute("aria-expanded")==="true"');
+    await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
     const fixture=await readFile(join(root,'tests/fixtures/sidebar-book.html'),'utf8');
-    const geometry=`(()=>{const host=document.querySelector('.document-host:not([hidden])'),frame=host.querySelector('iframe'),doc=frame.contentDocument,toc=doc.querySelector('.toc'),toggle=doc.querySelector('[data-htmlmemo-toc-toggle]');return {scroll:frame.contentWindow.scrollY,tocWidth:toc.getBoundingClientRect().width,toggleWidth:toggle.getBoundingClientRect().width,toggleHeight:toggle.getBoundingClientRect().height,mainWidth:doc.querySelector('main').getBoundingClientRect().width,position:frame.contentWindow.getComputedStyle(toc).position,height:frame.contentWindow.getComputedStyle(toc).height,overflow:frame.contentWindow.getComputedStyle(toc).overflowY,sourceCSS:doc.querySelector('#source-layout').textContent,inline:toc.getAttribute('style'),libraryWidth:document.querySelector('#desk-nav').getBoundingClientRect().width};})()`;
-    for(const layout of ['grid','flex']){
-      const html=fixture.replace('사이드바 스크롤 검증',layout+' 사이드바 스크롤 검증').replace('display:grid;grid-template-columns:240px minmax(0,1fr)',layout==='grid'?'display:grid;grid-template-columns:240px minmax(0,1fr)':'display:flex');
+    const geometry=`(()=>{const host=document.querySelector('.document-host:not([hidden])'),frame=host.querySelector('iframe'),doc=frame.contentDocument,toc=doc.querySelector('.toc'),toggle=doc.querySelector('[data-htmlmemo-toc-toggle]'),main=doc.querySelector('main');return {scroll:frame.contentWindow.scrollY,tocWidth:toc.getBoundingClientRect().width,tocLeft:toc.getBoundingClientRect().left,toggleWidth:toggle.getBoundingClientRect().width,toggleHeight:toggle.getBoundingClientRect().height,mainWidth:main.getBoundingClientRect().width,mainLeft:main.getBoundingClientRect().left,position:frame.contentWindow.getComputedStyle(toc).position,height:frame.contentWindow.getComputedStyle(toc).height,overflow:frame.contentWindow.getComputedStyle(toc).overflowY,sourceCSS:doc.querySelector('#source-layout').textContent,inline:toc.getAttribute('style'),libraryWidth:document.querySelector('#desk-nav').getBoundingClientRect().width};})()`;
+    for(const layout of ['grid','flex','rtl-grid']){
+      const sourceLayout=layout==='flex'?'display:flex':layout==='rtl-grid'?'display:grid;direction:rtl;grid-template-columns:minmax(0,1fr) 240px':'display:grid;grid-template-columns:240px minmax(0,1fr)';
+      let html=fixture.replace('사이드바 스크롤 검증',layout+' 사이드바 스크롤 검증').replace('display:grid;grid-template-columns:240px minmax(0,1fr)',sourceLayout);
+      if(layout==='rtl-grid')html=html.replace('.toc{','.toc{direction:ltr;grid-column:2;').replace('.page{','.page{direction:ltr;grid-column:1;');
       await page.evaluate(`(()=>{const file=new File([${JSON.stringify(html)}],${JSON.stringify(layout+'.html')},{type:'text/html'}),transfer=new DataTransfer();transfer.items.add(file);const input=document.querySelector('#file-input');input.files=transfer.files;input.dispatchEvent(new Event('change',{bubbles:true}));})()`);
       const tocButton=`document.querySelector('.document-host:not([hidden]) iframe')?.contentDocument?.querySelector('[data-htmlmemo-toc-toggle]')`;
       await page.waitFor(`document.querySelector('.document-host:not([hidden]) iframe')?.contentDocument?.title===${JSON.stringify(layout+' 사이드바 스크롤 검증')} && ${tocButton}?.getAttribute('aria-expanded')==='true'`);
       const original=await page.evaluate(geometry);assert.equal(original.tocWidth,240);assert.equal(original.position,'sticky');
+      if(layout==='rtl-grid')assert.ok(original.tocLeft<original.mainLeft,'the source TOC starts on the left');
       let libraryFolded=false,tocFolded=false;
       for(const target of ['toc','#desk-nav-toggle','toc','#desk-nav-toggle']){
         const before=await page.evaluate(geometry);
@@ -37,6 +47,7 @@ test('real Chrome: independent library and document TOC toggles preserve scrolli
         if(tocFolded){assert.equal(after.toggleWidth,18);assert.ok(after.toggleHeight>=96,'the folded TOC keeps a long vertical reopen tab');}
         assert.equal(after.position,original.position);assert.equal(after.overflow,original.overflow);
         assert.equal(after.sourceCSS,original.sourceCSS);assert.equal(after.inline,original.inline);
+        if(layout==='rtl-grid')assert.ok(after.tocLeft<after.mainLeft,'folding keeps the TOC on the left');
         assert.ok(Math.abs(after.scroll-before.scroll)<2,'folding keeps the document reading position');
         if(tocFolded)assert.ok(after.mainWidth>original.mainWidth,'the folded document track releases width');
         const point=await page.evaluate(`(()=>{const f=document.querySelector('.document-host:not([hidden]) iframe').getBoundingClientRect();return {x:f.left+f.width*.75,y:f.top+80};})()`);
