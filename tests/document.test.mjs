@@ -167,3 +167,22 @@ test('document TOC separator stays aligned with TOC right edge for both CSS vari
   const saved=serializeHTML(doc,r.metadata);
   assert.doesNotMatch(saved,/data-htmlmemo-toc-|--htmlmemo-toc-|style="left:\s*360px/);
 });
+test('document top header bar is compacted to 24px without vertical padding and stripped on save',()=>{
+  const doc=documentFor('<html><head><style>:root{--book-header-height:52px}.topbar{height:var(--book-header-height);padding:10px 16px}.layout{height:calc(100vh - var(--book-header-height));display:grid;grid-template-columns:240px 1fr}</style></head><body><header class="topbar"><strong>바이브 코딩 입문 + 실전 + 개발 용어</strong><div class="controls"><button type="button">↰</button><button type="button">‹</button><span>1 / 7108</span><button type="button">›</button><button type="button">A−</button><button type="button">A+</button><select><option>시스템</option></select></div></header><div class="layout"><aside class="toc"><h2>목차</h2><a href="#s1">1장</a></aside><main><h1 id="s1">본문</h1></main></div></body></html>');
+  const style=doc.createElement('style');style.id='htmlmemo-editor-style';doc.head.append(style);
+  const topbar=doc.querySelector('.topbar');
+  topbar.getBoundingClientRect=()=>({left:0,top:0,right:1200,bottom:52,width:1200,height:52});
+  const r=Object.create(Reader.prototype);
+  r.doc=doc;r.win=doc.defaultView;r.storage=()=>null;r.metadata={version:1,annotations:[],view:{scrollTop:0,scrollLeft:0,zoom:1,autoFit:true}};
+  r.frame={getBoundingClientRect:()=>({left:0,top:0,right:1200,bottom:800,width:1200,height:800})};
+  r.viewport={scrollTop:0,scrollLeft:0,clientWidth:1200};r.zoom=1;r.autoFit=true;r.nativeScroll=true;r.callbacks={};
+  r.measure=()=>{};r.renderDrawingLayer=()=>{};
+  style.textContent=r.baseEditorStyle();
+  r.setupDocumentTocResize();
+  assert.equal(topbar.getAttribute('data-htmlmemo-doc-topbar'),'');
+  assert.equal(doc.documentElement.getAttribute('data-htmlmemo-topbar-active'),'');
+  assert.match(style.textContent,/\[data-htmlmemo-doc-topbar\],\[data-htmlmemo-doc-topbar-item\]\{height:24px!important;min-height:24px!important;max-height:24px!important;padding-top:0!important;padding-bottom:0!important/);
+  assert.match(style.textContent,/--book-header-height:24px!important/);
+  const saved=serializeHTML(doc,r.metadata);
+  assert.doesNotMatch(saved,/data-htmlmemo-topbar-|data-htmlmemo-doc-topbar|--htmlmemo-topbar-/);
+});

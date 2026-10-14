@@ -59,15 +59,18 @@ export class Reader {
     } else this.frame.srcdoc = parsed.html;
   }
   baseEditorStyle() {
-    return `${this.nativeScroll ? '' : 'html{overflow:hidden!important;height:auto!important;min-height:0!important;scroll-behavior:auto!important}body{touch-action:pan-x pan-y;height:auto!important;min-height:0!important}'}html[data-htmlmemo-drawing] *{cursor:crosshair!important;user-select:none!important;touch-action:none!important}html[data-htmlmemo-toc-resizing],html[data-htmlmemo-toc-resizing] body{cursor:col-resize!important;user-select:none!important;-webkit-user-select:none!important}[data-htmlmemo-sidebar-grid]{grid-template-columns:var(--htmlmemo-toc-grid-columns)!important;transition:none!important}[data-htmlmemo-toc-sidebar],[data-htmlmemo-toc-item],[data-htmlmemo-sidebar-flex]{width:var(--htmlmemo-toc-width)!important;min-width:var(--htmlmemo-toc-width)!important;max-width:var(--htmlmemo-toc-width)!important;flex:0 0 var(--htmlmemo-toc-width)!important;box-sizing:border-box!important;transition:none!important}[data-htmlmemo-toc-sidebar]{overflow-x:hidden!important}[data-htmlmemo-toc-item-strip]{width:8px!important;min-width:8px!important;max-width:8px!important;flex:0 0 8px!important;padding-left:0!important;padding-right:0!important;overflow:hidden!important;box-sizing:border-box!important}[data-htmlmemo-toc-strip]{width:8px!important;min-width:8px!important;max-width:8px!important;flex:0 0 8px!important;padding-left:0!important;padding-right:0!important;overflow:hidden!important;box-sizing:border-box!important;cursor:col-resize!important;user-select:none!important}[data-htmlmemo-toc-strip]>:not([data-htmlmemo-toc-resizer]):not([data-htmlmemo-toc-resizer-bound]){opacity:0!important;visibility:hidden!important;pointer-events:none!important}[data-htmlmemo-toc-resizer],[data-htmlmemo-toc-resizer-bound]{cursor:col-resize!important;touch-action:none!important;user-select:none!important;-webkit-user-select:none!important;transition:none!important}`;
+    return `${this.nativeScroll ? '' : 'html{overflow:hidden!important;height:auto!important;min-height:0!important;scroll-behavior:auto!important}body{touch-action:pan-x pan-y;height:auto!important;min-height:0!important}'}html[data-htmlmemo-drawing] *{cursor:crosshair!important;user-select:none!important;touch-action:none!important}html[data-htmlmemo-toc-resizing],html[data-htmlmemo-toc-resizing] body{cursor:col-resize!important;user-select:none!important;-webkit-user-select:none!important}[data-htmlmemo-sidebar-grid]{grid-template-columns:var(--htmlmemo-toc-grid-columns)!important;transition:none!important}[data-htmlmemo-toc-sidebar],[data-htmlmemo-toc-item],[data-htmlmemo-sidebar-flex]{width:var(--htmlmemo-toc-width)!important;min-width:var(--htmlmemo-toc-width)!important;max-width:var(--htmlmemo-toc-width)!important;flex:0 0 var(--htmlmemo-toc-width)!important;box-sizing:border-box!important;transition:none!important}[data-htmlmemo-toc-sidebar]{overflow-x:hidden!important}[data-htmlmemo-toc-item-strip]{width:8px!important;min-width:8px!important;max-width:8px!important;flex:0 0 8px!important;padding-left:0!important;padding-right:0!important;overflow:hidden!important;box-sizing:border-box!important}[data-htmlmemo-toc-strip]{width:8px!important;min-width:8px!important;max-width:8px!important;flex:0 0 8px!important;padding-left:0!important;padding-right:0!important;overflow:hidden!important;box-sizing:border-box!important;cursor:col-resize!important;user-select:none!important}[data-htmlmemo-toc-strip]>:not([data-htmlmemo-toc-resizer]):not([data-htmlmemo-toc-resizer-bound]){opacity:0!important;visibility:hidden!important;pointer-events:none!important}[data-htmlmemo-toc-resizer],[data-htmlmemo-toc-resizer-bound]{cursor:col-resize!important;touch-action:none!important;user-select:none!important;-webkit-user-select:none!important;transition:none!important}[data-htmlmemo-topbar-grid]{grid-template-rows:var(--htmlmemo-topbar-grid-rows)!important}[data-htmlmemo-topbar-pad]{padding-top:24px!important}[data-htmlmemo-topbar-offset]{top:24px!important}[data-htmlmemo-doc-topbar],[data-htmlmemo-doc-topbar-item]{height:24px!important;min-height:24px!important;max-height:24px!important;padding-top:0!important;padding-bottom:0!important;margin-top:0!important;margin-bottom:0!important;box-sizing:border-box!important;align-items:center!important}[data-htmlmemo-doc-topbar] *{padding-top:0!important;padding-bottom:0!important;margin-top:0!important;margin-bottom:0!important;min-height:0!important;box-sizing:border-box!important}[data-htmlmemo-doc-topbar]>div,[data-htmlmemo-doc-topbar]>nav{height:100%!important;max-height:24px!important;align-items:center!important}[data-htmlmemo-doc-topbar] h1,[data-htmlmemo-doc-topbar] h2,[data-htmlmemo-doc-topbar] h3,[data-htmlmemo-doc-topbar] strong,[data-htmlmemo-doc-topbar] [class*="title"]{font-size:13px!important;line-height:22px!important;white-space:nowrap!important}[data-htmlmemo-doc-topbar] button,[data-htmlmemo-doc-topbar] [role="button"],[data-htmlmemo-doc-topbar] input{height:20px!important;min-height:20px!important;max-height:20px!important;padding-top:0!important;padding-bottom:0!important;font-size:12px!important;line-height:18px!important;border-radius:4px!important;display:inline-flex!important;align-items:center!important;justify-content:center!important}[data-htmlmemo-doc-topbar] select{height:20px!important;min-height:20px!important;max-height:20px!important;padding-top:0!important;padding-bottom:0!important;font-size:12px!important;line-height:18px!important;border-radius:4px!important}[data-htmlmemo-doc-topbar] svg{width:14px!important;height:14px!important}`;
   }
-  setupEditorTocVars(customVars, defaultWidth = TOC_DEFAULT) {
+  setupEditorTocVars(customVars = this.tocCustomVars, defaultWidth = this.tocDefaultWidth || TOC_DEFAULT) {
     const editorStyle = this.doc?.getElementById('htmlmemo-editor-style');
     if (!editorStyle) return;
-    const names = customVars?.length ? customVars : ['--toc-width', '--sidebar-width', '--nav-width'];
+    if (customVars) this.tocCustomVars = customVars;
+    const names = this.tocCustomVars?.length ? this.tocCustomVars : ['--toc-width', '--sidebar-width', '--nav-width'];
     const mapVars = names.map(name => `${name}:var(--htmlmemo-toc-width)!important`).join(';');
     const freezeVars = [...names, '--htmlmemo-toc-width'].map(name => `${name}:${defaultWidth}px!important`).join(';');
-    editorStyle.textContent = this.baseEditorStyle() + `html[data-htmlmemo-toc-active],html[data-htmlmemo-toc-active] body,[data-htmlmemo-sidebar-grid],[data-htmlmemo-toc-sidebar],[data-htmlmemo-toc-item],[data-htmlmemo-toc-resizer-bound]{${mapVars}}html[data-htmlmemo-toc-resizing] [data-htmlmemo-toc-main]>:not([role="separator"]):not([data-htmlmemo-toc-resizer-bound]){${freezeVars}}`;
+    const topNames = this.topbarCustomVars?.length ? this.topbarCustomVars : ['--header-height', '--topbar-height', '--header-h', '--topbar-h', '--navbar-height', '--toolbar-height'];
+    const topVars = topNames.map(name => `${name}:24px!important`).join(';');
+    editorStyle.textContent = this.baseEditorStyle() + `html[data-htmlmemo-toc-active],html[data-htmlmemo-toc-active] body,[data-htmlmemo-sidebar-grid],[data-htmlmemo-toc-sidebar],[data-htmlmemo-toc-item],[data-htmlmemo-toc-resizer-bound]{${mapVars}}html[data-htmlmemo-toc-resizing] [data-htmlmemo-toc-main]>:not([role="separator"]):not([data-htmlmemo-toc-resizer-bound]){${freezeVars}}html[data-htmlmemo-topbar-active],html[data-htmlmemo-topbar-active] body,[data-htmlmemo-doc-topbar],[data-htmlmemo-doc-topbar-item]{${topVars}}`;
   }
   bind() {
     const editorStyle = this.doc.createElement('style'); editorStyle.id = 'htmlmemo-editor-style';
@@ -318,9 +321,100 @@ export class Reader {
     const customVars = this.detectTocCSSVariables();
     return {sidebar, resizer, layoutParent, layoutKind, sidebarItem, resizerItem, mainItem, chain, mainNodes, resizerFollowsRightEdge, resizerEdgeOffset, resizerLeftChecked: false, syncResizerLeft: false, initialTokens, sidebarTrackIndex, mainTrackIndex, defaultWidth, customVars};
   }
+  detectTopbarCSSVariables() {
+    const vars = new Set(['--header-height', '--topbar-height', '--header-h', '--topbar-h', '--navbar-height', '--toolbar-height', '--top-height', '--bar-height']);
+    for (const style of this.doc?.querySelectorAll?.('style') || []) {
+      if (style.id?.startsWith('htmlmemo-')) continue;
+      const css = style.textContent || '';
+      for (const match of css.matchAll(/--([a-z0-9_-]*(?:header|topbar|top-bar|navbar|nav-bar|appbar|toolbar|banner)[a-z0-9_-]*(?:height|size|h|offset)[a-z0-9_-]*)/gi)) vars.add('--' + match[1]);
+      for (const match of css.matchAll(/calc\(\s*100(?:d|s|l)?vh\s*-\s*var\(\s*(--[a-z0-9_-]+)/gi)) {
+        if (!/(?:width|left|right|toc-w|sidebar-w|htmlmemo)/i.test(match[1])) vars.add(match[1]);
+      }
+      for (const match of css.matchAll(/\btop\s*:\s*var\(\s*(--[a-z0-9_-]+)/gi)) {
+        if (!/(?:width|left|right|toc-w|sidebar-w|htmlmemo)/i.test(match[1])) vars.add(match[1]);
+      }
+    }
+    return [...vars];
+  }
+  findDocumentTopbar() {
+    if (!this.doc?.body) return null;
+    const sidebar = this.tocResize?.sidebar || null;
+    const sidebarItem = this.tocResize?.sidebarItem || sidebar;
+    const layoutParent = this.tocResize?.layoutParent || null;
+    const isMainOrToc = node => {
+      if (!node || node.nodeType !== 1) return true;
+      if (node.closest?.('main,article,[role="main"],#' + LAYER_ID + ',[data-htmlmemo-ui]')) return true;
+      if (node.querySelector?.('main,article,[role="main"]')) return true;
+      if (sidebar && (node === sidebar || node === sidebarItem || sidebar.contains(node) || node.contains(sidebar))) return true;
+      return false;
+    };
+    const explicitTopbar = '.topbar,#topbar,.top-bar,#top-bar,.book-header,#book-header,.reader-header,#reader-header,.doc-header,#doc-header,.app-header,#app-header,.navbar,#navbar,.nav-bar,#nav-bar,.toolbar,#toolbar,[role="toolbar"]';
+    const hasControls = node => !!node?.querySelector?.('button,select,[role="button"],input[type="range"],input[type="search"]');
+    const isBarGeometry = node => {
+      const rect = node.getBoundingClientRect?.();
+      if (!rect || (rect.width === 0 && rect.height === 0)) return true;
+      return rect.height > 0 && rect.height <= 110 && rect.top <= 48;
+    };
+    const candidates = [
+      ...this.doc.querySelectorAll(explicitTopbar + ',header,[role="banner"],.header,#header'),
+      layoutParent?.previousElementSibling,
+      sidebarItem?.previousElementSibling,
+      this.doc.body.firstElementChild,
+      this.doc.body.firstElementChild?.firstElementChild,
+    ].filter(Boolean);
+    const seen = new Set();
+    for (const node of candidates) {
+      if (seen.has(node)) continue;
+      seen.add(node);
+      if (isMainOrToc(node) || !isBarGeometry(node)) continue;
+      if (node.matches?.(explicitTopbar) || hasControls(node)) return node;
+      if (sidebar && node.matches?.('header,[role="banner"],.header,#header') && !node.querySelector?.('p')) return node;
+    }
+    return null;
+  }
+  setupDocumentTopbar() {
+    if (this.disposed || !this.doc?.body) return null;
+    const topbar = this.findDocumentTopbar();
+    if (!topbar) { this.topbarNode = null; return null; }
+    this.topbarNode = topbar;
+    const cs = el => this.doc.defaultView?.getComputedStyle?.(el);
+    const initialHeight = Math.round(topbar.getBoundingClientRect?.().height || Number.parseFloat(cs(topbar)?.height) || 0);
+    this.topbarCustomVars = this.detectTopbarCSSVariables();
+    this.doc.documentElement.setAttribute('data-htmlmemo-topbar-active', '');
+    topbar.setAttribute('data-htmlmemo-doc-topbar', '');
+    this.viewport?.style?.setProperty?.('padding-top', '0px');
+    const topbarItem = topbar.parentElement && topbar.parentElement !== this.doc.body && topbar.parentElement.children?.length === 1 ? topbar.parentElement : topbar;
+    if (topbarItem !== topbar) topbarItem.setAttribute('data-htmlmemo-doc-topbar-item', '');
+    const rowParent = topbarItem.parentElement;
+    if (rowParent && rowParent.children?.length >= 2 && rowParent.firstElementChild === topbarItem) {
+      const parentStyle = cs(rowParent);
+      if (/grid/.test(parentStyle?.display || '')) {
+        const rowTokens = this.gridTrackTokens(parentStyle.gridTemplateRows);
+        if (rowTokens.length === 2) {
+          rowParent.setAttribute('data-htmlmemo-topbar-grid', '');
+          rowParent.style?.setProperty?.('--htmlmemo-topbar-grid-rows', '24px minmax(0,1fr)');
+        }
+      }
+    }
+    this.setupEditorTocVars();
+    if (initialHeight > 28) {
+      const nearInitial = value => Math.abs((Number.parseFloat(value) || 0) - initialHeight) <= 4;
+      for (const padTarget of [this.doc.body, this.tocResize?.layoutParent, rowParent].filter(Boolean)) {
+        if (nearInitial(cs(padTarget)?.paddingTop)) padTarget.setAttribute('data-htmlmemo-topbar-pad', '');
+      }
+      for (const offsetTarget of [this.tocResize?.layoutParent, this.tocResize?.sidebarItem, this.tocResize?.sidebar, this.tocResize?.resizer].filter(Boolean)) {
+        const st = cs(offsetTarget);
+        if (/^(?:fixed|sticky|absolute)$/i.test(st?.position || '') && nearInitial(st?.top)) offsetTarget.setAttribute('data-htmlmemo-topbar-offset', '');
+      }
+    }
+    return topbar;
+  }
   ensureDocumentTocResize() {
     if (this.disposed || !this.doc?.body) return null;
-    if (this.tocResize?.sidebar?.isConnected && (!this.tocResize.resizer || this.tocResize.resizer.isConnected)) return this.tocResize;
+    if (this.tocResize?.sidebar?.isConnected && (!this.tocResize.resizer || this.tocResize.resizer.isConnected)) {
+      if (!this.topbarNode?.isConnected) this.setupDocumentTopbar();
+      return this.tocResize;
+    }
     if (this.tocChecked && !this.tocResize) return null;
     return this.setupDocumentTocResize();
   }
@@ -329,7 +423,7 @@ export class Reader {
     this.tocChecked = true;
     this.tocApplied = false;
     const parts = this.findDocumentTocParts();
-    if (!parts) { this.tocResize = null; return null; }
+    if (!parts) { this.tocResize = null; this.setupDocumentTopbar(); return null; }
     const info = this.analyzeTocLayout(parts.sidebar, parts.resizer);
     this.tocResize = info;
     this.tocDefaultWidth = info.defaultWidth;
@@ -352,6 +446,7 @@ export class Reader {
       this.tocStrip = false;
       if (info.resizer) info.resizer.setAttribute('aria-valuenow', String(this.tocWidth));
     }
+    this.setupDocumentTopbar();
     return info;
   }
   applyTocWidth(value, {persist = false, snapStrip = true} = {}) {

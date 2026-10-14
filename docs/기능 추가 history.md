@@ -772,4 +772,20 @@ ID: hist-20261014-024. tests/chrome.mjs가 macOS Codex/CodeMemo 제한 환경을
    - 둘째 줄(`.addressbar`)의 높이를 기존 `55px`에서 `24px`로 줄이고 상하 패딩·마진(`padding-block: 0; margin-block: 0`)을 완전히 없앴습니다. 탐색 버튼(`#back`, `#forward`, `#reload`), 주소·파일 표시창(`#address-form`, `#address`, `#local-label`), 로컬 HTML 파일 열기(`#import-button`), `HTML 내보내기`(`#save-page`), 추가 메뉴(`#app-menu-button`) 등 모든 요소를 그대로 유지하면서 컨트롤 높이를 `24px`에 맞춰 상하 빈 공간이 전혀 남지 않도록 했습니다.
    - 이에 따라 상단 헤더(`header.chrome`) 전체 높이가 기존 약 `100px`(`44px + 55px + 1px`)에서 `47px`(`22px + 24px + 1px`)로 절반 이하로 줄어들어 본문 읽기 영역이 더 넓게 확보됩니다(`public/sw.js` 캐시 버전 `htmlmemo-v10` 갱신).
 
-**검증:** `npm run check`(60개 파일), `npm test`(115개 단위 검사 통과), `npm run build`, `git diff --check` 통과 및 `codememo-browser` 스크린샷으로 상단 두 줄의 상하 여백이 제거되고 모든 탭·주소창·버튼이 정상 표시되는 것을 확인했습니다.
+**검증:** `npm run check`(60개 파일), `npm test`(115개 단위 검사 통과), `npm run build`, `git diff --check` 통과 및 `codememo-browser` 스크린샷으로 상단 두 줄의 상하 여백이 제거되고 모든 탭·주소창·버튼이 정상 표시되는 것을 확인했습니다. [GitHub Actions 38559894983](https://github.com/seionwon/HTMLMemo/actions/runs/38559894983) 배포를 완료했습니다.
+
+<a id="hist-20261014-028"></a>
+### 2026-10-14 21:32:00 +09:00 — 열린 HTML 문서 자체 상단 헤더 줄(`[data-htmlmemo-doc-topbar]`) 상하 여백 제거 및 세로 높이 최소화
+
+| ID | change-kind | status |
+|---|---|---|
+| hist-20261014-028 | 열린 문서 내부 상단 헤더·도구 줄(`[data-htmlmemo-doc-topbar]`) 상하 여백 제거·세로 높이 최소화(`24px`) | 구현·단위 검사·빌드·`codememo-browser` 검증·Pages 게시 진행 |
+
+**목적과 변경 내용:**
+1. **열린 HTML 문서 자체 상단 헤더 줄 상하 여백 제거 및 세로 높이 최소화(`public/src/reader.js`, `public/src/document.js`, `public/sw.js`):**
+   - 불러온 HTML 문서(전자책·문서 뷰어 등) 최상단의 헤더·도구 줄(`header`, `.topbar`, `.book-header`, `.reader-header`, `[role="banner"]` 또는 본문·목차 레이아웃 위쪽에서 제목과 페이지 이동 `↰`/`‹`/`›`, 페이지 번호 `1 / 7108`, 음성 읽기 버튼, 글자 크기 `A−`/`A+`, 테마 선택 `<select>` 등을 담고 있는 상단 바)을 감지해 `data-htmlmemo-doc-topbar`로 표시하고 세로 높이를 `24px`(`min-height: 24px; max-height: 24px`)로 줄였습니다.
+   - 상단 바 내부의 상하 패딩·마진(`padding-top: 0; padding-bottom: 0; margin-top: 0; margin-bottom: 0`)을 완전히 제거하고, 제목(`font-size: 13px; line-height: 22px`)과 내부 버튼·입력창·`<select>`(`height: 20px; font-size: 12px; border-radius: 4px`) 및 아이콘(`14px`)이 같은 내용을 그대로 표시하면서 한 줄 안에 촘촘하게 정렬되도록 구성했습니다.
+   - 문서가 상단 바 높이를 CSS 변수(`--header-height`, `--topbar-height`, `calc(100vh - var(--...))` 등), 2행 CSS Grid(`grid-template-rows`), 혹은 고정 `padding-top`/`top` 오프셋으로 참조하는 경우에도 이를 `24px`에 맞춰 동기화해 상단 바와 아래쪽 `목차`·본문 사이에 빈 여백이 생기지 않도록 했습니다.
+   - 모든 런타임 속성(`data-htmlmemo-topbar-active`, `data-htmlmemo-doc-topbar`, `data-htmlmemo-doc-topbar-item`, `data-htmlmemo-topbar-grid`, `data-htmlmemo-topbar-pad`, `data-htmlmemo-topbar-offset`)과 스타일은 `serializeHTML` 저장 및 재열기 시 완전히 제거되어 원본 HTML 파일을 변경하지 않습니다(`public/sw.js` 캐시 버전 `htmlmemo-v11` 갱신).
+
+**검증:** `npm run check`(60개 파일), `npm test`(116개 단위 검사 통과), `npm run build`, `git diff --check`, `codememo-browser` 검증을 통과했습니다.
