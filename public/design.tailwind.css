@@ -42,7 +42,7 @@ body[data-codememo-design]{margin:0;font-family:var(--app-font);background:var(-
 .brand-icon{background:none;width:32px;height:32px}.brand-icon img{width:100%;height:100%}
 .desk-shell{display:flex;flex:1;min-height:0}.desk-nav{width:180px;flex-shrink:0;border-right:1px solid var(--line);background:var(--surface);padding:24px 16px;display:flex;flex-direction:column;gap:10px}.desk-nav strong{margin:8px 8px 22px}.desk-nav button{text-align:left;padding:12px;border-radius:10px;font-size:12px}.desk-nav button:hover,.desk-nav button[aria-current=page]{background:var(--green-light);color:var(--green)}
 #main{min-width:0;flex:1}.chrome{background:var(--surface)}.library-inner{max-width:1120px}.hero{display:block;min-height:0;padding:44px 0 32px}.hero-art{display:none}.hero h1{font-size:40px}.hero-description{max-width:540px}.eyebrow{color:var(--green)}.document-card,.execution-cards article,.empty-library{border-radius:18px}.card-preview{background:var(--surface-muted)}.empty-library{background:var(--surface);border:1px solid var(--line);margin:20px 0}.library-heading{padding-top:24px}
-@media(max-width:767px){.desk-shell{flex-direction:row}.desk-nav{width:180px;min-width:180px;flex-direction:column;flex-wrap:nowrap;padding:24px 16px;gap:10px;border-right:1px solid var(--line);border-bottom:0}.desk-nav strong{display:block}.desk-nav button{padding:12px;font-size:12px}.hero{padding:28px 0}.hero h1{font-size:35px}}
+@media(max-width:767px){.desk-shell{flex-direction:column}.desk-nav{width:100%;flex-direction:row;flex-wrap:wrap;padding:8px 12px;gap:4px;border-right:0;border-bottom:1px solid var(--line)}.desk-nav strong{display:none}.desk-nav button{padding:9px;font-size:11px}.hero{padding:28px 0}.hero h1{font-size:35px}}
 
 /* Keep the brand, tabs and app controls on one row, including narrow/zoomed screens. */
 .chrome-topline{display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"brand tabs actions";align-items:center;gap:12px;padding:0 18px;min-width:0}
@@ -105,14 +105,3 @@ body[data-codememo-design]{margin:0;font-family:var(--app-font);background:var(-
 #tool-popover.selection { display:flex;gap:3px;flex-wrap:wrap;width:310px;max-width:calc(100vw - 20px);padding:6px; }
 #tool-popover.selection[hidden] { display:none; }
 #tool-popover.selection button { font-size:11px;padding:4px 9px; }
-
-/* The library control leaves the reader's height and scroll owners unchanged. */
-@theme {--spacing-sidebar-rail:48px;--spacing-sidebar-toggle:32px;}
-.desk-nav-heading{display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:12px}
-.desk-nav .desk-nav-heading strong{margin:0;font-size:12px}
-.desk-nav #desk-nav-toggle{width:var(--spacing-sidebar-toggle);height:var(--spacing-sidebar-toggle);padding:0;flex:none;border:1px solid var(--line);border-radius:6px;background:var(--surface);font-size:20px}
-#desk-nav-content{display:flex;flex-direction:column;gap:10px}
-.desk-nav.is-collapsed{width:var(--spacing-sidebar-rail);padding-inline:8px}
-.desk-nav.is-collapsed .desk-nav-heading strong{display:none}
-#desk-nav-toggle:focus-visible{outline:2px solid var(--green);outline-offset:2px}
-@media(max-width:767px){.desk-nav-heading{margin-bottom:12px}.desk-nav #desk-nav-content{flex:initial;flex-direction:column;flex-wrap:nowrap;gap:10px}.desk-nav.is-collapsed{width:var(--spacing-sidebar-rail);min-width:var(--spacing-sidebar-rail);padding:24px 8px}}

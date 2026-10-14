@@ -122,7 +122,7 @@ function activate(id) {
   if(readerFocused && id!==activeId)void leaveReaderFocus();
   closePopover(); closeSidebar(); activeId=id; $('#library').hidden=id!=='library';$('#execution').hidden=id!=='execution';$('#workspace').hidden=id==='library'||id==='execution';
   tabs.forEach(tab=>tab.host.hidden=tab.id!==id);renderTabs(); updateChrome();
-  if(reader()){renderToolbar();requestAnimationFrame(()=>reader()?.positionDocumentSidebarToggle?.());}else $('#toolbar').hidden=true;
+  if(reader())renderToolbar();else $('#toolbar').hidden=true;
   if(id==='library')renderLibrary();
   if(id==='execution'){$('#status-left').textContent='앱 설치 · URL 공유 · 모든 데이터는 이 기기에 저장';document.title='앱 설치 · URL 공유 · HTMLMemo';}
 }
@@ -484,24 +484,6 @@ async function copyAppURL(){
     $('#share-status').textContent='자동 복사를 사용할 수 없습니다. 위 주소를 선택해 직접 복사해 보내주세요.';
   }finally{sharingApp=false;$('#share-app').disabled=false;updateChrome();if(activeId==='execution')$('#status-left').textContent='앱 설치 · URL 공유 · 모든 데이터는 이 기기에 저장';}
 }
-function toggleLibrarySidebar() {
-  const r=reader();
-  const position=r?.doc?{top:r.scrollTop/r.zoom,left:r.scrollLeft/r.zoom}:null;
-  const collapsed=$('#desk-nav').classList.toggle('is-collapsed');
-  const button=$('#desk-nav-toggle'),label=collapsed?'서재 사이드바 펼치기':'서재 사이드바 접기';
-  $('#desk-nav-content').hidden=collapsed;
-  button.innerHTML=icon(collapsed?'forward':'back',16);
-  button.setAttribute('aria-expanded',String(!collapsed));button.setAttribute('aria-label',label);button.title=label;
-  requestAnimationFrame(()=>{
-    if(position&&!r.disposed){
-      if(r.autoFit)r.zoom=r.fitZoom();
-      r.measure();r.applyZoom();
-      r.scrollTop=position.top*r.zoom;r.scrollLeft=position.left*r.zoom;
-      r.positionDocumentSidebarToggle?.();r.callbacks.onView?.();
-    }
-    applyToolbarPosition();
-  });
-}
 function bindUI() {
   document.addEventListener('fullscreenchange',()=>{if(document.fullscreenElement===$('#app') && readerFocused)nativeReaderFullscreen=true;else if(nativeReaderFullscreen){nativeReaderFullscreen=false;setReaderFocus(false);}});
   [['#library-tab','library'],['#new-tab','plus'],['#back','back'],['#forward','forward'],['#reload','reload'],['#import-button','folder'],['#save-page','save'],['#app-menu-button','more'],['#settings-button','settings'],['#library-search-icon','search'],['#empty-icon','file']].forEach(([id,name])=>setButton(id,name));
@@ -509,7 +491,6 @@ function bindUI() {
   $('#desk-execution').onclick=()=>activate('execution');
   $('#desk-browse').onclick=()=>{activate('library');$('#address').focus();};
   $('#desk-import').onclick=safely(importFiles);
-  setButton('#desk-nav-toggle','back');$('#desk-nav-toggle').onclick=toggleLibrarySidebar;
   $('#home-button').onclick=e=>{e.preventDefault();activate('library');};$('#library-tab').onclick=()=>activate('library');$('#new-tab').onclick=()=>{activate('library');$('#address').focus();};$('#browse-start').onclick=()=>$('#address').focus();
   $('#execution-tab').onclick=()=>activate('execution');$('#execution-import').onclick=safely(importFiles);$('#execution-chrome').onclick=connectionDialog;$('#execution-settings').onclick=settingsDialog;
   $('#share-url').value=PUBLIC_APP_URL;$('#shared-app-link').href=PUBLIC_APP_URL;

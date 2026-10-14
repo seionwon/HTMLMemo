@@ -8,6 +8,12 @@ export function cleanAnnotations(doc) {
   doc.getElementById(LAYER_ID)?.remove();
   doc.getElementById(DATA_ID)?.remove();
   doc.getElementById('htmlmemo-annotation-style')?.remove();
+  // Older HTMLMemo builds temporarily added a control and a collapsed-state
+  // attribute to the document's own table of contents.  Those editor-only
+  // artifacts must never hide the source document's sidebar after reopening.
+  doc.getElementById('htmlmemo-toc-toggle-style')?.remove();
+  doc.querySelectorAll('[data-htmlmemo-toc-toggle]').forEach(element => element.remove());
+  doc.querySelectorAll('[data-htmlmemo-toc-collapsed]').forEach(element => element.removeAttribute('data-htmlmemo-toc-collapsed'));
   let unwrapped = false;
   for (const selector of ['[data-htmlmemo-mark]', '[data-htmlmemo-search]']) {
     for (const mark of [...doc.querySelectorAll(selector)].reverse()) { mark.replaceWith(...mark.childNodes); unwrapped = true; }
@@ -15,21 +21,6 @@ export function cleanAnnotations(doc) {
   // Normalization walks the entire tree. It is needed only after unwrapping
   // marks, not when opening an unannotated book containing millions of nodes.
   if (unwrapped) doc.body?.normalize();
-}
-function clearReaderTOCArtifacts(root) {
-  // `cleanAnnotations()` also runs while a document is being read. Keep the
-  // live TOC tab intact there; remove it only when opening an old saved file
-  // or producing a standalone save.
-  root.querySelector?.('#htmlmemo-toc-toggle-style')?.remove();
-  root.querySelector?.('#htmlmemo-sidebar-style')?.remove();
-  for(const element of root.querySelectorAll?.('[data-htmlmemo-toc-toggle]')||[])element.remove();
-  for(const element of root.querySelectorAll?.('[data-htmlmemo-toc-collapsed],[data-htmlmemo-sidebar-folded],[data-htmlmemo-sidebar-grid],[data-htmlmemo-sidebar-grid-item],[data-htmlmemo-sidebar-flex],[style*="--htmlmemo-toc-grid-columns"]')||[]){
-    element.removeAttribute('data-htmlmemo-toc-collapsed');element.removeAttribute('data-htmlmemo-sidebar-folded');element.removeAttribute('data-htmlmemo-sidebar-grid');element.removeAttribute('data-htmlmemo-sidebar-grid-item');element.removeAttribute('data-htmlmemo-sidebar-flex');
-    if(/--htmlmemo-toc-grid-columns\s*:/i.test(element.getAttribute('style')||'')){
-      element.style?.removeProperty('--htmlmemo-toc-grid-columns');
-      if(!element.getAttribute('style')?.trim())element.removeAttribute('style');
-    }
-  }
 }
 function* sanitizeTree(root, source, depth = 0, allowScripts = false) {
   for (const element of root.querySelectorAll('*')) {
@@ -91,7 +82,6 @@ function* prepareHTML(html, defaults, {includeMetadata = false, document: loaded
   let source = embedded.source || defaults.source || '';
   try { const url=new URL(source); source=['http:','https:'].includes(url.protocol)&&!url.username&&!url.password?url.href:''; } catch { source=''; }
   allowScripts = (allowScripts ?? defaults.execution?.allowScripts ?? embedded.execution?.allowScripts ?? false) === true;
-  clearReaderTOCArtifacts(doc);
   cleanAnnotations(doc);
   yield* sanitizeTree(doc, source,0,allowScripts);
   for(const meta of doc.head.querySelectorAll('meta[charset],meta[http-equiv]'))if(meta.hasAttribute('charset')||/^content-type$/i.test(meta.getAttribute('http-equiv')))meta.remove();
@@ -137,9 +127,11 @@ export function serializeHTML(doc, metadata) {
   clone.querySelector('#' + DATA_ID)?.remove();
   for (const mark of [...clone.querySelectorAll('[data-htmlmemo-search]')].reverse()) mark.replaceWith(...mark.childNodes);
   clone.querySelectorAll('[data-htmlmemo-preview], [data-htmlmemo-selected]').forEach(element => element.remove());
-  // The runtime TOC control is never carried into a saved HTML file; a saved
-  // document always reopens with its original TOC fully expanded.
-  clearReaderTOCArtifacts(clone);
+  // A short-lived reader build wrote its TOC collapse control into the source
+  // document. Never carry those controls or their hidden state into a saved
+  // HTML file; the document's own TOC remains entirely under its own CSS.
+  clone.querySelectorAll('#htmlmemo-toc-toggle-style, [data-htmlmemo-toc-toggle]').forEach(element => element.remove());
+  clone.querySelectorAll('[data-htmlmemo-toc-collapsed]').forEach(element => element.removeAttribute('data-htmlmemo-toc-collapsed'));
   // Interactive editor-only styles should never change the standalone file.
   clone.querySelector('#htmlmemo-editor-style')?.remove();
   clone.querySelector('head').append(metadataElement(doc, metadata));

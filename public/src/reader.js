@@ -48,7 +48,7 @@ export class Reader {
           }
           this.bind(); this.frame.style.pointerEvents = ''; this.measure(); this.render();
           this.zoom = clamp(this.metadata.view.zoom || this.fitZoom(), .2, 8); this.applyZoom();
-          requestAnimationFrame(() => { if(this.disposed){resolve(this);return;} this.scrollTop = this.openingScroll?.top ? this.openingScroll.top*this.zoom : Number(this.metadata.view.scrollTop) || 0; this.scrollLeft = this.openingScroll?.left ? this.openingScroll.left*this.zoom : Number(this.metadata.view.scrollLeft) || 0; this.positionDocumentSidebarToggle(); this.callbacks.onView?.(); resolve(this); });
+          requestAnimationFrame(() => { if(this.disposed){resolve(this);return;} this.scrollTop = this.openingScroll?.top ? this.openingScroll.top*this.zoom : Number(this.metadata.view.scrollTop) || 0; this.scrollLeft = this.openingScroll?.left ? this.openingScroll.left*this.zoom : Number(this.metadata.view.scrollLeft) || 0; this.callbacks.onView?.(); resolve(this); });
         } catch (error) { reject(error); }
       }, {once:true});
     });
@@ -97,13 +97,12 @@ export class Reader {
     }, {passive:true});
     this.resizeObserver = new ResizeObserver(() => { if (!this.disposed) { this.measure(); this.renderDrawingLayer(); } });
     this.resizeObserver.observe(this.doc.body);
-    this.hostObserver = new ResizeObserver(() => { if (!this.disposed) { if(this.autoFit)this.zoom = this.fitZoom(); if(this.nativeScroll || this.autoFit)this.applyZoom(); this.positionDocumentSidebarToggle(); } }); this.hostObserver.observe(this.viewport);
+    this.hostObserver = new ResizeObserver(() => { if (!this.disposed) { if(this.autoFit)this.zoom = this.fitZoom(); if(this.nativeScroll || this.autoFit)this.applyZoom(); } }); this.hostObserver.observe(this.viewport);
     this.doc.fonts.ready.then(() => { if (!this.disposed) { this.measure(); this.renderDrawingLayer(); } });
-    this.installDocumentSidebarToggle();
     if (this.metadata.execution?.allowScripts) {
       this.dynamicAnchor = 0;
       this.dynamicObserver = new MutationObserver(records => {
-        const editor = node => (node.nodeType===3?node.parentElement:node)?.closest?.('#'+LAYER_ID+',#htmlmemo-annotation-style,#htmlmemo-editor-style,#htmlmemo-sidebar-style,#htmlmemo-toc-toggle-style,[data-htmlmemo-ui],[data-htmlmemo-mark],[data-htmlmemo-search]');
+        const editor = node => (node.nodeType===3?node.parentElement:node)?.closest?.('#'+LAYER_ID+',#htmlmemo-annotation-style,#htmlmemo-editor-style,[data-htmlmemo-mark],[data-htmlmemo-search]');
         if(records.some(record=>!editor(record.target) && (record.type==='characterData' || [...record.addedNodes,...record.removedNodes].some(node=>!editor(node)))))this.scheduleDynamicRefresh();
       });
       this.observeDynamicDocument();
@@ -183,186 +182,6 @@ export class Reader {
     this.middleScroll.target?.releasePointerCapture?.(this.middleScroll.pointerId);
     this.middleScroll=null;
   }
-  installDocumentSidebarToggle() {
-    if (this.disposed || !this.doc) return;
-    const sidebar=this.findDocumentSidebar();
-    if (!sidebar) { this.clearDocumentSidebarToggle();return; }
-    if (this.documentSidebar!==sidebar) {
-      this.clearDocumentSidebarToggle();
-      this.documentSidebar=sidebar;this.sidebarFolded=false;this.sidebarGrid=null;
-    }
-    this.ensureDocumentSidebarToggleStyle();
-    let button=[...sidebar.children].find(node=>node.hasAttribute?.('data-htmlmemo-toc-toggle'));
-    if (!button) {
-      button=this.doc.createElement('button');button.type='button';button.setAttribute('data-htmlmemo-toc-toggle','');
-      sidebar.prepend(button);
-    }
-    if (this.tocToggle!==button) {
-      this.tocToggle?.remove();
-      button.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();this.toggleDocumentSidebar();});
-    }
-    button.setAttribute('data-htmlmemo-ui','');
-    this.tocToggle=button;
-    this.positionDocumentSidebarToggle();
-  }
-  findDocumentSidebar() {
-    const named='.toc,#toc,.table-of-contents,#table-of-contents,.book-toc,#book-toc,.reader-toc,[data-toc]';
-    const label=value=>/목차|table of contents|contents/i.test(String(value||''));
-    const isMain=node=>!!node?.closest?.('main,article,[role="main"]');
-    const name=node=>`${node?.id||''} ${typeof node?.className==='string'?node.className:''} ${node?.getAttribute?.('role')||''} ${node?.getAttribute?.('data-toc')||''}`;
-    const namedNode=node=>node.matches?.(named)||/(?:^|[\s_-])(toc|contents?|목차)(?:$|[\s_-])/i.test(name(node));
-    const navigation=node=>!!node.querySelector?.('a[href],ol,ul,li,[role="list"],[role="tree"]');
-    const titled=node=>{
-      if(label(node.getAttribute?.('aria-label'))||label(node.getAttribute?.('data-title'))||label(node.getAttribute?.('title')))return true;
-      return [...node.querySelectorAll?.('h1,h2,h3,h4,h5,h6,header,[role="heading"],[data-toc-title],[data-title]')||[]].some(heading=>label(heading.textContent)||label(heading.getAttribute?.('aria-label')));
-    };
-    const candidates=[...this.doc.querySelectorAll(named+',aside,nav,[role="navigation"],[role="complementary"],#sidebar,.sidebar')];
-    const direct=candidates.find(node=>!isMain(node)&&navigation(node)&&(namedNode(node)||titled(node)));
-    if(direct)return direct;
-    // Some publishers use an otherwise unlabelled <div> as the sidebar. Walk
-    // out from a real “목차” heading, but never make a main article panel a TOC.
-    const headings=[...this.doc.querySelectorAll('h1,h2,h3,h4,h5,h6,header,[role="heading"],[data-toc-title],[data-title],[aria-label]')].filter(node=>label(node.textContent)||label(node.getAttribute?.('aria-label'))||label(node.getAttribute?.('data-title')));
-    for(const heading of headings){
-      for(let node=heading.parentElement,depth=0;node&&node!==this.doc.body&&depth<6;node=node.parentElement,depth++){
-        if(!isMain(node)&&navigation(node)&&(namedNode(node)||['aside','nav','section'].includes(node.localName)||node.parentElement===this.doc.body))return node;
-      }
-    }
-    return null;
-  }
-  ensureDocumentSidebarToggleStyle() {
-    if (this.doc.getElementById('htmlmemo-toc-toggle-style')) return;
-    const style=this.doc.createElement('style');style.id='htmlmemo-toc-toggle-style';
-    // The button is a temporary direct child of the source TOC.  Keeping it
-    // inside the panel means the same control becomes the narrow visible tab
-    // after folding, without creating an app-owned outline or touching scroll
-    // containers outside the source document.
-    style.textContent='[data-htmlmemo-toc-toggle]{box-sizing:border-box!important;float:right!important;display:flex!important;align-items:center!important;justify-content:center!important;width:26px!important;min-width:26px!important;height:26px!important;margin:2px!important;padding:0!important;border:1px solid #94a3b8!important;border-radius:5px!important;background:#fff!important;color:#334155!important;font:600 18px/1 system-ui,sans-serif!important;cursor:pointer!important;position:relative!important;z-index:2147483646!important}[data-htmlmemo-toc-toggle]:hover{background:#f1f5f9!important}[data-htmlmemo-toc-toggle]:focus-visible{outline:2px solid #334155!important;outline-offset:1px!important}[data-htmlmemo-toc-collapsed]{box-sizing:border-box!important;width:18px!important;min-width:18px!important;max-width:18px!important;flex:0 0 18px!important;padding:0!important;margin:0!important;overflow:hidden!important;font-size:0!important}[data-htmlmemo-toc-collapsed]>:not([data-htmlmemo-toc-toggle]){display:none!important}[data-htmlmemo-toc-collapsed]>[data-htmlmemo-toc-toggle]{float:none!important;display:flex!important;width:18px!important;min-width:18px!important;max-width:18px!important;height:96px!important;min-height:96px!important;margin:0!important;padding:0!important;border-width:0 1px 0 0!important;border-radius:0 5px 5px 0!important;font-size:17px!important;line-height:1!important}[data-htmlmemo-sidebar-grid]{grid-template-columns:var(--htmlmemo-toc-grid-columns)!important}[data-htmlmemo-sidebar-grid-item],[data-htmlmemo-sidebar-flex]{box-sizing:border-box!important;width:18px!important;min-width:0!important;max-width:18px!important;margin-inline:0!important;padding-inline:0!important;overflow:hidden!important}[data-htmlmemo-sidebar-flex]{flex:0 0 18px!important}';
-    this.doc.head.append(style);
-  }
-  gridTracks(value) {
-    const values=String(value||'').trim().split(/\s+/).filter(Boolean);
-    if(values.length<2||values.some(value=>!/^\d+(?:\.\d+)?px$/i.test(value)))return [];
-    return values.map(value=>Number.parseFloat(value));
-  }
-  gridTrackIndex(parent,item,tracks,layout) {
-    const box=parent.getBoundingClientRect(),cell=item.getBoundingClientRect();
-    if(!box.width||!cell.width)return -1;
-    const left=box.left+(Number.parseFloat(layout.borderLeftWidth)||0)+(Number.parseFloat(layout.paddingLeft)||0);
-    const right=(box.right??box.left+box.width)-(Number.parseFloat(layout.borderRightWidth)||0)-(Number.parseFloat(layout.paddingRight)||0);
-    const gap=Number.parseFloat(layout.columnGap||layout.gap)||0,x=cell.left+cell.width/2;
-    const rtl=String(layout.direction||'').toLowerCase()==='rtl';
-    let cursor=rtl?right:left;
-    for(let index=0;index<tracks.length;index++){
-      const start=rtl?cursor-tracks[index]:cursor,end=rtl?cursor:cursor+tracks[index];
-      if(x>=start-1&&x<=end+1)return index;
-      cursor=rtl?start-gap:end+gap;
-    }
-    return -1;
-  }
-  gridItem(parent,node) {
-    for(let item=node;item&&item!==parent;item=item.parentElement)if(item.parentElement===parent)return item;
-    return null;
-  }
-  documentMainTrack(parent,sidebarItem,tracks,layout) {
-    const mainNodes=[...parent.querySelectorAll('main,[role="main"],article,#main,#content,.page,.content')];
-    const candidates=[];
-    for(const node of mainNodes){
-      const item=this.gridItem(parent,node);
-      if(!item||item===sidebarItem||sidebarItem.contains(node)||node.contains(sidebarItem))continue;
-      const index=this.gridTrackIndex(parent,item,tracks,layout);
-      if(index<0)continue;
-      const box=item.getBoundingClientRect(),main=node.matches('main,[role="main"]')?3:node.matches('article,#main,#content')?2:1;
-      candidates.push({index,score:main*1e9+Math.max(0,box.width)*Math.max(0,box.height)});
-    }
-    if(candidates.length)return candidates.sort((a,b)=>b.score-a.score)[0].index;
-    const siblings=[];
-    for(const item of parent.children){
-      if(item===sidebarItem)continue;
-      const index=this.gridTrackIndex(parent,item,tracks,layout);
-      if(index<0)continue;
-      const box=item.getBoundingClientRect();siblings.push({index,score:Math.max(0,box.width)*Math.max(0,box.height)});
-    }
-    if(siblings.length)return siblings.sort((a,b)=>b.score-a.score)[0].index;
-    return -1;
-  }
-  findDocumentSidebarLayout(sidebar) {
-    let flexLayout=null;
-    for(let item=sidebar,depth=0;item?.parentElement&&depth<10;item=item.parentElement,depth++){
-      const parent=item.parentElement,layout=this.doc.defaultView.getComputedStyle(parent);
-      if(/grid/.test(layout.display||'')){
-        const tracks=this.gridTracks(layout.gridTemplateColumns),index=this.gridTrackIndex(parent,item,tracks,layout);
-        if(index>=0){
-          let mainTrack=this.documentMainTrack(parent,item,tracks,layout);
-          if(mainTrack===index)mainTrack=-1;
-          const columns=tracks.map((width,cursor)=>cursor===index?'18px':cursor===mainTrack?'minmax(0,1fr)':`${width}px`).join(' ');
-          return {kind:'grid',element:parent,item,columns};
-        }
-      }
-      if(/flex/.test(layout.display||'')&&!flexLayout)flexLayout={kind:'flex',element:item};
-    }
-    return flexLayout;
-  }
-  applyDocumentSidebarLayout(sidebar) {
-    this.restoreDocumentSidebarLayout();
-    const layout=this.findDocumentSidebarLayout(sidebar);
-    if(!layout)return;
-    if(layout.kind==='grid'){
-      const style=layout.element.style,property='--htmlmemo-toc-grid-columns';
-      this.sidebarLayout={...layout,value:style.getPropertyValue(property),priority:style.getPropertyPriority?.(property)||''};
-      layout.element.setAttribute('data-htmlmemo-sidebar-grid','');layout.item.setAttribute('data-htmlmemo-sidebar-grid-item','');style.setProperty(property,layout.columns);this.sidebarGrid=layout.element;
-    } else {
-      layout.element.setAttribute('data-htmlmemo-sidebar-flex','');this.sidebarLayout=layout;
-    }
-  }
-  restoreDocumentSidebarLayout() {
-    const layout=this.sidebarLayout;
-    if(layout?.kind==='grid'){
-      layout.element.removeAttribute('data-htmlmemo-sidebar-grid');
-      layout.item.removeAttribute('data-htmlmemo-sidebar-grid-item');
-      if(layout.value)layout.element.style.setProperty('--htmlmemo-toc-grid-columns',layout.value,layout.priority);else layout.element.style.removeProperty('--htmlmemo-toc-grid-columns');
-    } else if(layout?.kind==='flex')layout.element.removeAttribute('data-htmlmemo-sidebar-flex');
-    if(this.sidebarGrid&&this.sidebarGrid!==layout?.element)this.sidebarGrid.removeAttribute('data-htmlmemo-sidebar-grid');
-    this.sidebarGrid=null;this.sidebarLayout=null;
-  }
-  clearDocumentSidebarToggle() {
-    this.documentSidebar?.removeAttribute('data-htmlmemo-toc-collapsed');
-    this.restoreDocumentSidebarLayout();
-    this.tocToggle?.remove();
-    this.doc?.getElementById('htmlmemo-toc-toggle-style')?.remove();
-    this.tocToggle=null;this.documentSidebar=null;this.sidebarGrid=null;this.sidebarFolded=false;this.sidebarScroll=null;
-  }
-  toggleDocumentSidebar() {
-    if (this.disposed || !this.documentSidebar?.isConnected) return;
-    const sidebar=this.documentSidebar,position={top:this.scrollTop,left:this.scrollLeft};
-    const folded=!this.sidebarFolded;
-    if (folded) {
-      this.sidebarScroll={top:sidebar.scrollTop,left:sidebar.scrollLeft};
-      this.ensureDocumentSidebarToggleStyle();
-      // The TOC can be wrapped before it reaches the actual grid/flex item.
-      // Narrow that layout track as well as the sidebar itself so the reading
-      // pane receives the released width.
-      this.applyDocumentSidebarLayout(sidebar);
-      sidebar.setAttribute('data-htmlmemo-toc-collapsed','');
-    } else {
-      sidebar.removeAttribute('data-htmlmemo-toc-collapsed');
-      this.restoreDocumentSidebarLayout();
-      sidebar.scrollTop=this.sidebarScroll?.top||0;sidebar.scrollLeft=this.sidebarScroll?.left||0;
-    }
-    this.sidebarFolded=folded;
-    this.measure();this.renderDrawingLayer();
-    this.scrollTop=position.top;this.scrollLeft=position.left;
-    this.positionDocumentSidebarToggle();
-    this.doc.defaultView.requestAnimationFrame(()=>{
-      if(this.disposed)return;
-      this.scrollTop=position.top;this.scrollLeft=position.left;this.positionDocumentSidebarToggle();
-    });
-  }
-  positionDocumentSidebarToggle() {
-    if (this.disposed || !this.tocToggle || !this.documentSidebar?.isConnected) return;
-    const label=this.sidebarFolded?'목차 사이드바 펼치기':'목차 사이드바 접기';
-    this.tocToggle.hidden=false;this.tocToggle.textContent=this.sidebarFolded?'›':'‹';this.tocToggle.title=label;
-    this.tocToggle.setAttribute('aria-label',label);this.tocToggle.setAttribute('aria-expanded',String(!this.sidebarFolded));
-  }
   observeDynamicDocument() {
     if (!this.disposed) this.dynamicObserver?.observe(this.doc.documentElement,{childList:true,subtree:true,characterData:true});
   }
@@ -380,11 +199,11 @@ export class Reader {
       body.setAttribute('data-htmlmemo-anchor','body');
       let count=0;
       for (const element of body.querySelectorAll('*')) {
-        if (!element.closest('#'+LAYER_ID+',[data-htmlmemo-ui]') && !['script','style','meta','link','template'].includes(element.localName) && !element.hasAttribute('data-htmlmemo-anchor')) element.setAttribute('data-htmlmemo-anchor','js'+this.dynamicAnchor++);
+        if (!element.closest('#'+LAYER_ID) && !['script','style','meta','link','template'].includes(element.localName) && !element.hasAttribute('data-htmlmemo-anchor')) element.setAttribute('data-htmlmemo-anchor','js'+this.dynamicAnchor++);
         if (++count % 1000 === 0) {await new Promise(resolve=>setTimeout(resolve,0));if(this.disposed)return;}
       }
       this.initialHTML = null;
-      this.measure();this.render();this.installDocumentSidebarToggle();
+      this.measure();this.render();
       this.callbacks.onChange?.();this.callbacks.onView?.();
     } finally {
       this.dynamicRunning = false;
@@ -429,9 +248,6 @@ export class Reader {
     if (this.nativeScroll) this.frame.style.height = Math.max(200, this.viewport.clientHeight / this.zoom) + 'px';
     this.frame.style.transform = `scale(${this.zoom})`;
     this.sizer.style.width = this.naturalWidth * this.zoom + 'px'; this.sizer.style.height = this.nativeScroll ? Math.max(200 * this.zoom, this.viewport.clientHeight) + 'px' : (this.naturalHeight || 800) * this.zoom + 'px';
-    // The document-owned TOC tab stays in the iframe. Keep its label current
-    // after every size or zoom update so it is ready on the first paint.
-    this.positionDocumentSidebarToggle?.();
   }
   get scrollTop() { return this.nativeScroll ? (this.doc.defaultView.scrollY || 0) * this.zoom : this.viewport.scrollTop; }
   set scrollTop(value) { if(this.nativeScroll)this.doc.defaultView.scrollTo(this.doc.defaultView.scrollX, value / this.zoom);else this.viewport.scrollTop=value; }
