@@ -243,7 +243,7 @@ export class Reader {
     }
     this.measure();
   }
-  fitZoom() { const inset=this.host.closest('.reader-focus') ? 0 : innerWidth < 600 ? 16 : 56; return clamp((this.viewport.clientWidth - inset) / this.naturalWidth, .2, this.host.closest('.reader-focus') ? 8 : 2); }
+  fitZoom() { const focused=!!this.host.closest('.reader-focus'); return clamp(this.viewport.clientWidth / this.naturalWidth, .2, focused ? 8 : 2); }
   applyZoom() {
     if (this.nativeScroll) this.frame.style.height = Math.max(200, this.viewport.clientHeight / this.zoom) + 'px';
     this.frame.style.transform = `scale(${this.zoom})`;

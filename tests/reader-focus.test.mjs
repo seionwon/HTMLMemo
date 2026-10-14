@@ -80,12 +80,13 @@ test('opening a local document does not create the app outline sidebar',()=>{
 });
 
 
-test('fitting a focused pane uses its full width without the normal reader margins',()=>{
+test('reader panes use all available horizontal width without app gutters',async()=>{
  const a=app(),r=Object.create(Reader.prototype),host=a.doc.createElement('div');a.doc.querySelector('#workspaces').append(host);
  r.host=host;r.viewport={clientWidth:1000};r.naturalWidth=1000;
- const prior=globalThis.innerWidth;globalThis.innerWidth=1200;
- try{assert.equal(r.fitZoom(),.944);a.root.classList.add('reader-focus');assert.equal(r.fitZoom(),1);}
- finally{if(prior===undefined)delete globalThis.innerWidth;else globalThis.innerWidth=prior;}
+ assert.equal(r.fitZoom(),1);a.root.classList.add('reader-focus');assert.equal(r.fitZoom(),1);
+ const css=await readFile(new URL('../public/design.tailwind.css',import.meta.url),'utf8');
+ assert.match(css,/\.reader-viewport\{height:100%;width:100%;overflow:auto;padding:25px 0 100px;/);
+ assert.match(css,/\.reader-viewport\{padding:15px 0 90px\}/);
 });
 
 
