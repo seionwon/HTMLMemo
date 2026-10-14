@@ -62,6 +62,8 @@ test('toolbar retains compact buttons and includes selected-text TTS',async()=>{
  const css=await readFile(new URL('../public/design.tailwind.css',import.meta.url),'utf8');
  assert.match(css,/\.floating-toolbar\{height:auto;min-height:0;padding:0 1px;gap:0/);
  assert.match(css,/#app\.reader-focus>\.chrome/);
+ assert.match(css,/\.chrome-topline>\.titlebar,\.chrome-topline>\.title-actions,\.chrome-topline>\.tabbar\{height:22px;min-height:0;padding-block:0;margin-block:0\}/);
+ assert.match(css,/\.addressbar\{height:24px;min-height:0;padding-block:0;margin-block:0\}/);
 });
 
 test('document focus is entered through a document double-click, without a separate screen button',()=>{

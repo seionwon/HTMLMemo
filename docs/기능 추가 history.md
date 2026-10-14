@@ -757,4 +757,19 @@ ID: hist-20261014-024. tests/chrome.mjs가 macOS Codex/CodeMemo 제한 환경을
    - `setupEditorTocVars`에서 `#htmlmemo-editor-style`을 문서 초기화 시 단 한 번만 구성해 `--toc-width` 등 문서 CSS 변수를 `var(--htmlmemo-toc-width) !important`로 연결하고, 드래그 중(`html[data-htmlmemo-toc-resizing]`)에는 본문(`[data-htmlmemo-toc-main] > :not([role="separator"]):not([data-htmlmemo-toc-resizer-bound])`)의 CSS 변수만 초기값으로 고정해 본문 수만 개 노드의 스타일 재계산을 막으면서도 사이드바·레이아웃·세로 구분선은 즉시 함께 이동하도록 개선했습니다.
    - 또한 고정 픽셀(`left`)로 배치된 구분선이 사이드바 오른쪽 끝과 어긋나는 경우에도 첫 폭 변경 시 이를 감지해 `left` 좌표를 사이드바 우측 경계에 동기화하고, 문서 저장(`serializeHTML`) 시 관련 런타임 속성·스타일을 모두 제거하도록 보강했습니다(`public/sw.js` 캐시 버전 `htmlmemo-v9` 갱신).
 
-**검증:** `npm run check`(60개 파일), `npm test`(115개 단위 검사 통과), `npm run build`, `git diff --check`, `codememo-browser` 로컬 프로덕션 서버 검증을 통과했습니다.
+**검증:** `npm run check`(60개 파일), `npm test`(115개 단위 검사 통과), `npm run build`, `git diff --check`, `codememo-browser` 로컬 프로덕션 서버 검증을 통과했습니다. [GitHub Actions 38558297264](https://github.com/seionwon/HTMLMemo/actions/runs/38558297264) 배포를 완료했습니다.
+
+<a id="hist-20261014-027"></a>
+### 2026-10-14 20:52:00 +09:00 — 상단 두 줄(`.chrome-topline`·`.addressbar`) 상하 여백 제거 및 세로 높이 최소화
+
+| ID | change-kind | status |
+|---|---|---|
+| hist-20261014-027 | 상단 탭 줄(`.chrome-topline`) 및 주소·파일 줄(`.addressbar`) 상하 여백 제거·세로 높이 최소화 | 구현·단위 검사·빌드·`codememo-browser` 검증·Pages 게시 진행 |
+
+**목적과 변경 내용:**
+1. **상단 두 줄(`.chrome-topline`, `.addressbar`)의 상하 여백 제거 및 세로 높이 최소화(`public/design.tailwind.css`, `public/styles.css`, `public/sw.js`):**
+   - 첫째 줄(`.chrome-topline` 내부 `.titlebar`, `.tabbar`, `.title-actions`)의 높이를 기존 `44px`에서 `22px`로 줄이고 상하 패딩·마진(`padding-block: 0; margin-block: 0`)을 완전히 없앴습니다. 브랜드 로고(`HTMLMemo`), 서재·실행·열린 문서 탭(`.tab`), 새 탭(`#new-tab`), 앱 설치(`#install-button`), Chrome 연결(`#connection-button`), 설정(`#settings-button`) 등 모든 요소를 그대로 표시하면서 탭·버튼 높이를 `22px`에 맞췄습니다.
+   - 둘째 줄(`.addressbar`)의 높이를 기존 `55px`에서 `24px`로 줄이고 상하 패딩·마진(`padding-block: 0; margin-block: 0`)을 완전히 없앴습니다. 탐색 버튼(`#back`, `#forward`, `#reload`), 주소·파일 표시창(`#address-form`, `#address`, `#local-label`), 로컬 HTML 파일 열기(`#import-button`), `HTML 내보내기`(`#save-page`), 추가 메뉴(`#app-menu-button`) 등 모든 요소를 그대로 유지하면서 컨트롤 높이를 `24px`에 맞춰 상하 빈 공간이 전혀 남지 않도록 했습니다.
+   - 이에 따라 상단 헤더(`header.chrome`) 전체 높이가 기존 약 `100px`(`44px + 55px + 1px`)에서 `47px`(`22px + 24px + 1px`)로 절반 이하로 줄어들어 본문 읽기 영역이 더 넓게 확보됩니다(`public/sw.js` 캐시 버전 `htmlmemo-v10` 갱신).
+
+**검증:** `npm run check`(60개 파일), `npm test`(115개 단위 검사 통과), `npm run build`, `git diff --check` 통과 및 `codememo-browser` 스크린샷으로 상단 두 줄의 상하 여백이 제거되고 모든 탭·주소창·버튼이 정상 표시되는 것을 확인했습니다.

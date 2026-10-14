@@ -105,3 +105,41 @@ body[data-codememo-design]{margin:0;font-family:var(--app-font);background:var(-
 #tool-popover.selection { display:flex;gap:3px;flex-wrap:wrap;width:310px;max-width:calc(100vw - 20px);padding:6px; }
 #tool-popover.selection[hidden] { display:none; }
 #tool-popover.selection button { font-size:11px;padding:4px 9px; }
+
+/* Compact the two top header rows (.chrome-topline and .addressbar) with zero vertical padding/margins while preserving all controls. */
+.chrome{padding-block:0;margin-block:0}
+.chrome-topline{padding-block:0;margin-block:0;min-height:0}
+.chrome-topline>.titlebar,.chrome-topline>.title-actions,.chrome-topline>.tabbar{height:22px;min-height:0;padding-block:0;margin-block:0}
+.chrome-topline #tabs{height:22px;min-height:0;padding-block:0;margin-block:0;align-items:center}
+.chrome-topline .brand{gap:7px;padding-block:0;line-height:1}
+.chrome-topline .brand-icon{width:20px;height:20px}
+.chrome-topline .brand strong{font-size:14px;line-height:1}
+.chrome-topline .app-caption{padding-block:0;line-height:1}
+.chrome-topline .tab,.chrome-topline .library-tab,.chrome-topline .execution-tab{height:22px;min-height:0;padding-block:0;margin-block:0;border-radius:5px;line-height:1}
+.chrome-topline .tab-close{width:18px;height:18px}
+.chrome-topline .icon-button,.chrome-topline #new-tab{width:26px;height:22px;min-height:0;padding-block:0;border-radius:5px}
+.chrome-topline .quiet-button{height:22px;min-height:0;padding:0 8px;line-height:1}
+.chrome-topline .connection{height:22px;min-height:0;padding-block:0;line-height:1}
+.addressbar{height:24px;min-height:0;padding-block:0;margin-block:0}
+.addressbar .navigation{align-items:center}
+.addressbar .icon-button{width:26px;height:24px;min-height:0;padding-block:0;border-radius:5px}
+#address-form{height:24px;min-height:0;padding-block:0;margin-block:0;border-radius:5px}
+#address{height:100%;padding-block:0;line-height:1}
+.addressbar .open-button{width:26px;height:24px;min-height:0;padding:0;border-radius:5px;display:inline-flex;align-items:center;justify-content:center}
+.addressbar .save-button{height:24px;min-height:0;padding:0 10px;border-radius:5px;line-height:1}
+.sidebar{top:var(--chrome-height,47px)}
+@media(max-width:800px){
+ #install-button,#connection-button{height:22px;width:26px;padding:0}
+}
+@media(max-width:720px){
+ .addressbar{height:24px;padding-block:0}
+ .addressbar .open-button{width:26px;height:24px}
+}
+@media(max-width:600px){
+ .chrome-topline>.titlebar,.chrome-topline>.title-actions,.chrome-topline>.tabbar{height:22px}
+ .chrome-topline .title-actions .icon-button{width:26px;height:22px}
+}
+@media(max-width:480px){
+ .addressbar{height:24px;padding-block:0}
+ .addressbar .save-button{width:26px;height:24px;padding:0}
+}
