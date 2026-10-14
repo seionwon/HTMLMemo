@@ -670,10 +670,12 @@ HTMLMemo 프로젝트에서 구현과 관련 검증을 마친 변경을 기록�
 
 | ID | change-kind | status |
 |---|---|---|
-| hist-20261014-022 | 읽기 pane 폭 계산·가로 여백 수정 | 구현·자동 검사·빌드 완료 / Pages 게시 진행 |
+| hist-20261014-022 | 읽기 pane 폭 계산·가로 여백 수정 | 구현·자동 검사·빌드·Pages 게시 완료 / 실제 Chrome 확인 제한 |
 
 **문제와 수정:** 일반 읽기 화면의 HTMLMemo 리더가 좌우 28px padding을 두고 자동 맞춤 폭에서도 추가 56px을 빼서 계산하던 탓에, 앱의 `나만의 웹 서재`와 원본 문서의 왼쪽 `목차` 사이 및 문서 오른쪽에 빈 띠가 생겼습니다. 리더의 가로 padding과 자동 맞춤 폭 공제를 제거해, 자동 맞춤일 때 문서 프레임이 사용할 수 있는 전체 가로폭을 채우도록 바꿨습니다. 위아래 읽기 여백과 스크롤 동작은 유지합니다.
 
 **사용 위치와 동작:** GitHub Pages에서 로컬 HTML을 열면 원본 문서의 목차·본문·스타일은 그대로 두고 HTMLMemo가 추가하던 바깥 좌우 여백만 없어집니다. 따라서 원본 HTML 자체가 정의한 내부 margin·padding은 보존됩니다. 사용자가 수동으로 축소한 경우에는 문서를 가운데에 놓기 위한 공간이 남을 수 있으며, 이는 자동 맞춤 화면의 빈 띠와 별개입니다.
 
 **검증과 제한:** `npm run check`(59개 JavaScript·JSON), `npm test`(108개), `npm run build`, `git diff --check`를 통과했습니다. 일반·전체 화면 리더의 자동 맞춤 폭과 데스크톱·모바일 가로 padding이 0인지 단위 검사했습니다. `npm run test:browser`는 이 실행 환경에서 전용 Chrome이 시작 직후 종료되어 실패했습니다(`Chrome exited null`). 따라서 실제 사용자 파일을 Chrome에서 열어 시각적으로 통과했다고 표시하지 않습니다. Pages 게시와 운영 파일 대조 결과는 완료 후 이 항목에 보충합니다.
+
+**게시 완료 (2026-10-14 13:14:45 +09:00):** `3b7e3968a0b201d7ee9b5f4a035cbfa11306defe`를 main에 push했고 [GitHub Actions 38510297905](https://github.com/seionwon/HTMLMemo/actions/runs/38510297905)의 `npm test`·`npm run check`·`npm run build`와 Pages 게시 성공을 확인했습니다. 공개 주소는 HTTP 200으로 응답했으며, 공개 `index.html`·`styles.css`·`src/app.js`·`src/document.js`·`src/reader.js`가 로컬 `dist/`와 바이트 단위로 일치합니다. 서비스 워커도 빌드 환경별 콘텐츠 캐시 식별자를 제외한 본문이 일치해, 기존 캐시가 새 리더 자산으로 교체될 수 있음을 확인했습니다. 실제 사용자 HTML의 화면 검증은 위 Chrome 실행 제한으로 완료하지 못했습니다.
