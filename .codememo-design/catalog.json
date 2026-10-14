@@ -24,6 +24,26 @@
       "density": "compact",
       "font": "system",
       "previewHtml": "<div class=\"min-h-screen md:grid md:grid-cols-[180px_1fr]\"><aside class=\"border-b border-line bg-surface p-5 md:border-r\"><img src=\"{{CODEMEMO_ICON}}\" width=\"36\" height=\"36\" alt=\"\" class=\"rounded-lg\"/><strong class=\"mt-3 block\">HTMLMemo</strong><nav class=\"mt-6 flex flex-wrap gap-3 md:flex-col\"><span class=\"text-sm text-muted\">웹 페이지 열기</span><span class=\"text-sm text-muted\">HTML 파일 가져오기</span><span class=\"text-sm text-muted\">내 서재</span></nav></aside><div><header class=\"flex items-center justify-between gap-3 border-b border-line bg-surface px-5 py-3\"><div class=\"flex items-center gap-3\"><img src=\"{{CODEMEMO_ICON}}\" width=\"36\" height=\"36\" alt=\"\" class=\"rounded-lg\"/><strong>HTMLMemo</strong></div><span class=\"text-xs text-muted\">내 서재</span></header><main class=\"mx-auto max-w-5xl p-6\"><section class=\"py-8\"><p class=\"mb-3 text-xs font-semibold tracking-widest text-brand\">나만의 웹 서재</p><h1 class=\"text-4xl font-semibold leading-snug\">읽고, 남기고,<br>다시 이어서.</h1><p class=\"mt-4 max-w-lg text-sm leading-relaxed text-muted\">저장한 문서를 중심으로 서재·최근 기록·가져오기를 구분하고 넓은 읽기 영역을 둔 서재 화면.</p><div class=\"mt-6\"><button data-design-primary class=\"rounded-lg px-4 py-2 text-sm font-semibold\">웹 페이지 열기</button></div></section><section class=\"grid gap-4 sm:grid-cols-3\"><article data-design-card class=\"p-5\"><span class=\"text-xs text-brand\">01</span><h2 class=\"my-3 font-semibold\">저장한 웹 페이지</h2><div class=\"h-2 w-full rounded bg-line\"></div><div class=\"mt-2 h-2 w-3/4 rounded bg-line\"></div></article><article data-design-card class=\"p-5\"><span class=\"text-xs text-brand\">02</span><h2 class=\"my-3 font-semibold\">최근 읽은 문서</h2><div class=\"h-2 w-full rounded bg-line\"></div><div class=\"mt-2 h-2 w-3/4 rounded bg-line\"></div></article><article data-design-card class=\"p-5\"><span class=\"text-xs text-brand\">03</span><h2 class=\"my-3 font-semibold\">주석과 메모</h2><div class=\"h-2 w-full rounded bg-line\"></div><div class=\"mt-2 h-2 w-3/4 rounded bg-line\"></div></article></section></main></div></div>"
+    },
+    {
+      "id": "sidebar-headings",
+      "title": "상단 토글 · 독립 접기",
+      "description": "선택된 서재 화면을 유지하고 서재 제목 옆과 문서 목차 상단에 독립 버튼을 둡니다. 접으면 좁은 버튼 영역이 남아 같은 자리에서 다시 펼칩니다.",
+      "layout": "sidebar",
+      "radius": 18,
+      "density": "compact",
+      "font": "system",
+      "previewHtml": "<div class=\"min-h-screen bg-canvas text-ink\"><header class=\"flex items-center gap-3 border-b border-line bg-surface px-5 py-3\"><img src=\"{{CODEMEMO_ICON}}\" width=\"32\" height=\"32\" alt=\"\"/><strong>HTMLMemo</strong><span class=\"text-xs text-muted\">내 서재 · 문서 읽기</span></header><div class=\"grid grid-cols-[48px_minmax(0,1fr)] sm:grid-cols-[180px_minmax(0,1fr)]\"><aside class=\"border-r border-line bg-surface p-2 sm:p-4\"><div class=\"flex items-center justify-between gap-2\"><strong class=\"hidden text-xs sm:block\">나만의 웹 서재</strong><button class=\"rounded border border-line px-2 py-1\" aria-label=\"서재 접기\">‹</button></div><nav class=\"mt-6 hidden space-y-4 text-xs text-muted sm:block\"><p>내 서재</p><p>웹 페이지 열기</p><p>HTML 파일 가져오기</p></nav></aside><main class=\"p-4 sm:p-6\"><p class=\"mb-3 text-xs text-muted\">각 사이드바를 같은 자리에서 접고 다시 펼치기</p><div data-design-card class=\"grid min-h-80 grid-cols-[48px_minmax(0,1fr)] overflow-hidden\"><aside class=\"border-r border-line p-2\"><button class=\"rounded border border-line px-2 py-1 text-brand\" aria-label=\"목차 펼치기\">›</button></aside><article class=\"p-5\"><p class=\"text-xs text-brand\">목차를 접은 읽기 화면</p><h1 class=\"my-4 text-2xl font-semibold\">읽던 자리에서 계속.</h1><p class=\"text-sm leading-7 text-muted\">문서 목차는 좁은 버튼 영역으로 접힙니다. 본문의 스크롤은 계속 사용할 수 있습니다.</p></article></div></main></div></div>"
+    },
+    {
+      "id": "sidebar-reader-toolbar",
+      "title": "읽기 도구 토글 · 본문 집중",
+      "description": "서재와 목차의 접기 버튼을 읽기 화면 위쪽 도구 줄에 모읍니다. 패널을 완전히 숨겨 본문 폭을 확보하고 도구 줄에서 다시 엽니다.",
+      "layout": "sidebar",
+      "radius": 18,
+      "density": "compact",
+      "font": "system",
+      "previewHtml": "<div class=\"min-h-screen bg-canvas text-ink\"><header class=\"flex items-center gap-3 border-b border-line bg-surface px-5 py-3\"><img src=\"{{CODEMEMO_ICON}}\" width=\"32\" height=\"32\" alt=\"\"/><strong>HTMLMemo</strong><span class=\"text-xs text-muted\">문서 읽기</span></header><div class=\"flex flex-wrap items-center gap-2 border-b border-line bg-surface p-3\"><button class=\"rounded border border-line px-3 py-2 text-xs text-brand\">서재 펼치기</button><button class=\"rounded border border-line px-3 py-2 text-xs text-brand\">목차 펼치기</button><span class=\"ml-auto text-xs text-muted\">본문에 집중</span></div><main class=\"mx-auto max-w-4xl p-5 sm:p-8\"><article data-design-card class=\"min-h-80 p-6\"><p class=\"text-xs text-brand\">두 사이드바를 숨긴 읽기 화면</p><h1 class=\"my-5 text-3xl font-semibold\">문서를 넓게 읽기.</h1><p class=\"text-sm leading-7 text-muted\">패널 대신 본문에 공간을 더 줍니다. 서재 탐색이나 목차가 필요할 때 위쪽 도구 줄에서 다시 엽니다.</p><div class=\"mt-8 h-2 rounded bg-line\"></div><div class=\"mt-3 h-2 w-3/4 rounded bg-line\"></div></article></main></div>"
     }
   ],
   "colors": [
@@ -46,6 +66,16 @@
       "text": "#202633",
       "muted": "#667085",
       "border": "#e0e5ee"
+    },
+    {
+      "id": "reader-slate",
+      "title": "현재 선택된 슬레이트",
+      "primary": "#334155",
+      "background": "#f6f7fb",
+      "surface": "#ffffff",
+      "text": "#202633",
+      "muted": "#667085",
+      "border": "#e0e5ee"
     }
   ],
   "icons": [
@@ -59,6 +89,18 @@
       "id": "alternative",
       "title": "새 문서 심볼",
       "symbol": "layers"
+    },
+    {
+      "id": "page-pen",
+      "title": "페이지와 펜",
+      "symbol": "file",
+      "file": "design/icons/a-page.svg"
+    },
+    {
+      "id": "open-library",
+      "title": "열린 서재",
+      "symbol": "book",
+      "file": "design/icons/d-library.svg"
     }
   ],
   "screen": {

@@ -24,7 +24,7 @@ function sidebarReader({layout='grid',native=true,html=source}={}) {
   doc.documentElement.scrollBy=move=>{moves.push(move);view.scrollY+=move.top;};
   const viewport=app.createElement('div');Object.assign(viewport,{clientWidth:1000,clientHeight:700,scrollTop:600,scrollLeft:0,scrollBy(move){moves.push(move);this.scrollTop+=move.top;}});
   const r=Object.create(Reader.prototype);
-  Object.assign(r,{doc,host,frame,viewport,nativeScroll:native,zoom:.75,naturalWidth:1100,sizer:{style:{}},metadata:parseHTML(source).metadata,renderDrawingLayer(){},callbacks:{}});
+  Object.assign(r,{doc,host,frame,viewport,nativeScroll:native,zoom:.75,naturalWidth:1100,sizer:{style:{}},metadata:parseHTML(source,{}, {allowScripts:native}).metadata,renderDrawingLayer(){},callbacks:{}});
   return {r,doc,sidebar,app,moves,flush(){while(frames.length)frames.shift()();}};
 }
 

@@ -2,13 +2,51 @@
 // These are real browser checks, separate from the DOM/unit test suite.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, cp, rm, writeFile, mkdir } from 'node:fs/promises';
+import { mkdtemp, cp, rm, writeFile, mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { root, prepareAssets } from '../scripts/assets.mjs';
 import { createServer } from '../scripts/server.mjs';
 import { launchChrome } from './chrome.mjs';
 import { FORMAT_VERSION } from '../public/src/model.js';
+test('real Chrome: independent library and document TOC toggles preserve scrolling and source layout',{timeout:90000},async()=>{
+  await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-sidebar-test-'));await cp(join(root,'public'),folder,{recursive:true});
+  const server=createServer(folder);let chrome;
+  try{
+    await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});
+    chrome=await launchChrome();const page=chrome.page;
+    await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
+    await page.navigate(`http://127.0.0.1:${server.address().port}/`);await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
+    const fixture=await readFile(join(root,'tests/fixtures/sidebar-book.html'),'utf8');
+    const geometry=`(()=>{const host=document.querySelector('.document-host:not([hidden])'),frame=host.querySelector('iframe'),doc=frame.contentDocument,toc=doc.querySelector('.toc');return {scroll:frame.contentWindow.scrollY,tocWidth:toc.getBoundingClientRect().width,mainWidth:doc.querySelector('main').getBoundingClientRect().width,position:frame.contentWindow.getComputedStyle(toc).position,height:frame.contentWindow.getComputedStyle(toc).height,overflow:frame.contentWindow.getComputedStyle(toc).overflowY,sourceCSS:doc.querySelector('#source-layout').textContent,inline:toc.getAttribute('style'),libraryWidth:document.querySelector('#desk-nav').getBoundingClientRect().width};})()`;
+    for(const layout of ['grid','flex']){
+      const html=fixture.replace('사이드바 스크롤 검증',layout+' 사이드바 스크롤 검증').replace('display:grid;grid-template-columns:240px minmax(0,1fr)',layout==='grid'?'display:grid;grid-template-columns:240px minmax(0,1fr)':'display:flex');
+      await page.evaluate(`(()=>{const file=new File([${JSON.stringify(html)}],${JSON.stringify(layout+'.html')},{type:'text/html'}),transfer=new DataTransfer();transfer.items.add(file);const input=document.querySelector('#file-input');input.files=transfer.files;input.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+      await page.waitFor(`document.querySelector('.document-host:not([hidden]) iframe')?.contentDocument?.title===${JSON.stringify(layout+' 사이드바 스크롤 검증')} && document.querySelector('.document-host:not([hidden]) .document-sidebar-toggle')?.getAttribute('aria-expanded')==='true'`);
+      const original=await page.evaluate(geometry);assert.equal(original.tocWidth,240);assert.equal(original.position,'sticky');
+      let libraryFolded=false,tocFolded=false;
+      for(const selector of ['.document-host:not([hidden]) .document-sidebar-toggle','#desk-nav-toggle','.document-host:not([hidden]) .document-sidebar-toggle','#desk-nav-toggle']){
+        const before=await page.evaluate(geometry);await page.click(selector);
+        if(selector==='#desk-nav-toggle')libraryFolded=!libraryFolded;else tocFolded=!tocFolded;
+        await page.waitFor(`document.querySelector('#desk-nav-toggle').getAttribute('aria-expanded')==='${!libraryFolded}' && document.querySelector('.document-host:not([hidden]) .document-sidebar-toggle').getAttribute('aria-expanded')==='${!tocFolded}'`);
+        await page.evaluate('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
+        const after=await page.evaluate(geometry);
+        assert.equal(after.tocWidth,tocFolded?48:240);assert.equal(after.libraryWidth,libraryFolded?48:180);
+        assert.equal(after.position,original.position);assert.equal(after.overflow,original.overflow);
+        assert.equal(after.sourceCSS,original.sourceCSS);assert.equal(after.inline,original.inline);
+        assert.ok(Math.abs(after.scroll-before.scroll)<2,'folding keeps the document reading position');
+        if(tocFolded)assert.ok(after.mainWidth>original.mainWidth,'the folded document track releases width');
+        const point=await page.evaluate(`(()=>{const f=document.querySelector('.document-host:not([hidden]) iframe').getBoundingClientRect();return {x:f.left+f.width*.75,y:f.top+80};})()`);
+        await page.send('Input.dispatchMouseEvent',{type:'mouseMoved',...point});
+        await page.send('Input.dispatchMouseEvent',{type:'mouseWheel',...point,deltaX:0,deltaY:120});
+        await page.waitFor(`document.querySelector('.document-host:not([hidden]) iframe').contentWindow.scrollY>${after.scroll}`);
+      }
+      const restored=await page.evaluate(geometry);assert.equal(restored.tocWidth,original.tocWidth);assert.equal(restored.mainWidth,original.mainWidth);
+      await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,`test-results/sidebar-${layout}-restored.png`),await page.screenshot());
+    }
+    assert.deepEqual(chrome.errors,[]);
+  }finally{if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
+});
 test('real Chrome: browsing, capture, local annotation, file writes, reopen and offline',{timeout:90000},async t=>{
   await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-web-test-'));await cp(join(root,'public'),folder,{recursive:true});await cp(join(root,'tests/fixtures'),join(folder,'fixtures'),{recursive:true});
   const server=createServer(folder);let chrome;

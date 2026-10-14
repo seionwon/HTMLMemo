@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>사이드바 스크롤 검증</title>
+  <style id="source-layout">
+    *{box-sizing:border-box}
+    body{margin:0;display:grid;grid-template-columns:240px minmax(0,1fr);font:16px system-ui}
+    .toc{position:sticky;top:0;width:240px;height:100dvh;overflow:auto;padding:20px;background:#edf0f6}
+    .page{flex:1;min-width:0;padding:32px}
+    .page section{min-height:3600px}
+    h1,h2{margin-top:0}
+    a{display:block;padding:12px 0}
+  </style>
+</head>
+<body>
+  <aside class="toc" style="color:#334155"><h2>목차</h2><a href="#chapter">첫 장</a><a href="#last">마지막 문단</a></aside>
+  <main class="page"><section><h1 id="chapter">문서 읽기</h1><p>사이드바를 접고 펼친 뒤에도 마우스 휠로 계속 읽습니다.</p></section><p id="last">마지막 문단</p></main>
+</body>
+</html>
