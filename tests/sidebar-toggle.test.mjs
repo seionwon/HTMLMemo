@@ -16,10 +16,11 @@ function sidebarReader({layout='grid',native=true,html=source}={}) {
   Object.defineProperty(doc,'defaultView',{value:view,configurable:true});
   const host=app.querySelector('#host');host.getBoundingClientRect=()=>({left:180,top:100,width:1000,height:700});
   const frame={style:{},getBoundingClientRect:()=>({left:180,top:100,width:825,height:700})};
-  doc.body.getBoundingClientRect=()=>({left:0,top:0,width:1100,height:4000});
-  Object.defineProperty(doc.body,'scrollHeight',{value:4000});
+  doc.body.getBoundingClientRect=()=>({left:0,top:0,right:1100,bottom:4000,width:1100,height:4000});
+  Object.defineProperties(doc.body,{scrollHeight:{value:4000},offsetHeight:{value:4000},offsetTop:{value:0}});
+  for(const child of doc.body.children)child.getBoundingClientRect=doc.body.getBoundingClientRect;
   const sidebar=doc.querySelector('.toc');
-  if(sidebar){sidebar.scrollTop=125;sidebar.scrollLeft=0;sidebar.getBoundingClientRect=()=>({left:0,top:0,right:sidebar.hasAttribute('data-htmlmemo-sidebar-folded')?48:240,width:sidebar.hasAttribute('data-htmlmemo-sidebar-folded')?48:240,height:600});}
+  if(sidebar){sidebar.scrollTop=125;sidebar.scrollLeft=0;sidebar.getBoundingClientRect=()=>({left:0,top:0,right:sidebar.hasAttribute('data-htmlmemo-sidebar-folded')?48:240,bottom:600,width:sidebar.hasAttribute('data-htmlmemo-sidebar-folded')?48:240,height:600});}
   doc.documentElement.scrollBy=move=>{moves.push(move);view.scrollY+=move.top;};
   const viewport=app.createElement('div');Object.assign(viewport,{clientWidth:1000,clientHeight:700,scrollTop:600,scrollLeft:0,scrollBy(move){moves.push(move);this.scrollTop+=move.top;}});
   const r=Object.create(Reader.prototype);
@@ -78,7 +79,10 @@ test('saving while folded excludes transient controls and grid overrides, and re
   const reopened=documentFor(parseHTML(saved).html);
   assert.equal(reopened.querySelector('.toc').getAttribute('style'),'color:navy');
   assert.equal(reopened.querySelector('.toc a').getAttribute('href'),'#chapter');
-  assert.match(reopened.querySelector('style').textContent,/position:sticky;top:0;height:100dvh;overflow:auto;width:240px/);
+  // linkedom preserves the authored `100dvh` on macOS but resolves it to the
+  // test viewport's 800px height on the Linux Actions runner.  Either form
+  // proves that the original sticky sidebar rule survived export unchanged.
+  assert.match(reopened.querySelector('style').textContent,/position:sticky;top:0;height:(?:100dvh|800px);overflow:auto;width:240px/);
   assert.equal(doc.querySelector('.toc').hasAttribute('data-htmlmemo-sidebar-folded'),true,'exporting does not expand the live document');
 });
 
