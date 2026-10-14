@@ -71,8 +71,15 @@ test('document focus is entered through a document double-click, without a separ
  assert.doesNotMatch(appSource,/reader-fullscreen/);
 });
 
-test('document tools provide an explicit close button',()=>{
+test('document tools and palette window provide an explicit close button and full color selection controls',()=>{
  assert.match(appSource,/data-popover-close aria-label="문서 도구 닫기"/);
+ assert.match(appSource,/data-popover-close aria-label="펜과 색상 닫기"/);
+ assert.match(appSource,/id="palette-preset"/);
+ assert.match(appSource,/id="add-custom-color"/);
+ assert.match(appSource,/id="save-custom-palette"/);
+ assert.match(appSource,/id="color-picker-sv"/);
+ assert.match(appSource,/id="color-picker-hue"/);
+ assert.match(appSource,/id="color-hex"/);
  assert.match(appSource,/\$\('\[data-popover-close\]'\s*,\$\('#tool-popover'\)\)\.onclick=closePopover/);
 });
 

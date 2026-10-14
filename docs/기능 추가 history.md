@@ -788,4 +788,25 @@ ID: hist-20261014-024. tests/chrome.mjs가 macOS Codex/CodeMemo 제한 환경을
    - 문서가 상단 바 높이를 CSS 변수(`--header-height`, `--topbar-height`, `calc(100vh - var(--...))` 등), 2행 CSS Grid(`grid-template-rows`), 혹은 고정 `padding-top`/`top` 오프셋으로 참조하는 경우에도 이를 `24px`에 맞춰 동기화해 상단 바와 아래쪽 `목차`·본문 사이에 빈 여백이 생기지 않도록 했습니다.
    - 모든 런타임 속성(`data-htmlmemo-topbar-active`, `data-htmlmemo-doc-topbar`, `data-htmlmemo-doc-topbar-item`, `data-htmlmemo-topbar-grid`, `data-htmlmemo-topbar-pad`, `data-htmlmemo-topbar-offset`)과 스타일은 `serializeHTML` 저장 및 재열기 시 완전히 제거되어 원본 HTML 파일을 변경하지 않습니다(`public/sw.js` 캐시 버전 `htmlmemo-v11` 갱신).
 
-**검증:** `npm run check`(60개 파일), `npm test`(116개 단위 검사 통과), `npm run build`, `git diff --check`, `codememo-browser` 검증을 통과했습니다.
+**검증:** `npm run check`(60개 파일), `npm test`(116개 단위 검사 통과), `npm run build`, `git diff --check`, `codememo-browser` 검증을 통과했습니다. [GitHub Actions 38565297586](https://github.com/seionwon/HTMLMemo/actions/runs/38565297586) 배포를 완료했습니다.
+
+<a id="hist-20261014-029"></a>
+### 2026-10-14 22:20:00 +09:00 — 「펜과 색상」 닫기 버튼 추가 및 20개 프리셋·사용자 팔레트·2D 컬러 피커 풀세트 색상 선택 기능 구현
+
+| ID | change-kind | status |
+|---|---|---|
+| hist-20261014-029 | 「펜과 색상」 닫기 버튼(`[data-popover-close]`), 20개 프리셋 팔레트·20색 기본 스와치, 사용자 색상·팔레트 생성/삭제, 2D 채도·명도(SV) 및 색조(Hue)·HEX·RGB 컬러 피커 | 구현·단위 검사·빌드·`codememo-browser` 검증·Pages 게시 진행 |
+
+**목적과 변경 내용:**
+1. **「펜과 색상」 및 도구 팝오버 닫기 버튼 추가(`public/src/app.js`, `public/design.tailwind.css`, `public/styles.css`):**
+   - 「펜과 색상」(`#tool-popover.palette-popover`)과 「확대 · 축소」 팝오버 상단 헤더(`.popover-heading`) 우측에 `×` 닫기 버튼(`[data-popover-close]`, `aria-label="펜과 색상 닫기"`)을 추가해 클릭 한 번으로 즉시 창을 닫을 수 있게 했습니다.
+2. **20개 프리셋 팔레트·20색 기본 스와치 및 사용자 맞춤 팔레트·색상 관리(`public/src/preferences.js`, `public/src/app.js`):**
+   - 기본 20색 스와치(`PRESET_COLORS`, 10×2 그리드)와 용도·분위기별 **20개 프리셋 팔레트**(`PRESET_PALETTES`: `1. 기본 20색 팔레트`, `2. 형광펜 베스트`, `3. 따뜻한 필기`, `4. 차분한 블루·그린`, `5. 파스텔 노트`, `6. 선명한 강조`, `7. 논문·교재 마킹`, `8. 포레스트 데스크`, `9. 오션 브리즈`, `10. 선셋 글로우`, `11. 베리·바이올렛`, `12. 어스·세피아`, `13. 모노크롬·그레이`, `14. 네온 팝`, `15. 빈티지 북`, `16. 스프링 가든`, `17. 어텀 리프`, `18. 다크 모드 필기`, `19. 미니멀 잉크`, `20. 레인보우 컬렉션`)를 추가해 `#palette-preset` 드롭다운에서 전환할 수 있게 했습니다.
+   - 사용자가 직접 색상을 골라 **사용자 색상** 목록(`#custom-swatches`)에 추가(`#add-custom-color`)하거나 삭제(`#remove-custom-color`)할 수 있고, 원하는 이름을 지정해 **사용자 팔레트**로 저장(`#custom-palette-name`, `#save-custom-palette`)·선택·삭제(`#delete-custom-palette`)할 수 있도록 구현했습니다.
+   - 선택한 팔레트(`paletteId`), 사용자 색상(`customColors`), 사용자 팔레트(`customPalettes`)는 브라우저 `localStorage`(`htmlmemo-preferences-v1`) 및 설정 JSON 내보내기·가져오기에 영구 보존됩니다.
+3. **2D 채도·명도(SV) 스펙트럼 + 색조(Hue) 슬라이더 + HEX·RGB 컬러 피커(`public/src/preferences.js`, `public/src/app.js`, `public/design.tailwind.css`):**
+   - HEX ↔ RGB ↔ HSV 양방향 색상 변환 유틸리티(`normalizeHexColor`, `hexToRgb`, `rgbToHex`, `rgbToHsv`, `hsvToRgb`, `hexToHsv`, `hsvToHex`)를 구현했습니다.
+   - 마우스·포인터 드래그 및 키보드 방향키로 조작 가능한 2D 채도·명도(Saturation/Value) 스펙트럼 박스(`#color-picker-sv`, `#color-picker-sv-thumb`), 0~360° 무지개 색조 슬라이더(`#color-picker-hue`), 실시간 미리보기 배지(`#color-preview-chip`, `#color-preview-text`), 시스템 컬러 피커(`#custom-color`), 직접 입력 가능한 `HEX`(`#color-hex`) 및 `R`·`G`·`B`(`#color-r`, `#color-g`, `#color-b`) 입력창을 모두 갖추어 어떤 방식이든 즉시 동기화되도록 구성했습니다.
+   - 「주석 편집」 모달(`#annotation-dialog`)에서도 동일한 20색 스와치와 사용자 색상 스와치, `HEX` 코드 입력(`#annotation-color-hex`), 컬러 피커(`#annotation-color`)를 사용할 수 있도록 확장했습니다(`public/sw.js` 캐시 버전 `htmlmemo-v12` 갱신).
+
+**검증:** `npm run check`(60개 파일), `npm test`(117개 단위 검사 통과), `npm run build`, `git diff --check`, `codememo-browser` 검증을 통과했습니다.

@@ -143,3 +143,42 @@ body[data-codememo-design]{margin:0;font-family:var(--app-font);background:var(-
  .addressbar{height:24px;padding-block:0}
  .addressbar .save-button{width:26px;height:24px;padding:0}
 }
+
+/* Full-set palette (20 presets + user custom colors/palettes) and interactive Color Picker. */
+#tool-popover.palette-popover{width:320px;max-width:calc(100vw - 20px);padding:12px 14px}
+#tool-popover.palette-popover .popover-heading{margin-bottom:8px}
+.palette-section{border-top:1px solid var(--line);padding-top:8px;margin-top:8px}
+.palette-section:first-of-type{border-top:0;padding-top:0;margin-top:4px}
+.palette-bar{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:6px}
+.palette-label{font-size:11px;font-weight:600;color:var(--muted);white-space:nowrap}
+.palette-actions{display:flex;align-items:center;gap:4px;min-width:0}
+#palette-preset{padding:3px 6px;font-size:11px;border-radius:5px;max-width:190px;height:24px}
+.palette-mini-btn{border:1px solid var(--line);background:var(--surface);border-radius:5px;padding:2px 7px;font-size:10px;height:22px;display:inline-flex;align-items:center;justify-content:center;white-space:nowrap}
+.palette-mini-btn:hover:not(:disabled){background:var(--bg)}
+.palette-mini-btn.primary{background:var(--green);border-color:var(--green);color:#fff}
+.palette-mini-btn.danger{color:#b77653;border-color:#e2c4b3}
+.swatches.preset-swatches{display:grid;grid-template-columns:repeat(10,1fr);gap:5px;margin-bottom:4px}
+.swatches.preset-swatches .swatch{width:22px;height:22px;justify-self:center}
+.swatches.custom-swatches{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px;min-height:22px;align-items:center}
+.swatches.custom-swatches .swatch{width:20px;height:20px}
+.palette-empty{font-size:10px;color:var(--muted);line-height:1.4}
+.custom-palette-creator{display:flex;align-items:center;gap:5px;margin-top:4px}
+.custom-palette-creator input{flex:1;min-width:0;border:1px solid var(--line);background:var(--bg);border-radius:5px;padding:3px 7px;font-size:11px;height:24px}
+.color-preview-badge{display:inline-flex;align-items:center;gap:5px;font-size:10px;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:2px 6px}
+.color-preview-badge i{width:12px;height:12px;border-radius:3px;border:1px solid #0002;display:inline-block}
+.color-preview-badge code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px}
+.color-picker-sv{position:relative;width:100%;height:96px;border-radius:6px;border:1px solid var(--line);background:linear-gradient(to top,#000,transparent),linear-gradient(to right,#fff,hsl(var(--picker-hue,45) 100% 50%));cursor:crosshair;touch-action:none;user-select:none;margin-bottom:7px;overflow:hidden}
+.color-picker-sv-thumb{position:absolute;width:12px;height:12px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px #0008,0 1px 3px #0006;transform:translate(-50%,-50%);pointer-events:none}
+.color-picker-hue-row{display:flex;align-items:center;gap:6px;margin-bottom:7px}
+.color-picker-hue{flex:1;height:10px;-webkit-appearance:none;appearance:none;border-radius:999px;background:linear-gradient(to right,#f00 0%,#ff0 17%,#0f0 33%,#0ff 50%,#00f 67%,#f0f 83%,#f00 100%);outline:none;margin:0}
+.color-picker-hue::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:14px;height:14px;border-radius:50%;background:#fff;border:2px solid var(--text);box-shadow:0 1px 3px #0004;cursor:pointer}
+.color-picker-hue-row input[type=color]{width:24px;height:24px;padding:0;border:1px solid var(--line);border-radius:5px;background:var(--bg);cursor:pointer;flex-shrink:0}
+.color-picker-inputs{display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr;gap:4px}
+.color-input-field{display:flex;flex-direction:column;gap:2px;font-size:9px;color:var(--muted);font-weight:600}
+.color-input-field input{width:100%;min-width:0;border:1px solid var(--line);background:var(--bg);border-radius:4px;padding:2px 4px;font-size:11px;text-align:center;color:var(--text);font-weight:500;height:22px}
+.color-input-field.hex-field input{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+#tool-popover.palette-popover .range-label{margin:8px 0}
+#tool-popover.palette-popover .range-label input{margin:4px 0}
+#tool-popover.palette-popover .select-label{margin:8px 0 4px}
+#tool-popover.palette-popover .popover-hint{margin:4px 0 0}
+.annotation-hex-input{width:78px;border:1px solid var(--line);background:var(--bg);border-radius:5px;padding:4px 6px;font-size:11px;text-align:center;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
