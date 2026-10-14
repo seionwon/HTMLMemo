@@ -520,6 +520,7 @@ function network() {$('#network-status').textContent=navigator.onLine?'온라인
 const DESK_NAV_WIDTH_KEY='htmlmemo-desk-nav-width-v1',DESK_NAV_EXPANDED_WIDTH_KEY='htmlmemo-desk-nav-expanded-width-v1',DESK_NAV_DEFAULT=180,DESK_NAV_MIN=8,DESK_NAV_STRIP_SNAP=48,DESK_NAV_MAX=360;
 let deskNavWidth=DESK_NAV_DEFAULT,deskNavExpandedWidth=DESK_NAV_DEFAULT,deskDrag=null;
 function maxDeskNavWidth() {
+  if(deskDrag&&Number.isFinite(deskDrag.maxWidth))return deskDrag.maxWidth;
   const shellWidth=$('.desk-shell')?.clientWidth||innerWidth||1280;
   return Math.max(96,Math.min(DESK_NAV_MAX,shellWidth-160));
 }
@@ -536,17 +537,18 @@ function applyDeskNavWidth(value,{persist=false,snapStrip=true}={}) {
     deskNavExpandedWidth=width;
     if(persist){try{localStorage?.setItem(DESK_NAV_EXPANDED_WIDTH_KEY,String(width));}catch{/* Ignore storage quota/privacy errors. */}}
   }
-  if(width===deskNavWidth&&!persist&&nav.style.width===width+'px'&&nav.classList.contains('is-strip')===strip)return width;
+  const prevStrip=nav.classList.contains('is-strip');
+  if(width===deskNavWidth&&!persist&&nav.style.width===width+'px'&&prevStrip===strip)return width;
   deskNavWidth=width;
   nav.style.setProperty?.('--desk-nav-width',width+'px');
   nav.style.width=width+'px';nav.style.minWidth=width+'px';nav.style.maxWidth=width+'px';
   nav.classList.toggle('is-strip',strip);
   nav.classList.toggle('is-compact',!strip&&width<136);
   nav.dataset.collapsed=strip?'true':'false';
-  $$('button',nav).forEach(button=>{if(strip){button.setAttribute('tabindex','-1');button.setAttribute('aria-hidden','true');}else{button.removeAttribute('tabindex');button.removeAttribute('aria-hidden');}});
+  if(strip!==prevStrip||persist)$$('button',nav).forEach(button=>{if(strip){button.setAttribute('tabindex','-1');button.setAttribute('aria-hidden','true');}else{button.removeAttribute('tabindex');button.removeAttribute('aria-hidden');}});
   if(resizer){
     resizer.setAttribute('aria-valuenow',String(width));
-    resizer.setAttribute('aria-valuemax',String(maxDeskNavWidth()));
+    if(!deskDrag||persist)resizer.setAttribute('aria-valuemax',String(maxDeskNavWidth()));
     resizer.dataset.collapsed=strip?'true':'false';
   }
   if(persist){try{localStorage?.setItem(DESK_NAV_WIDTH_KEY,String(width));}catch{/* Ignore storage quota/privacy errors. */}}
@@ -563,10 +565,11 @@ function bindDeskResize() {
     event.preventDefault?.();
     if(deskDrag)return;
     const shellLeft=$('.desk-shell')?.getBoundingClientRect?.().left||0;
+    const maxWidth=maxDeskNavWidth();
     const initialWidth=deskNavWidth;
     const startX=Number.isFinite(event.clientX)?event.clientX:shellLeft+initialWidth;
     const offset=Math.abs(startX-(shellLeft+initialWidth))<=16?startX-(shellLeft+initialWidth):0;
-    const state={pointerId:event.pointerId,startX,initialWidth,offset,moved:false,target:event.currentTarget||resizer};
+    const state={pointerId:event.pointerId,startX,shellLeft,maxWidth,initialWidth,offset,moved:false,target:event.currentTarget||resizer};
     deskDrag=state;
     $('#app')?.setAttribute('data-resizing-desk','');
     resizer.classList.add('is-dragging');
@@ -588,8 +591,7 @@ function bindDeskResize() {
       if(state.moved&&e.buttons===0){end(e);return;}
       const clientX=Number.isFinite(e.clientX)?e.clientX:state.startX;
       if(Math.abs(clientX-state.startX)>=1)state.moved=true;
-      const currentShellLeft=$('.desk-shell')?.getBoundingClientRect?.().left||0;
-      applyDeskNavWidth(clientX-currentShellLeft-state.offset,{persist:false,snapStrip:false});
+      applyDeskNavWidth(clientX-state.shellLeft-state.offset,{persist:false,snapStrip:false});
     };
     const end=e=>{
       if(deskDrag!==state)return;

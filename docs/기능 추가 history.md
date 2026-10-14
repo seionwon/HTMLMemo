@@ -747,5 +747,10 @@ ID: hist-20261014-024. tests/chrome.mjs가 macOS Codex/CodeMemo 제한 환경을
    - 문서 `목차` 사이드바의 마지막 폭(`htmlmemo-doc-toc-width-v1`)과 마지막 펼침 폭(`htmlmemo-doc-toc-expanded-width-v1`)을 `localStorage`와 문서 `metadata.view.tocWidth`에 저장해 문서를 다시 열거나 새로고침해도 마지막 폭이 그대로 복원됩니다.
    - 앱 왼쪽 `나만의 웹 서재` 사이드바도 현재 폭(`htmlmemo-desk-nav-width-v1`)과 마지막 펼침 폭(`htmlmemo-desk-nav-expanded-width-v1`)을 함께 저장해 `8px` 띠로 접은 채 새로고침한 뒤 다시 펼쳐도 직전에 사용한 펼침 폭을 기억합니다.
    - 모든 런타임 폭 조절 스타일·속성은 `#htmlmemo-editor-style` 및 `data-htmlmemo-*`로만 관리하고 `serializeHTML` 저장 시 완전히 제거해 원본 HTML 파일을 오염시키지 않습니다.
+3. **마우스 드래그 폭 조절 즉시 반응하도록 성능 최적화(2026-10-14 17:12:00 +09:00, `public/src/reader.js`, `public/src/app.js`, `public/sw.js`):**
+   - 대용량 문서(수만 개 DOM 노드)에서 마우스로 `목차` 사이드바 폭을 조절할 때 매 픽셀마다 `<style id="htmlmemo-editor-style">.textContent` 전체를 다시 쓰고 `:root, body`의 상속 CSS 변수(`--toc-width` 등)를 변경해 문서 전체 스타일 재계산이 반복되던 병목을 제거했습니다.
+   - `@property --htmlmemo-toc-width`와 `@property --htmlmemo-toc-grid-columns`를 `inherits: false`로 등록해 CSS 변수 변경이 하위 본문 수만 개 요소로 전파되지 않게 격리하고, `html[data-htmlmemo-toc-resizing] *` 전체 선택자 대신 레이아웃·사이드바·항목 요소에만 `transition: none !important`를 적용했습니다.
+   - 드래그 시작 시점에 사이드바 좌측 좌표(`sidebarLeft` / `shellLeft`), 최대 허용 폭(`maxWidth`), iframe 오프셋(`frameRect`)을 한 번만 계산해 캐시하고, 동일 캡처 체인의 중복 이벤트 리스너(창당 1개로 축소)와 드래그 중 `getBoundingClientRect()`·`clientWidth` 강제 동기 레이아웃 읽기를 완전히 제거했습니다.
+   - 드래그 중 `ResizeObserver`·`MutationObserver` 개입을 일시 중지하고, 드래그 종료 시에도 전체 문서 `cloneNode(true)` 직렬화(`rememberPosition` → `SaveQueue`)나 불필요한 전체 높이 재측정을 수행하지 않도록 최적화해 마우스 이동 즉시 지연 없이 폭이 조절됩니다.
 
 **검증:** `npm run check`(60개 파일), `npm test`(114개 단위 검사 통과), `npm run build`, `git diff --check`, `codememo-browser` 로컬 프로덕션 서버 검증을 통과했습니다.

@@ -59,14 +59,7 @@ export class Reader {
     } else this.frame.srcdoc = parsed.html;
   }
   baseEditorStyle() {
-    return `${this.nativeScroll ? '' : 'html{overflow:hidden!important;height:auto!important;min-height:0!important;scroll-behavior:auto!important}body{touch-action:pan-x pan-y;height:auto!important;min-height:0!important}'}html[data-htmlmemo-drawing] *{cursor:crosshair!important;user-select:none!important;touch-action:none!important}html[data-htmlmemo-toc-resizing],html[data-htmlmemo-toc-resizing] *{cursor:col-resize!important;user-select:none!important;-webkit-user-select:none!important}[data-htmlmemo-sidebar-grid]{grid-template-columns:var(--htmlmemo-toc-grid-columns)!important}[data-htmlmemo-toc-sidebar],[data-htmlmemo-toc-item],[data-htmlmemo-sidebar-flex]{width:var(--htmlmemo-toc-width)!important;min-width:var(--htmlmemo-toc-width)!important;max-width:var(--htmlmemo-toc-width)!important;flex:0 0 var(--htmlmemo-toc-width)!important;box-sizing:border-box!important}[data-htmlmemo-toc-sidebar]{overflow-x:hidden!important}[data-htmlmemo-toc-item-strip]{width:8px!important;min-width:8px!important;max-width:8px!important;flex:0 0 8px!important;padding-left:0!important;padding-right:0!important;overflow:hidden!important;box-sizing:border-box!important}[data-htmlmemo-toc-strip]{width:8px!important;min-width:8px!important;max-width:8px!important;flex:0 0 8px!important;padding-left:0!important;padding-right:0!important;overflow:hidden!important;box-sizing:border-box!important;cursor:col-resize!important;user-select:none!important}[data-htmlmemo-toc-strip]>:not([data-htmlmemo-toc-resizer]):not([data-htmlmemo-toc-resizer-bound]){opacity:0!important;visibility:hidden!important;pointer-events:none!important}[data-htmlmemo-toc-resizer],[data-htmlmemo-toc-resizer-bound]{cursor:col-resize!important;touch-action:none!important;user-select:none!important;-webkit-user-select:none!important}`;
-  }
-  updateEditorStyle(customVars, width) {
-    const editorStyle = this.doc?.getElementById('htmlmemo-editor-style');
-    if (!editorStyle) return;
-    if (!Number.isFinite(width)) { editorStyle.textContent = this.baseEditorStyle(); return; }
-    const vars = (customVars?.length ? customVars : ['--toc-width', '--sidebar-width', '--nav-width']).map(name => `${name}:${width}px!important`).join(';');
-    editorStyle.textContent = this.baseEditorStyle() + `:root,body,[data-htmlmemo-sidebar-grid],[data-htmlmemo-toc-sidebar],[data-htmlmemo-toc-item]{${vars};--htmlmemo-toc-width:${width}px!important}`;
+    return `@property --htmlmemo-toc-width{syntax:"*";inherits:false;initial-value:260px}@property --htmlmemo-toc-grid-columns{syntax:"*";inherits:false;initial-value:none}${this.nativeScroll ? '' : 'html{overflow:hidden!important;height:auto!important;min-height:0!important;scroll-behavior:auto!important}body{touch-action:pan-x pan-y;height:auto!important;min-height:0!important}'}html[data-htmlmemo-drawing] *{cursor:crosshair!important;user-select:none!important;touch-action:none!important}html[data-htmlmemo-toc-resizing],html[data-htmlmemo-toc-resizing] body{cursor:col-resize!important;user-select:none!important;-webkit-user-select:none!important}[data-htmlmemo-sidebar-grid]{grid-template-columns:var(--htmlmemo-toc-grid-columns)!important;transition:none!important}[data-htmlmemo-toc-sidebar],[data-htmlmemo-toc-item],[data-htmlmemo-sidebar-flex]{width:var(--htmlmemo-toc-width)!important;min-width:var(--htmlmemo-toc-width)!important;max-width:var(--htmlmemo-toc-width)!important;flex:0 0 var(--htmlmemo-toc-width)!important;box-sizing:border-box!important;transition:none!important}[data-htmlmemo-toc-sidebar]{overflow-x:hidden!important}[data-htmlmemo-toc-item-strip]{width:8px!important;min-width:8px!important;max-width:8px!important;flex:0 0 8px!important;padding-left:0!important;padding-right:0!important;overflow:hidden!important;box-sizing:border-box!important}[data-htmlmemo-toc-strip]{width:8px!important;min-width:8px!important;max-width:8px!important;flex:0 0 8px!important;padding-left:0!important;padding-right:0!important;overflow:hidden!important;box-sizing:border-box!important;cursor:col-resize!important;user-select:none!important}[data-htmlmemo-toc-strip]>:not([data-htmlmemo-toc-resizer]):not([data-htmlmemo-toc-resizer-bound]){opacity:0!important;visibility:hidden!important;pointer-events:none!important}[data-htmlmemo-toc-resizer],[data-htmlmemo-toc-resizer-bound]{cursor:col-resize!important;touch-action:none!important;user-select:none!important;-webkit-user-select:none!important;transition:none!important}`;
   }
   bind() {
     const editorStyle = this.doc.createElement('style'); editorStyle.id = 'htmlmemo-editor-style';
@@ -109,13 +102,14 @@ export class Reader {
         this.rememberPosition(); this.callbacks.onView?.();
       }, 250);
     }, {passive:true});
-    this.resizeObserver = new ResizeObserver(() => { if (!this.disposed) { this.measure(); this.renderDrawingLayer(); } });
+    this.resizeObserver = new ResizeObserver(() => { if (!this.disposed && !this.tocDrag) { this.measure(); this.renderDrawingLayer(); } });
     this.resizeObserver.observe(this.doc.body);
     this.hostObserver = new ResizeObserver(() => { if (!this.disposed) { if(this.autoFit)this.zoom = this.fitZoom(); if(this.nativeScroll || this.autoFit)this.applyZoom(); } }); this.hostObserver.observe(this.viewport);
-    this.doc.fonts.ready.then(() => { if (!this.disposed) { this.measure(); this.renderDrawingLayer(); } });
+    this.doc.fonts.ready.then(() => { if (!this.disposed && !this.tocDrag) { this.measure(); this.renderDrawingLayer(); } });
     if (this.metadata.execution?.allowScripts) {
       this.dynamicAnchor = 0;
       this.dynamicObserver = new MutationObserver(records => {
+        if (this.tocDrag) return;
         const editor = node => (node.nodeType===3?node.parentElement:node)?.closest?.('#'+LAYER_ID+',#htmlmemo-annotation-style,#htmlmemo-editor-style,[data-htmlmemo-mark],[data-htmlmemo-search]');
         if(records.some(record=>!editor(record.target) && (record.type==='characterData' || [...record.addedNodes,...record.removedNodes].some(node=>!editor(node)))))this.scheduleDynamicRefresh();
       });
@@ -127,6 +121,7 @@ export class Reader {
     try { return this.host?.ownerDocument?.defaultView?.localStorage || (typeof localStorage !== 'undefined' ? localStorage : null); } catch { return null; }
   }
   maxTocWidth() {
+    if (this.tocDrag && Number.isFinite(this.tocDrag.maxWidth)) return this.tocDrag.maxWidth;
     const docWidth = this.doc?.documentElement?.clientWidth || this.naturalWidth || 1100;
     return Math.max(120, Math.min(TOC_MAX, docWidth - 180));
   }
@@ -172,25 +167,18 @@ export class Reader {
     return null;
   }
   documentMainTrack(parent, sidebarItem, tracks, layout, resizerItem = null) {
-    const mainNodes = [...parent.querySelectorAll('main,[role="main"],article,#main,#content,.page,.content')];
     const candidates = [];
-    for (const node of mainNodes) {
-      const item = this.gridItem(parent, node);
-      if (!item || item === sidebarItem || item === resizerItem || sidebarItem.contains(node) || node.contains(sidebarItem)) continue;
+    for (const item of parent.children || []) {
+      if (!item || item === sidebarItem || item === resizerItem || sidebarItem.contains?.(item) || item.contains?.(sidebarItem)) continue;
       const index = this.gridTrackIndex(parent, item, tracks, layout);
       if (index < 0) continue;
-      const box = item.getBoundingClientRect(), main = node.matches('main,[role="main"]') ? 3 : node.matches('article,#main,#content') ? 2 : 1;
+      const box = item.getBoundingClientRect?.() || {width: 0, height: 0};
+      const isMainEl = item.matches?.('main,[role="main"]') || !!item.querySelector?.('main,[role="main"]');
+      const isContentEl = !isMainEl && (item.matches?.('article,#main,#content,.page,.content') || !!item.querySelector?.('article,#main,#content'));
+      const main = isMainEl ? 3 : isContentEl ? 2 : 1;
       candidates.push({index, score: main * 1e9 + Math.max(0, box.width) * Math.max(0, box.height)});
     }
     if (candidates.length) return candidates.sort((a, b) => b.score - a.score)[0].index;
-    const siblings = [];
-    for (const item of parent.children) {
-      if (item === sidebarItem || item === resizerItem) continue;
-      const index = this.gridTrackIndex(parent, item, tracks, layout);
-      if (index < 0) continue;
-      const box = item.getBoundingClientRect(); siblings.push({index, score: Math.max(0, box.width) * Math.max(0, box.height)});
-    }
-    if (siblings.length) return siblings.sort((a, b) => b.score - a.score)[0].index;
     return -1;
   }
   detectTocCSSVariables() {
@@ -222,7 +210,7 @@ export class Reader {
     const titled = node => {
       if (!node) return false;
       if (label(node.getAttribute?.('aria-label')) || label(node.getAttribute?.('data-title')) || label(node.getAttribute?.('title'))) return true;
-      return [...(node.querySelectorAll?.('h1,h2,h3,h4,h5,h6,header,strong,div,span,[role="heading"],[data-toc-title],[data-title]') || [])].some(h => (h.childNodes?.length <= 3 && label(h.textContent)) || label(h.getAttribute?.('aria-label')));
+      return [...(node.querySelectorAll?.('h1,h2,h3,h4,h5,h6,header,strong,[role="heading"],[data-toc-title],[data-title]') || [])].some(h => (h.childNodes?.length <= 3 && label(h.textContent)) || label(h.getAttribute?.('aria-label')));
     };
     let sidebar = null, resizer = null;
     for (const candidate of explicitResizers) {
@@ -241,7 +229,7 @@ export class Reader {
       sidebar = candidates.find(node => !isMain(node) && !isResizerNode(node) && navigation(node) && (namedNode(node) || titled(node))) || null;
     }
     if (!sidebar) {
-      const headings = [...this.doc.querySelectorAll('h1,h2,h3,h4,h5,h6,header,strong,div,span,[role="heading"],[data-toc-title],[data-title],[aria-label]')].filter(node => {
+      const headings = [...this.doc.querySelectorAll('h1,h2,h3,h4,h5,h6,header,strong,[role="heading"],[data-toc-title],[data-title],[aria-label]')].filter(node => {
         const text = (node.childNodes?.length <= 3 ? node.textContent : '') || '';
         return /^\s*(?:목차|차례|table of contents|contents)\s*$/i.test(text) || label(node.getAttribute?.('aria-label')) || label(node.getAttribute?.('data-title'));
       });
@@ -292,6 +280,7 @@ export class Reader {
           }
           if (sidebarTrackIndex < 0) sidebarTrackIndex = rtl ? tokens.length - 1 : 0;
           if (mainTrackIndex < 0 || mainTrackIndex === sidebarTrackIndex) mainTrackIndex = rtl ? 0 : tokens.length - 1;
+          mainItem = [...parent.children].find(c => c !== sidebarItem && c !== resizerItem) || null;
           break;
         }
       }
@@ -312,16 +301,23 @@ export class Reader {
   ensureDocumentTocResize() {
     if (this.disposed || !this.doc?.body) return null;
     if (this.tocResize?.sidebar?.isConnected && (!this.tocResize.resizer || this.tocResize.resizer.isConnected)) return this.tocResize;
+    if (this.tocChecked && !this.tocResize) return null;
     return this.setupDocumentTocResize();
   }
   setupDocumentTocResize() {
     if (this.disposed || !this.doc?.body) return null;
+    this.tocChecked = true;
+    this.tocApplied = false;
     const parts = this.findDocumentTocParts();
     if (!parts) { this.tocResize = null; return null; }
     const info = this.analyzeTocLayout(parts.sidebar, parts.resizer);
     this.tocResize = info;
     this.tocDefaultWidth = info.defaultWidth;
-    if (info.resizer) info.resizer.setAttribute('data-htmlmemo-toc-resizer-bound', '');
+    if (info.resizer) {
+      info.resizer.setAttribute('data-htmlmemo-toc-resizer-bound', '');
+      info.resizer.setAttribute('aria-valuemin', String(TOC_MIN));
+      info.resizer.setAttribute('aria-valuemax', String(this.maxTocWidth()));
+    }
     const store = this.storage();
     let savedExpanded = null, savedWidth = null;
     try { savedExpanded = store?.getItem(TOC_EXPANDED_WIDTH_KEY); savedWidth = store?.getItem(TOC_WIDTH_KEY); } catch { /* ignore */ }
@@ -332,71 +328,73 @@ export class Reader {
       this.applyTocWidth(initialSaved, {persist: false, snapStrip: true});
     } else {
       this.tocWidth = info.defaultWidth;
-      if (info.resizer) {
-        info.resizer.setAttribute('aria-valuemin', String(TOC_MIN));
-        info.resizer.setAttribute('aria-valuemax', String(this.maxTocWidth()));
-        info.resizer.setAttribute('aria-valuenow', String(this.tocWidth));
-      }
+      this.tocStrip = false;
+      if (info.resizer) info.resizer.setAttribute('aria-valuenow', String(this.tocWidth));
     }
     return info;
   }
   applyTocWidth(value, {persist = false, snapStrip = true} = {}) {
-    const info = this.ensureDocumentTocResize();
+    const info = this.tocResize?.sidebar?.isConnected ? this.tocResize : this.ensureDocumentTocResize();
     if (!info?.sidebar?.isConnected) return TOC_DEFAULT;
     const width = this.clampTocWidth(value, snapStrip);
     const strip = width < TOC_STRIP_SNAP;
-    const prevStrip = info.sidebar.hasAttribute('data-htmlmemo-toc-strip');
-    if (strip && !prevStrip) this.tocScrollTop = info.sidebar.scrollTop || 0;
     if (!strip && (persist || width >= 96)) {
       this.tocExpandedWidth = width;
       if (persist) { try { this.storage()?.setItem(TOC_EXPANDED_WIDTH_KEY, String(width)); } catch { /* ignore */ } }
     }
+    if (!persist && this.tocApplied && width === this.tocWidth && strip === this.tocStrip) return width;
+    const prevStrip = !!this.tocStrip;
+    if (strip && !prevStrip) this.tocScrollTop = info.sidebar.scrollTop || 0;
     this.tocWidth = width;
     this.tocResizedWidth = width;
-    const {sidebar, sidebarItem, resizer, layoutParent, layoutKind, initialTokens, sidebarTrackIndex, mainTrackIndex, customVars} = info;
-    sidebar.setAttribute('data-htmlmemo-toc-sidebar', '');
+    this.tocStrip = strip;
+    const {sidebar, sidebarItem, resizer, layoutParent, layoutKind, initialTokens, sidebarTrackIndex, mainTrackIndex} = info;
+    if (!this.tocApplied) {
+      this.tocApplied = true;
+      sidebar.setAttribute('data-htmlmemo-toc-sidebar', '');
+      if (sidebarItem && sidebarItem !== sidebar) sidebarItem.setAttribute('data-htmlmemo-toc-item', '');
+      if (layoutKind === 'grid' && layoutParent && initialTokens.length >= 2 && sidebarTrackIndex >= 0) layoutParent.setAttribute('data-htmlmemo-sidebar-grid', '');
+      else if (layoutKind === 'flex' && sidebarItem) sidebarItem.setAttribute('data-htmlmemo-sidebar-flex', '');
+      if (resizer) resizer.setAttribute('data-htmlmemo-toc-resizer-bound', '');
+    }
     sidebar.style?.setProperty?.('--htmlmemo-toc-width', width + 'px');
     if (sidebarItem && sidebarItem !== sidebar) {
-      sidebarItem.setAttribute('data-htmlmemo-toc-item', '');
       sidebarItem.style?.setProperty?.('--htmlmemo-toc-width', width + 'px');
-      sidebarItem.toggleAttribute('data-htmlmemo-toc-item-strip', strip);
+      if (strip !== prevStrip || persist) sidebarItem.toggleAttribute('data-htmlmemo-toc-item-strip', strip);
     }
-    sidebar.toggleAttribute('data-htmlmemo-toc-strip', strip);
-    sidebar.toggleAttribute('data-htmlmemo-toc-collapsed', strip);
+    if (strip !== prevStrip || persist || sidebar.hasAttribute('data-htmlmemo-toc-strip') !== strip) {
+      sidebar.toggleAttribute('data-htmlmemo-toc-strip', strip);
+      sidebar.toggleAttribute('data-htmlmemo-toc-collapsed', strip);
+    }
     if (layoutKind === 'grid' && layoutParent && initialTokens.length >= 2 && sidebarTrackIndex >= 0) {
       const columns = initialTokens.map((token, idx) => idx === sidebarTrackIndex ? `${width}px` : idx === mainTrackIndex ? 'minmax(0,1fr)' : token).join(' ');
-      layoutParent.setAttribute('data-htmlmemo-sidebar-grid', '');
       layoutParent.style?.setProperty?.('--htmlmemo-toc-grid-columns', columns);
-    } else if (layoutKind === 'flex' && sidebarItem) {
-      sidebarItem.setAttribute('data-htmlmemo-sidebar-flex', '');
-    }
-    this.updateEditorStyle(customVars, width);
-    if (resizer) {
-      resizer.setAttribute('data-htmlmemo-toc-resizer-bound', '');
-      resizer.setAttribute('aria-valuemin', String(TOC_MIN));
-      resizer.setAttribute('aria-valuemax', String(this.maxTocWidth()));
-      resizer.setAttribute('aria-valuenow', String(width));
     }
     if (!strip && prevStrip && this.tocScrollTop != null) info.sidebar.scrollTop = this.tocScrollTop;
     if (persist) {
+      if (resizer) resizer.setAttribute('aria-valuenow', String(width));
       try { this.storage()?.setItem(TOC_WIDTH_KEY, String(width)); } catch { /* ignore */ }
-      this.rememberPosition();
+      if (this.metadata?.view) this.metadata.view.tocWidth = width;
     }
     return width;
+  }
+  syncAfterTocResize() {
+    if (!this.nativeScroll) this.measure();
+    if (this.metadata?.annotations?.some(a => !TEXT_TOOLS.includes(a.type))) this.renderDrawingLayer();
   }
   resetTocWidth() {
     const info = this.ensureDocumentTocResize();
     if (!info?.sidebar?.isConnected) return;
     const target = this.tocDefaultWidth || info.defaultWidth || TOC_DEFAULT;
     this.applyTocWidth(target, {persist: true, snapStrip: true});
-    this.measure(); this.renderDrawingLayer();
+    this.syncAfterTocResize();
   }
   eventDocX(event) {
     if (!event || !Number.isFinite(event.clientX)) return NaN;
     const hostDoc = this.host?.ownerDocument;
     const fromHost = hostDoc && hostDoc !== this.doc && (event.view === hostDoc.defaultView || event.target?.ownerDocument === hostDoc);
     if (fromHost) {
-      const rect = this.frame?.getBoundingClientRect?.();
+      const rect = this.tocDrag?.frameRect || this.frame?.getBoundingClientRect?.();
       if (rect) return (event.clientX - rect.left) / (this.zoom || 1);
     }
     return event.clientX;
@@ -434,17 +432,19 @@ export class Reader {
     const boxNode = sidebarItem || sidebar;
     const rect = boxNode.getBoundingClientRect?.();
     const sidebarLeft = rect?.left || 0;
+    const maxWidth = this.maxTocWidth();
+    const frameRect = this.host?.ownerDocument !== this.doc ? this.frame?.getBoundingClientRect?.() : null;
     const initialWidth = Number.isFinite(this.tocWidth) ? this.tocWidth : (rect?.width >= TOC_MIN ? Math.round(rect.width) : info.defaultWidth);
     const clientX = this.eventDocX(event);
     const startX = Number.isFinite(clientX) ? clientX : sidebarLeft + initialWidth;
     const offset = Math.abs(startX - (sidebarLeft + initialWidth)) <= 24 ? startX - (sidebarLeft + initialWidth) : 0;
     const captureTarget = resizer || sidebar;
-    const state = {pointerId: event.pointerId, startX, initialWidth, offset, moved: false, target: captureTarget};
+    const state = {pointerId: event.pointerId, startX, sidebarLeft, maxWidth, frameRect, initialWidth, offset, moved: false, target: captureTarget};
     this.tocDrag = state;
     this.doc.documentElement.setAttribute('data-htmlmemo-toc-resizing', '');
     try { if (event.pointerId != null) captureTarget?.setPointerCapture?.(event.pointerId); } catch { /* ignore */ }
-    const hostDoc = this.host?.ownerDocument, hostWin = hostDoc?.defaultView, docWin = this.doc.defaultView;
-    const targets = [resizer, sidebar, this.doc, docWin, hostDoc, hostWin].filter(Boolean);
+    const hostDoc = this.host?.ownerDocument, hostWin = hostDoc?.defaultView, docWin = this.doc.defaultView || this.doc;
+    const targets = [docWin, hostWin && hostWin !== docWin ? hostWin : null].filter(Boolean);
     const cleanup = () => {
       this.tocDrag = null;
       this.doc?.documentElement?.removeAttribute('data-htmlmemo-toc-resizing');
@@ -464,8 +464,7 @@ export class Reader {
       if (Math.abs(currentX - state.startX) >= 1) state.moved = true;
       if (!state.moved) return;
       e.preventDefault?.();
-      const currentLeft = (info.sidebarItem || info.sidebar).getBoundingClientRect?.().left || 0;
-      this.applyTocWidth(currentX - currentLeft - state.offset, {persist: false, snapStrip: false});
+      this.applyTocWidth(currentX - state.sidebarLeft - state.offset, {persist: false, snapStrip: false});
     };
     const end = e => {
       if (this.tocDrag !== state) return;
@@ -477,7 +476,7 @@ export class Reader {
         if (state.initialWidth <= TOC_MIN) {
           const restored = Math.max(TOC_STRIP_SNAP, this.tocExpandedWidth || this.tocDefaultWidth || TOC_DEFAULT);
           this.applyTocWidth(restored, {persist: true, snapStrip: true});
-          this.measure(); this.renderDrawingLayer();
+          this.syncAfterTocResize();
         }
         return;
       }
@@ -486,7 +485,7 @@ export class Reader {
         next = Math.max(TOC_STRIP_SNAP, this.tocExpandedWidth || this.tocDefaultWidth || TOC_DEFAULT);
       }
       this.applyTocWidth(next, {persist: true, snapStrip: true});
-      this.measure(); this.renderDrawingLayer();
+      this.syncAfterTocResize();
     };
     const cancel = e => {
       if (this.tocDrag !== state) return;
@@ -494,7 +493,7 @@ export class Reader {
       cleanup();
       if (state.moved) {
         this.applyTocWidth(this.tocWidth, {persist: true, snapStrip: true});
-        this.measure(); this.renderDrawingLayer();
+        this.syncAfterTocResize();
       }
     };
     for (const t of targets) {
@@ -520,18 +519,18 @@ export class Reader {
     if (event.key === 'ArrowLeft') {
       event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation?.();
       this.applyTocWidth(current - 16, {persist: true, snapStrip: true});
-      this.measure(); this.renderDrawingLayer(); return true;
+      this.syncAfterTocResize(); return true;
     }
     if (event.key === 'ArrowRight') {
       event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation?.();
       const base = current < TOC_STRIP_SNAP ? Math.max(TOC_STRIP_SNAP, this.tocExpandedWidth || this.tocDefaultWidth || TOC_DEFAULT) : current + 16;
       this.applyTocWidth(base, {persist: true, snapStrip: true});
-      this.measure(); this.renderDrawingLayer(); return true;
+      this.syncAfterTocResize(); return true;
     }
     if (event.key === 'Home') {
       event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation?.();
       this.applyTocWidth(TOC_MIN, {persist: true, snapStrip: true});
-      this.measure(); this.renderDrawingLayer(); return true;
+      this.syncAfterTocResize(); return true;
     }
     if (event.key === 'End') {
       event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation?.();
@@ -541,7 +540,7 @@ export class Reader {
       event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation?.();
       const next = current <= TOC_MIN ? Math.max(TOC_STRIP_SNAP, this.tocExpandedWidth || this.tocDefaultWidth || TOC_DEFAULT) : TOC_MIN;
       this.applyTocWidth(next, {persist: true, snapStrip: true});
-      this.measure(); this.renderDrawingLayer(); return true;
+      this.syncAfterTocResize(); return true;
     }
     return false;
   }
@@ -629,19 +628,23 @@ export class Reader {
   }
   async refreshDynamicDocument() {
     if (this.disposed || this.dynamicRunning) return;
+    if (this.tocDrag) { this.scheduleDynamicRefresh(); return; }
     this.dynamicRunning = true;this.dynamicDirty = false;
     try {
       const body = this.doc.body;if (!body) return;
       body.setAttribute('data-htmlmemo-anchor','body');
-      let count=0;
+      let count=0,added=0;
       for (const element of body.querySelectorAll('*')) {
-        if (!element.closest('#'+LAYER_ID) && !['script','style','meta','link','template'].includes(element.localName) && !element.hasAttribute('data-htmlmemo-anchor')) element.setAttribute('data-htmlmemo-anchor','js'+this.dynamicAnchor++);
+        if (!element.closest('#'+LAYER_ID) && !['script','style','meta','link','template'].includes(element.localName) && !element.hasAttribute('data-htmlmemo-anchor')) { element.setAttribute('data-htmlmemo-anchor','js'+this.dynamicAnchor++); added++; }
         if (++count % 1000 === 0) {await new Promise(resolve=>setTimeout(resolve,0));if(this.disposed)return;}
       }
+      this.tocChecked = false;
       this.ensureDocumentTocResize();
-      this.initialHTML = null;
-      this.measure();this.render();
-      this.callbacks.onChange?.();this.callbacks.onView?.();
+      if (added > 0) {
+        this.initialHTML = null;
+        this.measure();this.render();
+        this.callbacks.onChange?.();this.callbacks.onView?.();
+      }
     } finally {
       this.dynamicRunning = false;
       if (this.dynamicDirty && !this.disposed) this.scheduleDynamicRefresh();
