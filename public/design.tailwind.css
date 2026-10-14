@@ -153,10 +153,16 @@ body[data-codememo-design]{margin:0;font-family:var(--app-font);background:var(-
 .palette-label{font-size:11px;font-weight:600;color:var(--muted);white-space:nowrap}
 .palette-actions{display:flex;align-items:center;gap:4px;min-width:0}
 #palette-preset{padding:3px 6px;font-size:11px;border-radius:5px;max-width:190px;height:24px}
-.palette-mini-btn{border:1px solid var(--line);background:var(--surface);border-radius:5px;padding:2px 7px;font-size:10px;height:22px;display:inline-flex;align-items:center;justify-content:center;white-space:nowrap}
-.palette-mini-btn:hover:not(:disabled){background:var(--bg)}
-.palette-mini-btn.primary{background:var(--green);border-color:var(--green);color:#fff}
-.palette-mini-btn.danger{color:#b77653;border-color:#e2c4b3}
+.palette-mini-btn{border:1px solid var(--line);background:var(--surface-muted);color:var(--text);font-weight:600;border-radius:5px;padding:2px 8px;font-size:10px;height:24px;display:inline-flex;align-items:center;justify-content:center;white-space:nowrap}
+.palette-mini-btn:hover:not(:disabled){background:var(--line);color:var(--text)}
+.palette-mini-btn.primary{background:#1e293b;border-color:#1e293b;color:#fff}
+.palette-mini-btn.primary:hover:not(:disabled){background:#334155;border-color:#334155;color:#fff}
+:root[data-theme=dark] .palette-mini-btn.primary{background:#334155;border-color:#526580;color:#fff}
+:root[data-theme=dark] .palette-mini-btn.primary:hover:not(:disabled){background:#475569;border-color:#64748b;color:#fff}
+.palette-mini-btn.danger{color:#b42318;border-color:#fecdca;background:#fef3f2}
+.palette-mini-btn.danger:hover:not(:disabled){background:#fee4e2;border-color:#fda29b;color:#912018}
+:root[data-theme=dark] .palette-mini-btn.danger{color:#fecaca;border-color:#7f1d1d;background:#3b181b}
+:root[data-theme=dark] .palette-mini-btn.danger:hover:not(:disabled){background:#541e22;border-color:#991b1b;color:#fee2e2}
 .swatches.preset-swatches{display:grid;grid-template-columns:repeat(10,1fr);gap:5px;margin-bottom:4px}
 .swatches.preset-swatches .swatch{width:22px;height:22px;justify-self:center}
 .swatches.custom-swatches{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px;min-height:22px;align-items:center}

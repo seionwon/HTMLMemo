@@ -809,4 +809,19 @@ ID: hist-20261014-024. tests/chrome.mjs가 macOS Codex/CodeMemo 제한 환경을
    - 마우스·포인터 드래그 및 키보드 방향키로 조작 가능한 2D 채도·명도(Saturation/Value) 스펙트럼 박스(`#color-picker-sv`, `#color-picker-sv-thumb`), 0~360° 무지개 색조 슬라이더(`#color-picker-hue`), 실시간 미리보기 배지(`#color-preview-chip`, `#color-preview-text`), 시스템 컬러 피커(`#custom-color`), 직접 입력 가능한 `HEX`(`#color-hex`) 및 `R`·`G`·`B`(`#color-r`, `#color-g`, `#color-b`) 입력창을 모두 갖추어 어떤 방식이든 즉시 동기화되도록 구성했습니다.
    - 「주석 편집」 모달(`#annotation-dialog`)에서도 동일한 20색 스와치와 사용자 색상 스와치, `HEX` 코드 입력(`#annotation-color-hex`), 컬러 피커(`#annotation-color`)를 사용할 수 있도록 확장했습니다(`public/sw.js` 캐시 버전 `htmlmemo-v12` 갱신).
 
-**검증:** `npm run check`(60개 파일), `npm test`(117개 단위 검사 통과), `npm run build`, `git diff --check`, `codememo-browser` 검증을 통과했습니다.
+**검증:** `npm run check`(60개 파일), `npm test`(117개 단위 검사 통과), `npm run build`, `git diff --check`, `codememo-browser` 검증을 통과했습니다. [GitHub Actions 3857113](https://github.com/seionwon/HTMLMemo/actions) 배포를 완료했습니다.
+
+<a id="hist-20261014-030"></a>
+### 2026-10-14 22:47:00 +09:00 — 「펜과 색상」의 「+ 팔레트 저장」 등 버튼 텍스트 대비 및 다크·라이트 모드 가독성 개선
+
+| ID | change-kind | status |
+|---|---|---|
+| hist-20261014-030 | 「+ 팔레트 저장」(`.palette-mini-btn.primary`) 및 팔레트 보조·삭제 버튼의 다크·라이트 테마 색상 대비 개선 | 구현·단위 검사·빌드·`codememo-browser` 검증·Pages 게시 진행 |
+
+**목적과 변경 내용:**
+1. **「+ 팔레트 저장」 버튼(`.palette-mini-btn.primary`) 및 팔레트 조작 버튼 가독성 개선(`public/design.tailwind.css`, `public/styles.css`, `public/sw.js`):**
+   - 다크 모드(`:root[data-theme=dark]`)에서 `--green` 토큰이 밝은 파스텔 블루(`#c2d2e8`)로 바뀌면서 `.palette-mini-btn.primary`(`background: var(--green); color: #fff`)의 배경(`#c2d2e8`)과 흰색 글자(`#ffffff`) 대비가 낮아져 `「+ 팔레트 저장」` 글자가 잘 보이지 않던 문제를 수정했습니다.
+   - 또한 마우스 호버 시 `.palette-mini-btn:hover:not(:disabled)` 선택자 우선순위가 `.palette-mini-btn.primary`보다 높아 배경만 밝은 색(`var(--bg)`)으로 바뀌고 글자는 흰색으로 남아 가독성이 떨어지던 문제를 함께 해결했습니다.
+   - 라이트 모드에서는 짙은 슬레이트 배경(`#1e293b`, 호버 시 `#334155`)과 흰색 굵은 텍스트(`#ffffff`, 대비율 14.8:1), 다크 모드(`:root[data-theme=dark]`)에서는 상단 주요 버튼(`HTML 내보내기`)과 통일된 짙은 슬레이트 배경(`#334155`, 테두리 `#526580`, 호버 시 `#475569`)과 흰색 굵은 텍스트(`#ffffff`, 대비율 10.6:1)를 적용해 두 테마 모두에서 선명하게 읽히도록 개선했습니다(`public/sw.js` 캐시 버전 `htmlmemo-v13` 갱신).
+
+**검증:** `npm run check`(60개 파일), `npm test`(117개 단위 검사 통과), `npm run build`, `git diff --check` 및 `codememo-browser` 다크·라이트 모드 스크린샷 검증을 통과했습니다.
