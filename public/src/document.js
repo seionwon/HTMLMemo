@@ -8,6 +8,12 @@ export function cleanAnnotations(doc) {
   doc.getElementById(LAYER_ID)?.remove();
   doc.getElementById(DATA_ID)?.remove();
   doc.getElementById('htmlmemo-annotation-style')?.remove();
+  // Older HTMLMemo builds temporarily added a control and a collapsed-state
+  // attribute to the document's own table of contents.  Those editor-only
+  // artifacts must never hide the source document's sidebar after reopening.
+  doc.getElementById('htmlmemo-toc-toggle-style')?.remove();
+  doc.querySelectorAll('[data-htmlmemo-toc-toggle]').forEach(element => element.remove());
+  doc.querySelectorAll('[data-htmlmemo-toc-collapsed]').forEach(element => element.removeAttribute('data-htmlmemo-toc-collapsed'));
   let unwrapped = false;
   for (const selector of ['[data-htmlmemo-mark]', '[data-htmlmemo-search]']) {
     for (const mark of [...doc.querySelectorAll(selector)].reverse()) { mark.replaceWith(...mark.childNodes); unwrapped = true; }
@@ -98,14 +104,18 @@ function* prepareHTML(html, defaults, {includeMetadata = false, document: loaded
     execution:{allowScripts:!!allowScripts}, annotations: embedded.annotations || [], view: {scrollTop:Math.max(0,Number(view.scrollTop)||0),scrollLeft:Math.max(0,Number(view.scrollLeft)||0),zoom:Number.isFinite(view.zoom)?Math.min(8,Math.max(.2,view.zoom)):null}, bookmarks,
     warnings: (Array.isArray(embedded.warnings) ? embedded.warnings : defaults.warnings || []).filter(w=>typeof w==='string').slice(0,5000),
   };
-  // Freeze viewport-based heights to the capture viewport. The reader grows
-  // its iframe to the full document; otherwise 100vh can cause endless growth.
-  const freezeCSS=css=>css.replace(/(?<![\w.-])(-?\d*\.?\d+)(dvh|svh|lvh|vh)\b/g,(_,amount)=>`${Number(amount)*metadata.viewport.height/100}px`);
-  for(const style of doc.querySelectorAll('style')){yield;style.textContent=freezeCSS(style.textContent);}
-  for(const element of doc.querySelectorAll('[style]')){yield;element.setAttribute('style',freezeCSS(element.getAttribute('style')));}
+  const nativeScroll = !!allowScripts || !!loadedDocument || html.length >= 4 * 1024 * 1024 || n >= 20000;
+  // Native-scrolling local documents retain their own viewport rules. This is
+  // required for document-owned sticky navigation and sidebars to keep the
+  // same layout they have when opened directly in Chrome.
+  if (!nativeScroll) {
+    const freezeCSS=css=>css.replace(/(?<![\w.-])(-?\d*\.?\d+)(dvh|svh|lvh|vh)\b/g,(_,amount)=>`${Number(amount)*metadata.viewport.height/100}px`);
+    for(const style of doc.querySelectorAll('style')){yield;style.textContent=freezeCSS(style.textContent);}
+    for(const element of doc.querySelectorAll('[style]')){yield;element.setAttribute('style',freezeCSS(element.getAttribute('style')));}
+  }
   if (includeMetadata) doc.head.append(metadataElement(doc, metadata));
   return {html: '<!doctype html>\n' + doc.documentElement.outerHTML, metadata,
-    nativeScroll: !!allowScripts || !!loadedDocument || html.length >= 4 * 1024 * 1024 || n >= 20000};
+    nativeScroll};
 }
 function metadataElement(doc, metadata) {
   const script = doc.createElement('script'); script.id = DATA_ID; script.type = 'application/json';
@@ -117,6 +127,11 @@ export function serializeHTML(doc, metadata) {
   clone.querySelector('#' + DATA_ID)?.remove();
   for (const mark of [...clone.querySelectorAll('[data-htmlmemo-search]')].reverse()) mark.replaceWith(...mark.childNodes);
   clone.querySelectorAll('[data-htmlmemo-preview], [data-htmlmemo-selected]').forEach(element => element.remove());
+  // A short-lived reader build wrote its TOC collapse control into the source
+  // document. Never carry those controls or their hidden state into a saved
+  // HTML file; the document's own TOC remains entirely under its own CSS.
+  clone.querySelectorAll('#htmlmemo-toc-toggle-style, [data-htmlmemo-toc-toggle]').forEach(element => element.remove());
+  clone.querySelectorAll('[data-htmlmemo-toc-collapsed]').forEach(element => element.removeAttribute('data-htmlmemo-toc-collapsed'));
   // Interactive editor-only styles should never change the standalone file.
   clone.querySelector('#htmlmemo-editor-style')?.remove();
   clone.querySelector('head').append(metadataElement(doc, metadata));

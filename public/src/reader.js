@@ -59,10 +59,10 @@ export class Reader {
   }
   bind() {
     const editorStyle = this.doc.createElement('style'); editorStyle.id = 'htmlmemo-editor-style';
-    editorStyle.textContent = `html{overflow:${this.nativeScroll?'auto':'hidden'}!important;height:auto!important;min-height:0!important;scroll-behavior:auto!important}body{touch-action:pan-x pan-y;height:auto!important;min-height:0!important}html[data-htmlmemo-drawing] *{cursor:crosshair!important;user-select:none!important;touch-action:none!important}`; this.doc.head.append(editorStyle);
+    editorStyle.textContent = `${this.nativeScroll ? '' : 'html{overflow:hidden!important;height:auto!important;min-height:0!important;scroll-behavior:auto!important}body{touch-action:pan-x pan-y;height:auto!important;min-height:0!important}'}html[data-htmlmemo-drawing] *{cursor:crosshair!important;user-select:none!important;touch-action:none!important}`; this.doc.head.append(editorStyle);
     this.doc.addEventListener('wheel', event => this.forwardWheel(event), {capture:true,passive:false});
     this.doc.addEventListener('pointerdown', event => { if(this.startMiddleScroll(event))return;this.stopMiddleScroll();this.callbacks.onSelectionDismiss?.(); this.pointerDown(event); }, true);
-    this.doc.addEventListener('pointermove', event => { this.moveMiddleScroll(event);this.pointerMove(event); }, true);
+    this.doc.addEventListener('pointermove', event => { if(this.moveMiddleScroll(event))return;this.pointerMove(event); }, true);
     this.doc.addEventListener('pointerup', event => { if(this.endMiddleScroll(event))return;this.pointerUp(event); }, true);
     this.doc.addEventListener('pointercancel', () => { this.stopMiddleScroll();this.gesture = null; this.preview?.remove(); this.preview = null; });
     this.doc.addEventListener('auxclick', event => {if(event.button===1&&!event.target.closest?.('a,button,input,textarea,select,[contenteditable]'))event.preventDefault();}, true);
@@ -110,18 +110,32 @@ export class Reader {
     }
   }
   forwardWheel(event) {
-    // Static documents scroll in the outer pane; wheel events inside an iframe
-    // cannot bubble there. Native documents retain Chrome's own scrolling.
-    if (this.nativeScroll || event.ctrlKey || event.defaultPrevented) return;
+    // The iframe is a separate event tree.  Move its actual scroll owner
+    // directly so a wheel keeps working even when the source HTML cancels its
+    // own wheel event or uses a custom root scroller.
+    if (event.ctrlKey) return;
     const scale=event.deltaMode===1?16:event.deltaMode===2?this.viewport.clientHeight:1;
-    for(let node=event.target;node?.nodeType===1&&node!==this.doc.body;node=node.parentElement){
+    const left=event.deltaX*scale,top=event.deltaY*scale;
+    for(let node=event.target;node?.nodeType===1;node=node.parentElement){
       const style=this.doc.defaultView.getComputedStyle(node);
-      if(/auto|scroll/.test(style.overflowY)&&node.scrollHeight>node.clientHeight&&
-        (event.deltaY<0&&node.scrollTop>0 || event.deltaY>0&&node.scrollTop<node.scrollHeight-node.clientHeight))return;
-      if(/auto|scroll/.test(style.overflowX)&&node.scrollWidth>node.clientWidth&&
-        (event.deltaX<0&&node.scrollLeft>0 || event.deltaX>0&&node.scrollLeft<node.scrollWidth-node.clientWidth))return;
+      const vertical=/auto|scroll|overlay/.test(style.overflowY)&&node.scrollHeight>node.clientHeight+1;
+      const horizontal=/auto|scroll|overlay/.test(style.overflowX)&&node.scrollWidth>node.clientWidth+1;
+      // Preserve normal scroll chaining. At the end of an inner panel, pass
+      // the wheel on to the document root instead of swallowing it there.
+      const canVertical=vertical&&(top<0&&node.scrollTop>0||top>0&&node.scrollTop<node.scrollHeight-node.clientHeight-1);
+      const canHorizontal=horizontal&&(left<0&&node.scrollLeft>0||left>0&&node.scrollLeft<node.scrollWidth-node.clientWidth-1);
+      if (canVertical || canHorizontal) {
+        node.scrollBy?.({left,top});
+        if (!node.scrollBy) { node.scrollLeft+=left;node.scrollTop+=top; }
+        event.preventDefault();return;
+      }
+      if (node===this.doc.documentElement) break;
     }
-    this.viewport.scrollBy({left:event.deltaX*scale,top:event.deltaY*scale});
+    if(this.nativeScroll) {
+      const root=this.doc.scrollingElement||this.doc.documentElement||this.doc.body;
+      root.scrollBy?.({left,top});
+      if (!root.scrollBy) { root.scrollLeft+=left;root.scrollTop+=top; }
+    } else this.viewport.scrollBy({left,top});
     event.preventDefault();
   }
   startMiddleScroll(event) {
@@ -129,8 +143,9 @@ export class Reader {
     if (event.target.closest?.('a,button,input,textarea,select,[contenteditable]')) return false;
     event.preventDefault();
     if (this.middleScroll) {this.stopMiddleScroll();return true;}
-    const state={pointerId:event.pointerId,x:event.clientX,y:event.clientY,dx:0,dy:0,moved:false,frame:0};
+    const state={pointerId:event.pointerId,x:event.clientX,y:event.clientY,dx:0,dy:0,moved:false,frame:0,target:event.target};
     this.middleScroll=state;
+    event.target.setPointerCapture?.(event.pointerId);
     const tick=()=>{
       if (this.middleScroll!==state || this.disposed) return;
       const speed=value=>Math.abs(value)<8?0:Math.sign(value)*Math.min(48,(Math.abs(value)-8)/4);
@@ -146,9 +161,11 @@ export class Reader {
   }
   moveMiddleScroll(event) {
     const state=this.middleScroll;
-    if(!state || event.pointerId!==state.pointerId)return;
+    if(!state || event.pointerId!==state.pointerId)return false;
+    event.preventDefault?.();
     state.dx=event.clientX-state.x;state.dy=event.clientY-state.y;
     if(Math.abs(state.dx)>8 || Math.abs(state.dy)>8)state.moved=true;
+    return true;
   }
   endMiddleScroll(event) {
     const state=this.middleScroll;
@@ -162,6 +179,7 @@ export class Reader {
   stopMiddleScroll() {
     if(!this.middleScroll)return;
     this.doc?.defaultView?.cancelAnimationFrame(this.middleScroll.frame);
+    this.middleScroll.target?.releasePointerCapture?.(this.middleScroll.pointerId);
     this.middleScroll=null;
   }
   observeDynamicDocument() {
