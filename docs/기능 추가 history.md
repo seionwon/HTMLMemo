@@ -706,18 +706,25 @@ ID: hist-20261014-024. tests/chrome.mjs가 macOS Codex/CodeMemo 제한 환경을
 
 | ID | change-kind | status |
 |---|---|---|
-| hist-20261014-025 | 사이드바 경계선 드래그 리사이저·최소 폭 띠(`8px`) 축소 | 구현·단위 검사·로컬 빌드·`codememo-browser` 검증 완료 (로컬 반영) |
+| hist-20261014-025 | 사이드바 경계선 드래그 리사이저·최소 폭 띠(`8px`) 축소·서비스 워커 캐시 갱신 | 구현·단위 검사·빌드·`codememo-browser` 검증·Pages 게시 진행 |
 
 **목적과 변경 내용:** 왼쪽 `나만의 웹 서재` 사이드바(`nav.desk-nav`)와 오른쪽 본문 영역(`main#main`) 사이의 세로 경계선을 마우스로 잡고 좌우로 옮겨 사이드바 폭을 자유롭게 조절할 수 있도록 `#desk-resizer`(`role="separator"`, `aria-orientation="vertical"`)를 추가했습니다. 최대로 왼쪽으로 축소하면 사이드바가 완전히 사라지지 않고 `8px` 너비의 아주 좁은 세로 띠(`.desk-nav.is-strip`)만 남도록 구현했습니다. 불러온 원본 HTML 문서 내부의 DOM·목차·스타일은 일절 수정하지 않습니다.
 
+**후속 수정 (2026-10-14 16:00:00 +09:00 — 마우스 드래그 미동작 원인 해결):**
+1. **서비스 워커 구버전 자산 캐시 및 미게시 문제 해결:** 기존 `public/sw.js`가 `CACHE = 'htmlmemo-v5'`에서 캐시 우선(`if (cached) return cached;`)으로 `./styles.css`·`./src/app.js`를 반환하고 GitHub Pages(`origin/main`)에도 게시되지 않아 브라우저가 리사이저 코드·스타일 없는 이전 자산을 계속 읽던 문제를 수정했습니다. `public/sw.js`를 `htmlmemo-v6`으로 올리고 온라인일 때는 최신 자산을 네트워크에서 먼저 받아 캐시를 갱신(오프라인 시 캐시 폴백)하도록 변경했으며, 앱 시작 시 `updateViaCache: 'none'`으로 서비스 워커를 즉시 갱신합니다.
+2. **마우스·포인터 드래그 이벤트 처리 보강:**
+   - `.desk-resizer`의 마우스 감지 폭을 `14px`(`margin: 0 -7px`, `z-index: 35`)로 넓히고 중앙 그립 표시(`::before`)를 추가했으며, `.desk-nav` 오른쪽 가장자리(`10px`)와 `#main` 왼쪽 가장자리(`6px`)에서도 드래그가 시작되도록 보강했습니다.
+   - `pointerdown` 직후 이어지는 호환 `mousedown`에서도 `preventDefault()`가 항상 호출되도록 순서를 바로잡아 브라우저 기본 선택·드래그(`dragstart`/`pointercancel`)가 마우스 이동을 끊지 않게 했습니다.
+   - `setPointerCapture`·`releasePointerCapture` 예외(`NotFoundError`) 보호를 추가하고, `48px` 구간을 거쳐 `8px` 띠까지 드래그할 때 이전 확장 폭(`deskNavExpandedWidth`)이 `48px`로 덮어써지지 않도록 수정했습니다.
+
 **확인 위치와 사용법:**
-- 웹 앱 기본 화면(`public/index.html`)의 왼쪽 `나만의 웹 서재`와 오른쪽 메인 영역 사이 세로 경계선에 마우스를 올리면 좌우 크기 조절 커서(`col-resize`)와 강조선이 나타납니다.
+- 웹 앱(`https://seionwon.github.io/HTMLMemo/` 및 로컬 서버)의 왼쪽 `나만의 웹 서재`와 오른쪽 메인 영역 사이 세로 경계선에 마우스를 올리면 좌우 크기 조절 커서(`col-resize`)와 강조선이 나타납니다.
 - 세로 경계선을 마우스로 드래그해 원하는 폭(`72px`~`360px`, 창 너비 기준 자동 상한 적용)으로 조절할 수 있으며, 폭이 `136px` 미만이 되면 탭이 아이콘 중심 축약 표시(`.is-compact`)로 전환됩니다.
 - 경계선을 왼쪽 끝(`48px` 미만, 드래그 중 `24px` 이하)까지 밀면 `8px` 폭의 좁은 띠(`.is-strip`)로 스냅되며, 사이드바 내부 텍스트·버튼은 숨겨지고 포커스가 비활성화됩니다.
 - 최소 폭 띠 상태에서는 띠 영역이나 세로 경계선을 다시 오른쪽으로 드래그하거나 클릭(또는 키보드 `Enter`/`Space`/`ArrowRight`/`End`)해 이전 폭(기본 `180px`)으로 즉시 복원할 수 있습니다.
 - 조절한 사이드바 폭은 브라우저 `localStorage`(`htmlmemo-desk-nav-width-v1`)에 저장되어 새로고침 후에도 유지되며, 열린 문서가 자동 맞춤(`autoFit`) 상태일 때는 사이드바 폭 변화에 맞춰 리더 배율(`fitZoom`)과 측정치(`measure`)를 즉시 다시 계산합니다. 드래그 중에는 `#app[data-resizing-desk] iframe { pointer-events: none; }`을 적용해 열려 있는 문서 iframe 위에서도 마우스 드래그가 끊기지 않습니다.
 
 **검증과 배포 상태:**
-- `npm run check`(60개 파일 문법·JSON 검사), `npm test`(113개 단위 검사 통과 — 사이드바 폭 계산, `8px` 좁은 띠 전환·클릭 복원, 리더 자동 맞춤 재계산, 배포 번들 포함 검사 추가), `npm run build`를 모두 통과했습니다.
-- `PORT=4173 node scripts/server.mjs --production` 실행 후 `codememo-browser` 헤드리스 검증으로 샘플 문서를 연 상태에서 `#desk-resizer`를 클릭해 사이드바가 `8px` 좁은 띠(`is-strip`)로 축소되고 리더 자동 맞춤 배율이 `115%`에서 `133%`로 확대되는 것, 다시 클릭해 `180px` 기본 폭과 `115%` 배율로 복원되는 것을 실제 렌더링 스크린샷과 함께 확인했습니다.
-- macOS 제한 실행 환경에서는 `npm run test:browser`의 데스크톱 Chrome 직접 기동이 차단되어 있으므로(`tests/chrome.mjs` 가드 동작), 제한된 `codememo-browser` 검증과 단위 검사로 확인했습니다. 이번 요청에는 GitHub Pages 게시 요청이 포함되지 않아 로컬 소스·빌드(`public/`, `dist/`)까지 반영했습니다.
+- `npm run check`(60개 파일 문법·JSON 검사), `npm test`(113개 단위 검사 통과 — 사이드바 폭 드래그, 중간 폭 경유 `8px` 축소 뒤 원래 폭 복원, `releasePointerCapture` 예외 내성, `pointercancel` 복구, 리더 자동 맞춤 재계산, 배포 번들 포함 검사), `npm run build`를 모두 통과했습니다.
+- `PORT=4173 node scripts/server.mjs --production` 실행 후 `codememo-browser` 헤드리스 검증으로 샘플 문서를 연 상태에서 `#desk-resizer` 조작 시 사이드바가 `8px` 좁은 띠(`is-strip`)로 축소되고 리더 자동 맞춤 배율이 `115%`에서 `133%`로 확대되는 것, 다시 `180px` 기본 폭과 `115%` 배율로 복원되는 것을 실제 렌더링 스크린샷과 함께 확인했습니다.
+- macOS 제한 실행 환경에서는 `npm run test:browser`의 데스크톱 Chrome 직접 기동이 차단되어 있으므로(`tests/chrome.mjs` 가드 동작), 제한된 `codememo-browser` 검증과 단위 검사로 확인했습니다. GitHub Pages 게시 결과는 완료 후 아래에 보충합니다.

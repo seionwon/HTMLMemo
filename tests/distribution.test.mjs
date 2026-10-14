@@ -153,13 +153,17 @@ test('Library Desk vertical boundary line can be dragged with the mouse down to 
   assert.equal(resizer.classList.contains('is-dragging'),false);
   assert.equal(local.get('htmlmemo-desk-nav-width-v1'),'240');
 
-  // Drag the boundary line all the way to the left -> collapses to 8px narrow strip
+  // Drag the boundary line all the way to the left through intermediate widths -> collapses to 8px narrow strip
+  resizer.releasePointerCapture=()=>{throw new Error('No active pointer');};
   resizer.onpointerdown({button:0,pointerId:2,clientX:240,currentTarget:resizer,preventDefault(){}});
+  resizer.dispatchEvent(makeEvent('pointermove',{pointerId:2,clientX:52}));
+  resizer.dispatchEvent(makeEvent('pointermove',{pointerId:2,clientX:48}));
   resizer.dispatchEvent(makeEvent('pointermove',{pointerId:2,clientX:4}));
   assert.equal(nav.style.width,'8px');
   assert.equal(nav.classList.contains('is-strip'),true);
   assert.equal(nav.dataset.collapsed,'true');
   resizer.dispatchEvent(makeEvent('pointerup',{pointerId:2,clientX:4}));
+  delete resizer.releasePointerCapture;
   assert.equal(nav.style.width,'8px');
   assert.equal(resizer.getAttribute('aria-valuenow'),'8');
   assert.equal(local.get('htmlmemo-desk-nav-width-v1'),'8');
@@ -168,7 +172,21 @@ test('Library Desk vertical boundary line can be dragged with the mouse down to 
     assert.equal(button.getAttribute('aria-hidden'),'true');
   }
 
-  // Drag from the narrow strip itself back to the right -> expands to 165px
+  // Clicking the collapsed strip restores the previous expanded width (240px), not 48px
+  resizer.onpointerdown({button:0,pointerId:20,clientX:8,currentTarget:resizer,preventDefault(){}});
+  resizer.dispatchEvent(makeEvent('pointerup',{pointerId:20,clientX:8}));
+  assert.equal(nav.style.width,'240px');
+  assert.equal(nav.classList.contains('is-strip'),false);
+
+  // A canceled pointer without movement keeps the current width instead of collapsing
+  resizer.onpointerdown({button:0,pointerId:21,clientX:240,currentTarget:resizer,preventDefault(){}});
+  resizer.dispatchEvent(makeEvent('pointercancel',{pointerId:21}));
+  assert.equal(nav.style.width,'240px');
+  assert.equal(nav.classList.contains('is-strip'),false);
+
+  // Collapse again and drag from the narrow strip itself back to the right -> expands to 165px
+  resizer.onkeydown({key:'Home',preventDefault(){}});
+  assert.equal(nav.style.width,'8px');
   nav.dispatchEvent(makeEvent('mousedown',{button:0,clientX:6}));
   doc.dispatchEvent(makeEvent('mousemove',{clientX:163}));
   doc.dispatchEvent(makeEvent('mouseup',{clientX:163}));

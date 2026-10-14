@@ -532,7 +532,9 @@ function clampDeskNavWidth(value,snapStrip=true) {
 function applyDeskNavWidth(value,{persist=false,snapStrip=true}={}) {
   const nav=$('.desk-nav'),resizer=$('#desk-resizer');if(!nav)return DESK_NAV_DEFAULT;
   const width=clampDeskNavWidth(value,snapStrip),strip=width<DESK_NAV_STRIP_SNAP;
-  deskNavWidth=width;if(!strip)deskNavExpandedWidth=width;
+  if(!strip&&(persist||width>=96))deskNavExpandedWidth=width;
+  if(width===deskNavWidth&&!persist&&nav.style.width===width+'px'&&nav.classList.contains('is-strip')===strip)return width;
+  deskNavWidth=width;
   nav.style.setProperty?.('--desk-nav-width',width+'px');
   nav.style.width=width+'px';nav.style.minWidth=width+'px';nav.style.maxWidth=width+'px';
   nav.classList.toggle('is-strip',strip);
@@ -549,60 +551,85 @@ function applyDeskNavWidth(value,{persist=false,snapStrip=true}={}) {
   return width;
 }
 function bindDeskResize() {
-  const nav=$('.desk-nav'),resizer=$('#desk-resizer');if(!nav||!resizer)return;
+  const nav=$('.desk-nav'),resizer=$('#desk-resizer'),main=$('#main');if(!nav||!resizer)return;
   let saved=null;try{saved=localStorage?.getItem(DESK_NAV_WIDTH_KEY);}catch{saved=null;}
   applyDeskNavWidth(saved!==null&&saved!==''?Number(saved):DESK_NAV_DEFAULT,{persist:false,snapStrip:true});
   const startDrag=event=>{
-    if(deskDrag||(event.button!=null&&event.button!==0))return;
+    if(event.button!=null&&event.button!==0)return;
     event.preventDefault?.();
+    if(deskDrag)return;
     const shellLeft=$('.desk-shell')?.getBoundingClientRect?.().left||0;
-    const startX=Number.isFinite(event.clientX)?event.clientX:shellLeft+deskNavWidth;
-    const offset=Math.abs(startX-(shellLeft+deskNavWidth))<=12?startX-(shellLeft+deskNavWidth):0;
-    const state={pointerId:event.pointerId,startX,offset,moved:false,target:event.currentTarget||resizer};
+    const initialWidth=deskNavWidth;
+    const startX=Number.isFinite(event.clientX)?event.clientX:shellLeft+initialWidth;
+    const offset=Math.abs(startX-(shellLeft+initialWidth))<=16?startX-(shellLeft+initialWidth):0;
+    const state={pointerId:event.pointerId,startX,initialWidth,offset,moved:false,target:event.currentTarget||resizer};
     deskDrag=state;
     $('#app')?.setAttribute('data-resizing-desk','');
     resizer.classList.add('is-dragging');
-    if(event.pointerId!=null)state.target.setPointerCapture?.(event.pointerId);
+    try{if(event.pointerId!=null)state.target.setPointerCapture?.(event.pointerId);}catch{/* Synthetic or mouse events may not have an active pointerId. */}
+    const cleanup=()=>{
+      deskDrag=null;
+      $('#app')?.removeAttribute('data-resizing-desk');
+      resizer.classList.remove('is-dragging');
+      try{if(state.pointerId!=null)state.target.releasePointerCapture?.(state.pointerId);}catch{/* Pointer capture may already be released by the browser. */}
+      for(const target of [resizer,nav,document,window]){
+        target?.removeEventListener?.('pointermove',move);target?.removeEventListener?.('mousemove',move);
+        target?.removeEventListener?.('pointerup',end);target?.removeEventListener?.('mouseup',end);
+        target?.removeEventListener?.('pointercancel',cancel);
+      }
+    };
     const move=e=>{
       if(deskDrag!==state)return;
       if(state.pointerId!=null&&e.pointerId!=null&&e.pointerId!==state.pointerId)return;
+      if(state.moved&&e.buttons===0){end(e);return;}
       const clientX=Number.isFinite(e.clientX)?e.clientX:state.startX;
-      if(Math.abs(clientX-state.startX)>=2)state.moved=true;
+      if(Math.abs(clientX-state.startX)>=1)state.moved=true;
       const currentShellLeft=$('.desk-shell')?.getBoundingClientRect?.().left||0;
       applyDeskNavWidth(clientX-currentShellLeft-state.offset,{persist:false,snapStrip:false});
     };
     const end=e=>{
       if(deskDrag!==state)return;
       if(state.pointerId!=null&&e?.pointerId!=null&&e.pointerId!==state.pointerId)return;
-      deskDrag=null;
-      $('#app')?.removeAttribute('data-resizing-desk');
-      resizer.classList.remove('is-dragging');
-      if(state.pointerId!=null)state.target.releasePointerCapture?.(state.pointerId);
-      for(const target of [resizer,nav,document,window]){
-        target?.removeEventListener?.('pointermove',move);target?.removeEventListener?.('mousemove',move);
-        target?.removeEventListener?.('pointerup',end);target?.removeEventListener?.('mouseup',end);
-        target?.removeEventListener?.('pointercancel',end);
-      }
-      const next=state.moved?deskNavWidth:(deskNavWidth<=DESK_NAV_MIN?Math.max(DESK_NAV_STRIP_SNAP,deskNavExpandedWidth||DESK_NAV_DEFAULT):DESK_NAV_MIN);
+      cleanup();
+      let next;
+      if(!state.moved)next=state.initialWidth<=DESK_NAV_MIN?Math.max(DESK_NAV_STRIP_SNAP,deskNavExpandedWidth||DESK_NAV_DEFAULT):DESK_NAV_MIN;
+      else if(state.initialWidth<=DESK_NAV_MIN&&deskNavWidth>DESK_NAV_MIN+8&&deskNavWidth<DESK_NAV_STRIP_SNAP)next=Math.max(DESK_NAV_STRIP_SNAP,deskNavExpandedWidth||DESK_NAV_DEFAULT);
+      else next=deskNavWidth;
       applyDeskNavWidth(next,{persist:true,snapStrip:true});
+      reader()?.measure?.();
+    };
+    const cancel=e=>{
+      if(deskDrag!==state)return;
+      if(state.pointerId!=null&&e?.pointerId!=null&&e.pointerId!==state.pointerId)return;
+      cleanup();
+      applyDeskNavWidth(state.moved?deskNavWidth:state.initialWidth,{persist:state.moved,snapStrip:true});
       reader()?.measure?.();
     };
     for(const target of [resizer,nav,document,window]){
       target?.addEventListener?.('pointermove',move);target?.addEventListener?.('mousemove',move);
       target?.addEventListener?.('pointerup',end);target?.addEventListener?.('mouseup',end);
-      target?.addEventListener?.('pointercancel',end);
+      target?.addEventListener?.('pointercancel',cancel);
     }
   };
   resizer.onpointerdown=startDrag;
   resizer.onmousedown=startDrag;
+  resizer.ondragstart=event=>event.preventDefault?.();
   const navStart=event=>{
     if(event.button!=null&&event.button!==0)return;
     const rect=nav.getBoundingClientRect?.();
-    const nearEdge=rect&&rect.width>0&&Number.isFinite(event.clientX)&&event.clientX>=rect.right-6;
+    const nearEdge=rect&&rect.width>0&&Number.isFinite(event.clientX)&&event.clientX>=rect.right-10;
     if(nav.classList.contains('is-strip')||nearEdge)startDrag(event);
   };
   nav.addEventListener('pointerdown',navStart);
   nav.addEventListener('mousedown',navStart);
+  const mainStart=event=>{
+    if(event.button!=null&&event.button!==0)return;
+    if(event.target?.closest?.('button,a,input,select,textarea,[role="tab"]'))return;
+    const rect=main?.getBoundingClientRect?.();
+    if(rect&&Number.isFinite(event.clientX)&&event.clientX<=rect.left+6)startDrag(event);
+  };
+  main?.addEventListener?.('pointerdown',mainStart);
+  main?.addEventListener?.('mousedown',mainStart);
   resizer.onkeydown=event=>{
     if(event.key==='ArrowLeft'){event.preventDefault();applyDeskNavWidth(deskNavWidth-16,{persist:true,snapStrip:true});reader()?.measure?.();}
     else if(event.key==='ArrowRight'){event.preventDefault();const base=deskNavWidth<DESK_NAV_STRIP_SNAP?Math.max(DESK_NAV_STRIP_SNAP,deskNavExpandedWidth||DESK_NAV_DEFAULT):deskNavWidth+16;applyDeskNavWidth(base,{persist:true,snapStrip:true});reader()?.measure?.();}
@@ -628,7 +655,7 @@ function fitHeader() {
 }
 async function initialize() {
   try{preferences=loadPreferences(localStorage);}catch(error){toast('설정 일부를 읽지 못했습니다. 설정 파일로 복원할 수 있습니다.',true);}applyTheme(preferences.theme);bindUI();fitHeader();$('#library-sort').value=preferences.librarySort;network();folder=await getSetting('folder');settingsFileHandle=await getSetting('settings-file');settingsFolderHint=await getSetting('settings-folder-hint')||'';await refreshLibrary();activate('library');
-  if(installableLocation(location)&&'serviceWorker'in navigator)await navigator.serviceWorker.register('./sw.js').catch(()=>toast('오프라인 준비를 완료하지 못했습니다. 다음 접속에서 다시 준비합니다.',true));
+  if(installableLocation(location)&&'serviceWorker'in navigator)await navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'}).then(reg=>reg?.update?.().catch(()=>{})).catch(()=>toast('오프라인 준비를 완료하지 못했습니다. 다음 접속에서 다시 준비합니다.',true));
   if('launchQueue'in window)window.launchQueue.setConsumer(safely(async params=>{for(const handle of params.files||[])await openLocalFile(handle);}));
   if(await discoverBridge()){updateConnection();await receiveCaptures();}
   setInterval(async()=>{
