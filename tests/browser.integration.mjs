@@ -102,3 +102,50 @@ test('real Chrome: browsing, capture, local annotation, file writes, reopen and 
     await page.send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await writeFile(join(root,'test-results/reader-mobile.png'),await page.screenshot());assert.deepEqual(chrome.errors,[]);
   }finally{if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
 });
+
+test('real Chrome: revoked file permission keeps annotations saved, retries on click, reopens and exports',{timeout:90000},async()=>{
+  await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-permission-test-'));await cp(join(root,'public'),folder,{recursive:true});
+  const server=createServer(folder);let chrome;
+  try {
+    await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});const url=`http://127.0.0.1:${server.address().port}/`;chrome=await launchChrome();const page=chrome.page;
+    await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
+    await page.navigate(url);await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
+    await page.evaluate(`(async()=>{
+      const root=await navigator.storage.getDirectory();const handle=await root.getFileHandle('source.html',{create:true});const writer=await handle.createWritable();
+      await writer.write('<html><head><title>Permission recovery</title></head><body><p id="selection">Local source text survives lost write permission and later edits.</p></body></html>');await writer.close();
+      window.showOpenFilePicker=async()=>[handle];window.fileAllowed=true;window.acceptPermission=false;window.permissionRequests=0;
+      const originalQuery=FileSystemHandle.prototype.queryPermission;
+      FileSystemHandle.prototype.queryPermission=async function(options){return this.kind==='file'&&this.name==='source.html'?(window.fileAllowed?'granted':'prompt'):originalQuery.call(this,options);};
+      FileSystemHandle.prototype.requestPermission=async function(){window.permissionRequests++;window.permissionGesture=navigator.userActivation.isActive;if(window.acceptPermission){window.fileAllowed=true;return 'granted';}return 'denied';};
+    })()`);
+    await page.click('#import-button');await page.waitFor('document.querySelector("#status-left").textContent.includes("HTML 파일") && document.querySelector("#status-left").textContent.includes("자동 저장됨")');
+    const highlight=async()=>{
+      await page.evaluate(`(()=>{const doc=document.querySelector('.document-host:not([hidden]) iframe').contentDocument;const walker=doc.createTreeWalker(doc.querySelector('#selection'),NodeFilter.SHOW_TEXT);let node,last;while(node=walker.nextNode())if(node.textContent.trim().length>=8)last=node;const range=doc.createRange();range.setStart(last,0);range.setEnd(last,6);doc.getSelection().removeAllRanges();doc.getSelection().addRange(range);doc.dispatchEvent(new Event('selectionchange'));})()`);
+      await page.click('[data-action="highlight"]');await page.waitFor('document.querySelector("#status-left").textContent.includes("앱에 자동 저장됨") && !!document.querySelector("#retry-save")');
+    };
+    await page.evaluate('window.fileAllowed=false');await highlight();
+    const readState=()=>page.evaluate(`(async()=>{const {listDocuments}=await import('./src/storage.js');const record=(await listDocuments())[0];return {html:record.html,annotations:record.metadata.annotations.length,pending:record.diskPending,error:record.diskError?.name};})()`);
+    const saved=await readState();assert.equal(saved.annotations,1);assert.equal(saved.pending,true);assert.equal(saved.error,'NotAllowedError');assert.equal(await page.evaluate('window.permissionRequests'),0);
+    assert.ok(!await page.evaluate('document.querySelector("#status-left").textContent.includes("자동 저장 실패")'));
+    await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/autosave-permission-warning.png'),await page.screenshot());
+    await page.click('#retry-save');await page.waitFor('window.permissionRequests===1');assert.equal(await page.evaluate('window.permissionGesture'),true);assert.equal((await readState()).annotations,1);
+    await page.click('.tab.document.active .tab-close');await page.waitFor('document.querySelectorAll(".tab.document").length===0');await page.evaluate(`document.querySelector('[data-open]').click()`);
+    await page.waitFor('document.querySelector("#status-left").textContent.includes("앱에 자동 저장됨")');assert.equal((await readState()).annotations,1);
+    await page.evaluate(`window.pickerRequests=0;window.showSaveFilePicker=async()=>{window.pickerRequests++;throw Error('Unexpected picker during original-file reconnect');};`);
+    await page.evaluate(`document.querySelector('[data-action="more"]').click()`);await page.waitFor(`!!document.querySelector('[data-more="connect"]')`);await page.click('[data-more="connect"]');await page.waitFor('window.permissionRequests===2');
+    assert.equal(await page.evaluate('window.pickerRequests'),0);assert.equal((await readState()).annotations,1);
+    await page.evaluate('window.acceptPermission=true');await page.click('#retry-save');await page.waitFor('!document.querySelector("#retry-save") && document.querySelector("#status-left").textContent.includes("HTML 파일에 자동 저장됨")');
+    assert.equal((await readState()).pending,false);
+    const sourceAnnotations=()=>page.evaluate(`(async()=>{const root=await navigator.storage.getDirectory();const html=await (await (await root.getFileHandle('source.html')).getFile()).text();return JSON.parse(new DOMParser().parseFromString(html,'text/html').getElementById('htmlmemo-data').textContent).annotations.length;})()`);
+    assert.equal(await sourceAnnotations(),1);
+    await page.evaluate('window.fileAllowed=false');await highlight();assert.equal((await readState()).annotations,2);
+    await page.evaluate(`window.showSaveFilePicker=async()=>{const root=await navigator.storage.getDirectory();return root.getFileHandle('exported.html',{create:true});};`);await page.click('#save-page');
+    await page.waitFor('!document.querySelector("#retry-save") && document.querySelector("#status-left").textContent.includes("HTML 파일에 자동 저장됨")');
+    const exported=await page.evaluate(`(async()=>{const root=await navigator.storage.getDirectory();const html=await (await (await root.getFileHandle('exported.html')).getFile()).text();return JSON.parse(new DOMParser().parseFromString(html,'text/html').getElementById('htmlmemo-data').textContent).annotations.length;})()`);
+    assert.equal(exported,2);assert.equal(await sourceAnnotations(),1);assert.equal((await readState()).annotations,2);
+    assert.deepEqual(chrome.errors,[]);
+  } catch(error) {
+    if(chrome)console.error('Autosave browser diagnostics:',await chrome.page.evaluate(`JSON.stringify({status:document.querySelector('#status-left')?.textContent,tabs:document.querySelectorAll('.tab.document').length,toast:document.querySelector('#toast')?.textContent,errors:[]})`));
+    throw error;
+  } finally {if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
+});

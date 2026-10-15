@@ -40,10 +40,30 @@ export async function permission(handle, request = false) {
 }
 export async function writeExternalHTML(record, html, force = false) {
   if (!record.fileHandle) return;
-  if (!await permission(record.fileHandle)) throw new Error('파일 쓰기 권한이 필요합니다. 「파일 연결 / 저장 재시도」를 눌러주세요.');
+  if (!await permission(record.fileHandle)) throw new DOMException('원본 HTML 파일의 쓰기 권한이 필요합니다.', 'NotAllowedError');
   const before = await record.fileHandle.getFile();
   if (!force && record.diskStamp && (before.lastModified !== record.diskStamp.modified || before.size !== record.diskStamp.size)) throw new Error('다른 프로그램에서 파일을 수정했습니다. 파일을 다시 열거나 다른 이름으로 저장해주세요.');
   const writer = await record.fileHandle.createWritable();
   try { await writer.write(html); await writer.close(); } catch (error) { await writer.abort().catch(() => {}); throw error; }
   const after = await record.fileHandle.getFile(); record.diskStamp = {modified: after.lastModified, size: after.size};
+}
+
+/** Internal persistence is the durable save; external-file synchronization has its own status. */
+export async function saveDocumentHTML(record, html, operations = {}) {
+  const put = operations.put || putDocument;
+  const internal = operations.internal || writeInternalHTML;
+  const external = operations.external || writeExternalHTML;
+  record.html = html;
+  record.diskPending = !!record.fileHandle;
+  if (!record.fileHandle) record.diskError = null;
+  await put(record);
+  await internal(record.id, html);
+  if (record.fileHandle) {
+    try { await external(record, html); record.diskPending = false; record.diskError = null; }
+    catch (error) {
+      record.diskError = {name: error?.name || 'Error', message: error?.message || '원본 파일을 갱신하지 못했습니다.'};
+    }
+    await put(record);
+  }
+  return record;
 }
