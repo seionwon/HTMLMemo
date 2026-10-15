@@ -2,7 +2,7 @@ import { $, $$, icon, escapeHTML as esc, uid, filename, normalizeURL, displayHos
 import { parseHTML } from './document.js';
 import { SaveQueue } from './model.js';
 import { Reader } from './reader.js';
-import { listDocuments, deleteDocument, getSetting, setSetting, saveDocumentHTML, listRevisions, putDocumentRevision, writeExternalHTML } from './storage.js';
+import { listDocuments, getDocument, deleteDocument, getSetting, setSetting, saveDocumentHTML, listRevisionSummaries, getRevision, putDocumentRevision, writeExternalHTML } from './storage.js';
 import { bridge, bridgeAvailable, discoverBridge } from './bridge.js';
 import { readLocalHTML, droppedHTMLFiles } from './local-files.js';
 import { normalizePreferences, loadPreferences, storePreferences, serializeSettings, readSettingsFile, PRESET_COLORS, PRESET_PALETTES, normalizeHexColor, hexToRgb, rgbToHex, hexToHsv, hsvToHex } from './preferences.js';
@@ -101,7 +101,7 @@ function renderLibrary() {
   $('#open-example').hidden=!!records.length;
   $('#document-grid').innerHTML=shown.map(record=>{
     const count=record.metadata?.annotations?.length||0;const progress=record.metadata?.view?.scrollTop||0;
-    return `<article class="document-card" data-record="${record.id}"><button class="card-open" data-open="${record.id}"><div class="card-preview"><div class="preview-host">${icon('globe',13)} ${esc(displayHost(record.source))}</div><h3>${esc(record.title)}</h3><div class="preview-lines"><i></i><i></i><i></i></div>${count?`<span class="preview-annotation">${icon('highlight',13)} ${count}개의 주석</span>`:''}</div><div class="card-details"><h3>${esc(record.title)}</h3><p>${esc(displayHost(record.source))} <span>·</span> ${formatDate(record.modified)}</p><div class="card-meta"><span>HTML <i>·</i> ${formatBytes(new Blob([record.html]).size)}</span><span>${progress?'이어서 읽기':'새 문서'} ${icon('forward',13)}</span></div></div></button><button class="card-menu icon-button" data-card-menu="${record.id}" aria-label="${esc(record.title)} 문서 메뉴">${icon('more',17)}</button></article>`;
+    return `<article class="document-card" data-record="${record.id}"><button class="card-open" data-open="${record.id}"><div class="card-preview"><div class="preview-host">${icon('globe',13)} ${esc(displayHost(record.source))}</div><h3>${esc(record.title)}</h3><div class="preview-lines"><i></i><i></i><i></i></div>${count?`<span class="preview-annotation">${icon('highlight',13)} ${count}개의 주석</span>`:''}</div><div class="card-details"><h3>${esc(record.title)}</h3><p>${esc(displayHost(record.source))} <span>·</span> ${formatDate(record.modified)}</p><div class="card-meta"><span>HTML <i>·</i> ${record.byteSize?formatBytes(record.byteSize):'HTML'}</span><span>${progress?'이어서 읽기':'새 문서'} ${icon('forward',13)}</span></div></div></button><button class="card-menu icon-button" data-card-menu="${record.id}" aria-label="${esc(record.title)} 문서 메뉴">${icon('more',17)}</button></article>`;
   }).join('');
   $$('[data-open]').forEach(button=>button.onclick=safely(()=>openRecord(records.find(r=>r.id===button.dataset.open))));
   $$('[data-card-menu]').forEach(button=>button.onclick=()=>documentMenu(records.find(r=>r.id===button.dataset.cardMenu)));
@@ -109,9 +109,23 @@ function renderLibrary() {
   if(activeId==='library')$('#status-left').textContent=`${records.length}개의 문서 · ${folder?folder.name+' 자동 저장':'이 기기에 보관'}`;
 }
 function renderTabs() {
-  $('#tabs').innerHTML=tabs.map(tab=>`<div class="tab ${tab.id===activeId?'active':''} ${tab.type}" role="tab" tabindex="0" aria-selected="${tab.id===activeId}" data-tab="${tab.id}" title="${esc(tab.title)}"><span class="tab-icon">${icon(tab.type==='document'?'file':'globe',15)}</span><span class="tab-title">${esc(tab.title)}</span>${tab.queue?.pending?'<i class="tab-dirty"></i>':''}<button class="tab-close" data-close="${tab.id}" aria-label="${esc(tab.title)} 탭 닫기">${icon('close',13)}</button></div>`).join('');
-  $$('[data-tab]').forEach(el=>{el.onclick=e=>{if(!e.target.closest('[data-close]'))activate(el.dataset.tab);};el.onkeydown=e=>{if(e.key==='Enter'||e.key===' ')activate(el.dataset.tab);};});
-  $$('[data-close]').forEach(button=>button.onclick=safely(e=>{e.stopPropagation();return closeTab(button.dataset.close);}));
+  const container=$('#tabs'),nodes=new Map($$('[data-tab]',container).map(el=>[el.dataset.tab,el]));
+  for(const tab of tabs){
+    let el=nodes.get(tab.id);
+    if(!el){
+      el=document.createElement('div');el.dataset.tab=tab.id;el.setAttribute('role','tab');el.tabIndex=0;
+      el.innerHTML=`<span class="tab-icon">${icon(tab.type==='document'?'file':'globe',15)}</span><span class="tab-title"></span><i class="tab-dirty" hidden></i><button class="tab-close" data-close="${tab.id}">${icon('close',13)}</button>`;
+      el.onclick=e=>{if(!e.target.closest('[data-close]'))activate(tab.id);};
+      el.onkeydown=e=>{if(e.key==='Enter'||e.key===' ')activate(tab.id);};
+      $('[data-close]',el).onclick=safely(e=>{e.stopPropagation();return closeTab(tab.id);});container.append(el);
+    }
+    el.className=`tab ${tab.id===activeId?'active':''} ${tab.type}`;el.title=tab.title;el.setAttribute('aria-selected',String(tab.id===activeId));
+    const title=$('.tab-title',el);if(title.textContent!==tab.title)title.textContent=tab.title;
+    $('.tab-dirty',el).hidden=!tab.opening && !tab.queue?.pending;
+    $('[data-close]',el).setAttribute('aria-label',tab.title+' 탭 닫기');
+    nodes.delete(tab.id);
+  }
+  for(const node of nodes.values())node.remove();
   $('#library-tab').classList.toggle('active',activeId==='library');
   $('#desk-library').setAttribute('aria-current',activeId==='library'?'page':'false');
   $('#desk-execution').setAttribute('aria-current',activeId==='execution'?'page':'false');
@@ -121,8 +135,8 @@ function activate(id) {
   if(id!==activeId)reader()?.stopSpeech();
   if(readerFocused && id!==activeId)void leaveReaderFocus();
   closePopover(); closeSidebar(); activeId=id; $('#library').hidden=id!=='library';$('#execution').hidden=id!=='execution';$('#workspace').hidden=id==='library'||id==='execution';
-  tabs.forEach(tab=>tab.host.hidden=tab.id!==id);renderTabs(); updateChrome();
-  if(reader())renderToolbar();else $('#toolbar').hidden=true;
+  tabs.forEach(tab=>tab.host.hidden=tab.id!==id);renderTabs();$('[data-tab="'+id+'"]')?.scrollIntoView?.({block:'nearest',inline:'nearest'});updateChrome();
+  if(reader()){renderToolbar();if(reader().dynamicDirty)reader().scheduleDynamicRefresh();}else $('#toolbar').hidden=true;
   if(id==='library')renderLibrary();
   if(id==='execution'){$('#status-left').textContent='앱 설치 · URL 공유 · 모든 데이터는 이 기기에 저장';document.title='앱 설치 · URL 공유 · HTMLMemo';}
 }
@@ -139,17 +153,22 @@ function updateChrome() {
 }
 function createHost(id,type) { const host=document.createElement('div');host.id='workspace-'+id;host.className='workspace-host '+type+'-host';host.hidden=true;$('#workspaces').append(host);return host; }
 async function openRecord(record, prepared = null) {
-  const existing=tabs.find(tab=>tab.record?.id===record.id);if(existing){activate(existing.id);return existing;}
-  const parsed=prepared || parseHTML(record.html,{title:record.title,source:record.source,viewport:record.metadata?.viewport,execution:record.metadata?.execution});
-  if(!prepared && record.metadata)parsed.metadata=structuredClone(record.metadata);
-  const tab={id:uid(),type:'document',title:record.title,record:{...record},host:null};tab.host=createHost(tab.id,'document');
+  const existing=tabs.find(tab=>tab.record?.id===record.id);if(existing){if(existing.closePromise){await existing.closePromise;return openRecord(record,prepared);}activate(existing.id);return existing;}
+  if(!prepared && typeof record.html!=='string' && !record.file)record=await getDocument(record.id);
+  const opened=tabs.find(tab=>tab.record?.id===record.id);if(opened){if(opened.closePromise){await opened.closePromise;return openRecord(record,prepared);}activate(opened.id);return opened;}
+  // The library already holds a prepared, sanitized snapshot. Reopening it
+  // should parse it once in the iframe, not clone the entire book in DOMParser first.
+  const parsed=prepared || (record.file ? {file:record.file,metadata:structuredClone(record.metadata),nativeScroll:true,savedMetadata:true} : record.metadata ? {html:record.html,metadata:structuredClone(record.metadata),nativeScroll:record.nativeScroll || record.metadata.execution?.allowScripts || record.byteSize>=4*1024*1024} : parseHTML(record.html,{title:record.title,source:record.source}));
+  const tab={id:uid(),type:'document',title:record.title,opening:true,record:{...record,nativeScroll:!!parsed.nativeScroll},host:null};tab.host=createHost(tab.id,'document');
   tab.queue=new SaveQueue(async()=>{
     await tab.reader.ready;
     const html=tab.record.html; const metadata=structuredClone(tab.reader.metadata);
     tab.record.html=html;tab.record.metadata=metadata;tab.record.title=metadata.title;tab.record.modified=Date.now();
     await saveDocumentHTML(tab.record, html, {revision:tab.restoredFrom?{restoredFrom:tab.restoredFrom}:undefined});
     tab.restoredFrom=null;
-    records=records.filter(r=>r.id!==record.id).concat({...tab.record});
+    const {html:body,file:sourceFile,...summary}=tab.record;
+    records=records.filter(r=>r.id!==record.id).concat(summary);
+    delete tab.record.html;delete tab.record.file;
   },()=>{if(activeId===tab.id)saveStatus(tab);renderTabs();});
   tabs.push(tab);activate(tab.id);
   tab.reader=new Reader(tab.host,parsed,{
@@ -158,22 +177,24 @@ async function openRecord(record, prepared = null) {
     onTextSelection:()=>{if(activeId===tab.id)showSelectionMenu(tab.reader);},
     onSelectionDismiss:()=>{if(popoverName==='selection')closePopover();},
     onLink:url=>safely(openBrowser)(url),onKey:handleKey,requestText:promptText,onError:showError,
-    onDocumentFocus:()=>{if(activeId===tab.id && !readerFocused)void toggleReaderFocus();},
+    onDocumentFocus:()=>{if(activeId===tab.id)void toggleReaderFocus();},
     onSelect:id=>{if(activeId===tab.id)annotationDialog(tab,id);},
   });
   Object.assign(tab.reader,preferences.annotation);
   try { await tab.reader.ready; } catch(error) {tabs.splice(tabs.indexOf(tab),1);tab.reader.dispose();activate('library');throw error;}
-  if(parsed.file){tab.record.html=tab.reader.initialHTML || tab.reader.html();tab.reader.initialHTML=null;tab.record.metadata=tab.reader.metadata;tab.record.source=tab.reader.metadata.source;tab.title=tab.record.title=tab.reader.metadata.title;}
+  if(parsed.file){tab.record.file=parsed.file;delete tab.record.html;tab.reader.initialHTML=null;tab.record.metadata=tab.reader.metadata;tab.record.source=tab.reader.metadata.source;tab.title=tab.record.title=tab.reader.metadata.title;}
   renderToolbar();
   updateChrome();
   // Preserve the imported/current annotation baseline before the first new edit.
-  try{await putDocumentRevision(tab.record,{baseline:true});}
+  try{const saved=await putDocumentRevision(tab.record,{baseline:true});tab.record.byteSize=saved.byteSize;delete tab.record.html;delete tab.record.file;}
   catch(error){tab.queue.schedule();try{await tab.queue.flush();}catch{showError(error);}}
+  record.html=null;record.file=null;parsed.html=null;parsed.file=null;
+  tab.opening=false;renderTabs();if(activeId===tab.id)updateChrome();
   return tab;
 }
 function saveStatus(tab) {
   const queue=tab.queue;if(!queue)return;
-  const label=queue.error?'주석 자동 저장 실패 · '+queue.error.message:queue.pending?'저장 중…':'주석이 앱에 자동 저장됨';
+  const label=queue.error?'주석 자동 저장 실패 · '+queue.error.message:queue.pending||tab.opening?'저장 중…':'주석이 앱에 자동 저장됨';
   const status=$('#status-left');let state=$('.save-state',status);
   if(!state){status.replaceChildren();state=document.createElement('span');status.append(state);}
   state.className=`save-state ${queue.error?'save-error':''}`;
@@ -186,19 +207,28 @@ function saveStatus(tab) {
 }
 async function closeTab(id) {
   const tab=tabs.find(t=>t.id===id);if(!tab)return;
-  if(tab.reader){await tab.reader.ready;tab.reader.rememberPosition();await tab.queue.flush();tab.reader.dispose();}else tab.host.remove();
-  tabs.splice(tabs.indexOf(tab),1);if(activeId===id)activate(tabs.at(-1)?.id||'library');else renderTabs();await refreshLibrary();
+  if(tab.closePromise)return tab.closePromise;
+  tab.closing=true;
+  tab.closePromise=(async()=>{
+    try{
+      if(tab.reader){await tab.reader.ready;tab.reader.rememberPosition();await tab.queue.flush();tab.reader.dispose();}else tab.host.remove();
+      tabs.splice(tabs.indexOf(tab),1);if(activeId===id)activate(tabs.at(-1)?.id||'library');else renderTabs();await refreshLibrary();
+    }finally{tab.closing=false;tab.closePromise=null;}
+  })();
+  return tab.closePromise;
 }
 async function createDocument(snapshot, handle = null, name = null, local = {}) {
   const parsed=snapshot.file ? {...parseHTML('<html><head></head><body></body></html>',{title:snapshot.title,execution:{allowScripts:!!snapshot.allowScripts}}),file:snapshot.file,nativeScroll:true} : parseHTML(snapshot.html,{title:snapshot.title,source:snapshot.url,viewport:snapshot.viewport,warnings:snapshot.warnings},{includeMetadata:true,allowScripts:snapshot.allowScripts});
   const title=parsed.metadata.title; const record={id:uid(),title,name:name||handle?.name||filename(title),source:parsed.metadata.source,created:Date.now(),modified:Date.now(),fileHandle:handle,originalHandle:local.originalHandle||null,metadata:parsed.metadata};
-  record.html=parsed.html;
+  if(snapshot.file)record.file=snapshot.file;else record.html=parsed.html;
   if(local.diskStamp)record.diskStamp=local.diskStamp;
   else if(handle){const disk=await handle.getFile();record.diskStamp={modified:disk.lastModified,size:disk.size};}
-  records=records.filter(r=>r.id!==record.id).concat(record);let tab;
+  const {html:body,file:sourceFile,...summary}=record;records=records.filter(r=>r.id!==record.id).concat(summary);let tab;
   try{tab=await openRecord(record,parsed);}catch(error){records=records.filter(r=>r.id!==record.id);renderLibrary();throw error;}
+  if(tab.closing || !tabs.includes(tab))return tab;
   tab.queue.schedule();
   try { await tab.queue.flush(); } catch(error) { showError(error); }
+  if(tab.closing || !tabs.includes(tab))return tab;
   renderLibrary();activate(tab.id);
   if(tab.queue.error)return tab;
   if(handle && !local.originalHandle)await writeExternalHTML(tab.record,tab.reader.html());
@@ -589,14 +619,17 @@ function annotationDialog(tab,id) {
     $('#delete-selected').onclick=()=>{tab.reader.remove(id);$('#dialog').close();};if($('#edit-note'))$('#edit-note').onclick=safely(async()=>{const text=await promptText(a.type,a.text);if(text?.trim())tab.reader.commit(tab.reader.metadata.annotations.map(item=>item.id===id?{...item,text:text.trim()}:item));});
   });
 }
-async function annotationHistory(tab) {
+async function annotationHistory(tab, before = Infinity) {
   await tab.reader.ready;await tab.queue.flush();
-  const versions=(await listRevisions(tab.record.id)).reverse();
+  const versions=await listRevisionSummaries(tab.record.id,before);
   const stamp=value=>new Date(value).toLocaleString('ko-KR',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
-  modal(`<div class="dialog-heading"><h2>주석 저장 이력</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><p class="dialog-description">본문은 유지하고 선택한 시점의 주석과 북마크만 복원합니다. 복원 직전 상태도 이력에 남습니다.</p><p class="dialog-description small">이 기능을 사용하기 시작한 시점부터 보관합니다. 이력은 이 브라우저에 저장되며, 앱 데이터나 문서를 삭제하면 함께 삭제됩니다. HTML 내보내기에는 현재 주석만 포함됩니다.</p><div class="revision-list">${versions.map((version,index)=>`<button class="menu-button" data-revision="${version.id}"><span>${esc(stamp(version.created))} · #${version.id}<br><small>${version.kind==='restore'?'복원 저장':version.kind==='baseline'?'최초 보관':'주석 변경'} · 주석 ${version.annotations.length}개 · 북마크 ${version.bookmarks.length}개${index===0?' · 최근 저장':''}</small></span></button>`).join('') || '<p>아직 저장된 이력이 없습니다.</p>'}</div>`,()=>{
-    $$('[data-revision]',$('#dialog')).forEach(button=>button.onclick=()=>{
-      const version=versions.find(item=>item.id===Number(button.dataset.revision));
-      modal(`<div class="dialog-heading"><h2>주석 이력 확인</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><p>${esc(stamp(version.created))} · #${version.id}</p><p>주석 ${version.annotations.length}개 · 북마크 ${version.bookmarks.length}개</p><div class="revision-preview">${version.annotations.map(a=>`<p>${esc(a.type)} · ${esc(a.text || a.textAnchor?.quote || '그림 주석')}</p>`).join('') || '<p>주석 없음</p>'}</div><div class="dialog-actions"><button class="secondary-button" id="history-back">이력 목록</button><button class="primary-button" id="restore-revision">이 시점으로 복원</button></div>`,()=>{
+  modal(`<div class="dialog-heading"><h2>주석 저장 이력</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><p class="dialog-description">본문은 유지하고 선택한 시점의 주석과 북마크만 복원합니다. 복원 직전 상태도 이력에 남습니다.</p><p class="dialog-description small">이 기능을 사용하기 시작한 시점부터 보관합니다. 이력은 이 브라우저에 저장되며, 앱 데이터나 문서를 삭제하면 함께 삭제됩니다. HTML 내보내기에는 현재 주석만 포함됩니다.</p><div class="revision-list">${versions.map((version,index)=>`<button class="menu-button" data-revision="${version.id}"><span>${esc(stamp(version.created))} · #${version.id}<br><small>${version.kind==='restore'?'복원 저장':version.kind==='baseline'?'최초 보관':'주석 변경'} · 주석 ${version.annotationCount}개 · 북마크 ${version.bookmarkCount}개${index===0 && before===Infinity?' · 최근 저장':''}</small></span></button>`).join('') || '<p>아직 저장된 이력이 없습니다.</p>'}</div>${versions.length===50?'<button class=secondary-button id=history-older>더 이전 이력</button>':''}${before!==Infinity?'<button class=secondary-button id=history-latest>최근 이력</button>':''}`,()=>{
+    if($('#history-older'))$('#history-older').onclick=safely(()=>annotationHistory(tab,versions.at(-1).id));
+    if($('#history-latest'))$('#history-latest').onclick=safely(()=>annotationHistory(tab));
+    $$('[data-revision]',$('#dialog')).forEach(button=>button.onclick=safely(async()=>{
+      const version=await getRevision(Number(button.dataset.revision));
+      if(!version || version.documentId!==tab.record.id)throw Error('저장 이력을 찾지 못했습니다.');
+      modal(`<div class="dialog-heading"><h2>주석 이력 확인</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><p>${esc(stamp(version.created))} · #${version.id}</p><p>주석 ${version.annotations.length}개 · 북마크 ${version.bookmarks.length}개</p><div class="revision-preview">${version.annotations.slice(0,100).map(a=>`<p>${esc(a.type)} · ${esc((a.text || a.textAnchor?.quote || '그림 주석').slice(0,500))}</p>`).join('') || '<p>주석 없음</p>'}${version.annotations.length>100?'<p>미리보기는 100개까지 표시합니다. 복원은 모든 주석에 적용됩니다.</p>':''}</div><div class="dialog-actions"><button class="secondary-button" id="history-back">이력 목록</button><button class="primary-button" id="restore-revision">이 시점으로 복원</button></div>`,()=>{
         $('#history-back').onclick=safely(()=>annotationHistory(tab));
         $('#restore-revision').onclick=safely(async()=>{
           // Flush current edits first, so restoration itself never destroys the state being replaced.
@@ -609,7 +642,7 @@ async function annotationHistory(tab) {
           toast('HTML 본문은 유지하고 주석과 북마크를 복원했습니다.');
         });
       });
-    });
+    }));
   });
 }
 function documentInfo(tab) {

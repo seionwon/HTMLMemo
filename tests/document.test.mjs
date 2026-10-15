@@ -84,11 +84,11 @@ test('opening and saving remove every former reader sidebar layout artifact',asy
   const saved=serializeHTML(opened,parsed.metadata);
   assert.doesNotMatch(saved,/htmlmemo-(toc-toggle-style|sidebar-style|toc-grid-columns)|data-htmlmemo-(toc-toggle|toc-collapsed|sidebar-folded|sidebar-grid)/);
 });
-test('legacy saved zoom reopens in automatic fit while explicit manual zoom remains manual',()=>{
+test('legacy saved zoom remains manual while documents without a saved zoom use automatic fit',()=>{
   const source=view=>`<html><head><script id="htmlmemo-data" type="application/json">${JSON.stringify({version:1,annotations:[],view})}</script></head><body>본문</body></html>`;
   const legacy=parseHTML(source({scrollTop:12,scrollLeft:4,zoom:.75}));
   assert.equal(legacy.metadata.view.zoom,.75);
-  assert.equal(legacy.metadata.view.autoFit,true);
+  assert.equal(legacy.metadata.view.autoFit,false);
   const manual=parseHTML(source({scrollTop:12,scrollLeft:4,zoom:.75,autoFit:false}));
   assert.equal(manual.metadata.view.autoFit,false);
 });

@@ -2,15 +2,27 @@ const DB_NAME = 'HTMLMemo-v1';
 let database;
 async function db() {
   if (!database) database = new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 2);
+    const request = indexedDB.open(DB_NAME, 3);
     let blocked=false;
     request.onblocked=()=>{blocked=true;database=null;reject(new Error('다른 HTMLMemo 창이 이전 보관함을 사용하고 있습니다. 해당 창을 닫고 다시 열어주세요. 보관한 문서는 유지됩니다.'));};
-    request.onupgradeneeded = () => {
+    request.onupgradeneeded = event => {
       const database = request.result;
       if (!database.objectStoreNames.contains('documents')) database.createObjectStore('documents', {keyPath:'id'});
       if (!database.objectStoreNames.contains('settings')) database.createObjectStore('settings');
       if (!database.objectStoreNames.contains('contents')) database.createObjectStore('contents', {keyPath:'documentId'});
       if (!database.objectStoreNames.contains('revisions')) database.createObjectStore('revisions', {keyPath:'id',autoIncrement:true}).createIndex('documentId','documentId');
+      // Migrate legacy inline bodies one document at a time, without getAll().
+      if(event && event.oldVersion<3){
+        const tx=request.transaction,contents=tx.objectStore('contents');
+        const cursorRequest=tx.objectStore('documents').openCursor();
+        cursorRequest.onsuccess=()=>{const cursor=cursorRequest.result;if(!cursor)return;
+          const {html,...record}=cursor.value;
+          if(typeof html==='string'){
+            contents.put({documentId:record.id,html});record.byteSize=new Blob([html]).size;cursor.update(record);
+          }
+          cursor.continue();
+        };
+      }
     };
     request.onsuccess = () => { const connection=request.result;if(blocked){connection.close();return;} connection.onversionchange=()=>{connection.close();database=null;};resolve(connection); }; request.onerror = () => {database=null;reject(request.error);};
   });
@@ -27,9 +39,10 @@ async function withContent(record) {
   if(!record || typeof record.html === 'string')return record;
   const content=await transaction('contents','readonly',store=>store.get(record.id));
   if(!content)throw new Error('보관한 HTML 본문을 찾지 못했습니다.');
-  return {...record,html:content.html};
+  return {...record,html:content.html,file:content.file};
 }
-export const listDocuments = async () => Promise.all((await transaction('documents', 'readonly', store => store.getAll())).map(withContent));
+// Library cards never load book bodies; getDocument is the explicit lazy read.
+export const listDocuments = () => transaction('documents','readonly',store=>store.getAll());
 export const getDocument = async id => withContent(await transaction('documents', 'readonly', store => store.get(id)));
 export const putDocument = record => putDocumentRevision(record);
 export const getSetting = key => transaction('settings', 'readonly', store => store.get(key));
@@ -63,28 +76,44 @@ export async function writeExternalHTML(record, html, force = false) {
 
 /** Only annotation content belongs in history; scrolling never creates a revision. */
 export const annotationState = metadata => ({annotations:structuredClone(metadata?.annotations || []),bookmarks:structuredClone(metadata?.bookmarks || [])});
-export const sameAnnotationState = (a,b) => JSON.stringify(annotationState(a)) === JSON.stringify(annotationState(b));
+export const sameAnnotationState = (a,b) => JSON.stringify({annotations:a?.annotations||[],bookmarks:a?.bookmarks||[]}) === JSON.stringify({annotations:b?.annotations||[],bookmarks:b?.bookmarks||[]});
 export const listRevisions = id => transaction('revisions','readonly',store=>store.index('documentId').getAll(id));
+
+export const getRevision = id => transaction('revisions','readonly',store=>store.get(id));
+export async function listRevisionSummaries(id, before = Infinity, limit = 50) {
+  const connection=await db();
+  return new Promise((resolve,reject)=>{
+    const tx=connection.transaction('revisions','readonly'),rows=[];
+    const request=tx.objectStore('revisions').index('documentId').openCursor(IDBKeyRange.only(id),'prev');
+    request.onsuccess=()=>{
+      const cursor=request.result;if(!cursor)return;
+      if(cursor.primaryKey<before){const v=cursor.value;rows.push({id:v.id,created:v.created,kind:v.kind,annotationCount:v.annotations.length,bookmarkCount:v.bookmarks.length});}
+      if(rows.length<limit)cursor.continue();
+    };
+    tx.oncomplete=()=>resolve(rows);tx.onabort=()=>reject(tx.error);tx.onerror=()=>reject(tx.error);
+  });
+}
 
 /** The current document and its annotation revision commit atomically. No source-file permission is needed. */
 export async function putDocumentRevision(record, {baseline = false, restoredFrom = null} = {}) {
   const connection=await db();
-  const state=annotationState(record.metadata);
-  const {html,...value}=record;value.diskPending=false;value.diskError=null;
+  const state={annotations:record.metadata?.annotations || [],bookmarks:record.metadata?.bookmarks || []};
+  const {html,file,...value}=record;value.diskPending=false;value.diskError=null;
+  if(!value.byteSize)value.byteSize=file?.size || (typeof html==='string'?new Blob([html]).size:0);
   return new Promise((resolve,reject)=>{
     const tx=connection.transaction(['documents','contents','revisions'],'readwrite');
     let failure;
     const documents=tx.objectStore('documents'),revisions=tx.objectStore('revisions'),contents=tx.objectStore('contents');
-    const previous=documents.get(record.id),content=contents.get(record.id);
-    const latest=revisions.index('documentId').openCursor(IDBKeyRange.only(record.id),'prev');
+    const previous=documents.get(record.id),content=contents.getKey(record.id);
+    const latest=revisions.index('documentId').openKeyCursor(IDBKeyRange.only(record.id),'prev');
     // Queue reads before any awaits so the transaction stays active.
     latest.onsuccess=()=>{
       try {
-        const last=latest.result?.value;
+        const last=latest.result;
         const old=previous.result;
         if (!last && old && !sameAnnotationState(old.metadata,state)) revisions.add({documentId:record.id,created:Date.now(),kind:'baseline',...annotationState(old.metadata)});
-        if (!last || !sameAnnotationState(last,state)) revisions.add({documentId:record.id,created:Date.now(),kind:restoredFrom?'restore':baseline?'baseline':'edit',restoredFrom,...state});
-        if(!content.result)contents.add({documentId:record.id,html:old?.html ?? html});
+        if (!last || !sameAnnotationState(old?.metadata,state)) revisions.add({documentId:record.id,created:Date.now(),kind:restoredFrom?'restore':baseline?'baseline':'edit',restoredFrom,...state});
+        if(!content.result){if(file instanceof Blob)contents.add({documentId:record.id,file});else{const source=old?.html ?? html;if(typeof source!=='string')throw Error('HTML 본문을 보관하지 못했습니다. 문서를 다시 열어주세요.');contents.add({documentId:record.id,html:source});}}
         documents.put(value);
       } catch(error){failure=error;tx.abort();}
     };
@@ -94,8 +123,9 @@ export async function putDocumentRevision(record, {baseline = false, restoredFro
 
 /** Autosave never writes the imported file. HTML is retained once; edits are separate metadata. */
 export async function saveDocumentHTML(record, html, operations = {}) {
-  record.html=html;record.diskPending=false;record.diskError=null;
+  if(typeof html==='string')record.html=html;record.diskPending=false;record.diskError=null;
   const put=operations.put || putDocumentRevision;
-  await put(record,operations.revision);
+  const saved=await put(record,operations.revision);
+  if(saved?.byteSize)record.byteSize=saved.byteSize;
   return record;
 }

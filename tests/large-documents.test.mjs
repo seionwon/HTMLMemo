@@ -91,10 +91,10 @@ test('native preparation yields between batches, retains annotation anchors, and
   await assert.rejects(prepareLoadedHTML(documentFor('<html><head></head><body>Cancelled</body></html>'),{},()=>true),{name:'AbortError'});
 });
 
-test('late JavaScript-generated text receives stable anchors and restores annotation/save callbacks',async()=>{
+test('late generated content receives stable anchors without unnecessary annotation autosaves',async()=>{
   const r=Object.create(Reader.prototype);r.doc=documentFor('<html><head></head><body><p>Late content</p><p data-htmlmemo-anchor="existing">Keep</p></body></html>');r.dynamicAnchor=0;r.metadata={execution:{allowScripts:true},annotations:[]};
   let saved=0,rendered=0;r.measure=()=>{};r.render=()=>{rendered++;};r.callbacks={onChange(){saved++;}};
-  await r.refreshDynamicDocument();assert.equal(r.doc.querySelector('p').getAttribute('data-htmlmemo-anchor'),'js0');assert.equal(r.doc.body.lastElementChild.getAttribute('data-htmlmemo-anchor'),'existing');assert.equal(saved,1);assert.equal(rendered,1);
+  await r.refreshDynamicDocument();assert.equal(r.doc.querySelector('p').getAttribute('data-htmlmemo-anchor'),'js0');assert.equal(r.doc.body.lastElementChild.getAttribute('data-htmlmemo-anchor'),'existing');assert.equal(saved,0);assert.equal(rendered,1);
   await r.refreshDynamicDocument();assert.equal(r.doc.querySelector('p').getAttribute('data-htmlmemo-anchor'),'js0');assert.equal(r.dynamicAnchor,1);
 });
 

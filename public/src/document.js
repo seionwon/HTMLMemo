@@ -80,8 +80,8 @@ export function parseHTML(html, defaults = {}, options = {}) {
   let step; do { step = work.next(); } while (!step.done);
   return step.value;
 }
-export async function prepareLoadedHTML(doc, defaults = {}, isCancelled = () => false) {
-  const work = prepareHTML(null, defaults, {document:doc,includeMetadata:true,allowScripts:defaults.execution?.allowScripts===true});
+export async function prepareLoadedHTML(doc, defaults = {}, isCancelled = () => false, {serialize = true} = {}) {
+  const work = prepareHTML(null, defaults, {document:doc,includeMetadata:true,allowScripts:defaults.execution?.allowScripts===true,serialize});
   try {
     for (;;) {
       if (isCancelled()) throw new DOMException('문서 열기가 취소되었습니다.','AbortError');
@@ -95,7 +95,7 @@ export async function prepareLoadedHTML(doc, defaults = {}, isCancelled = () => 
     }
   } finally { work.return(); }
 }
-function* prepareHTML(html, defaults, {includeMetadata = false, document: loadedDocument = null, allowScripts = undefined} = {}) {
+function* prepareHTML(html, defaults, {includeMetadata = false, document: loadedDocument = null, allowScripts = undefined, serialize = true} = {}) {
   if (!loadedDocument && (typeof html !== 'string' || !html.trim())) throw new Error('HTML 파일이 비어 있습니다.');
   const doc = loadedDocument || new DOMParser().parseFromString(html, 'text/html');
   let embedded = {};
@@ -128,7 +128,7 @@ function* prepareHTML(html, defaults, {includeMetadata = false, document: loaded
   const metadata = {
     version: FORMAT_VERSION, title: String(embedded.title || doc.title || defaults.title || 'HTML 문서').slice(0,1000),
     source, capturedAt: embedded.capturedAt || Date.now(), viewport: {width: Math.min(4096, Math.max(320, Number(viewport.width) || 1100)), height: Number(viewport.height) || 800},
-    execution:{allowScripts:!!allowScripts}, annotations: embedded.annotations || [], view: {scrollTop:Math.max(0,Number(view.scrollTop)||0),scrollLeft:Math.max(0,Number(view.scrollLeft)||0),zoom:Number.isFinite(view.zoom)?Math.min(8,Math.max(.2,view.zoom)):null,autoFit:view.autoFit!==false,...(Number.isFinite(view.tocWidth)?{tocWidth:Math.min(640,Math.max(8,Math.round(Number(view.tocWidth))))}:{})}, bookmarks,
+    execution:{allowScripts:!!allowScripts}, annotations: embedded.annotations || [], view: {scrollTop:Math.max(0,Number(view.scrollTop)||0),scrollLeft:Math.max(0,Number(view.scrollLeft)||0),zoom:Number.isFinite(view.zoom)?Math.min(8,Math.max(.2,view.zoom)):null,autoFit:view.autoFit==null?!Number.isFinite(view.zoom):view.autoFit!==false,...(Number.isFinite(view.tocWidth)?{tocWidth:Math.min(640,Math.max(8,Math.round(Number(view.tocWidth))))}:{})}, bookmarks,
     warnings: (Array.isArray(embedded.warnings) ? embedded.warnings : defaults.warnings || []).filter(w=>typeof w==='string').slice(0,5000),
   };
   const nativeScroll = !!allowScripts || !!loadedDocument || html.length >= 4 * 1024 * 1024 || n >= 20000;
@@ -141,7 +141,7 @@ function* prepareHTML(html, defaults, {includeMetadata = false, document: loaded
     for(const element of doc.querySelectorAll('[style]')){yield;element.setAttribute('style',freezeCSS(element.getAttribute('style')));}
   }
   if (includeMetadata) doc.head.append(metadataElement(doc, metadata));
-  return {html: '<!doctype html>\n' + doc.documentElement.outerHTML, metadata,
+  return {html: serialize ? '<!doctype html>\n' + doc.documentElement.outerHTML : null, metadata,
     nativeScroll};
 }
 function metadataElement(doc, metadata) {
@@ -200,13 +200,23 @@ export function resolveTextAnchor(index, anchor) {
   }
   return null;
 }
-export function wrapOffsets(doc, start, end, attributes, style = '') {
-  const {nodes} = textIndex(doc);
-  for (const item of nodes.filter(n => n.end > start && n.start < end).reverse()) {
-    const from = Math.max(0, start - item.start); const to = Math.min(item.node.length, end - item.start);
-    if (to < item.node.length) item.node.splitText(to);
-    const selected = from > 0 ? item.node.splitText(from) : item.node;
-    const mark = doc.createElement('span'); for (const [name, value] of Object.entries(attributes)) mark.setAttribute(name, value);
-    mark.style.cssText = style; selected.replaceWith(mark); mark.append(selected);
+export function wrapOffsets(doc, start, end, attributes, style = '', index = textIndex(doc)) {
+  // Keep a shared text index valid as ranges split nodes. Restoring N highlights
+  // must not walk and concatenate the entire book twice for every highlight.
+  let lo=0,hi=index.nodes.length;
+  while(lo<hi){const mid=(lo+hi)>>>1;if(index.nodes[mid].end<=start)lo=mid+1;else hi=mid;}
+  const matches=[];
+  for(let i=lo;i<index.nodes.length && index.nodes[i].start<end;i++)matches.push({item:index.nodes[i],i});
+  for(const {item,i} of matches.reverse()){
+    const from=Math.max(0,start-item.start),to=Math.min(item.node.length,end-item.start);
+    const suffix=to<item.node.length?item.node.splitText(to):null;
+    const selected=from>0?item.node.splitText(from):item.node;
+    const mark=doc.createElement('span');for(const [name,value] of Object.entries(attributes))mark.setAttribute(name,value);
+    mark.style.cssText=style;selected.replaceWith(mark);mark.append(selected);
+    const parts=[];
+    if(from>0)parts.push({node:item.node,start:item.start,end:item.start+from});
+    parts.push({node:selected,start:item.start+from,end:item.start+to});
+    if(suffix)parts.push({node:suffix,start:item.start+to,end:item.end});
+    index.nodes.splice(i,1,...parts);
   }
 }

@@ -37,10 +37,10 @@ export class Reader {
             const blockNavigation = event => { if(event.type==='click'||event.key==='Enter')event.preventDefault(); };
             this.doc.addEventListener('click',blockNavigation,true);this.doc.addEventListener('keydown',blockNavigation,true);
             this.frame.style.pointerEvents = '';
-            const prepared = await prepareLoadedHTML(this.doc, this.metadata, () => this.disposed);
+            const prepared = await prepareLoadedHTML(this.doc, this.metadata, () => this.disposed, {serialize:false});
             this.doc.removeEventListener('click',blockNavigation,true);this.doc.removeEventListener('keydown',blockNavigation,true);
             const openingScroll = {top:this.doc.defaultView.scrollY,left:this.doc.defaultView.scrollX};
-            this.metadata = prepared.metadata; this.history = new History(this.metadata.annotations);
+            this.metadata = parsed.savedMetadata ? {...prepared.metadata,...parsed.metadata} : prepared.metadata; this.history = new History(this.metadata.annotations);
             this.autoFit = this.metadata.view.autoFit !== false;
             this.initialHTML = prepared.html;
             this.naturalWidth = this.metadata.viewport.width;
@@ -113,16 +113,38 @@ export class Reader {
         this.rememberPosition(); this.callbacks.onView?.();
       }, 250);
     }, {passive:true});
-    this.resizeObserver = new ResizeObserver(() => { if (!this.disposed && !this.tocDrag) { this.measure(); this.renderDrawingLayer(); } });
+    this.resizeObserver = new ResizeObserver(entries => {
+      if (this.disposed || this.host?.hidden || this.tocDrag) return;
+      const rect=entries[0]?.contentRect;
+      const size=rect && [Math.round(rect.width),Math.round(rect.height)].join(':');
+      if(size && size===this.bodySize)return;
+      this.bodySize=size;this.measure();this.renderDrawingLayer();
+    });
     this.resizeObserver.observe(this.doc.body);
-    this.hostObserver = new ResizeObserver(() => { if (!this.disposed) { if(this.autoFit)this.zoom = this.fitZoom(); if(this.nativeScroll || this.autoFit)this.applyZoom(); } }); this.hostObserver.observe(this.viewport);
+    this.hostObserver = new ResizeObserver(() => {
+      if(this.disposed || this.host?.hidden)return;
+      const size=[this.viewport.clientWidth,this.viewport.clientHeight].join(':');
+      if(size===this.hostSize)return;
+      this.hostSize=size;
+      if(this.autoFit)this.zoom=this.fitZoom();
+      if(this.nativeScroll || this.autoFit)this.applyZoom();
+    }); this.hostObserver.observe(this.viewport);
     this.doc.fonts.ready.then(() => { if (!this.disposed && !this.tocDrag) { this.measure(); this.renderDrawingLayer(); } });
     if (this.metadata.execution?.allowScripts) {
-      this.dynamicAnchor = 0;
+      this.dynamicAnchor = 0;this.dynamicRoots=new Set([this.doc.body]);
       this.dynamicObserver = new MutationObserver(records => {
         if (this.tocDrag) return;
         const editor = node => (node.nodeType===3?node.parentElement:node)?.closest?.('#'+LAYER_ID+',#htmlmemo-annotation-style,#htmlmemo-editor-style,[data-htmlmemo-mark],[data-htmlmemo-search]');
-        if(records.some(record=>!editor(record.target) && (record.type==='characterData' || [...record.addedNodes,...record.removedNodes].some(node=>!editor(node)))))this.scheduleDynamicRefresh();
+        let changed=false;
+        for(const record of records){
+          if(editor(record.target))continue;
+          const nodes=record.type==='characterData'?[record.target]:[...record.addedNodes,...record.removedNodes];
+          if(nodes.some(node=>!editor(node))){
+            changed=true;
+            this.dynamicRoots.add(record.target.nodeType===1?record.target:record.target.parentElement);
+          }
+        }
+        if(changed)this.scheduleDynamicRefresh();
       });
       this.observeDynamicDocument();
       this.scheduleDynamicRefresh();
@@ -774,26 +796,32 @@ export class Reader {
     if (this.disposed) return;
     this.dynamicDirty = true;
     clearTimeout(this.dynamicTimer);
+    if(this.host?.hidden)return;
     this.dynamicTimer = setTimeout(() => this.refreshDynamicDocument().catch(error=>this.callbacks.onError?.(error)),400);
   }
   async refreshDynamicDocument() {
-    if (this.disposed || this.dynamicRunning) return;
+    if (this.disposed || this.host?.hidden || this.dynamicRunning) return;
     if (this.tocDrag) { this.scheduleDynamicRefresh(); return; }
     this.dynamicRunning = true;this.dynamicDirty = false;
     try {
       const body = this.doc.body;if (!body) return;
       body.setAttribute('data-htmlmemo-anchor','body');
       let count=0,added=0;
-      for (const element of body.querySelectorAll('*')) {
-        if (!element.closest('#'+LAYER_ID) && !['script','style','meta','link','template'].includes(element.localName) && !element.hasAttribute('data-htmlmemo-anchor')) { element.setAttribute('data-htmlmemo-anchor','js'+this.dynamicAnchor++); added++; }
-        if (++count % 1000 === 0) {await new Promise(resolve=>setTimeout(resolve,0));if(this.disposed)return;}
+      const roots=[...(this.dynamicRoots || [body])].filter(root=>root?.isConnected);
+      this.dynamicRoots?.clear();
+      // A clock or a small generated paragraph must not rescan a 50,000-page book.
+      const rootSet=new Set(roots);
+      const unique=roots.filter(root=>{for(let parent=root.parentElement;parent;parent=parent.parentElement)if(rootSet.has(parent))return false;return true;});
+      for(const root of unique)for(const element of [root,...root.querySelectorAll('*')]){
+        if (!element.closest('#'+LAYER_ID+', [data-htmlmemo-mark], [data-htmlmemo-search]') && !['script','style','meta','link','template'].includes(element.localName) && !element.hasAttribute('data-htmlmemo-anchor')) {element.setAttribute('data-htmlmemo-anchor','js'+this.dynamicAnchor++);added++;}
+        if(++count%1000===0){await new Promise(resolve=>setTimeout(resolve,0));if(this.disposed)return;}
       }
       this.tocChecked = false;
       this.ensureDocumentTocResize();
       if (added > 0) {
         this.initialHTML = null;
         this.measure();this.render();
-        this.callbacks.onChange?.();this.callbacks.onView?.();
+        this.callbacks.onView?.();
       }
     } finally {
       this.dynamicRunning = false;
@@ -835,9 +863,11 @@ export class Reader {
   }
   fitZoom() { const focused=!!this.host.closest('.reader-focus'); return clamp(this.viewport.clientWidth / this.naturalWidth, .2, focused ? 8 : 2); }
   applyZoom() {
-    if (this.nativeScroll) this.frame.style.height = Math.max(200, this.viewport.clientHeight / this.zoom) + 'px';
-    this.frame.style.transform = `scale(${this.zoom})`;
-    this.sizer.style.width = this.naturalWidth * this.zoom + 'px'; this.sizer.style.height = this.nativeScroll ? Math.max(200 * this.zoom, this.viewport.clientHeight) + 'px' : (this.naturalHeight || 800) * this.zoom + 'px';
+    const set=(style,key,value)=>{if(style[key]!==value)style[key]=value;};
+    if(this.nativeScroll)set(this.frame.style,'height',Math.max(200,this.viewport.clientHeight/this.zoom)+'px');
+    set(this.frame.style,'transform',`scale(${this.zoom})`);
+    set(this.sizer.style,'width',this.naturalWidth*this.zoom+'px');
+    set(this.sizer.style,'height',(this.nativeScroll?Math.max(200*this.zoom,this.viewport.clientHeight):(this.naturalHeight||800)*this.zoom)+'px');
   }
   get scrollTop() { return this.nativeScroll ? (this.doc.defaultView.scrollY || 0) * this.zoom : this.viewport.scrollTop; }
   set scrollTop(value) { if(this.nativeScroll)this.doc.defaultView.scrollTo(this.doc.defaultView.scrollX, value / this.zoom);else this.viewport.scrollTop=value; }
@@ -942,10 +972,12 @@ export class Reader {
     cleanAnnotations(this.doc); this.selectedId = null;
     const style = this.doc.createElement('style'); style.id = 'htmlmemo-annotation-style';
     style.textContent = '[data-htmlmemo-mark]{border-radius:2px;box-decoration-break:clone;-webkit-box-decoration-break:clone}'; this.doc.head.append(style);
-    for (const annotation of this.metadata.annotations.filter(a => TEXT_TOOLS.includes(a.type))) {
-      const resolved = resolveTextAnchor(textIndex(this.doc), annotation.textAnchor); if (!resolved) continue;
+    const textAnnotations=this.metadata.annotations.filter(a=>TEXT_TOOLS.includes(a.type));
+    const index=textAnnotations.length?textIndex(this.doc):null;
+    for (const annotation of textAnnotations) {
+      const resolved = resolveTextAnchor(index, annotation.textAnchor); if (!resolved) continue;
       const style = annotation.type === 'highlight' ? `background:${annotation.color}${Math.round(annotation.opacity * 255).toString(16).padStart(2,'0')};color:inherit` : `text-decoration-line:${annotation.type === 'underline' ? 'underline' : 'line-through'};text-decoration-color:${annotation.color};text-decoration-thickness:${annotation.width}px;text-underline-offset:3px`;
-      wrapOffsets(this.doc, resolved.start, resolved.end, {'data-htmlmemo-mark':'','data-htmlmemo-id':annotation.id}, style);
+      wrapOffsets(this.doc, resolved.start, resolved.end, {'data-htmlmemo-mark':'','data-htmlmemo-id':annotation.id}, style,index);
     }
     this.renderDrawingLayer();
     if (this.searchQuery) this.search(this.searchQuery, false);
@@ -981,14 +1013,31 @@ export class Reader {
   }
   renderDrawingLayer() {
     if (!this.doc || this.disposed) return;
-    this.doc.getElementById(LAYER_ID)?.remove();
-    this.layer = svg(this.doc, 'svg', {id:LAYER_ID,width:this.naturalWidth,height:this.nativeScroll ? 1 : this.naturalHeight || 800,'aria-label':'HTMLMemo 주석',style:'position:absolute;top:0;left:0;z-index:2147483000;pointer-events:none;overflow:visible;'});
-    this.layer.dataset.htmlmemoUi = '';
-    for (const annotation of this.metadata.annotations.filter(a => !TEXT_TOOLS.includes(a.type))) { const node = this.drawAnnotation(annotation); if (node) this.layer.append(node); }
-    this.doc.body.append(this.layer);
-    // Source pages can position their body. Keep overlay coordinates relative
-    // to the document viewport rather than applying the body offset twice.
-    const offset=this.layer.getBoundingClientRect();this.layer.style.left=-(offset.left + (this.doc.defaultView.scrollX || 0))+'px';this.layer.style.top=-(offset.top + (this.doc.defaultView.scrollY || 0))+'px';
+    // Keep one overlay: source Mutation/ResizeObservers must not see a removed
+    // and reinserted SVG every time their own layout changes.
+    let layer=this.doc.getElementById(LAYER_ID);
+    const drawings=this.metadata.annotations.filter(a=>!TEXT_TOOLS.includes(a.type));
+    const contentKey=JSON.stringify(drawings);
+    const layoutKey=JSON.stringify(drawings.map(a=>a.anchor?this.absolutePoints(a):null));
+    if(!layer){
+      layer=svg(this.doc,'svg',{id:LAYER_ID,'aria-label':'HTMLMemo 주석',style:'position:absolute;top:0;left:0;z-index:2147483000;pointer-events:none;overflow:visible;'});
+      layer.dataset.htmlmemoUi='';this.doc.body.append(layer);
+      this.drawingContentKey=null;this.drawingLayoutKey=null;
+    }
+    this.layer=layer;
+    const width=this.nativeScroll ? this.doc.documentElement?.clientWidth || this.naturalWidth : this.naturalWidth;
+    const height=this.nativeScroll ? 1 : this.naturalHeight || 800;
+    if(layer.getAttribute('width')!==String(width))layer.setAttribute('width',String(width));
+    if(layer.getAttribute('height')!==String(height))layer.setAttribute('height',String(height));
+    if(contentKey!==this.drawingContentKey || layoutKey!==this.drawingLayoutKey){
+      layer.replaceChildren(...drawings.map(a=>this.drawAnnotation(a)).filter(Boolean));
+      this.drawingContentKey=contentKey;this.drawingLayoutKey=layoutKey;
+    }
+    const offset=layer.getBoundingClientRect();
+    const left=(Number.parseFloat(layer.style.left)||0)-offset.left-(this.doc.defaultView.scrollX||0);
+    const top=(Number.parseFloat(layer.style.top)||0)-offset.top-(this.doc.defaultView.scrollY||0);
+    if(Math.abs(left-(Number.parseFloat(layer.style.left)||0))>.5)layer.style.left=left+'px';
+    if(Math.abs(top-(Number.parseFloat(layer.style.top)||0))>.5)layer.style.top=top+'px';
   }
   html() { return serializeHTML(this.doc, this.metadata); }
   async back() { const p = this.linkHistory.pop(); if (!p) return false; this.scrollTop=p.top; this.scrollLeft=p.left; this.callbacks.onView?.(); return true; }
