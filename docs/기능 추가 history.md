@@ -857,3 +857,5 @@ ID: hist-20261014-024. tests/chrome.mjs가 macOS Codex/CodeMemo 제한 환경을
 **반영 상태:** 로컬 구현·검증 완료, GitHub Pages 게시 진행. 원본 쓰기 권한의 재승인은 브라우저 정책상 사용자 클릭이 필요하며 자동으로 우회하지 않습니다. 앱 내부 보관함도 브라우저 데이터 삭제의 영향을 받으므로 원본 권한 승인 또는 HTML 내보내기로 기기 파일에 보관할 수 있습니다.
 
 **관련 파일:** [저장과 원본 동기화](../public/src/storage.js), [상태·재시도·닫기·내보내기](../public/src/app.js), [단위 검사](../tests/autosave.test.mjs), [실제 Chrome 검사](../tests/browser.integration.mjs), [사용법](../README.md).
+
+**추가 검증·보완:** 처음부터 원본 쓰기 권한을 거절하고 읽기 전용으로 연 문서도 「HTML 내보내기」에서 다른 파일을 선택할 수 있게 했습니다. 원본 재연결은 추가 도구에서 명시적으로 요청한 경우에만 수행합니다. 실제 Chrome 검사에 이 경우를 추가해 원본 권한을 재요청하지 않고 새 HTML 파일이 생성되는 것을 확인했습니다. 온라인 주소를 대상으로 같은 검사를 실행할 수 있는 `HTMLMEMO_AUTOSAVE_TEST_URL` 옵션을 추가했습니다. 초기 코드 커밋 `4903e5b`의 [Pages 빌드·게시](https://github.com/seionwon/HTMLMemo/actions/runs/38683540025)는 성공했고 해당 온라인 앱의 권한 복구 검사와 app.js·storage.js 바이트 일치를 확인했습니다. 읽기 전용 내보내기 보완을 포함한 최종 Pages 반영·온라인 검증 결과는 아래에 보충합니다.

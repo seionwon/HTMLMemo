@@ -107,7 +107,7 @@ test('real Chrome: revoked file permission keeps annotations saved, retries on c
   await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-permission-test-'));await cp(join(root,'public'),folder,{recursive:true});
   const server=createServer(folder);let chrome;
   try {
-    await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});const url=`http://127.0.0.1:${server.address().port}/`;chrome=await launchChrome();const page=chrome.page;
+    await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});const url=process.env.HTMLMEMO_AUTOSAVE_TEST_URL || `http://127.0.0.1:${server.address().port}/`;chrome=await launchChrome();const page=chrome.page;
     await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
     await page.navigate(url);await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
     await page.evaluate(`(async()=>{
@@ -143,6 +143,14 @@ test('real Chrome: revoked file permission keeps annotations saved, retries on c
     await page.waitFor('!document.querySelector("#retry-save") && document.querySelector("#status-left").textContent.includes("HTML 파일에 자동 저장됨")');
     const exported=await page.evaluate(`(async()=>{const root=await navigator.storage.getDirectory();const html=await (await (await root.getFileHandle('exported.html')).getFile()).text();return JSON.parse(new DOMParser().parseFromString(html,'text/html').getElementById('htmlmemo-data').textContent).annotations.length;})()`);
     assert.equal(exported,2);assert.equal(await sourceAnnotations(),1);assert.equal((await readState()).annotations,2);
+    // A source opened read-only must also be exportable without granting writes to that source.
+    await page.evaluate('window.fileAllowed=false;window.acceptPermission=false');await page.click('#import-button');
+    await page.waitFor('document.querySelector("#status-left").textContent.includes("앱의 HTML 파일에 자동 저장됨")');
+    const requestsBeforeExport=await page.evaluate('window.permissionRequests');
+    await page.evaluate(`window.showSaveFilePicker=async()=>{const root=await navigator.storage.getDirectory();return root.getFileHandle('read-only-copy.html',{create:true});};`);await page.click('#save-page');
+    await page.waitFor('document.querySelector("#address").value === "read-only-copy.html" && document.querySelector("#status-left").textContent.includes("HTML 파일에 자동 저장됨") && !document.querySelector("#retry-save")');
+    const readOnlyCopy=await page.evaluate(`(async()=>{const root=await navigator.storage.getDirectory();return (await (await root.getFileHandle('read-only-copy.html')).getFile()).text();})()`);
+    assert.ok(readOnlyCopy.includes('htmlmemo-data'));assert.equal(await page.evaluate('window.permissionRequests'),requestsBeforeExport);assert.equal(await sourceAnnotations(),1);
     assert.deepEqual(chrome.errors,[]);
   } catch(error) {
     if(chrome)console.error('Autosave browser diagnostics:',await chrome.page.evaluate(`JSON.stringify({status:document.querySelector('#status-left')?.textContent,tabs:document.querySelectorAll('.tab.document').length,toast:document.querySelector('#toast')?.textContent,errors:[]})`));

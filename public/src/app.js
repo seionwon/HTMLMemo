@@ -264,7 +264,7 @@ async function savePage() {
   } finally {updateChrome();}
 }
 async function connectDocumentFile(tab, retryExisting = false) {
-  const existingHandle = retryExisting ? tab.record.fileHandle || tab.record.originalHandle : !tab.record.fileHandle && tab.record.originalHandle;
+  const existingHandle = retryExisting ? tab.record.fileHandle || tab.record.originalHandle : null;
   if(existingHandle) {
     if(!await permission(existingHandle,true))throw new Error('원본 파일 쓰기 권한이 허용되지 않았습니다. 주석은 앱 보관함에 자동 저장됩니다.');
     if(tab.queue.running)await tab.queue.running.catch(()=>{});
