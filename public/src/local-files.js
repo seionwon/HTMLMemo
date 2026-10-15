@@ -1,7 +1,6 @@
 import { LOCAL_CSP, SCRIPT_CSP } from './document.js';
-import { permission } from './storage.js';
 
-export async function readLocalHTML(input, {requestWrite = false, native = false, allowScripts = false} = {}) {
+export async function readLocalHTML(input, {native = false, allowScripts = false} = {}) {
   const originalHandle = input?.kind === 'file' && typeof input.getFile === 'function' ? input : null;
   const file = originalHandle ? await originalHandle.getFile() : input;
   if (!file || typeof file.text !== 'function' || !/\.html?$/i.test(file.name || '') && file.type !== 'text/html') throw new Error('HTML 또는 HTM 파일을 선택해주세요.');
@@ -29,10 +28,8 @@ export async function readLocalHTML(input, {requestWrite = false, native = false
   } else html = await file.text();
   // Annotation availability is independent of file write permission. Read-only
   // files still become local document tabs with a recoverable internal copy.
-  let writable = false;
-  try { writable = originalHandle ? await permission(originalHandle,requestWrite) : false; } catch { /* A missing write gesture must not block reading or annotation. */ }
   return {
-    snapshot:{html,file:nativeFile,title:file.name,allowScripts}, name:file.name, handle:writable ? originalHandle : null,
+    snapshot:{html,file:nativeFile,title:file.name,allowScripts}, name:file.name, handle:null,
     originalHandle, diskStamp:originalHandle ? {modified:file.lastModified,size:file.size} : null,
   };
 }

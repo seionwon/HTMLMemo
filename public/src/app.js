@@ -2,7 +2,7 @@ import { $, $$, icon, escapeHTML as esc, uid, filename, normalizeURL, displayHos
 import { parseHTML } from './document.js';
 import { SaveQueue } from './model.js';
 import { Reader } from './reader.js';
-import { listDocuments, putDocument, deleteDocument, getSetting, setSetting, saveDocumentHTML, permission } from './storage.js';
+import { listDocuments, deleteDocument, getSetting, setSetting, saveDocumentHTML, listRevisions, putDocumentRevision, writeExternalHTML } from './storage.js';
 import { bridge, bridgeAvailable, discoverBridge } from './bridge.js';
 import { readLocalHTML, droppedHTMLFiles } from './local-files.js';
 import { normalizePreferences, loadPreferences, storePreferences, serializeSettings, readSettingsFile, PRESET_COLORS, PRESET_PALETTES, normalizeHexColor, hexToRgb, rgbToHex, hexToHsv, hsvToHex } from './preferences.js';
@@ -141,22 +141,20 @@ function createHost(id,type) { const host=document.createElement('div');host.id=
 async function openRecord(record, prepared = null) {
   const existing=tabs.find(tab=>tab.record?.id===record.id);if(existing){activate(existing.id);return existing;}
   const parsed=prepared || parseHTML(record.html,{title:record.title,source:record.source,viewport:record.metadata?.viewport,execution:record.metadata?.execution});
+  if(!prepared && record.metadata)parsed.metadata=structuredClone(record.metadata);
   const tab={id:uid(),type:'document',title:record.title,record:{...record},host:null};tab.host=createHost(tab.id,'document');
-  // The initial standalone copy is already sanitized and contains metadata.
-  // Reuse it until editing or moving, avoiding a second full DOM clone on import.
-  tab.initialHTML=prepared && !parsed.file && !parsed.metadata.annotations.length ? record.html : null;
   tab.queue=new SaveQueue(async()=>{
     await tab.reader.ready;
-    const html=tab.initialHTML || tab.reader.html();tab.initialHTML=null; const metadata=structuredClone(tab.reader.metadata);
+    const html=tab.record.html; const metadata=structuredClone(tab.reader.metadata);
     tab.record.html=html;tab.record.metadata=metadata;tab.record.title=metadata.title;tab.record.modified=Date.now();
-    // Never let lost external-file permission block the saved local library or closing/exporting.
-    await saveDocumentHTML(tab.record, html);
+    await saveDocumentHTML(tab.record, html, {revision:tab.restoredFrom?{restoredFrom:tab.restoredFrom}:undefined});
+    tab.restoredFrom=null;
     records=records.filter(r=>r.id!==record.id).concat({...tab.record});
   },()=>{if(activeId===tab.id)saveStatus(tab);renderTabs();});
   tabs.push(tab);activate(tab.id);
   tab.reader=new Reader(tab.host,parsed,{
-    onChange:()=>{tab.initialHTML=null;tab.queue.schedule();if(activeId===tab.id){renderToolbar();if(sidebarMode==='annotations')renderSidebar('annotations');}},
-    onPosition:()=>{tab.initialHTML=null;tab.queue.schedule();},onView:()=>{if(activeId===tab.id){updateChrome();updateToolbarState();}},
+    onChange:()=>{tab.queue.schedule();if(activeId===tab.id){renderToolbar();if(sidebarMode==='annotations')renderSidebar('annotations');}},
+    onPosition:()=>{tab.queue.schedule();},onView:()=>{if(activeId===tab.id){updateChrome();updateToolbarState();}},
     onTextSelection:()=>{if(activeId===tab.id)showSelectionMenu(tab.reader);},
     onSelectionDismiss:()=>{if(popoverName==='selection')closePopover();},
     onLink:url=>safely(openBrowser)(url),onKey:handleKey,requestText:promptText,onError:showError,
@@ -165,33 +163,26 @@ async function openRecord(record, prepared = null) {
   });
   Object.assign(tab.reader,preferences.annotation);
   try { await tab.reader.ready; } catch(error) {tabs.splice(tabs.indexOf(tab),1);tab.reader.dispose();activate('library');throw error;}
+  if(parsed.file){tab.record.html=tab.reader.initialHTML || tab.reader.html();tab.reader.initialHTML=null;tab.record.metadata=tab.reader.metadata;tab.record.source=tab.reader.metadata.source;tab.title=tab.record.title=tab.reader.metadata.title;}
   renderToolbar();
   updateChrome();
-  // A recovery copy ahead of its external file must keep its pending status.
-  if(record.diskPending) { tab.queue.schedule(); tab.queue.flush().catch(showError); }
+  // Preserve the imported/current annotation baseline before the first new edit.
+  try{await putDocumentRevision(tab.record,{baseline:true});}
+  catch(error){tab.queue.schedule();try{await tab.queue.flush();}catch{showError(error);}}
   return tab;
 }
 function saveStatus(tab) {
   const queue=tab.queue;if(!queue)return;
-  const externalPending = !queue.error && tab.record.diskPending && (!!tab.record.diskError || !queue.pending);
-  const warning = tab.record.diskError?.name === 'NotAllowedError' || tab.record.diskError?.name === 'SecurityError'
-    ? '원본 파일 쓰기 권한 확인이 필요합니다.' : tab.record.diskError?.message || '원본 파일 저장 대기 중';
-  const label=queue.error?'앱 자동 저장 실패 · '+queue.error.message:queue.pending?'저장 중…':externalPending?'앱에 자동 저장됨 · '+warning:tab.record.fileHandle?'HTML 파일에 자동 저장됨':'앱의 HTML 파일에 자동 저장됨';
-  // Keep the retry element stable while position autosaves update the status. Replacing it
-  // between pointer-down and pointer-up can swallow the gesture needed for permission prompts.
+  const label=queue.error?'주석 자동 저장 실패 · '+queue.error.message:queue.pending?'저장 중…':'주석이 앱에 자동 저장됨';
   const status=$('#status-left');let state=$('.save-state',status);
   if(!state){status.replaceChildren();state=document.createElement('span');status.append(state);}
-  state.className=`save-state ${queue.error||externalPending?'save-error':''}`;
-  state.innerHTML=`${icon(queue.error||externalPending?'more':queue.pending?'reload':'check',13)} ${esc(label)}`;
+  state.className=`save-state ${queue.error?'save-error':''}`;
+  state.innerHTML=`${icon(queue.error?'more':queue.pending?'reload':'check',13)} ${esc(label)}`;
   let retry=$('#retry-save');
-  if(queue.error||externalPending){
+  if(queue.error){
     if(!retry){retry=document.createElement('button');retry.id='retry-save';retry.className='text-button';status.append(retry);}
-    retry.textContent=externalPending?'원본 저장 재시도':'저장 재시도';
+    retry.textContent='저장 재시도';retry.onclick=safely(async()=>{tab.queue.schedule();await tab.queue.flush();});
   }else retry?.remove();
-  if(queue.error||externalPending)$('#retry-save').onclick=safely(async()=>{
-    if(externalPending&&tab.record.fileHandle&&!await permission(tab.record.fileHandle,true))throw new Error('앱에는 저장됐습니다. 원본 파일을 갱신하려면 브라우저에서 쓰기 권한을 허용해주세요.');
-    tab.queue.schedule();await tab.queue.flush();
-  });
 }
 async function closeTab(id) {
   const tab=tabs.find(t=>t.id===id);if(!tab)return;
@@ -206,11 +197,11 @@ async function createDocument(snapshot, handle = null, name = null, local = {}) 
   else if(handle){const disk=await handle.getFile();record.diskStamp={modified:disk.lastModified,size:disk.size};}
   records=records.filter(r=>r.id!==record.id).concat(record);let tab;
   try{tab=await openRecord(record,parsed);}catch(error){records=records.filter(r=>r.id!==record.id);renderLibrary();throw error;}
-  if(snapshot.file){tab.initialHTML=tab.reader.metadata.annotations.length ? null : tab.reader.initialHTML;tab.reader.initialHTML=null;tab.record.metadata=tab.reader.metadata;tab.record.source=tab.reader.metadata.source;tab.title=tab.record.title=tab.reader.metadata.title;}
   tab.queue.schedule();
   try { await tab.queue.flush(); } catch(error) { showError(error); }
   renderLibrary();activate(tab.id);
   if(tab.queue.error)return tab;
+  if(handle && !local.originalHandle)await writeExternalHTML(tab.record,tab.reader.html());
   if(parsed.metadata.warnings.length)toast(`페이지를 저장했습니다. ${parsed.metadata.warnings.length}개의 리소스를 보관하지 못했습니다. 문서 정보에서 확인할 수 있어요.`,true);
   else toast(local.originalHandle||name?'로컬 HTML을 주석 탭에서 열었습니다.':'HTML 파일로 저장하고 새 탭에서 열었습니다.');
   return tab;
@@ -230,11 +221,11 @@ async function folderFile(title) {
 async function importFiles() {
   if(!openPicker()){$('#file-input').click();return;}
   let handles;try{handles=await window.showOpenFilePicker({types:htmlTypes,multiple:true});}catch(error){if(['SecurityError','NotSupportedError'].includes(error.name)){$('#file-input').click();return;}throw error;}
-  for(const handle of handles)await openLocalFile(handle,true);
+  for(const handle of handles)await openLocalFile(handle);
 }
-async function openLocalFile(input,requestWrite=false) {
+async function openLocalFile(input) {
   $('#status-left').textContent='로컬 HTML을 읽는 중…';
-  const local=await readLocalHTML(input,{requestWrite,native:true,allowScripts:true});
+  const local=await readLocalHTML(input,{native:true,allowScripts:true});
   $('#status-left').textContent='HTML 문서를 준비하는 중…';
   await new Promise(resolve=>setTimeout(resolve,0));
   return createDocument(local.snapshot,local.handle,local.name,local);
@@ -263,24 +254,20 @@ async function savePage() {
     await createDocument(snapshot,handle);
   } finally {updateChrome();}
 }
-async function connectDocumentFile(tab, retryExisting = false) {
-  const existingHandle = retryExisting ? tab.record.fileHandle || tab.record.originalHandle : null;
-  if(existingHandle) {
-    if(!await permission(existingHandle,true))throw new Error('원본 파일 쓰기 권한이 허용되지 않았습니다. 주석은 앱 보관함에 자동 저장됩니다.');
-    if(tab.queue.running)await tab.queue.running.catch(()=>{});
-    tab.record.fileHandle=existingHandle;tab.queue.schedule();await tab.queue.flush();updateChrome();if(!tab.record.diskPending)toast('원본 HTML 파일에 주석을 자동 저장합니다.');return;
-  }
-  if(!savePicker()){await tab.queue.flush();download(tab.reader.html(),tab.record.name);toast('HTML을 내보냈습니다. 이 브라우저는 내려받은 파일의 자동 갱신을 지원하지 않습니다.');return;}
-  let handle;try{handle=await window.showSaveFilePicker({suggestedName:tab.record.name,types:htmlTypes});}catch(error){if(['SecurityError','NotSupportedError'].includes(error.name)){await tab.queue.flush();download(tab.reader.html(),tab.record.name);toast('주석이 포함된 HTML을 저장했습니다.');return;}throw error;}
-  if(tab.queue.running)await tab.queue.running.catch(()=>{});
-  const disk=await handle.getFile();tab.record.fileHandle=handle;tab.record.name=handle.name;tab.record.diskStamp={modified:disk.lastModified,size:disk.size};
-  tab.queue.schedule();await tab.queue.flush();updateChrome();if(!tab.record.diskPending)toast('이 HTML 파일에 주석을 자동 저장합니다.');
-}
 async function exportDocument(tab) {
-  await tab.reader.ready;
-  if(savePicker())return connectDocumentFile(tab);
-  await tab.queue.flush();download(tab.reader.html(),tab.record.name);toast('주석이 포함된 HTML 파일을 내보냈습니다.');
+  // Invoke the picker before awaiting persistence, while the click still has user activation.
+  let handle;
+  if(savePicker()) {
+    try { handle=await window.showSaveFilePicker({suggestedName:tab.record.name.replace(/\.html?$/i,'-주석.html'),types:htmlTypes}); }
+    catch(error){if(!['SecurityError','NotSupportedError'].includes(error.name))throw error;}
+  }
+  await tab.reader.ready;await tab.queue.flush();
+  const html=tab.reader.html();
+  if(handle){const disk=await handle.getFile();await writeExternalHTML({fileHandle:handle,diskStamp:{modified:disk.lastModified,size:disk.size}},html);}
+  else download(html,tab.record.name);
+  toast('현재 주석을 포함한 HTML을 내보냈습니다. 이후 주석은 앱에 자동 저장됩니다.');
 }
+
 async function openBrowser(input, forceNew = true) {
   if(/^file:/i.test(input.trim())){await importFiles();return;}
   const url=normalizeURL(input);const current=active();
@@ -542,14 +529,15 @@ function toolAction(action) {
     $('#zoom-out').onclick=()=>r.setZoom(r.zoom/1.2);$('#zoom-in').onclick=()=>r.setZoom(r.zoom*1.2);$('#zoom-value').onchange=e=>r.setZoom(Number(e.target.value)/100);$('#zoom-fit').onclick=()=>{r.setZoom(1,true);closePopover();};$('#zoom-reset').onclick=()=>{r.setZoom(1);closePopover();};
   });return;}
   if(action==='more') {
-    const items=[['search','search','문서 검색'],['outline','list','목차 · 북마크'],['annotations','note','주석 목록'],['rect','rect','사각형'],['ellipse','ellipse','타원'],['arrow','arrow','화살표'],['area','area','영역 형광펜'],['area-underline','underline','영역 밑줄'],['strike','strike','취소선'],['text','text','텍스트'],['undo','undo','실행 취소'],['redo','redo','다시 실행'],['bookmark','bookmark','현재 위치 북마크'],['connect','save','파일 연결 / 저장 재시도'],['info','file','문서 정보'],['clear','trash','주석 모두 지우기']];
+    const items=[['search','search','문서 검색'],['outline','list','목차 · 북마크'],['annotations','note','주석 목록'],['rect','rect','사각형'],['ellipse','ellipse','타원'],['arrow','arrow','화살표'],['area','area','영역 형광펜'],['area-underline','underline','영역 밑줄'],['strike','strike','취소선'],['text','text','텍스트'],['undo','undo','실행 취소'],['redo','redo','다시 실행'],['bookmark','bookmark','현재 위치 북마크'],['history','undo','주석 저장 이력'],['connect','save','HTML 내보내기'],['info','file','문서 정보'],['clear','trash','주석 모두 지우기']];
     showPopover('more',`<div class="popover-heading"><h3>문서 도구</h3><button class="icon-button popover-close" data-popover-close aria-label="문서 도구 닫기" title="닫기">${icon('close',16)}</button></div><div class="more-grid">${items.map(([id,name,label])=>`<button class="menu-button" data-more="${id}">${icon(name,16)}<span>${label}</span></button>`).join('')}</div>`,()=>{
       $('[data-popover-close]',$('#tool-popover')).onclick=closePopover;
       $$('[data-more]',$('#tool-popover')).forEach(button=>button.onclick=safely(()=>{const id=button.dataset.more;closePopover();return toolAction(id);}));
     });return;
   }
   if(['search','outline','annotations'].includes(action)){closePopover();renderSidebar(action);return;}
-  if(action==='connect')return safely(()=>connectDocumentFile(active(),true))();
+  if(action==='connect')return safely(()=>exportDocument(active()))();
+  if(action==='history')return safely(()=>annotationHistory(active()))();
   if(action==='info')return documentInfo(active());
   if(action==='bookmark')return safely(async()=>{const title=await promptText('text','읽던 위치');if(title){r.addBookmark(title);toast('북마크를 저장했습니다.');}})();
   if(action==='clear')return safely(async()=>{if(await confirmDialog('주석을 모두 지울까요?',`${r.metadata.annotations.length}개의 주석을 지웁니다. 실행 취소로 복원할 수 있어요.`,'모두 지우기'))r.commit([]);})();
@@ -601,13 +589,37 @@ function annotationDialog(tab,id) {
     $('#delete-selected').onclick=()=>{tab.reader.remove(id);$('#dialog').close();};if($('#edit-note'))$('#edit-note').onclick=safely(async()=>{const text=await promptText(a.type,a.text);if(text?.trim())tab.reader.commit(tab.reader.metadata.annotations.map(item=>item.id===id?{...item,text:text.trim()}:item));});
   });
 }
+async function annotationHistory(tab) {
+  await tab.reader.ready;await tab.queue.flush();
+  const versions=(await listRevisions(tab.record.id)).reverse();
+  const stamp=value=>new Date(value).toLocaleString('ko-KR',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
+  modal(`<div class="dialog-heading"><h2>주석 저장 이력</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><p class="dialog-description">본문은 유지하고 선택한 시점의 주석과 북마크만 복원합니다. 복원 직전 상태도 이력에 남습니다.</p><p class="dialog-description small">이 기능을 사용하기 시작한 시점부터 보관합니다. 이력은 이 브라우저에 저장되며, 앱 데이터나 문서를 삭제하면 함께 삭제됩니다. HTML 내보내기에는 현재 주석만 포함됩니다.</p><div class="revision-list">${versions.map((version,index)=>`<button class="menu-button" data-revision="${version.id}"><span>${esc(stamp(version.created))} · #${version.id}<br><small>${version.kind==='restore'?'복원 저장':version.kind==='baseline'?'최초 보관':'주석 변경'} · 주석 ${version.annotations.length}개 · 북마크 ${version.bookmarks.length}개${index===0?' · 최근 저장':''}</small></span></button>`).join('') || '<p>아직 저장된 이력이 없습니다.</p>'}</div>`,()=>{
+    $$('[data-revision]',$('#dialog')).forEach(button=>button.onclick=()=>{
+      const version=versions.find(item=>item.id===Number(button.dataset.revision));
+      modal(`<div class="dialog-heading"><h2>주석 이력 확인</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><p>${esc(stamp(version.created))} · #${version.id}</p><p>주석 ${version.annotations.length}개 · 북마크 ${version.bookmarks.length}개</p><div class="revision-preview">${version.annotations.map(a=>`<p>${esc(a.type)} · ${esc(a.text || a.textAnchor?.quote || '그림 주석')}</p>`).join('') || '<p>주석 없음</p>'}</div><div class="dialog-actions"><button class="secondary-button" id="history-back">이력 목록</button><button class="primary-button" id="restore-revision">이 시점으로 복원</button></div>`,()=>{
+        $('#history-back').onclick=safely(()=>annotationHistory(tab));
+        $('#restore-revision').onclick=safely(async()=>{
+          // Flush current edits first, so restoration itself never destroys the state being replaced.
+          await tab.queue.flush();
+          tab.reader.metadata.bookmarks=structuredClone(version.bookmarks);
+          tab.restoredFrom=version.id;
+          tab.reader.commit(structuredClone(version.annotations));
+          await tab.queue.flush();$('#dialog').close();
+          if(sidebarMode)renderSidebar(sidebarMode);
+          toast('HTML 본문은 유지하고 주석과 북마크를 복원했습니다.');
+        });
+      });
+    });
+  });
+}
 function documentInfo(tab) {
   const m=tab.reader.metadata;
-  modal(`<div class="dialog-heading"><h2>문서 정보</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><dl class="document-info"><dt>제목</dt><dd>${esc(m.title)}</dd><dt>파일</dt><dd>${esc(tab.record.name)}</dd><dt>원본</dt><dd>${m.source?`<a href="${esc(m.source)}" target="_blank" rel="noopener noreferrer">${esc(m.source)}</a>`:'로컬 HTML 파일'}</dd><dt>저장 위치</dt><dd>${tab.record.fileHandle?'연결된 외부 HTML 파일 + 앱 보관함':'앱 내부 HTML 파일'}</dd><dt>주석</dt><dd>${m.annotations.length}개</dd></dl>${m.warnings.length?`<details class="capture-warnings"><summary>보관하지 못한 리소스 ${m.warnings.length}개</summary><ul>${m.warnings.map(w=>`<li>${esc(w)}</li>`).join('')}</ul></details>`:''}<p class="dialog-description small">본문과 주석은 HTML 파일 하나에 들어 있습니다. 파일을 HTMLMemo에서 다시 열면 주석을 계속 편집할 수 있어요.</p>`);
+  modal(`<div class="dialog-heading"><h2>문서 정보</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><dl class="document-info"><dt>제목</dt><dd>${esc(m.title)}</dd><dt>파일</dt><dd>${esc(tab.record.name)}</dd><dt>원본</dt><dd>${m.source?`<a href="${esc(m.source)}" target="_blank" rel="noopener noreferrer">${esc(m.source)}</a>`:'로컬 HTML 파일'}</dd><dt>저장 위치</dt><dd>앱 보관함 (원본 파일은 변경하지 않음)</dd><dt>주석</dt><dd>${m.annotations.length}개</dd></dl>${m.warnings.length?`<details class="capture-warnings"><summary>보관하지 못한 리소스 ${m.warnings.length}개</summary><ul>${m.warnings.map(w=>`<li>${esc(w)}</li>`).join('')}</ul></details>`:''}<p class="dialog-description small">본문은 보관한 상태로 유지하고 주석과 북마크를 별도로 자동 저장합니다. HTML 내보내기로 현재 주석을 포함한 사본을 만들 수 있어요.</p>`);
 }
 function documentMenu(record) {
-  modal(`<div class="dialog-heading"><h2>${esc(record.title)}</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><div class="document-actions"><button class="menu-button" id="menu-open">${icon('file')} 열기</button><button class="menu-button" id="menu-export">${icon('download')} HTML 내보내기</button><button class="menu-button danger" id="menu-remove">${icon('trash')} 서재에서 삭제</button></div>`,()=>{
+  modal(`<div class="dialog-heading"><h2>${esc(record.title)}</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><div class="document-actions"><button class="menu-button" id="menu-open">${icon('file')} 열기</button><button class="menu-button" id="menu-export">${icon('download')} HTML 내보내기</button><button class="menu-button" id="menu-history">${icon('undo')} 주석 저장 이력</button><button class="menu-button danger" id="menu-remove">${icon('trash')} 서재에서 삭제</button></div>`,()=>{
     $('#menu-open').onclick=safely(async()=>{$('#dialog').close();await openRecord(record);});$('#menu-export').onclick=safely(async()=>{$('#dialog').close();const tab=await openRecord(record);await exportDocument(tab);});
+    $('#menu-history').onclick=safely(async()=>{$('#dialog').close();await annotationHistory(await openRecord(record));});
     $('#menu-remove').onclick=safely(async()=>{if(!await confirmDialog('서재에서 삭제할까요?','앱 보관함에서만 삭제합니다. 연결된 외부 HTML 파일은 남습니다.','삭제'))return;const tab=tabs.find(t=>t.record?.id===record.id);if(tab)await closeTab(tab.id);await deleteDocument(record.id);await refreshLibrary();});
   });
 }

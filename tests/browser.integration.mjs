@@ -24,9 +24,10 @@ test('real Chrome: browsing, capture, local annotation, file writes, reopen and 
       await page.click('#save-page');await page.waitFor('!document.querySelector("#toolbar").hidden && document.querySelector("#status-left").textContent.includes("자동 저장됨")');
       const html=await page.evaluate(`(async()=>{const root=await navigator.storage.getDirectory();return (await (await root.getFileHandle('picked-document.html')).getFile()).text();})()`);assert.match(html,/data:image\/svg\+xml;base64/);assert.match(html,/htmlmemo-data/);assert.ok(!html.includes('fixtureLoaded'));
     });
-    await t.test('local annotation auto-writes to the connected HTML',async()=>{
+    await t.test('local annotation saves internally and exports on request',async()=>{
       await page.evaluate(`(()=>{const doc=document.querySelector('.document-host:not([hidden]) iframe').contentDocument;const text=doc.querySelector('#selection').firstChild;const range=doc.createRange();range.setStart(text,0);range.setEnd(text,15);doc.getSelection().removeAllRanges();doc.getSelection().addRange(range);doc.dispatchEvent(new Event('selectionchange'));})()`);await page.click('[data-action="highlight"]');
       await page.waitFor('document.querySelector(".document-host:not([hidden]) iframe").contentDocument.querySelector("[data-htmlmemo-mark]") && document.querySelector("#status-left").textContent.includes("자동 저장됨")');
+      await page.click('#save-page');
       await page.waitFor(`(async()=>{const root=await navigator.storage.getDirectory();const html=await (await (await root.getFileHandle('picked-document.html')).getFile()).text();return JSON.parse(new DOMParser().parseFromString(html,'text/html').getElementById('htmlmemo-data').textContent).annotations.length > 0;})()`);
       const annotation=await page.evaluate(`(async()=>{const root=await navigator.storage.getDirectory();const html=await (await (await root.getFileHandle('picked-document.html')).getFile()).text();return JSON.parse(new DOMParser().parseFromString(html,'text/html').getElementById('htmlmemo-data').textContent).annotations[0];})()`);assert.equal(annotation.type,'highlight');assert.ok(annotation.textAnchor.quote.length);
     });
@@ -103,57 +104,68 @@ test('real Chrome: browsing, capture, local annotation, file writes, reopen and 
   }finally{if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
 });
 
-test('real Chrome: revoked file permission keeps annotations saved, retries on click, reopens and exports',{timeout:90000},async()=>{
-  await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-permission-test-'));await cp(join(root,'public'),folder,{recursive:true});
+test('real Chrome: separate annotations, immutable source, durable history, restoration and export',{timeout:90000},async()=>{
+  await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-history-test-'));await cp(join(root,'public'),folder,{recursive:true});
   const server=createServer(folder);let chrome;
   try {
-    await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});const url=process.env.HTMLMEMO_AUTOSAVE_TEST_URL || `http://127.0.0.1:${server.address().port}/`;chrome=await launchChrome();const page=chrome.page;
+    await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});
+    const url=process.env.HTMLMEMO_AUTOSAVE_TEST_URL || `http://127.0.0.1:${server.address().port}/`;
+    chrome=await launchChrome();const page=chrome.page;
     await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
     await page.navigate(url);await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
     await page.evaluate(`(async()=>{
       const root=await navigator.storage.getDirectory();const handle=await root.getFileHandle('source.html',{create:true});const writer=await handle.createWritable();
-      await writer.write('<html><head><title>Permission recovery</title></head><body><p id="selection">Local source text survives lost write permission and later edits.</p></body></html>');await writer.close();
-      window.showOpenFilePicker=async()=>[handle];window.fileAllowed=true;window.acceptPermission=false;window.permissionRequests=0;
-      const originalQuery=FileSystemHandle.prototype.queryPermission;
-      FileSystemHandle.prototype.queryPermission=async function(options){return this.kind==='file'&&this.name==='source.html'?(window.fileAllowed?'granted':'prompt'):originalQuery.call(this,options);};
-      FileSystemHandle.prototype.requestPermission=async function(){window.permissionRequests++;window.permissionGesture=navigator.userActivation.isActive;if(window.acceptPermission){window.fileAllowed=true;return 'granted';}return 'denied';};
+      window.sourceHTML='<html><head><title>Annotation history</title></head><body><p id="selection">Local source text remains unchanged across annotation history.</p></body></html>';
+      await writer.write(window.sourceHTML);await writer.close();window.showOpenFilePicker=async()=>[handle];
+      window.permissionRequests=0;const query=FileSystemHandle.prototype.queryPermission;
+      FileSystemHandle.prototype.queryPermission=async function(options){if(this.name==='source.html'){window.permissionRequests++;return 'prompt';}return query.call(this,options);};
+      FileSystemHandle.prototype.requestPermission=async function(){window.permissionRequests++;return 'denied';};
     })()`);
-    await page.click('#import-button');await page.waitFor('document.querySelector("#status-left").textContent.includes("HTML 파일") && document.querySelector("#status-left").textContent.includes("자동 저장됨")');
+    await page.click('#import-button');await page.waitFor('document.querySelector("#status-left").textContent.includes("주석이 앱에 자동 저장됨")');
+    const state=()=>page.evaluate(`(async()=>{const {listDocuments,listRevisions}=await import('./src/storage.js');const record=(await listDocuments())[0];return {id:record.id,html:record.html,metadata:record.metadata,revisions:await listRevisions(record.id),pending:record.diskPending,error:record.diskError};})()`);
+    const first=await state();assert.equal(first.revisions.length,1);assert.equal(first.revisions[0].annotations.length,0);
     const highlight=async()=>{
       await page.evaluate(`(()=>{const doc=document.querySelector('.document-host:not([hidden]) iframe').contentDocument;const walker=doc.createTreeWalker(doc.querySelector('#selection'),NodeFilter.SHOW_TEXT);let node,last;while(node=walker.nextNode())if(node.textContent.trim().length>=8)last=node;const range=doc.createRange();range.setStart(last,0);range.setEnd(last,6);doc.getSelection().removeAllRanges();doc.getSelection().addRange(range);doc.dispatchEvent(new Event('selectionchange'));})()`);
-      await page.click('[data-action="highlight"]');await page.waitFor('document.querySelector("#status-left").textContent.includes("앱에 자동 저장됨") && !!document.querySelector("#retry-save")');
+      await page.click('[data-action="highlight"]');
+      await page.waitFor(`!document.querySelector('.tab-dirty') && document.querySelector('#status-left').textContent.includes('주석이 앱에 자동 저장됨')`);
     };
-    await page.evaluate('window.fileAllowed=false');await highlight();
-    const readState=()=>page.evaluate(`(async()=>{const {listDocuments}=await import('./src/storage.js');const record=(await listDocuments())[0];return {html:record.html,annotations:record.metadata.annotations.length,pending:record.diskPending,error:record.diskError?.name};})()`);
-    const saved=await readState();assert.equal(saved.annotations,1);assert.equal(saved.pending,true);assert.equal(saved.error,'NotAllowedError');assert.equal(await page.evaluate('window.permissionRequests'),0);
-    assert.ok(!await page.evaluate('document.querySelector("#status-left").textContent.includes("자동 저장 실패")'));
-    await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/autosave-permission-warning.png'),await page.screenshot());
-    await page.click('#retry-save');await page.waitFor('window.permissionRequests===1');assert.equal(await page.evaluate('window.permissionGesture'),true);assert.equal((await readState()).annotations,1);
-    await page.click('.tab.document.active .tab-close');await page.waitFor('document.querySelectorAll(".tab.document").length===0');await page.evaluate(`document.querySelector('[data-open]').click()`);
-    await page.waitFor('document.querySelector("#status-left").textContent.includes("앱에 자동 저장됨")');assert.equal((await readState()).annotations,1);
-    await page.evaluate(`window.pickerRequests=0;window.showSaveFilePicker=async()=>{window.pickerRequests++;throw Error('Unexpected picker during original-file reconnect');};`);
-    await page.evaluate(`document.querySelector('[data-action="more"]').click()`);await page.waitFor(`!!document.querySelector('[data-more="connect"]')`);await page.click('[data-more="connect"]');await page.waitFor('window.permissionRequests===2');
-    assert.equal(await page.evaluate('window.pickerRequests'),0);assert.equal((await readState()).annotations,1);
-    await page.evaluate('window.acceptPermission=true');await page.click('#retry-save');await page.waitFor('!document.querySelector("#retry-save") && document.querySelector("#status-left").textContent.includes("HTML 파일에 자동 저장됨")');
-    assert.equal((await readState()).pending,false);
-    const sourceAnnotations=()=>page.evaluate(`(async()=>{const root=await navigator.storage.getDirectory();const html=await (await (await root.getFileHandle('source.html')).getFile()).text();return JSON.parse(new DOMParser().parseFromString(html,'text/html').getElementById('htmlmemo-data').textContent).annotations.length;})()`);
-    assert.equal(await sourceAnnotations(),1);
-    await page.evaluate('window.fileAllowed=false');await highlight();assert.equal((await readState()).annotations,2);
+    await highlight();const second=await state();assert.equal(second.metadata.annotations.length,1);assert.equal(second.revisions.length,2);assert.equal(second.html,first.html);
+    const separate=await page.evaluate(`new Promise((resolve,reject)=>{const request=indexedDB.open('HTMLMemo-v1',2);request.onsuccess=()=>{const db=request.result,tx=db.transaction(['documents','contents'],'readonly'),docs=tx.objectStore('documents').getAll(),contents=tx.objectStore('contents').getAll();tx.oncomplete=()=>{resolve({documentHasHTML:Object.hasOwn(docs.result[0],'html'),contents:contents.result.length,html:contents.result[0].html});db.close();};tx.onabort=()=>reject(tx.error);};request.onerror=()=>reject(request.error);})`);
+    assert.equal(separate.documentHasHTML,false);assert.equal(separate.contents,1);assert.equal(separate.html,first.html);
+    // View changes persist, but do not duplicate annotation history or serialize a new body.
+    await page.evaluate(`document.querySelector('.document-host:not([hidden]) .reader-viewport').dispatchEvent(new Event('scroll'))`);
+    await page.waitFor(`!document.querySelector('.tab-dirty')`);assert.equal((await state()).revisions.length,2);
+    await highlight();const third=await state();assert.equal(third.metadata.annotations.length,2);assert.equal(third.revisions.length,3);assert.equal(third.html,first.html);
+    assert.equal(await page.evaluate('window.permissionRequests'),0);assert.equal(await page.evaluate('!!document.querySelector("#retry-save")'),false);
+    const openHistory=async()=>{await page.evaluate(`document.querySelector('[data-action="more"]').click()`);await page.waitFor(`!!document.querySelector('[data-more="history"]')`);await page.click('[data-more="history"]');await page.waitFor(`!!document.querySelector('[data-revision]')`);};
+    const restore=async id=>{await openHistory();await page.click(`[data-revision="${id}"]`);await page.waitFor(`!!document.querySelector('#restore-revision')`);await page.click('#restore-revision');await page.waitFor(`!document.querySelector('#dialog').open && !document.querySelector('.tab-dirty')`);};
+    await restore(second.revisions[1].id);const restored=await state();assert.equal(restored.metadata.annotations.length,1);assert.equal(restored.revisions.length,4);assert.equal(restored.revisions.at(-1).kind,'restore');assert.equal(restored.revisions.at(-1).restoredFrom,second.revisions[1].id);assert.equal(restored.html,first.html);
+    // The two-annotation state remains available, making restoration itself reversible.
+    await restore(third.revisions[2].id);assert.equal((await state()).metadata.annotations.length,2);
+    await restore(first.revisions[0].id);assert.equal((await state()).metadata.annotations.length,0);
+    await restore(third.revisions[2].id);
+    await openHistory();await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/annotation-history-desktop.png'),await page.screenshot());
+    await page.send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await writeFile(join(root,'test-results/annotation-history-mobile.png'),await page.screenshot());
+    assert.equal(await page.evaluate(`document.querySelector('#dialog').getBoundingClientRect().width <= innerWidth`),true);
+    await page.evaluate(`document.querySelector('#dialog').close()`);await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
+    await page.click('.tab.document.active .tab-close');await page.waitFor('document.querySelectorAll(".tab.document").length===0');await page.evaluate(`document.querySelector('[data-open]').click()`);await page.waitFor(`document.querySelector('.document-host:not([hidden]) iframe')?.contentDocument?.querySelectorAll('[data-htmlmemo-mark]').length===2`);
+    await page.waitFor(`!document.querySelector('.tab-dirty')`);const beforeReload=await state();
+    await page.navigate(url);await page.waitFor(`!!document.querySelector('[data-open]')`);await page.evaluate(`document.querySelector('[data-open]').click()`);await page.waitFor(`document.querySelector('.document-host:not([hidden]) iframe')?.contentDocument?.querySelectorAll('[data-htmlmemo-mark]').length===2`);
+    assert.equal((await state()).revisions.length,beforeReload.revisions.length);
     await page.evaluate(`window.showSaveFilePicker=async()=>{const root=await navigator.storage.getDirectory();return root.getFileHandle('exported.html',{create:true});};`);await page.click('#save-page');
-    await page.waitFor('!document.querySelector("#retry-save") && document.querySelector("#status-left").textContent.includes("HTML 파일에 자동 저장됨")');
-    const exported=await page.evaluate(`(async()=>{const root=await navigator.storage.getDirectory();const html=await (await (await root.getFileHandle('exported.html')).getFile()).text();return JSON.parse(new DOMParser().parseFromString(html,'text/html').getElementById('htmlmemo-data').textContent).annotations.length;})()`);
-    assert.equal(exported,2);assert.equal(await sourceAnnotations(),1);assert.equal((await readState()).annotations,2);
-    // A source opened read-only must also be exportable without granting writes to that source.
-    await page.evaluate('window.fileAllowed=false;window.acceptPermission=false');await page.click('#import-button');
-    await page.waitFor('document.querySelector("#status-left").textContent.includes("앱의 HTML 파일에 자동 저장됨")');
-    const requestsBeforeExport=await page.evaluate('window.permissionRequests');
-    await page.evaluate(`window.showSaveFilePicker=async()=>{const root=await navigator.storage.getDirectory();return root.getFileHandle('read-only-copy.html',{create:true});};`);await page.click('#save-page');
-    await page.waitFor('document.querySelector("#address").value === "read-only-copy.html" && document.querySelector("#status-left").textContent.includes("HTML 파일에 자동 저장됨") && !document.querySelector("#retry-save")');
-    const readOnlyCopy=await page.evaluate(`(async()=>{const root=await navigator.storage.getDirectory();return (await (await root.getFileHandle('read-only-copy.html')).getFile()).text();})()`);
-    assert.ok(readOnlyCopy.includes('htmlmemo-data'));assert.equal(await page.evaluate('window.permissionRequests'),requestsBeforeExport);assert.equal(await sourceAnnotations(),1);
+    await page.waitFor(`document.querySelector('#toast').textContent.includes('현재 주석을 포함한 HTML을 내보냈습니다')`);
+    const exported=await page.evaluate(`(async()=>{const root=await navigator.storage.getDirectory();const source=await (await (await root.getFileHandle('source.html')).getFile()).text();const html=await (await (await root.getFileHandle('exported.html')).getFile()).text();const doc=new DOMParser().parseFromString(html,'text/html');return {source,annotations:JSON.parse(doc.getElementById('htmlmemo-data').textContent).annotations.length};})()`);
+    assert.equal(exported.source,'<html><head><title>Annotation history</title></head><body><p id="selection">Local source text remains unchanged across annotation history.</p></body></html>');assert.equal(exported.annotations,2);
+    // Simulate legacy v1 data and verify upgrade without losing documents or preferences.
+    await page.click('.tab.document.active .tab-close');await page.waitFor(`document.querySelectorAll('.tab.document').length===0`);
+    await page.evaluate(`(async()=>{await new Promise((resolve,reject)=>{const r=indexedDB.deleteDatabase('HTMLMemo-v1');r.onsuccess=resolve;r.onerror=()=>reject(r.error);});await new Promise((resolve,reject)=>{const r=indexedDB.open('HTMLMemo-v1',1);r.onupgradeneeded=()=>{r.result.createObjectStore('documents',{keyPath:'id'});r.result.createObjectStore('settings');};r.onsuccess=()=>{const db=r.result,tx=db.transaction(['documents','settings'],'readwrite');tx.objectStore('documents').put({...${JSON.stringify(first)},title:'Annotation history',name:'source.html',created:Date.now(),modified:Date.now()});tx.objectStore('settings').put('legacy retained','migration-test');tx.oncomplete=()=>{db.close();resolve();};tx.onabort=()=>reject(tx.error);};r.onerror=()=>reject(r.error);});})()`);
+    await page.navigate(url);await page.waitFor(`!!document.querySelector('[data-open]')`);await page.evaluate(`document.querySelector('[data-open]').click()`);await page.waitFor(`!!document.querySelector('[data-action="more"]')`);
+    const migrated=await state();assert.equal(migrated.id,first.id);assert.equal(migrated.html,first.html);assert.equal(migrated.revisions.length,1);
+    assert.equal(await page.evaluate(`(async()=>{const {getSetting}=await import('./src/storage.js');return getSetting('migration-test');})()`),'legacy retained');
+    // A failed structured clone aborts both stores; it cannot leave an orphan revision.
+    const atomic=await page.evaluate(`(async()=>{const {listDocuments,listRevisions,putDocumentRevision}=await import('./src/storage.js');const record=(await listDocuments())[0];record.metadata.annotations=[{id:'rejected'}];record.uncloneable=()=>{};try{await putDocumentRevision(record);return false;}catch{}return (await listRevisions(record.id)).length===1 && (await listDocuments())[0].metadata.annotations.length===0;})()`);assert.equal(atomic,true);
     assert.deepEqual(chrome.errors,[]);
   } catch(error) {
-    if(chrome)console.error('Autosave browser diagnostics:',await chrome.page.evaluate(`JSON.stringify({status:document.querySelector('#status-left')?.textContent,tabs:document.querySelectorAll('.tab.document').length,toast:document.querySelector('#toast')?.textContent,errors:[]})`));
-    throw error;
+    if(chrome)console.error('History browser diagnostics:',await chrome.page.evaluate(`JSON.stringify({status:document.querySelector('#status-left')?.textContent,toast:document.querySelector('#toast')?.textContent,dialog:document.querySelector('#dialog')?.textContent})`));throw error;
   } finally {if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
 });

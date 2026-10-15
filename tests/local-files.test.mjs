@@ -12,11 +12,11 @@ test('plain local HTML opens without a source URL, a browser bridge or write per
 test('read-only and denied local files stay available for annotation',async()=>{
   const raw=file('<html><head></head><body>Read-only</body></html>');let requested=0;
   const handle={kind:'file',name:raw.name,getFile:async()=>raw,queryPermission:async()=> 'prompt',requestPermission:async()=>{requested++;return 'denied';}};
-  const local=await readLocalHTML(handle,{requestWrite:true});assert.equal(local.handle,null);assert.equal(local.originalHandle,handle);assert.equal(requested,1);assert.match(local.snapshot.html,/Read-only/);assert.deepEqual(local.diskStamp,{modified:1234,size:raw.size});
+  const local=await readLocalHTML(handle,{requestWrite:true});assert.equal(local.handle,null);assert.equal(local.originalHandle,handle);assert.equal(requested,0);assert.match(local.snapshot.html,/Read-only/);assert.deepEqual(local.diskStamp,{modified:1234,size:raw.size});
   handle.requestPermission=async()=>{throw new Error('User activation expired');};assert.equal((await readLocalHTML(handle,{requestWrite:true})).handle,null);
 });
-test('granted local handles connect to the original file for automatic writes',async()=>{
-  const raw=file('<html><head><title>Writable</title></head><body>content</body></html>');const handle={kind:'file',name:raw.name,getFile:async()=>raw,queryPermission:async()=> 'granted'};const local=await readLocalHTML(handle);assert.equal(local.handle,handle);assert.equal(local.originalHandle,handle);
+test('even granted source handles are read-only to the annotation autosave path',async()=>{
+  const raw=file('<html><head><title>Writable</title></head><body>content</body></html>');const handle={kind:'file',name:raw.name,getFile:async()=>raw,queryPermission:async()=> 'granted'};const local=await readLocalHTML(handle);assert.equal(local.handle,null);assert.equal(local.originalHandle,handle);
 });
 test('an imported saved web page remains a local annotated document despite its original HTTPS URL',async()=>{
   const parsed=parseHTML('<html><head><title>Saved web</title></head><body><p>Saved text</p></body></html>',{source:'https://example.test/article'});

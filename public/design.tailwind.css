@@ -188,3 +188,9 @@ body[data-codememo-design]{margin:0;font-family:var(--app-font);background:var(-
 #tool-popover.palette-popover .select-label{margin:8px 0 4px}
 #tool-popover.palette-popover .popover-hint{margin:4px 0 0}
 .annotation-hex-input{width:78px;border:1px solid var(--line);background:var(--bg);border-radius:5px;padding:4px 6px;font-size:11px;text-align:center;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+
+/* Annotation history keeps the document itself out of each saved revision. */
+.revision-list,.revision-preview{max-height:45vh;overflow:auto;overflow-wrap:anywhere}
+.revision-list .menu-button{width:100%;text-align:left;white-space:normal;border-bottom:1px solid var(--line);padding:12px}
+.revision-list small{color:var(--muted)}
+.revision-preview p{padding:6px 0;border-bottom:1px solid var(--line)}
