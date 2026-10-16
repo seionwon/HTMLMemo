@@ -152,10 +152,10 @@ function updateChrome() {
   document.title=tab?tab.title+' · HTMLMemo':'HTMLMemo · 나만의 웹 서재';
 }
 function createHost(id,type) { const host=document.createElement('div');host.id='workspace-'+id;host.className='workspace-host '+type+'-host';host.hidden=true;$('#workspaces').append(host);return host; }
-async function openRecord(record, prepared = null) {
-  const existing=tabs.find(tab=>tab.record?.id===record.id);if(existing){if(existing.closePromise){await existing.closePromise;return openRecord(record,prepared);}activate(existing.id);return existing;}
+async function openRecord(record, prepared = null, {deferReady = false} = {}) {
+  const existing=tabs.find(tab=>tab.record?.id===record.id);if(existing){if(existing.closePromise){await existing.closePromise;return openRecord(record,prepared,{deferReady});}activate(existing.id);return existing;}
   if(!prepared && typeof record.html!=='string' && !record.file)record=await getDocument(record.id);
-  const opened=tabs.find(tab=>tab.record?.id===record.id);if(opened){if(opened.closePromise){await opened.closePromise;return openRecord(record,prepared);}activate(opened.id);return opened;}
+  const opened=tabs.find(tab=>tab.record?.id===record.id);if(opened){if(opened.closePromise){await opened.closePromise;return openRecord(record,prepared,{deferReady});}activate(opened.id);return opened;}
   // The library already holds a prepared, sanitized snapshot. Reopening it
   // should parse it once in the iframe, not clone the entire book in DOMParser first.
   const parsed=prepared || (record.file ? {file:record.file,metadata:structuredClone(record.metadata),nativeScroll:true,savedMetadata:true} : record.metadata ? {html:record.html,metadata:structuredClone(record.metadata),nativeScroll:record.nativeScroll || record.metadata.execution?.allowScripts || record.byteSize>=4*1024*1024} : parseHTML(record.html,{title:record.title,source:record.source}));
@@ -189,7 +189,7 @@ async function openRecord(record, prepared = null) {
   try{const saved=await putDocumentRevision(tab.record,{baseline:true});tab.record.byteSize=saved.byteSize;delete tab.record.html;delete tab.record.file;}
   catch(error){tab.queue.schedule();try{await tab.queue.flush();}catch{showError(error);}}
   record.html=null;record.file=null;parsed.html=null;parsed.file=null;
-  tab.opening=false;renderTabs();if(activeId===tab.id)updateChrome();
+  if(!deferReady){tab.opening=false;renderTabs();if(activeId===tab.id)updateChrome();}
   return tab;
 }
 function saveStatus(tab) {
@@ -224,14 +224,14 @@ async function createDocument(snapshot, handle = null, name = null, local = {}) 
   if(local.diskStamp)record.diskStamp=local.diskStamp;
   else if(handle){const disk=await handle.getFile();record.diskStamp={modified:disk.lastModified,size:disk.size};}
   const {html:body,file:sourceFile,...summary}=record;records=records.filter(r=>r.id!==record.id).concat(summary);let tab;
-  try{tab=await openRecord(record,parsed);}catch(error){records=records.filter(r=>r.id!==record.id);renderLibrary();throw error;}
-  if(tab.closing || !tabs.includes(tab))return tab;
+  try{tab=await openRecord(record,parsed,{deferReady:true});}catch(error){records=records.filter(r=>r.id!==record.id);renderLibrary();throw error;}
+  if(tab.closing || !tabs.includes(tab)){tab.opening=false;return tab;}
   tab.queue.schedule();
   try { await tab.queue.flush(); } catch(error) { showError(error); }
-  if(tab.closing || !tabs.includes(tab))return tab;
-  renderLibrary();activate(tab.id);
+  if(tab.closing || !tabs.includes(tab)){tab.opening=false;return tab;}
+  if(handle && !local.originalHandle && !tab.queue.error)await writeExternalHTML(tab.record,tab.reader.html());
+  tab.opening=false;renderLibrary();activate(tab.id);
   if(tab.queue.error)return tab;
-  if(handle && !local.originalHandle)await writeExternalHTML(tab.record,tab.reader.html());
   if(parsed.metadata.warnings.length)toast(`페이지를 저장했습니다. ${parsed.metadata.warnings.length}개의 리소스를 보관하지 못했습니다. 문서 정보에서 확인할 수 있어요.`,true);
   else toast(local.originalHandle||name?'로컬 HTML을 주석 탭에서 열었습니다.':'HTML 파일로 저장하고 새 탭에서 열었습니다.');
   return tab;

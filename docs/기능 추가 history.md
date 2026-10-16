@@ -905,3 +905,26 @@ ID: hist-20261014-024. tests/chrome.mjs가 macOS Codex/CodeMemo 제한 환경을
 검사 중 발견한 오류와 중간 실패도 로컬 로그에 보존합니다. 기존 대형 문서·동적 본문 검사 실패, 닫기/재열기 경합, 초기 준비 완료 전에 저장 완료처럼 표시하던 시점을 함께 점검했습니다. 최종 검사는 전체 통과했으며 상세 결과는 비공개 `test-results/stability-2026-10-15/`에 보관합니다.
 
 **게시:** 2026-10-15 20:11:25 +0900 코드 커밋 `08ec872`의 [GitHub Actions·Pages 게시](https://github.com/seionwon/HTMLMemo/actions/runs/38725323814) 성공 확인. 공개 앱 `https://seionwon.github.io/HTMLMemo/`에서 주석·이력·복원, 90프레임 화면 안정성, 큰 서재/자동 저장 본문 읽기 검사 3개를 실제 Chrome으로 실행해 모두 통과했습니다. app.js·storage.js·reader.js·document.js·model.js·styles.css의 바이트와 SHA-256이 로컬 수정본과 일치했습니다. 브라우저 실행 오류는 없었습니다. 문서의 검증 결과만 보충한 후속 커밋도 같은 게시 흐름으로 반영합니다.
+
+
+<a id="hist-20261016-001"></a>
+### 2026-10-16 14:46:00 +09:00 — 내부 스크롤 본문(`main` 등) 및 `body` 스크롤 문서에서 주석 레이어(`#htmlmemo-annotation-layer`)가 본문과 함께 스크롤되도록 동기화 수정
+
+| ID | change-kind | status |
+|---|---|---|
+| hist-20261016-001 | 내부 스크롤 읽기 영역(`main` 등)·`body` 스크롤 컨테이너의 주석 SVG 레이어 호스팅 및 스크롤 불변 좌표 동기화 | 구현·단위 125개·실제 Chrome 13개·Pages 게시·온라인 검증 완료 |
+
+**목적과 원인:**
+- 상단 고정 바와 좌측 목차(`aside.toc`), 우측 본문(`main`, `overflow-y: auto`)으로 나뉜 분할 레이아웃 HTML 책이나 `html { overflow: hidden } body { overflow-y: auto }` 구조를 가진 문서에서는 `window.scrollY`가 `0`으로 고정된 채 내부 컨테이너(`main` 또는 `body`)의 `scrollTop`만 변경됩니다.
+- 기존에는 주석 SVG 오버레이(`<svg id="htmlmemo-annotation-layer">`)를 항상 `document.body`(`position: static`) 바로 아래에 배치하고 좌표(`point`, `elementAnchor`, `absolutePoints`, `renderDrawingLayer`)를 `window.scrollX`·`window.scrollY` 기준으로만 계산했기 때문에, 본문(`main` 또는 `body`)을 스크롤할 때 HTML 본문만 움직이고 펜·도형·메모 등 주석 레이어는 화면에 고정된 채 본문과 분리되는 문제가 발생했습니다.
+
+**변경 내용과 동작:**
+1. **실제 스크롤 컨테이너 자동 탐지 및 주석 레이어 호스팅(`public/src/reader.js`):**
+   - `findAnnotationScrollHost()`와 `ensureAnnotationLayerHost()`를 추가해 분할 레이아웃의 읽기 영역(`[data-htmlmemo-toc-main]`, `main`, `[role="main"]`, `.wm-doc`, `.book-content`, `.doc-content`, `.reader-content`, `.markdown-body`, `#content`, `.content`, `article` 및 비목차·비상단바 스크롤 컨테이너) 또는 `html`이 잠긴 상태의 `body` 스크롤 컨테이너를 자동 감지합니다.
+   - 감지된 스크롤 컨테이너(`scrollHost`)의 `position`이 `static`이면 `data-htmlmemo-scroll-host` 속성(`[data-htmlmemo-scroll-host]{position:relative!important}`)을 부여해 컨테이닝 블록으로 만들고, `#htmlmemo-annotation-layer`를 `scrollHost` 내부(`left: 0px; top: 0px`)에 배치하여 브라우저 네이티브 스크롤 컴포지터가 본문과 주석 레이어를 지연이나 어긋남 없이 1:1로 함께 이동시킵니다.
+   - 또한 캡처 단계(`{capture: true, passive: true}`) 스크롤 리스너를 통해 동적으로 스크롤이 시작된 본문 컨테이너도 즉시 감지해 주석 레이어를 동기화합니다.
+2. **스크롤 위치에 불변인 주석 좌표 계산 및 이동·검색·자동 스크롤 연동(`public/src/reader.js`, `public/src/document.js`, `public/src/app.js`, `public/sw.js`):**
+   - `layerOrigin()`과 `anchorBox()`를 통해 포인터 입력 좌표(`point`), 요소 기준 앵커(`elementAnchor`), 도형 절대 좌표(`absolutePoints`), 선택 텍스트 메모(`addText`), 목차·주석 점프(`jump`), 본문 검색 이동(`nextSearch`), 읽던 위치 저장(`scrollTop`·`scrollLeft`), 휠(`forwardWheel`) 및 가운데 버튼 자동 스크롤(`startMiddleScroll`)이 내부 스크롤 컨테이너(`scrollHost`)와 루트 윈도우 스크롤 모두에서 일관되게 동작하도록 통합했습니다.
+   - 문서 저장·내보내기·재열기 시 `clearReaderSidebarArtifacts`(`public/src/document.js`)에서 `data-htmlmemo-scroll-host` 속성을 제거해 원본 HTML 구조를 깨끗하게 보존하며, 새 문서 캡처·생성 시 외부 파일 기록이 끝난 뒤 준비 완료 상태로 전환되도록 `openRecord`·`createDocument`(`public/src/app.js`)를 보강했습니다(`public/sw.js` 캐시 버전 `htmlmemo-v17` 갱신).
+
+**검증:** `npm run check`(62개 파일), `npm test`(**125개 단위 검사 모두 통과**), `npm run test:browser`(별도 임시 프로필의 **실제 Chrome 통합 검사 13개 모두 통과** — 분할 스크롤 본문 `main`에서 펜 주석 작성 후 `main.scrollTop = 320` 스크롤 시 본문 문단과 주석 스트로크가 모두 정확히 `-320px` 이동해 오차 `0px`로 고정됨을 확인), `npm run build`, `git diff --check`를 모두 통과했습니다.

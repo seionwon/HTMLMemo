@@ -59,7 +59,7 @@ export class Reader {
     } else this.frame.srcdoc = parsed.html;
   }
   baseEditorStyle() {
-    return `${this.nativeScroll ? '' : 'html{overflow:hidden!important;height:auto!important;min-height:0!important;scroll-behavior:auto!important}body{touch-action:pan-x pan-y;height:auto!important;min-height:0!important}'}html[data-htmlmemo-drawing] *{cursor:crosshair!important;user-select:none!important;touch-action:none!important}html[data-htmlmemo-toc-resizing],html[data-htmlmemo-toc-resizing] body{cursor:col-resize!important;user-select:none!important;-webkit-user-select:none!important}[data-htmlmemo-sidebar-grid]{grid-template-columns:var(--htmlmemo-toc-grid-columns)!important;transition:none!important}[data-htmlmemo-toc-sidebar],[data-htmlmemo-toc-item],[data-htmlmemo-sidebar-flex]{width:var(--htmlmemo-toc-width)!important;min-width:var(--htmlmemo-toc-width)!important;max-width:var(--htmlmemo-toc-width)!important;flex:0 0 var(--htmlmemo-toc-width)!important;box-sizing:border-box!important;transition:none!important}[data-htmlmemo-toc-sidebar]{overflow-x:hidden!important}[data-htmlmemo-toc-item-strip]{width:8px!important;min-width:8px!important;max-width:8px!important;flex:0 0 8px!important;padding-left:0!important;padding-right:0!important;overflow:hidden!important;box-sizing:border-box!important}[data-htmlmemo-toc-strip]{width:8px!important;min-width:8px!important;max-width:8px!important;flex:0 0 8px!important;padding-left:0!important;padding-right:0!important;overflow:hidden!important;box-sizing:border-box!important;cursor:col-resize!important;user-select:none!important}[data-htmlmemo-toc-strip]>:not([data-htmlmemo-toc-resizer]):not([data-htmlmemo-toc-resizer-bound]){opacity:0!important;visibility:hidden!important;pointer-events:none!important}[data-htmlmemo-toc-resizer],[data-htmlmemo-toc-resizer-bound]{cursor:col-resize!important;touch-action:none!important;user-select:none!important;-webkit-user-select:none!important;transition:none!important}[data-htmlmemo-topbar-grid]{grid-template-rows:var(--htmlmemo-topbar-grid-rows)!important}[data-htmlmemo-topbar-pad]{padding-top:24px!important}[data-htmlmemo-topbar-offset]{top:24px!important}[data-htmlmemo-doc-topbar],[data-htmlmemo-doc-topbar-item]{height:24px!important;min-height:24px!important;max-height:24px!important;padding-top:0!important;padding-bottom:0!important;margin-top:0!important;margin-bottom:0!important;box-sizing:border-box!important;align-items:center!important}[data-htmlmemo-doc-topbar] *{padding-top:0!important;padding-bottom:0!important;margin-top:0!important;margin-bottom:0!important;min-height:0!important;box-sizing:border-box!important}[data-htmlmemo-doc-topbar]>div,[data-htmlmemo-doc-topbar]>nav{height:100%!important;max-height:24px!important;align-items:center!important}[data-htmlmemo-doc-topbar] h1,[data-htmlmemo-doc-topbar] h2,[data-htmlmemo-doc-topbar] h3,[data-htmlmemo-doc-topbar] strong,[data-htmlmemo-doc-topbar] [class*="title"]{font-size:13px!important;line-height:22px!important;white-space:nowrap!important}[data-htmlmemo-doc-topbar] button,[data-htmlmemo-doc-topbar] [role="button"],[data-htmlmemo-doc-topbar] input{height:20px!important;min-height:20px!important;max-height:20px!important;padding-top:0!important;padding-bottom:0!important;font-size:12px!important;line-height:18px!important;border-radius:4px!important;display:inline-flex!important;align-items:center!important;justify-content:center!important}[data-htmlmemo-doc-topbar] select{height:20px!important;min-height:20px!important;max-height:20px!important;padding-top:0!important;padding-bottom:0!important;font-size:12px!important;line-height:18px!important;border-radius:4px!important}[data-htmlmemo-doc-topbar] svg{width:14px!important;height:14px!important}`;
+    return `${this.nativeScroll ? '' : 'html{overflow:hidden!important;height:auto!important;min-height:0!important;scroll-behavior:auto!important}body{touch-action:pan-x pan-y;height:auto!important;min-height:0!important}'}html[data-htmlmemo-drawing] *{cursor:crosshair!important;user-select:none!important;touch-action:none!important}[data-htmlmemo-scroll-host]{position:relative!important}html[data-htmlmemo-toc-resizing],html[data-htmlmemo-toc-resizing] body{cursor:col-resize!important;user-select:none!important;-webkit-user-select:none!important}[data-htmlmemo-sidebar-grid]{grid-template-columns:var(--htmlmemo-toc-grid-columns)!important;transition:none!important}[data-htmlmemo-toc-sidebar],[data-htmlmemo-toc-item],[data-htmlmemo-sidebar-flex]{width:var(--htmlmemo-toc-width)!important;min-width:var(--htmlmemo-toc-width)!important;max-width:var(--htmlmemo-toc-width)!important;flex:0 0 var(--htmlmemo-toc-width)!important;box-sizing:border-box!important;transition:none!important}[data-htmlmemo-toc-sidebar]{overflow-x:hidden!important}[data-htmlmemo-toc-item-strip]{width:8px!important;min-width:8px!important;max-width:8px!important;flex:0 0 8px!important;padding-left:0!important;padding-right:0!important;overflow:hidden!important;box-sizing:border-box!important}[data-htmlmemo-toc-strip]{width:8px!important;min-width:8px!important;max-width:8px!important;flex:0 0 8px!important;padding-left:0!important;padding-right:0!important;overflow:hidden!important;box-sizing:border-box!important;cursor:col-resize!important;user-select:none!important}[data-htmlmemo-toc-strip]>:not([data-htmlmemo-toc-resizer]):not([data-htmlmemo-toc-resizer-bound]){opacity:0!important;visibility:hidden!important;pointer-events:none!important}[data-htmlmemo-toc-resizer],[data-htmlmemo-toc-resizer-bound]{cursor:col-resize!important;touch-action:none!important;user-select:none!important;-webkit-user-select:none!important;transition:none!important}[data-htmlmemo-topbar-grid]{grid-template-rows:var(--htmlmemo-topbar-grid-rows)!important}[data-htmlmemo-topbar-pad]{padding-top:24px!important}[data-htmlmemo-topbar-offset]{top:24px!important}[data-htmlmemo-doc-topbar],[data-htmlmemo-doc-topbar-item]{height:24px!important;min-height:24px!important;max-height:24px!important;padding-top:0!important;padding-bottom:0!important;margin-top:0!important;margin-bottom:0!important;box-sizing:border-box!important;align-items:center!important}[data-htmlmemo-doc-topbar] *{padding-top:0!important;padding-bottom:0!important;margin-top:0!important;margin-bottom:0!important;min-height:0!important;box-sizing:border-box!important}[data-htmlmemo-doc-topbar]>div,[data-htmlmemo-doc-topbar]>nav{height:100%!important;max-height:24px!important;align-items:center!important}[data-htmlmemo-doc-topbar] h1,[data-htmlmemo-doc-topbar] h2,[data-htmlmemo-doc-topbar] h3,[data-htmlmemo-doc-topbar] strong,[data-htmlmemo-doc-topbar] [class*="title"]{font-size:13px!important;line-height:22px!important;white-space:nowrap!important}[data-htmlmemo-doc-topbar] button,[data-htmlmemo-doc-topbar] [role="button"],[data-htmlmemo-doc-topbar] input{height:20px!important;min-height:20px!important;max-height:20px!important;padding-top:0!important;padding-bottom:0!important;font-size:12px!important;line-height:18px!important;border-radius:4px!important;display:inline-flex!important;align-items:center!important;justify-content:center!important}[data-htmlmemo-doc-topbar] select{height:20px!important;min-height:20px!important;max-height:20px!important;padding-top:0!important;padding-bottom:0!important;font-size:12px!important;line-height:18px!important;border-radius:4px!important}[data-htmlmemo-doc-topbar] svg{width:14px!important;height:14px!important}`;
   }
   setupEditorTocVars(customVars = this.tocCustomVars, defaultWidth = this.tocDefaultWidth || TOC_DEFAULT) {
     const editorStyle = this.doc?.getElementById('htmlmemo-editor-style');
@@ -106,13 +106,17 @@ export class Reader {
         if (target) { this.linkHistory.push({top:this.scrollTop, left:this.scrollLeft}); if (this.linkHistory.length > 128) this.linkHistory.shift(); this.jump(target); }
       } else if (/^https?:/.test(href)) this.callbacks.onLink?.(href);
     }, true);
-    (this.nativeScroll ? this.doc : this.viewport).addEventListener('scroll', () => {
+    (this.nativeScroll ? this.doc : this.viewport).addEventListener('scroll', event => {
+      const target = event?.target;
+      if (this.nativeScroll && target?.nodeType === 1 && target !== this.doc.documentElement && !target.closest?.('[data-htmlmemo-toc-sidebar],[data-htmlmemo-doc-topbar]') && !/^(?:pre|code|table|ul|ol|nav|aside)$/i.test(target.localName || '') && target.scrollTop > 0 && (!this.scrollHostEl || target === this.doc.body || target.contains?.(this.scrollHostEl)) && (target === this.doc.body || (target.clientWidth >= 160 && target.clientHeight >= 100))) {
+        if (this.scrollHostEl !== target) { this.scrollHostEl = target; this.renderDrawingLayer(); }
+      }
       clearTimeout(this.positionTimer);
       this.positionTimer = setTimeout(() => {
         if (this.disposed) return;
         this.rememberPosition(); this.callbacks.onView?.();
       }, 250);
-    }, {passive:true});
+    }, {capture:true, passive:true});
     this.resizeObserver = new ResizeObserver(entries => {
       if (this.disposed || this.host?.hidden || this.tocDrag) return;
       const rect=entries[0]?.contentRect;
@@ -724,6 +728,11 @@ export class Reader {
     const scale=event.deltaMode===1?16:event.deltaMode===2?this.viewport.clientHeight:1;
     const left=event.deltaX*scale,top=event.deltaY*scale;
     for(let node=event.target;node?.nodeType===1;node=node.parentElement){
+      if (node===this.doc.documentElement) break;
+      if (node===this.doc.body && this.doc.scrollingElement===this.doc.documentElement) {
+        const htmlStyle=this.doc.defaultView.getComputedStyle(this.doc.documentElement);
+        if (!/hidden|clip/i.test(htmlStyle.overflowY) && this.doc.documentElement.scrollHeight>this.doc.documentElement.clientHeight+1) continue;
+      }
       const style=this.doc.defaultView.getComputedStyle(node);
       const vertical=/auto|scroll|overlay/.test(style.overflowY)&&node.scrollHeight>node.clientHeight+1;
       const horizontal=/auto|scroll|overlay/.test(style.overflowX)&&node.scrollWidth>node.clientWidth+1;
@@ -736,10 +745,9 @@ export class Reader {
         if (!node.scrollBy) { node.scrollLeft+=left;node.scrollTop+=top; }
         event.preventDefault();return;
       }
-      if (node===this.doc.documentElement) break;
     }
     if(this.nativeScroll) {
-      const root=this.doc.scrollingElement||this.doc.documentElement||this.doc.body;
+      const root=this.findAnnotationScrollHost()||this.doc.scrollingElement||this.doc.documentElement||this.doc.body;
       root.scrollBy?.({left,top});
       if (!root.scrollBy) { root.scrollLeft+=left;root.scrollTop+=top; }
     } else this.viewport.scrollBy({left,top});
@@ -758,8 +766,11 @@ export class Reader {
       const speed=value=>Math.abs(value)<8?0:Math.sign(value)*Math.min(48,(Math.abs(value)-8)/4);
       const left=speed(state.dx),top=speed(state.dy);
       if (left||top) {
-        if(this.nativeScroll)this.doc.defaultView.scrollBy(left/this.zoom,top/this.zoom);
-        else this.viewport.scrollBy(left,top);
+        if(this.nativeScroll){
+          const host=this.findAnnotationScrollHost();
+          if(host){host.scrollLeft+=left/this.zoom;host.scrollTop+=top/this.zoom;}
+          else this.doc.defaultView.scrollBy(left/this.zoom,top/this.zoom);
+        } else this.viewport.scrollBy(left,top);
       }
       state.frame=this.doc.defaultView.requestAnimationFrame(tick);
     };
@@ -869,10 +880,126 @@ export class Reader {
     set(this.sizer.style,'width',this.naturalWidth*this.zoom+'px');
     set(this.sizer.style,'height',(this.nativeScroll?Math.max(200*this.zoom,this.viewport.clientHeight):(this.naturalHeight||800)*this.zoom)+'px');
   }
-  get scrollTop() { return this.nativeScroll ? (this.doc.defaultView.scrollY || 0) * this.zoom : this.viewport.scrollTop; }
-  set scrollTop(value) { if(this.nativeScroll)this.doc.defaultView.scrollTo(this.doc.defaultView.scrollX, value / this.zoom);else this.viewport.scrollTop=value; }
-  get scrollLeft() { return this.nativeScroll ? this.viewport.scrollLeft + (this.doc.defaultView.scrollX || 0) * this.zoom : this.viewport.scrollLeft; }
-  set scrollLeft(value) { if(this.nativeScroll){const target=Math.max(0,value);this.viewport.scrollLeft=target;this.doc.defaultView.scrollTo((target-this.viewport.scrollLeft)/this.zoom, this.doc.defaultView.scrollY);}else this.viewport.scrollLeft=value; }
+  rootScrollTop() { return this.doc?.defaultView?.scrollY || this.doc?.scrollingElement?.scrollTop || this.doc?.documentElement?.scrollTop || 0; }
+  rootScrollLeft() { return this.doc?.defaultView?.scrollX || this.doc?.scrollingElement?.scrollLeft || this.doc?.documentElement?.scrollLeft || 0; }
+  findAnnotationScrollHost() {
+    if (!this.doc?.body || typeof this.doc.querySelectorAll !== 'function' || typeof this.doc.body.querySelectorAll !== 'function') return null;
+    const win = this.doc.defaultView;
+    const getStyle = el => win?.getComputedStyle?.(el) || el?.style || null;
+    const prop = (st, camel, kebab) => st?.[camel] || st?.getPropertyValue?.(kebab) || '';
+    const overflowY = (el, st = getStyle(el)) => prop(st, 'overflowY', 'overflow-y') || prop(st, 'overflow', 'overflow');
+    const htmlStyle = getStyle(this.doc.documentElement);
+    const bodyStyle = getStyle(this.doc.body);
+    const rootLocked = /hidden|clip/i.test(overflowY(this.doc.documentElement, htmlStyle)) || /hidden|clip/i.test(overflowY(this.doc.body, bodyStyle)) || !!this.tocResize;
+    const isScrollablePane = (node, allowUnfilled = false) => {
+      if (!node || node.nodeType !== 1 || node === this.doc.body || node === this.doc.documentElement) return false;
+      if (node.id === LAYER_ID || node.hasAttribute?.('data-htmlmemo-ui') || node.hasAttribute?.('data-htmlmemo-toc-sidebar') || node.hasAttribute?.('data-htmlmemo-doc-topbar')) return false;
+      if (this.tocResize?.sidebar && (node === this.tocResize.sidebar || node === this.tocResize.sidebarItem || this.tocResize.sidebar.contains?.(node))) return false;
+      if (this.topbarNode && (node === this.topbarNode || this.topbarNode.contains?.(node))) return false;
+      const st = getStyle(node);
+      if (!st || prop(st, 'display', 'display') === 'none' || prop(st, 'visibility', 'visibility') === 'hidden') return false;
+      if (!/auto|scroll|overlay/i.test(overflowY(node, st))) return false;
+      if (!(node.scrollHeight > node.clientHeight + 1 || node.scrollTop > 0 || (allowUnfilled && rootLocked))) return false;
+      const r = node.getBoundingClientRect?.();
+      if (r && (r.width > 0 || r.height > 0) && (r.width < 120 || r.height < 60)) return false;
+      return true;
+    };
+    if (this.scrollHostEl?.isConnected && this.scrollHostEl !== this.doc.body && this.scrollHostEl !== this.doc.documentElement) {
+      if (isScrollablePane(this.scrollHostEl, true)) return this.scrollHostEl;
+    }
+    const candidates = [];
+    if (this.tocResize?.mainNodes?.length) candidates.push(...this.tocResize.mainNodes);
+    if (this.tocResize?.mainItem) candidates.push(this.tocResize.mainItem);
+    for (const sel of ['[data-htmlmemo-toc-main]', 'main', '[role="main"]', '.wm-doc', '.book-content', '.doc-content', '.reader-content', '.markdown-body', '#content', '.content', 'article']) {
+      for (const el of this.doc.querySelectorAll(sel)) candidates.push(el);
+    }
+    for (const el of candidates) {
+      if (isScrollablePane(el, true)) { this.scrollHostEl = el; return el; }
+      if (el?.querySelectorAll) {
+        for (const child of el.querySelectorAll('main, [role="main"], article, section, div')) {
+          if (isScrollablePane(child, false)) { this.scrollHostEl = child; return child; }
+        }
+      }
+    }
+    let best = null, bestArea = 0;
+    for (const el of this.doc.body.querySelectorAll('main, [role="main"], article, section, div')) {
+      if (!isScrollablePane(el, false)) continue;
+      const r = el.getBoundingClientRect?.() || {width: el.clientWidth || 300, height: el.clientHeight || 300};
+      const area = Math.max(1, r.width) * Math.max(1, r.height);
+      if (area > bestArea) { bestArea = area; best = el; }
+    }
+    if (best) { this.scrollHostEl = best; return best; }
+    const htmlCanScroll = !/hidden|clip/i.test(overflowY(this.doc.documentElement, htmlStyle)) && (this.doc.documentElement.scrollHeight > this.doc.documentElement.clientHeight + 1 || (win?.scrollY || 0) > 0);
+    if (!htmlCanScroll && (/auto|scroll|overlay/i.test(overflowY(this.doc.body, bodyStyle)) && (this.doc.body.scrollHeight > this.doc.body.clientHeight + 1 || this.doc.body.scrollTop > 0) || (this.doc.body.scrollTop > 0 && !(win?.scrollY > 0)))) {
+      this.scrollHostEl = this.doc.body;
+      return this.doc.body;
+    }
+    this.scrollHostEl = null;
+    return null;
+  }
+  layerOrigin(scrollHost = this.findAnnotationScrollHost()) {
+    if (scrollHost) {
+      const r = scrollHost.getBoundingClientRect?.() || {left: 0, top: 0};
+      const st = this.doc?.defaultView?.getComputedStyle?.(scrollHost) || scrollHost?.style;
+      const borderLeft = scrollHost.clientLeft || Number.parseFloat(st?.borderLeftWidth || st?.getPropertyValue?.('border-left-width')) || 0;
+      const borderTop = scrollHost.clientTop || Number.parseFloat(st?.borderTopWidth || st?.getPropertyValue?.('border-top-width')) || 0;
+      return {
+        left: r.left + borderLeft - (scrollHost.scrollLeft || 0),
+        top: r.top + borderTop - (scrollHost.scrollTop || 0),
+        scrollHost,
+      };
+    }
+    return {
+      left: -this.rootScrollLeft(),
+      top: -this.rootScrollTop(),
+      scrollHost: null,
+    };
+  }
+  ensureAnnotationLayerHost() {
+    const scrollHost = this.findAnnotationScrollHost();
+    for (const prev of this.doc?.querySelectorAll?.('[data-htmlmemo-scroll-host]') || []) {
+      if (prev !== scrollHost) prev.removeAttribute('data-htmlmemo-scroll-host');
+    }
+    if (scrollHost) {
+      const st = this.doc.defaultView?.getComputedStyle?.(scrollHost) || scrollHost?.style;
+      const pos = st?.position || st?.getPropertyValue?.('position');
+      if (!pos || pos === 'static') scrollHost.setAttribute('data-htmlmemo-scroll-host', '');
+      if (scrollHost !== this.doc.body && this.observedScrollHost !== scrollHost) {
+        if (this.observedScrollHost) this.resizeObserver?.unobserve?.(this.observedScrollHost);
+        this.observedScrollHost = scrollHost;
+        this.resizeObserver?.observe?.(scrollHost);
+      }
+    }
+    return scrollHost;
+  }
+  get scrollTop() {
+    if (!this.nativeScroll) return this.viewport.scrollTop;
+    const host = this.findAnnotationScrollHost();
+    return ((host ? host.scrollTop : 0) || this.rootScrollTop()) * this.zoom;
+  }
+  set scrollTop(value) {
+    if (this.nativeScroll) {
+      const target = value / this.zoom;
+      const host = this.findAnnotationScrollHost();
+      if (host) host.scrollTop = target;
+      else this.doc.defaultView.scrollTo(this.doc.defaultView.scrollX, target);
+    } else this.viewport.scrollTop = value;
+  }
+  get scrollLeft() {
+    if (!this.nativeScroll) return this.viewport.scrollLeft;
+    const host = this.findAnnotationScrollHost();
+    return this.viewport.scrollLeft + ((host ? host.scrollLeft : 0) || this.rootScrollLeft()) * this.zoom;
+  }
+  set scrollLeft(value) {
+    if (this.nativeScroll) {
+      const target = Math.max(0, value);
+      this.viewport.scrollLeft = target;
+      const rem = (target - this.viewport.scrollLeft) / this.zoom;
+      const host = this.findAnnotationScrollHost();
+      if (host) host.scrollLeft = rem;
+      else this.doc.defaultView.scrollTo(rem, this.doc.defaultView.scrollY);
+    } else this.viewport.scrollLeft = value;
+  }
   setZoom(value, fit = false) {
     const centerX = (this.scrollLeft + this.viewport.clientWidth / 2) / this.zoom;
     const centerY = (this.scrollTop + this.viewport.clientHeight / 2) / this.zoom;
@@ -896,8 +1023,8 @@ export class Reader {
       const resolved = resolveTextAnchor(textIndex(this.doc), anchor); if (!resolved || !text?.trim()) return;
       const range = rangeFromOffsets(this.doc, resolved.start, resolved.end); if (!range) return;
       const rect = range.getBoundingClientRect(), element = range.startContainer.parentElement;
-      const position = this.elementAnchor(element);
-      this.commit([...this.metadata.annotations, this.annotation(type, {anchor:position.key, points:[{x:(rect.left + this.doc.defaultView.scrollX-position.x)/position.width,y:(rect.top+this.doc.defaultView.scrollY-position.y)/position.height}], text:text.trim()})]);
+      const position = this.elementAnchor(element), origin = this.layerOrigin();
+      this.commit([...this.metadata.annotations, this.annotation(type, {anchor:position.key, points:[{x:(rect.left - origin.left - position.x)/position.width,y:(rect.top - origin.top - position.y)/position.height}], text:text.trim()})]);
     } else this.commit([...this.metadata.annotations, this.annotation(type, {textAnchor:anchor})]);
     this.doc.getSelection()?.removeAllRanges(); this.selection = null;
   }
@@ -907,13 +1034,44 @@ export class Reader {
   undo() { if (this.history.canUndo) { this.metadata.annotations = this.history.undo(); this.render(); this.callbacks.onChange?.(); this.callbacks.onView?.(); } }
   redo() { if (this.history.canRedo) { this.metadata.annotations = this.history.redo(); this.render(); this.callbacks.onChange?.(); this.callbacks.onView?.(); } }
   remove(id) { this.commit(this.metadata.annotations.filter(a => a.id !== id)); if (this.selectedId === id) this.selectedId = null; }
-  point(event) { return {x:event.clientX + this.doc.defaultView.scrollX, y:event.clientY + this.doc.defaultView.scrollY}; }
+  point(event) {
+    const origin = this.layerOrigin();
+    return {x:event.clientX - origin.left, y:event.clientY - origin.top};
+  }
+  anchorBox(element, origin = this.layerOrigin()) {
+    const scrollHost = origin.scrollHost;
+    if (scrollHost && (!element || element === this.doc.body || element === this.doc.documentElement || element === scrollHost || element.contains?.(scrollHost))) {
+      const r = scrollHost.getBoundingClientRect?.() || {width:1, height:1};
+      return {
+        x:0,
+        y:0,
+        width:Math.max(1, scrollHost.scrollWidth || scrollHost.clientWidth || r.width),
+        height:Math.max(1, scrollHost.scrollHeight || scrollHost.clientHeight || r.height),
+      };
+    }
+    const r = element.getBoundingClientRect();
+    return {
+      x:r.left - origin.left,
+      y:r.top - origin.top,
+      width:Math.max(1, r.width),
+      height:Math.max(1, r.height),
+    };
+  }
   elementAnchor(target) {
-    let element = target.closest?.('[data-htmlmemo-anchor]') || this.doc.body;
-    if (element.namespaceURI === NS || element.closest('#' + LAYER_ID)) element = this.doc.body;
-    while (element !== this.doc.body && ['span','a','b','strong','em','i','small','mark'].includes(element.localName)) element = element.parentElement;
-    const rect = element.getBoundingClientRect();
-    return {key:element.dataset.htmlmemoAnchor || 'body', x:rect.left + this.doc.defaultView.scrollX, y:rect.top + this.doc.defaultView.scrollY, width:Math.max(1, rect.width), height:Math.max(1, rect.height)};
+    const origin = this.layerOrigin();
+    const scrollHost = origin.scrollHost;
+    let element = target?.closest?.('[data-htmlmemo-anchor]') || scrollHost || this.doc.body;
+    if (element.namespaceURI === NS || element.closest?.('#' + LAYER_ID)) element = scrollHost || this.doc.body;
+    while (element !== this.doc.body && element !== scrollHost && ['span','a','b','strong','em','i','small','mark'].includes(element.localName)) element = element.parentElement || this.doc.body;
+    const win = this.doc?.defaultView;
+    if (typeof win?.getComputedStyle === 'function') {
+      while (element && element !== this.doc.body && element !== scrollHost && /^(?:fixed|sticky)$/i.test(win.getComputedStyle(element)?.position || '')) {
+        element = element.parentElement || scrollHost || this.doc.body;
+      }
+    }
+    if (scrollHost && !scrollHost.contains(element)) element = scrollHost;
+    const box = this.anchorBox(element, origin);
+    return {key:element.dataset?.htmlmemoAnchor || 'body', ...box};
   }
   pointerDown(event) {
     if (event.button !== 0) return;
@@ -925,6 +1083,8 @@ export class Reader {
       // cancels a stroke instead of accidentally recording a two-finger gesture.
       if (this.gesture) { this.gesture = null; this.preview?.remove(); return; }
       event.preventDefault(); event.stopPropagation();
+      const scrollHost = this.findAnnotationScrollHost();
+      if (!this.layer?.isConnected || (scrollHost && this.layer.parentElement !== scrollHost)) this.renderDrawingLayer();
       const anchor = this.elementAnchor(event.target); const p = this.point(event);
       this.gesture = {pointerId:event.pointerId, type:this.tool, anchor, points:[p]};
       event.target.setPointerCapture?.(event.pointerId);
@@ -985,9 +1145,12 @@ export class Reader {
   }
   absolutePoints(annotation) {
     if (!annotation.anchor) return annotation.points;
-    const element = this.doc.querySelector(`[data-htmlmemo-anchor="${annotation.anchor}"]`) || this.doc.body;
-    const r = element.getBoundingClientRect();
-    return annotation.points.map(p => ({x:r.left + this.doc.defaultView.scrollX + p.x * Math.max(1,r.width), y:r.top + this.doc.defaultView.scrollY + p.y * Math.max(1,r.height)}));
+    const origin = this.layerOrigin();
+    const scrollHost = origin.scrollHost;
+    let element = this.doc.querySelector(`[data-htmlmemo-anchor="${annotation.anchor}"]`) || scrollHost || this.doc.body;
+    if (scrollHost && !scrollHost.contains(element)) element = scrollHost;
+    const box = this.anchorBox(element, origin);
+    return annotation.points.map(p => ({x:box.x + p.x * box.width, y:box.y + p.y * box.height}));
   }
   drawAnnotation(annotation, preview = false) {
     const p = preview ? annotation.points : this.absolutePoints(annotation); if (!p?.length) return null;
@@ -1015,34 +1178,44 @@ export class Reader {
     if (!this.doc || this.disposed) return;
     // Keep one overlay: source Mutation/ResizeObservers must not see a removed
     // and reinserted SVG every time their own layout changes.
+    const scrollHost=this.ensureAnnotationLayerHost();
+    const hostParent=scrollHost||this.doc.body;
     let layer=this.doc.getElementById(LAYER_ID);
     const drawings=this.metadata.annotations.filter(a=>!TEXT_TOOLS.includes(a.type));
     const contentKey=JSON.stringify(drawings);
     const layoutKey=JSON.stringify(drawings.map(a=>a.anchor?this.absolutePoints(a):null));
     if(!layer){
       layer=svg(this.doc,'svg',{id:LAYER_ID,'aria-label':'HTMLMemo 주석',style:'position:absolute;top:0;left:0;z-index:2147483000;pointer-events:none;overflow:visible;'});
-      layer.dataset.htmlmemoUi='';this.doc.body.append(layer);
+      layer.dataset.htmlmemoUi='';hostParent.append(layer);
+      this.drawingContentKey=null;this.drawingLayoutKey=null;
+    } else if (layer.parentElement!==hostParent) {
+      hostParent.append(layer);
       this.drawingContentKey=null;this.drawingLayoutKey=null;
     }
     this.layer=layer;
-    const width=this.nativeScroll ? this.doc.documentElement?.clientWidth || this.naturalWidth : this.naturalWidth;
-    const height=this.nativeScroll ? 1 : this.naturalHeight || 800;
+    const width=scrollHost ? Math.max(1, scrollHost.clientWidth || this.doc.documentElement?.clientWidth || this.naturalWidth) : (this.nativeScroll ? this.doc.documentElement?.clientWidth || this.naturalWidth : this.naturalWidth);
+    const height=(this.nativeScroll || scrollHost) ? 1 : this.naturalHeight || 800;
     if(layer.getAttribute('width')!==String(width))layer.setAttribute('width',String(width));
     if(layer.getAttribute('height')!==String(height))layer.setAttribute('height',String(height));
     if(contentKey!==this.drawingContentKey || layoutKey!==this.drawingLayoutKey){
       layer.replaceChildren(...drawings.map(a=>this.drawAnnotation(a)).filter(Boolean));
       this.drawingContentKey=contentKey;this.drawingLayoutKey=layoutKey;
     }
-    const offset=layer.getBoundingClientRect();
-    const left=(Number.parseFloat(layer.style.left)||0)-offset.left-(this.doc.defaultView.scrollX||0);
-    const top=(Number.parseFloat(layer.style.top)||0)-offset.top-(this.doc.defaultView.scrollY||0);
-    if(Math.abs(left-(Number.parseFloat(layer.style.left)||0))>.5)layer.style.left=left+'px';
-    if(Math.abs(top-(Number.parseFloat(layer.style.top)||0))>.5)layer.style.top=top+'px';
+    if(scrollHost){
+      if(layer.style.left!=='0px')layer.style.left='0px';
+      if(layer.style.top!=='0px')layer.style.top='0px';
+    } else {
+      const offset=layer.getBoundingClientRect();
+      const left=(Number.parseFloat(layer.style.left)||0)-offset.left-this.rootScrollLeft();
+      const top=(Number.parseFloat(layer.style.top)||0)-offset.top-this.rootScrollTop();
+      if(Math.abs(left-(Number.parseFloat(layer.style.left)||0))>.5)layer.style.left=left+'px';
+      if(Math.abs(top-(Number.parseFloat(layer.style.top)||0))>.5)layer.style.top=top+'px';
+    }
   }
   html() { return serializeHTML(this.doc, this.metadata); }
   async back() { const p = this.linkHistory.pop(); if (!p) return false; this.scrollTop=p.top; this.scrollLeft=p.left; this.callbacks.onView?.(); return true; }
   jump(target) {
-    const r = target.getBoundingClientRect(); this.scrollTop = Math.max(0,(r.top+this.doc.defaultView.scrollY+r.height/2)*this.zoom-this.viewport.clientHeight/2); this.scrollLeft = Math.max(0,(r.left+this.doc.defaultView.scrollX+r.width/2)*this.zoom-this.viewport.clientWidth/2);
+    const r = target.getBoundingClientRect(), origin = this.layerOrigin(); this.scrollTop = Math.max(0,(r.top-origin.top+r.height/2)*this.zoom-this.viewport.clientHeight/2); this.scrollLeft = Math.max(0,(r.left-origin.left+r.width/2)*this.zoom-this.viewport.clientWidth/2);
   }
   jumpAnnotation(id) {
     const annotation = this.metadata.annotations.find(a=>a.id===id); if (!annotation) return;
@@ -1065,8 +1238,8 @@ export class Reader {
     for (const mark of [...this.doc.querySelectorAll('[data-htmlmemo-search]')].reverse()) mark.replaceWith(...mark.childNodes);
     this.doc.body.normalize(); const result=this.searchResults[this.searchPosition];
     const range=rangeFromOffsets(this.doc,result.start,result.end); if (!range) return;
-    const rect=range.getBoundingClientRect(); this.scrollTop=Math.max(0,(rect.top+this.doc.defaultView.scrollY+rect.height/2)*this.zoom-this.viewport.clientHeight/2);
-    this.scrollLeft=Math.max(0,(rect.left+this.doc.defaultView.scrollX+rect.width/2)*this.zoom-this.viewport.clientWidth/2);
+    const rect=range.getBoundingClientRect(), origin=this.layerOrigin(); this.scrollTop=Math.max(0,(rect.top-origin.top+rect.height/2)*this.zoom-this.viewport.clientHeight/2);
+    this.scrollLeft=Math.max(0,(rect.left-origin.left+rect.width/2)*this.zoom-this.viewport.clientWidth/2);
     wrapOffsets(this.doc,result.start,result.end,{'data-htmlmemo-search':''},'background:#f0a85b80;outline:2px solid #df9057;border-radius:2px;color:inherit');
   }
   outline() { return [...this.doc.querySelectorAll('h1,h2,h3,h4,h5,h6')].filter(n=>n.textContent.trim()).map(node=>({node,level:Number(node.localName[1]),title:node.textContent.trim()})); }
