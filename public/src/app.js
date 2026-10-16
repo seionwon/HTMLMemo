@@ -809,8 +809,10 @@ function bindDeskResize() {
       if(state.pointerId!=null&&e.pointerId!=null&&e.pointerId!==state.pointerId)return;
       if(state.moved&&e.buttons===0){end(e);return;}
       const clientX=Number.isFinite(e.clientX)?e.clientX:state.startX;
-      if(Math.abs(clientX-state.startX)>=1)state.moved=true;
-      applyDeskNavWidth(clientX-state.shellLeft-state.offset,{persist:false,snapStrip:false});
+      if(Math.abs(clientX-state.startX)>=(state.initialWidth<=DESK_NAV_MIN?6:1))state.moved=true;
+      if(!state.moved)return;
+      const nextW=applyDeskNavWidth(clientX-state.shellLeft-state.offset,{persist:false,snapStrip:false});
+      if(nextW>=DESK_NAV_STRIP_SNAP)state.expandedDuringDrag=true;
     };
     const end=e=>{
       if(deskDrag!==state)return;
@@ -818,7 +820,7 @@ function bindDeskResize() {
       cleanup();
       let next;
       if(!state.moved)next=state.initialWidth<=DESK_NAV_MIN?Math.max(DESK_NAV_STRIP_SNAP,deskNavExpandedWidth||DESK_NAV_DEFAULT):DESK_NAV_MIN;
-      else if(state.initialWidth<=DESK_NAV_MIN&&deskNavWidth>DESK_NAV_MIN+8&&deskNavWidth<DESK_NAV_STRIP_SNAP)next=Math.max(DESK_NAV_STRIP_SNAP,deskNavExpandedWidth||DESK_NAV_DEFAULT);
+      else if(state.initialWidth<=DESK_NAV_MIN&&deskNavWidth<DESK_NAV_STRIP_SNAP&&!state.expandedDuringDrag)next=Math.max(DESK_NAV_STRIP_SNAP,deskNavExpandedWidth||DESK_NAV_DEFAULT);
       else next=deskNavWidth;
       applyDeskNavWidth(next,{persist:true,snapStrip:true});
       reader()?.measure?.();

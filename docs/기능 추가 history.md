@@ -930,3 +930,26 @@ ID: hist-20261014-024. tests/chrome.mjs가 macOS Codex/CodeMemo 제한 환경을
 **검증:** `npm run check`(62개 파일), `npm test`(**125개 단위 검사 모두 통과**), `npm run test:browser`(별도 임시 프로필의 **실제 Chrome 통합 검사 13개 모두 통과** — 분할 스크롤 본문 `main`에서 펜 주석 작성 후 `main.scrollTop = 320` 스크롤 시 본문 문단과 주석 스트로크가 모두 정확히 `-320px` 이동해 오차 `0px`로 고정됨을 확인), `npm run build`, `git diff --check`를 모두 통과했습니다.
 
 **게시:** 2026-10-16 14:48:22 +09:00 코드 커밋 `77d579f`의 [GitHub Actions·Pages 게시](https://github.com/seionwon/HTMLMemo/actions/runs/38857573336) 성공 확인. 공개 주소 `https://seionwon.github.io/HTMLMemo/`의 `src/reader.js`, `src/document.js`, `src/app.js`가 로컬 수정본과 SHA-256 바이트 단위까지 일치함을 확인했습니다.
+
+
+<a id="hist-20261016-002"></a>
+### 2026-10-16 16:45:00 +09:00 — 목차 섹션(`<details><summary>`, `<summary><a href="#...">`, JS 토글) 및 접힌 8px 목차 스트립 클릭 펼침 수정
+
+| ID | change-kind | status |
+|---|---|---|
+| hist-20261016-002 | 그리기 도구 활성 상태·버블 단계 해시 링크·접힌 8px 스트립 클릭 시 목차 펼침 및 대용량 문서 스크롤 호스트 탐색 최적화 | 구현·단위 126개·`codememo-browser` 검증·Pages 게시 완료 |
+
+**목적과 원인:**
+- 펜·도형·메모 등 그리기 도구(`DRAW_TOOLS`)가 활성화된 상태에서 목차(`aside`, `nav`, `.toc`, `#toc`, `[data-htmlmemo-toc-sidebar]`)나 상단 바를 클릭하면 캡처 단계 `pointerDown`이 `event.preventDefault(); event.stopPropagation()`으로 이벤트를 가로채고 캡처 단계 `click`이 링크 이동을 막아 `<details><summary>` 토글과 목차 항목 클릭이 동작하지 않았습니다.
+- `<details><summary><a href="#...">` 구조나 문서 자체 JavaScript가 클릭 이벤트로 하위 목차를 펼치는 경우, 캡처 단계(`true`)에서 `event.preventDefault()`가 먼저 호출되어 `<details.open` 토글과 문서 스크립트 핸들러가 취소되었습니다.
+- 접힌 `8px` 목차 스트립(`[data-htmlmemo-toc-strip]`)을 클릭해 펼칠 때 마우스가 `1px`~`24px`만 흔들려도 `clampTocWidth(numeric, false)`가 `8`을 반환한 채 `state.moved = true`가 되어 `end()`에서 다시 `8px`로 접히는 현상이 있었고, `findAnnotationScrollHost()`가 전체 문서의 `section, div`를 `querySelectorAll`로 순회해 수천 페이지 문서에서 메인 스레드를 지연시켰습니다.
+
+**변경 내용과 동작:**
+1. **목차·상단 바·대화형 컨트롤에서 그리기 도구 가로채기 방지 및 버블 단계 해시 링크 처리(`public/src/reader.js`, `public/src/document.js`):**
+   - `isInsideTocOrTopbar()`와 `isInteractiveControl()`을 추가해 목차·상단 바 내부 및 `<summary>`, `<button>`, `<input>`, `<select>` 클릭 시 현재 도구가 펜·도형이어도 그리기 캡처를 시작하지 않고 기본 커서(`pointer`/`auto`)와 목차 토글·링크 이동을 그대로 수행합니다.
+   - `#` 해시 링크 처리를 버블 단계(`false`)로 옮겨 문서 자체의 목차 펼침 스크립트가 먼저 실행되도록 하고, `<details><summary><a href="#...">` 클릭 시 `details.open`을 함께 토글하며, 초기 준비(`prepareLoadedHTML`) 중에는 외부 링크·폼 제출만 차단하도록 좁혔습니다.
+2. **접힌 `8px` 목차 스트립 및 좌측 서재 스트립의 클릭 펼침 보강과 스크롤 호스트 탐색 최적화(`public/src/reader.js`, `public/src/app.js`, `public/sw.js`):**
+   - 접힌 스트립(`initialWidth <= 8`)에서 클릭 시 미세한 포인터 흔들림(`6px` 미만 또는 드래그 중 실제 펼침 임계치 `48px` 미달)이 있어도 클릭으로 인식해 원래 목차 폭(`260px` 등)으로 즉시 펼쳐지도록 수정했습니다.
+   - `findAnnotationScrollHost()`에서 전체 `section, div` 탐색을 제거하고 얕은 레이아웃 후보만 검사하도록 최적화했으며, `ResizeObserver`가 요소별 크기를 `WeakMap`으로 추적하도록 수정했습니다(`public/sw.js` 캐시 버전 `htmlmemo-v18` 갱신).
+
+**검증:** `npm run check`(62개 파일), `npm test`(**126개 단위 검사 모두 통과** — 펜 도구 활성 상태에서 `<details><summary>`·`<summary><a href="#...">` 클릭 펼침 및 접힌 `8px` 목차 스트립에서 포인터 흔들림을 동반한 클릭 복원 검사 포함), `codememo-browser` 헤드리스 브라우저 검증(`ok: true, status: 200`), `npm run build`, `git diff --check`를 모두 통과했습니다.

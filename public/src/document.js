@@ -71,7 +71,7 @@ function* sanitizeTree(root, source, depth = 0, allowScripts = false) {
       }
     }
     element.removeAttribute('contenteditable');
-    if (tag === 'form') { element.removeAttribute('action'); element.setAttribute('inert', ''); }
+    if (tag === 'form') { element.removeAttribute('action'); if (!allowScripts) element.setAttribute('inert', ''); }
     if (tag === 'template') yield* sanitizeTree(element.content, source, depth,allowScripts);
   }
 }
@@ -81,14 +81,14 @@ export function parseHTML(html, defaults = {}, options = {}) {
   return step.value;
 }
 export async function prepareLoadedHTML(doc, defaults = {}, isCancelled = () => false, {serialize = true} = {}) {
-  const work = prepareHTML(null, defaults, {document:doc,includeMetadata:true,allowScripts:defaults.execution?.allowScripts===true,serialize});
+  const work = prepareHTML(null, defaults, {document:doc,includeMetadata:true,allowScripts:defaults.execution?.allowScripts,serialize});
   try {
     for (;;) {
       if (isCancelled()) throw new DOMException('문서 열기가 취소되었습니다.','AbortError');
       const start = performance.now();
-      for (let count=0;count<1000;count++) {
+      for (let count=0;count<4000;count++) {
         const step=work.next();if(step.done)return step.value;
-        if(performance.now()-start>=8)break;
+        if((count&255)===255&&performance.now()-start>=8)break;
       }
       // Yield between bounded batches so the native document can paint/scroll.
       await new Promise(resolve=>setTimeout(resolve,0));

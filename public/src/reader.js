@@ -34,7 +34,15 @@ export class Reader {
             // its DOM instead of decoding, parsing and copying the book again.
             await new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done)));
             if (this.disposed) { resolve(this); return; }
-            const blockNavigation = event => { if(event.type==='click'||event.key==='Enter')event.preventDefault(); };
+            const blockNavigation = event => {
+              if (event.type !== 'click' && event.key !== 'Enter') return;
+              const target = event.target?.nodeType === 1 ? event.target : event.target?.parentElement;
+              const link = target?.closest?.('a[href]');
+              if (link) {
+                const href = (link.getAttribute('href') || '').trim();
+                if (href && !href.startsWith('#') && !/^javascript:/i.test(href)) event.preventDefault();
+              } else if (target?.closest?.('form')) event.preventDefault();
+            };
             this.doc.addEventListener('click',blockNavigation,true);this.doc.addEventListener('keydown',blockNavigation,true);
             this.frame.style.pointerEvents = '';
             const prepared = await prepareLoadedHTML(this.doc, this.metadata, () => this.disposed, {serialize:false});
@@ -59,7 +67,7 @@ export class Reader {
     } else this.frame.srcdoc = parsed.html;
   }
   baseEditorStyle() {
-    return `${this.nativeScroll ? '' : 'html{overflow:hidden!important;height:auto!important;min-height:0!important;scroll-behavior:auto!important}body{touch-action:pan-x pan-y;height:auto!important;min-height:0!important}'}html[data-htmlmemo-drawing] *{cursor:crosshair!important;user-select:none!important;touch-action:none!important}[data-htmlmemo-scroll-host]{position:relative!important}html[data-htmlmemo-toc-resizing],html[data-htmlmemo-toc-resizing] body{cursor:col-resize!important;user-select:none!important;-webkit-user-select:none!important}[data-htmlmemo-sidebar-grid]{grid-template-columns:var(--htmlmemo-toc-grid-columns)!important;transition:none!important}[data-htmlmemo-toc-sidebar],[data-htmlmemo-toc-item],[data-htmlmemo-sidebar-flex]{width:var(--htmlmemo-toc-width)!important;min-width:var(--htmlmemo-toc-width)!important;max-width:var(--htmlmemo-toc-width)!important;flex:0 0 var(--htmlmemo-toc-width)!important;box-sizing:border-box!important;transition:none!important}[data-htmlmemo-toc-sidebar]{overflow-x:hidden!important}[data-htmlmemo-toc-item-strip]{width:8px!important;min-width:8px!important;max-width:8px!important;flex:0 0 8px!important;padding-left:0!important;padding-right:0!important;overflow:hidden!important;box-sizing:border-box!important}[data-htmlmemo-toc-strip]{width:8px!important;min-width:8px!important;max-width:8px!important;flex:0 0 8px!important;padding-left:0!important;padding-right:0!important;overflow:hidden!important;box-sizing:border-box!important;cursor:col-resize!important;user-select:none!important}[data-htmlmemo-toc-strip]>:not([data-htmlmemo-toc-resizer]):not([data-htmlmemo-toc-resizer-bound]){opacity:0!important;visibility:hidden!important;pointer-events:none!important}[data-htmlmemo-toc-resizer],[data-htmlmemo-toc-resizer-bound]{cursor:col-resize!important;touch-action:none!important;user-select:none!important;-webkit-user-select:none!important;transition:none!important}[data-htmlmemo-topbar-grid]{grid-template-rows:var(--htmlmemo-topbar-grid-rows)!important}[data-htmlmemo-topbar-pad]{padding-top:24px!important}[data-htmlmemo-topbar-offset]{top:24px!important}[data-htmlmemo-doc-topbar],[data-htmlmemo-doc-topbar-item]{height:24px!important;min-height:24px!important;max-height:24px!important;padding-top:0!important;padding-bottom:0!important;margin-top:0!important;margin-bottom:0!important;box-sizing:border-box!important;align-items:center!important}[data-htmlmemo-doc-topbar] *{padding-top:0!important;padding-bottom:0!important;margin-top:0!important;margin-bottom:0!important;min-height:0!important;box-sizing:border-box!important}[data-htmlmemo-doc-topbar]>div,[data-htmlmemo-doc-topbar]>nav{height:100%!important;max-height:24px!important;align-items:center!important}[data-htmlmemo-doc-topbar] h1,[data-htmlmemo-doc-topbar] h2,[data-htmlmemo-doc-topbar] h3,[data-htmlmemo-doc-topbar] strong,[data-htmlmemo-doc-topbar] [class*="title"]{font-size:13px!important;line-height:22px!important;white-space:nowrap!important}[data-htmlmemo-doc-topbar] button,[data-htmlmemo-doc-topbar] [role="button"],[data-htmlmemo-doc-topbar] input{height:20px!important;min-height:20px!important;max-height:20px!important;padding-top:0!important;padding-bottom:0!important;font-size:12px!important;line-height:18px!important;border-radius:4px!important;display:inline-flex!important;align-items:center!important;justify-content:center!important}[data-htmlmemo-doc-topbar] select{height:20px!important;min-height:20px!important;max-height:20px!important;padding-top:0!important;padding-bottom:0!important;font-size:12px!important;line-height:18px!important;border-radius:4px!important}[data-htmlmemo-doc-topbar] svg{width:14px!important;height:14px!important}`;
+    return `${this.nativeScroll ? '' : 'html{overflow:hidden!important;height:auto!important;min-height:0!important;scroll-behavior:auto!important}body{touch-action:pan-x pan-y;height:auto!important;min-height:0!important}'}html[data-htmlmemo-drawing] *{cursor:crosshair!important;user-select:none!important;touch-action:none!important}html[data-htmlmemo-drawing] aside,html[data-htmlmemo-drawing] aside *,html[data-htmlmemo-drawing] nav,html[data-htmlmemo-drawing] nav *,html[data-htmlmemo-drawing] header,html[data-htmlmemo-drawing] header *,html[data-htmlmemo-drawing] .toc,html[data-htmlmemo-drawing] .toc *,html[data-htmlmemo-drawing] #toc,html[data-htmlmemo-drawing] #toc *,html[data-htmlmemo-drawing] [data-htmlmemo-toc-sidebar],html[data-htmlmemo-drawing] [data-htmlmemo-toc-sidebar] *,html[data-htmlmemo-drawing] [data-htmlmemo-doc-topbar],html[data-htmlmemo-drawing] [data-htmlmemo-doc-topbar] *{cursor:auto!important;touch-action:auto!important}html[data-htmlmemo-drawing] aside a,html[data-htmlmemo-drawing] aside button,html[data-htmlmemo-drawing] aside summary,html[data-htmlmemo-drawing] nav a,html[data-htmlmemo-drawing] nav button,html[data-htmlmemo-drawing] nav summary,html[data-htmlmemo-drawing] .toc a,html[data-htmlmemo-drawing] .toc button,html[data-htmlmemo-drawing] .toc summary,html[data-htmlmemo-drawing] #toc a,html[data-htmlmemo-drawing] #toc button,html[data-htmlmemo-drawing] #toc summary,html[data-htmlmemo-drawing] [data-htmlmemo-toc-sidebar] a,html[data-htmlmemo-drawing] [data-htmlmemo-toc-sidebar] button,html[data-htmlmemo-drawing] [data-htmlmemo-toc-sidebar] summary,html[data-htmlmemo-drawing] [data-htmlmemo-doc-topbar] button,html[data-htmlmemo-drawing] [data-htmlmemo-doc-topbar] select{cursor:pointer!important}[data-htmlmemo-scroll-host]{position:relative!important}html[data-htmlmemo-toc-resizing],html[data-htmlmemo-toc-resizing] body{cursor:col-resize!important;user-select:none!important;-webkit-user-select:none!important}[data-htmlmemo-sidebar-grid]{grid-template-columns:var(--htmlmemo-toc-grid-columns)!important;transition:none!important}[data-htmlmemo-toc-sidebar],[data-htmlmemo-toc-item],[data-htmlmemo-sidebar-flex]{width:var(--htmlmemo-toc-width)!important;min-width:var(--htmlmemo-toc-width)!important;max-width:var(--htmlmemo-toc-width)!important;flex:0 0 var(--htmlmemo-toc-width)!important;box-sizing:border-box!important;transition:none!important}[data-htmlmemo-toc-sidebar]{overflow-x:hidden!important}[data-htmlmemo-toc-item-strip]{width:8px!important;min-width:8px!important;max-width:8px!important;flex:0 0 8px!important;padding-left:0!important;padding-right:0!important;overflow:hidden!important;box-sizing:border-box!important}[data-htmlmemo-toc-strip]{width:8px!important;min-width:8px!important;max-width:8px!important;flex:0 0 8px!important;padding-left:0!important;padding-right:0!important;overflow:hidden!important;box-sizing:border-box!important;cursor:col-resize!important;user-select:none!important;pointer-events:auto!important}[data-htmlmemo-toc-strip]>:not([data-htmlmemo-toc-resizer]):not([data-htmlmemo-toc-resizer-bound]){opacity:0!important;visibility:hidden!important;pointer-events:none!important}[data-htmlmemo-toc-strip] [data-htmlmemo-toc-resizer],[data-htmlmemo-toc-strip] [data-htmlmemo-toc-resizer-bound]{left:0!important;width:8px!important;min-width:8px!important;opacity:1!important;visibility:visible!important;pointer-events:auto!important}[data-htmlmemo-toc-resizer],[data-htmlmemo-toc-resizer-bound]{cursor:col-resize!important;touch-action:none!important;user-select:none!important;-webkit-user-select:none!important;transition:none!important}[data-htmlmemo-topbar-grid]{grid-template-rows:var(--htmlmemo-topbar-grid-rows)!important}[data-htmlmemo-topbar-pad]{padding-top:24px!important}[data-htmlmemo-topbar-offset]{top:24px!important}[data-htmlmemo-doc-topbar],[data-htmlmemo-doc-topbar-item]{height:24px!important;min-height:24px!important;max-height:24px!important;padding-top:0!important;padding-bottom:0!important;margin-top:0!important;margin-bottom:0!important;box-sizing:border-box!important;align-items:center!important}[data-htmlmemo-doc-topbar] *{padding-top:0!important;padding-bottom:0!important;margin-top:0!important;margin-bottom:0!important;min-height:0!important;box-sizing:border-box!important}[data-htmlmemo-doc-topbar]>div,[data-htmlmemo-doc-topbar]>nav{height:100%!important;max-height:24px!important;align-items:center!important}[data-htmlmemo-doc-topbar] h1,[data-htmlmemo-doc-topbar] h2,[data-htmlmemo-doc-topbar] h3,[data-htmlmemo-doc-topbar] strong,[data-htmlmemo-doc-topbar] [class*="title"]{font-size:13px!important;line-height:22px!important;white-space:nowrap!important}[data-htmlmemo-doc-topbar] button,[data-htmlmemo-doc-topbar] [role="button"],[data-htmlmemo-doc-topbar] input{height:20px!important;min-height:20px!important;max-height:20px!important;padding-top:0!important;padding-bottom:0!important;font-size:12px!important;line-height:18px!important;border-radius:4px!important;display:inline-flex!important;align-items:center!important;justify-content:center!important}[data-htmlmemo-doc-topbar] select{height:20px!important;min-height:20px!important;max-height:20px!important;padding-top:0!important;padding-bottom:0!important;font-size:12px!important;line-height:18px!important;border-radius:4px!important}[data-htmlmemo-doc-topbar] svg{width:14px!important;height:14px!important}`;
   }
   setupEditorTocVars(customVars = this.tocCustomVars, defaultWidth = this.tocDefaultWidth || TOC_DEFAULT) {
     const editorStyle = this.doc?.getElementById('htmlmemo-editor-style');
@@ -88,28 +96,64 @@ export class Reader {
     this.doc.addEventListener('keydown', event => {if(this.handleTocKeydown(event))return; if(event.key==='Escape'&&this.middleScroll){this.stopMiddleScroll();event.preventDefault();return;}this.callbacks.onKey?.(event);}, true);
     this.doc.addEventListener('dblclick', event => {if(this.handleTocDblClick(event))return; this.focusDocument(event);}, true);
     this.viewport.addEventListener('dblclick', event => this.focusDocument(event));
+    const jumpToHash = hash => {
+      if (!hash || hash === '#') return false;
+      let id; try { id = decodeURIComponent(hash.slice(1)); } catch { id = hash.slice(1); }
+      if (!id) return false;
+      const target = this.doc.getElementById(id) || [...this.doc.querySelectorAll('a[name]')].find(a => a.name === id);
+      if (!target) return false;
+      this.linkHistory.push({top:this.scrollTop, left:this.scrollLeft});
+      if (this.linkHistory.length > 128) this.linkHistory.shift();
+      this.jump(target);
+      return true;
+    };
     this.doc.addEventListener('click', event => {
-      if (this.tocResizeJustEnded || this.isTocResizerNode(event.target)) { this.tocResizeJustEnded = false; event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation?.(); return; }
-      const annotation = event.target.closest?.('[data-htmlmemo-id]');
+      const target = event.target?.nodeType === 1 ? event.target : event.target?.parentElement;
+      if (this.tocResizeJustEnded || this.isTocResizerNode(target)) { this.tocResizeJustEnded = false; event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation?.(); return; }
+      const annotation = target?.closest?.('[data-htmlmemo-id]');
       if (annotation && this.tool === 'select') { event.preventDefault(); event.stopPropagation(); this.selectedId = annotation.dataset.htmlmemoId; this.callbacks.onSelect?.(this.selectedId); return; }
-      const link = event.target.closest?.('a[href]');
+      if (this.tocStrip) {
+        const btn = target?.closest?.('button,[role="button"]');
+        if (btn && !this.tocResize?.sidebar?.contains?.(btn)) {
+          const info = `${btn.id || ''} ${typeof btn.className === 'string' ? btn.className : ''} ${btn.getAttribute?.('title') || ''} ${btn.getAttribute?.('aria-label') || ''} ${btn.getAttribute?.('aria-controls') || ''} ${btn.textContent || ''}`;
+          if (/목차|차례|\btoc\b|sidebar|사이드바/i.test(info)) {
+            this.applyTocWidth(Math.max(TOC_STRIP_SNAP, this.tocExpandedWidth || this.tocDefaultWidth || TOC_DEFAULT), {persist: true, snapStrip: true});
+            this.syncAfterTocResize();
+          }
+        }
+      }
+      const link = target?.closest?.('a[href]');
       if (!link) return;
-      const href = link.getAttribute('href');
-      if (this.metadata.execution?.allowScripts && /^javascript:/i.test(href)) return;
+      const href = (link.getAttribute('href') || '').trim();
+      if (!href || href.startsWith('#') || (this.metadata.execution?.allowScripts && /^javascript:/i.test(href))) return;
       event.preventDefault();
-      if (this.tool !== 'select') return;
-      let hash = href.startsWith('#') ? href : '';
-      if (!hash && this.metadata.source) { try { const current = new URL(this.metadata.source); const dest = new URL(href); if (current.origin === dest.origin && current.pathname === dest.pathname && current.search === dest.search) hash = dest.hash; } catch { /* non-web links aren't opened by the app */ } }
-      if (hash) {
-        let id; try { id = decodeURIComponent(hash.slice(1)); } catch { id = hash.slice(1); }
-        const target = this.doc.getElementById(id) || [...this.doc.querySelectorAll('a[name]')].find(a => a.name === id);
-        if (target) { this.linkHistory.push({top:this.scrollTop, left:this.scrollLeft}); if (this.linkHistory.length > 128) this.linkHistory.shift(); this.jump(target); }
-      } else if (/^https?:/.test(href)) this.callbacks.onLink?.(href);
+      if (this.tool !== 'select' && !this.isInsideTocOrTopbar(link)) return;
+      let hash = '';
+      if (this.metadata.source) { try { const current = new URL(this.metadata.source); const dest = new URL(href); if (current.origin === dest.origin && current.pathname === dest.pathname && current.search === dest.search) hash = dest.hash; } catch { /* non-web links aren't opened by the app */ } }
+      if (hash && hash.length > 1) jumpToHash(hash);
+      else if (/^https?:/i.test(href)) this.callbacks.onLink?.(href);
     }, true);
+    this.doc.addEventListener('click', event => {
+      if (event.defaultPrevented) return;
+      const target = event.target?.nodeType === 1 ? event.target : event.target?.parentElement;
+      const link = target?.closest?.('a[href]');
+      if (!link) return;
+      const href = (link.getAttribute('href') || '').trim();
+      if (!href.startsWith('#')) return;
+      const summary = link.closest?.('summary');
+      const details = summary ? (summary.parentElement?.localName === 'details' ? summary.parentElement : summary.closest?.('details')) : null;
+      if (href === '#') {
+        if (!summary) event.preventDefault();
+        return;
+      }
+      event.preventDefault();
+      if (details) details.open = !details.open;
+      if (this.tool === 'select' || this.isInsideTocOrTopbar(link)) jumpToHash(href);
+    }, false);
     (this.nativeScroll ? this.doc : this.viewport).addEventListener('scroll', event => {
       const target = event?.target;
-      if (this.nativeScroll && target?.nodeType === 1 && target !== this.doc.documentElement && !target.closest?.('[data-htmlmemo-toc-sidebar],[data-htmlmemo-doc-topbar]') && !/^(?:pre|code|table|ul|ol|nav|aside)$/i.test(target.localName || '') && target.scrollTop > 0 && (!this.scrollHostEl || target === this.doc.body || target.contains?.(this.scrollHostEl)) && (target === this.doc.body || (target.clientWidth >= 160 && target.clientHeight >= 100))) {
-        if (this.scrollHostEl !== target) { this.scrollHostEl = target; this.renderDrawingLayer(); }
+      if (this.nativeScroll && target?.nodeType === 1 && target !== this.doc.documentElement && !this.isInsideTocOrTopbar(target) && !/^(?:pre|code|table|ul|ol|nav|aside)$/i.test(target.localName || '') && target.scrollTop > 0 && (!this.scrollHostEl || target === this.doc.body || target.contains?.(this.scrollHostEl)) && (target === this.doc.body || (target.clientWidth >= 160 && target.clientHeight >= 100))) {
+        if (this.scrollHostEl !== target) { this.scrollHostEl = target; this.scrollHostChecked = true; this.renderDrawingLayer(); }
       }
       clearTimeout(this.positionTimer);
       this.positionTimer = setTimeout(() => {
@@ -117,41 +161,55 @@ export class Reader {
         this.rememberPosition(); this.callbacks.onView?.();
       }, 250);
     }, {capture:true, passive:true});
-    this.resizeObserver = new ResizeObserver(entries => {
-      if (this.disposed || this.host?.hidden || this.tocDrag) return;
-      const rect=entries[0]?.contentRect;
-      const size=rect && [Math.round(rect.width),Math.round(rect.height)].join(':');
-      if(size && size===this.bodySize)return;
-      this.bodySize=size;this.measure();this.renderDrawingLayer();
-    });
-    this.resizeObserver.observe(this.doc.body);
-    this.hostObserver = new ResizeObserver(() => {
-      if(this.disposed || this.host?.hidden)return;
-      const size=[this.viewport.clientWidth,this.viewport.clientHeight].join(':');
-      if(size===this.hostSize)return;
-      this.hostSize=size;
-      if(this.autoFit)this.zoom=this.fitZoom();
-      if(this.nativeScroll || this.autoFit)this.applyZoom();
-    }); this.hostObserver.observe(this.viewport);
-    this.doc.fonts.ready.then(() => { if (!this.disposed && !this.tocDrag) { this.measure(); this.renderDrawingLayer(); } });
-    if (this.metadata.execution?.allowScripts) {
-      this.dynamicAnchor = 0;this.dynamicRoots=new Set([this.doc.body]);
-      this.dynamicObserver = new MutationObserver(records => {
-        if (this.tocDrag) return;
-        const editor = node => (node.nodeType===3?node.parentElement:node)?.closest?.('#'+LAYER_ID+',#htmlmemo-annotation-style,#htmlmemo-editor-style,[data-htmlmemo-mark],[data-htmlmemo-search]');
-        let changed=false;
-        for(const record of records){
-          if(editor(record.target))continue;
-          const nodes=record.type==='characterData'?[record.target]:[...record.addedNodes,...record.removedNodes];
-          if(nodes.some(node=>!editor(node))){
-            changed=true;
-            this.dynamicRoots.add(record.target.nodeType===1?record.target:record.target.parentElement);
+    this.observedSizes = new WeakMap();
+    if (typeof ResizeObserver !== 'undefined') {
+      this.resizeObserver = new ResizeObserver(entries => {
+        if (this.disposed || this.host?.hidden || this.tocDrag) return;
+        let changed = false;
+        for (const entry of entries) {
+          const rect = entry?.contentRect;
+          const size = rect && [Math.round(rect.width), Math.round(rect.height)].join(':');
+          if (size && size !== this.observedSizes.get(entry.target)) {
+            this.observedSizes.set(entry.target, size);
+            changed = true;
           }
         }
-        if(changed)this.scheduleDynamicRefresh();
+        if (!changed) return;
+        this.measure(); this.renderDrawingLayer();
       });
-      this.observeDynamicDocument();
-      this.scheduleDynamicRefresh();
+      this.resizeObserver.observe(this.doc.body);
+      this.hostObserver = new ResizeObserver(() => {
+        if(this.disposed || this.host?.hidden)return;
+        const size=[this.viewport.clientWidth,this.viewport.clientHeight].join(':');
+        if(size===this.hostSize)return;
+        this.hostSize=size;
+        if(this.autoFit)this.zoom=this.fitZoom();
+        if(this.nativeScroll || this.autoFit)this.applyZoom();
+      });
+      if (this.viewport instanceof Element) this.hostObserver.observe(this.viewport);
+    }
+    this.doc.fonts?.ready?.then?.(() => { if (!this.disposed && !this.tocDrag) { this.measure(); this.renderDrawingLayer(); } });
+    if (this.metadata.execution?.allowScripts) {
+      this.dynamicAnchor = 0;this.dynamicRoots=new Set([this.doc.body]);
+      const MO = this.doc.defaultView?.MutationObserver || (typeof MutationObserver !== 'undefined' ? MutationObserver : null);
+      if (MO) {
+        this.dynamicObserver = new MO(records => {
+          if (this.tocDrag) return;
+          const editor = node => (node.nodeType===3?node.parentElement:node)?.closest?.('#'+LAYER_ID+',#htmlmemo-annotation-style,#htmlmemo-editor-style,[data-htmlmemo-mark],[data-htmlmemo-search]');
+          let changed=false;
+          for(const record of records){
+            if(editor(record.target))continue;
+            const nodes=record.type==='characterData'?[record.target]:[...record.addedNodes,...record.removedNodes];
+            if(nodes.some(node=>!editor(node))){
+              changed=true;
+              this.dynamicRoots.add(record.target.nodeType===1?record.target:record.target.parentElement);
+            }
+          }
+          if(changed)this.scheduleDynamicRefresh();
+        });
+        this.observeDynamicDocument();
+        this.scheduleDynamicRefresh();
+      }
     }
   }
   storage() {
@@ -564,6 +622,21 @@ export class Reader {
     }
     return event.clientX;
   }
+  isInsideTocOrTopbar(node) {
+    const el = node?.nodeType === 1 ? node : node?.parentElement;
+    if (!el) return false;
+    const sidebar = this.tocResize?.sidebar;
+    const sidebarItem = this.tocResize?.sidebarItem;
+    if (sidebar && (el === sidebar || sidebar.contains?.(el) || (sidebarItem && (el === sidebarItem || sidebarItem.contains?.(el))))) return true;
+    if (this.topbarNode && (el === this.topbarNode || this.topbarNode.contains?.(el))) return true;
+    return !!el.closest?.('[data-htmlmemo-toc-sidebar],[data-htmlmemo-toc-item],[data-htmlmemo-doc-topbar],[data-htmlmemo-doc-topbar-item],aside,nav,[role="navigation"],.toc,#toc,.sidebar,#sidebar');
+  }
+  isInteractiveControl(node) {
+    const el = node?.nodeType === 1 ? node : node?.parentElement;
+    if (!el) return false;
+    if (this.isInsideTocOrTopbar(el)) return true;
+    return !!el.closest?.('summary,button,[role="button"],input,select,textarea,label,[data-htmlmemo-toc-resizer],[data-htmlmemo-toc-resizer-bound]');
+  }
   isTocResizerNode(node) {
     const el = node?.nodeType === 1 ? node : node?.parentElement;
     if (!el) return false;
@@ -579,7 +652,7 @@ export class Reader {
     if (this.isTocResizerNode(target)) return true;
     const isStrip = sidebar.hasAttribute('data-htmlmemo-toc-strip');
     if (isStrip && target && (target === sidebar || sidebar.contains?.(target) || (sidebarItem && (target === sidebarItem || sidebarItem.contains?.(target))))) return true;
-    if (target?.closest?.('a,button,input,textarea,select,summary,[contenteditable],[data-htmlmemo-id]')) return false;
+    if (!isStrip && target?.closest?.('a,button,input,textarea,select,summary,[contenteditable],[data-htmlmemo-id]')) return false;
     const rect = (sidebarItem || sidebar).getBoundingClientRect?.();
     const clientX = this.eventDocX(event);
     return !!(rect && rect.width > 0 && Number.isFinite(clientX) && clientX >= rect.right - 10 && clientX <= rect.right + 12 && (!rect.height || event.clientY == null || (event.clientY >= rect.top - 4 && event.clientY <= rect.bottom + 4)));
@@ -605,7 +678,7 @@ export class Reader {
     const offset = Math.abs(startX - (sidebarLeft + initialWidth)) <= 24 ? startX - (sidebarLeft + initialWidth) : 0;
     const captureTarget = resizer || sidebar;
     const usePointer = event.pointerId != null;
-    const state = {pointerId: event.pointerId, usePointer, startX, sidebarLeft, maxWidth, frameRect, initialWidth, offset, moved: false, target: captureTarget};
+    const state = {pointerId: event.pointerId, usePointer, startX, sidebarLeft, maxWidth, frameRect, initialWidth, offset, moved: false, expandedDuringDrag: false, target: captureTarget};
     this.tocDrag = state;
     this.doc.documentElement.setAttribute('data-htmlmemo-toc-resizing', '');
     try { if (usePointer) captureTarget?.setPointerCapture?.(event.pointerId); } catch { /* ignore */ }
@@ -632,10 +705,11 @@ export class Reader {
       if (state.moved && e.buttons === 0) { end(e); return; }
       const x = this.eventDocX(e);
       const currentX = Number.isFinite(x) ? x : state.startX;
-      if (Math.abs(currentX - state.startX) >= 1) state.moved = true;
+      if (Math.abs(currentX - state.startX) >= (state.initialWidth <= TOC_MIN ? 6 : 1)) state.moved = true;
       if (!state.moved) return;
       e.preventDefault?.();
-      this.applyTocWidth(currentX - state.sidebarLeft - state.offset, {persist: false, snapStrip: false});
+      const nextW = this.applyTocWidth(currentX - state.sidebarLeft - state.offset, {persist: false, snapStrip: false});
+      if (nextW >= TOC_STRIP_SNAP) state.expandedDuringDrag = true;
     };
     const end = e => {
       if (this.tocDrag !== state) return;
@@ -652,7 +726,7 @@ export class Reader {
         return;
       }
       let next = this.tocWidth;
-      if (state.initialWidth <= TOC_MIN && next > TOC_MIN + 8 && next < TOC_STRIP_SNAP) {
+      if (state.initialWidth <= TOC_MIN && next < TOC_STRIP_SNAP && !state.expandedDuringDrag) {
         next = Math.max(TOC_STRIP_SNAP, this.tocExpandedWidth || this.tocDefaultWidth || TOC_DEFAULT);
       }
       this.applyTocWidth(next, {persist: true, snapStrip: true});
@@ -817,21 +891,29 @@ export class Reader {
     try {
       const body = this.doc.body;if (!body) return;
       body.setAttribute('data-htmlmemo-anchor','body');
-      let count=0,added=0;
+      let count=0,added=0,mainAdded=0,start=performance.now();
       const roots=[...(this.dynamicRoots || [body])].filter(root=>root?.isConnected);
       this.dynamicRoots?.clear();
       // A clock or a small generated paragraph must not rescan a 50,000-page book.
       const rootSet=new Set(roots);
       const unique=roots.filter(root=>{for(let parent=root.parentElement;parent;parent=parent.parentElement)if(rootSet.has(parent))return false;return true;});
-      for(const root of unique)for(const element of [root,...root.querySelectorAll('*')]){
-        if (!element.closest('#'+LAYER_ID+', [data-htmlmemo-mark], [data-htmlmemo-search]') && !['script','style','meta','link','template'].includes(element.localName) && !element.hasAttribute('data-htmlmemo-anchor')) {element.setAttribute('data-htmlmemo-anchor','js'+this.dynamicAnchor++);added++;}
-        if(++count%1000===0){await new Promise(resolve=>setTimeout(resolve,0));if(this.disposed)return;}
+      for(const root of unique){
+        const inChrome = this.isInsideTocOrTopbar(root);
+        for(const element of [root,...root.querySelectorAll('*')]){
+          if (!element.closest('#'+LAYER_ID+', [data-htmlmemo-mark], [data-htmlmemo-search]') && !['script','style','meta','link','template'].includes(element.localName) && !element.hasAttribute('data-htmlmemo-anchor')) {
+            element.setAttribute('data-htmlmemo-anchor','js'+this.dynamicAnchor++);
+            added++;
+            if (!inChrome && !this.isInsideTocOrTopbar(element)) mainAdded++;
+          }
+          if((++count&255)===0&&performance.now()-start>=10){await new Promise(resolve=>setTimeout(resolve,0));if(this.disposed)return;start=performance.now();}
+        }
       }
       this.tocChecked = false;
       this.ensureDocumentTocResize();
       if (added > 0) {
         this.initialHTML = null;
-        this.measure();this.render();
+        this.measure();
+        if (mainAdded > 0) this.render();
         this.callbacks.onView?.();
       }
     } finally {
@@ -883,7 +965,7 @@ export class Reader {
   rootScrollTop() { return this.doc?.defaultView?.scrollY || this.doc?.scrollingElement?.scrollTop || this.doc?.documentElement?.scrollTop || 0; }
   rootScrollLeft() { return this.doc?.defaultView?.scrollX || this.doc?.scrollingElement?.scrollLeft || this.doc?.documentElement?.scrollLeft || 0; }
   findAnnotationScrollHost() {
-    if (!this.doc?.body || typeof this.doc.querySelectorAll !== 'function' || typeof this.doc.body.querySelectorAll !== 'function') return null;
+    if (!this.doc?.body || typeof this.doc.querySelectorAll !== 'function') return null;
     const win = this.doc.defaultView;
     const getStyle = el => win?.getComputedStyle?.(el) || el?.style || null;
     const prop = (st, camel, kebab) => st?.[camel] || st?.getPropertyValue?.(kebab) || '';
@@ -893,42 +975,41 @@ export class Reader {
     const rootLocked = /hidden|clip/i.test(overflowY(this.doc.documentElement, htmlStyle)) || /hidden|clip/i.test(overflowY(this.doc.body, bodyStyle)) || !!this.tocResize;
     const isScrollablePane = (node, allowUnfilled = false) => {
       if (!node || node.nodeType !== 1 || node === this.doc.body || node === this.doc.documentElement) return false;
-      if (node.id === LAYER_ID || node.hasAttribute?.('data-htmlmemo-ui') || node.hasAttribute?.('data-htmlmemo-toc-sidebar') || node.hasAttribute?.('data-htmlmemo-doc-topbar')) return false;
-      if (this.tocResize?.sidebar && (node === this.tocResize.sidebar || node === this.tocResize.sidebarItem || this.tocResize.sidebar.contains?.(node))) return false;
-      if (this.topbarNode && (node === this.topbarNode || this.topbarNode.contains?.(node))) return false;
+      if (node.id === LAYER_ID || node.hasAttribute?.('data-htmlmemo-ui') || /^(?:aside|nav|header|footer|pre|code|table|ul|ol|dl|details|figure|blockquote)$/i.test(node.localName || '')) return false;
+      if (this.isInsideTocOrTopbar(node)) return false;
+      if (this.tocResize?.sidebar && (node.contains?.(this.tocResize.sidebar) || (this.tocResize.sidebarItem && node.contains?.(this.tocResize.sidebarItem)))) return false;
+      if (this.topbarNode && node.contains?.(this.topbarNode)) return false;
       const st = getStyle(node);
       if (!st || prop(st, 'display', 'display') === 'none' || prop(st, 'visibility', 'visibility') === 'hidden') return false;
       if (!/auto|scroll|overlay/i.test(overflowY(node, st))) return false;
       if (!(node.scrollHeight > node.clientHeight + 1 || node.scrollTop > 0 || (allowUnfilled && rootLocked))) return false;
       const r = node.getBoundingClientRect?.();
-      if (r && (r.width > 0 || r.height > 0) && (r.width < 120 || r.height < 60)) return false;
+      if (r && (r.width > 0 || r.height > 0) && (r.width < 160 || r.height < 80)) return false;
       return true;
     };
     if (this.scrollHostEl?.isConnected && this.scrollHostEl !== this.doc.body && this.scrollHostEl !== this.doc.documentElement) {
       if (isScrollablePane(this.scrollHostEl, true)) return this.scrollHostEl;
     }
-    const candidates = [];
-    if (this.tocResize?.mainNodes?.length) candidates.push(...this.tocResize.mainNodes);
-    if (this.tocResize?.mainItem) candidates.push(this.tocResize.mainItem);
-    for (const sel of ['[data-htmlmemo-toc-main]', 'main', '[role="main"]', '.wm-doc', '.book-content', '.doc-content', '.reader-content', '.markdown-body', '#content', '.content', 'article']) {
-      for (const el of this.doc.querySelectorAll(sel)) candidates.push(el);
+    const candidates = new Set();
+    const addCandidate = el => { if (el?.nodeType === 1 && el !== this.doc.body && el !== this.doc.documentElement) candidates.add(el); };
+    if (this.tocResize?.mainNodes?.length) for (const el of this.tocResize.mainNodes) addCandidate(el);
+    if (this.tocResize?.mainItem) addCandidate(this.tocResize.mainItem);
+    for (const sel of ['[data-htmlmemo-toc-main]', 'main', '[role="main"]', '.wm-doc', '.book-content', '.doc-content', '.reader-content', '.markdown-body', '#content', '.content']) {
+      for (const el of this.doc.querySelectorAll(sel)) addCandidate(el);
+    }
+    for (const el of [...candidates]) {
+      for (const child of el.children || []) addCandidate(child);
+    }
+    for (const top of this.doc.body.children || []) {
+      addCandidate(top);
+      for (const child of top.children || []) {
+        addCandidate(child);
+        for (const grand of child.children || []) addCandidate(grand);
+      }
     }
     for (const el of candidates) {
       if (isScrollablePane(el, true)) { this.scrollHostEl = el; return el; }
-      if (el?.querySelectorAll) {
-        for (const child of el.querySelectorAll('main, [role="main"], article, section, div')) {
-          if (isScrollablePane(child, false)) { this.scrollHostEl = child; return child; }
-        }
-      }
     }
-    let best = null, bestArea = 0;
-    for (const el of this.doc.body.querySelectorAll('main, [role="main"], article, section, div')) {
-      if (!isScrollablePane(el, false)) continue;
-      const r = el.getBoundingClientRect?.() || {width: el.clientWidth || 300, height: el.clientHeight || 300};
-      const area = Math.max(1, r.width) * Math.max(1, r.height);
-      if (area > bestArea) { bestArea = area; best = el; }
-    }
-    if (best) { this.scrollHostEl = best; return best; }
     const htmlCanScroll = !/hidden|clip/i.test(overflowY(this.doc.documentElement, htmlStyle)) && (this.doc.documentElement.scrollHeight > this.doc.documentElement.clientHeight + 1 || (win?.scrollY || 0) > 0);
     if (!htmlCanScroll && (/auto|scroll|overlay/i.test(overflowY(this.doc.body, bodyStyle)) && (this.doc.body.scrollHeight > this.doc.body.clientHeight + 1 || this.doc.body.scrollTop > 0) || (this.doc.body.scrollTop > 0 && !(win?.scrollY > 0)))) {
       this.scrollHostEl = this.doc.body;
@@ -1078,6 +1159,7 @@ export class Reader {
     if (this.tool === 'eraser') {
       const target = event.target.closest?.('[data-htmlmemo-id]'); if (target) { event.preventDefault(); this.remove(target.dataset.htmlmemoId); } return;
     }
+    if (this.isInteractiveControl(event.target)) return;
     if (DRAW_TOOLS.includes(this.tool) || ['note','text'].includes(this.tool)) {
       // Touch scroll remains available in selection mode; a second pointer
       // cancels a stroke instead of accidentally recording a two-finger gesture.
