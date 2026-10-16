@@ -928,3 +928,5 @@ ID: hist-20261014-024. tests/chrome.mjs가 macOS Codex/CodeMemo 제한 환경을
    - 문서 저장·내보내기·재열기 시 `clearReaderSidebarArtifacts`(`public/src/document.js`)에서 `data-htmlmemo-scroll-host` 속성을 제거해 원본 HTML 구조를 깨끗하게 보존하며, 새 문서 캡처·생성 시 외부 파일 기록이 끝난 뒤 준비 완료 상태로 전환되도록 `openRecord`·`createDocument`(`public/src/app.js`)를 보강했습니다(`public/sw.js` 캐시 버전 `htmlmemo-v17` 갱신).
 
 **검증:** `npm run check`(62개 파일), `npm test`(**125개 단위 검사 모두 통과**), `npm run test:browser`(별도 임시 프로필의 **실제 Chrome 통합 검사 13개 모두 통과** — 분할 스크롤 본문 `main`에서 펜 주석 작성 후 `main.scrollTop = 320` 스크롤 시 본문 문단과 주석 스트로크가 모두 정확히 `-320px` 이동해 오차 `0px`로 고정됨을 확인), `npm run build`, `git diff --check`를 모두 통과했습니다.
+
+**게시:** 2026-10-16 14:48:22 +09:00 코드 커밋 `77d579f`의 [GitHub Actions·Pages 게시](https://github.com/seionwon/HTMLMemo/actions/runs/38857573336) 성공 확인. 공개 주소 `https://seionwon.github.io/HTMLMemo/`의 `src/reader.js`, `src/document.js`, `src/app.js`가 로컬 수정본과 SHA-256 바이트 단위까지 일치함을 확인했습니다.
