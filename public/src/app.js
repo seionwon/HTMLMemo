@@ -1,5 +1,5 @@
 import { $, $$, icon, escapeHTML as esc, uid, filename, normalizeURL, displayHost, formatDate, formatBytes, download } from './utils.js';
-import { parseHTML } from './document.js';
+import { parseHTML, SCRIPT_CSP } from './document.js';
 import { SaveQueue } from './model.js';
 import { Reader } from './reader.js';
 import { listDocuments, getDocument, deleteDocument, getSetting, setSetting, saveDocumentHTML, listRevisionSummaries, getRevision, putDocumentRevision, writeExternalHTML } from './storage.js';
@@ -158,7 +158,14 @@ async function openRecord(record, prepared = null, {deferReady = false} = {}) {
   const opened=tabs.find(tab=>tab.record?.id===record.id);if(opened){if(opened.closePromise){await opened.closePromise;return openRecord(record,prepared,{deferReady});}activate(opened.id);return opened;}
   // The library already holds a prepared, sanitized snapshot. Reopening it
   // should parse it once in the iframe, not clone the entire book in DOMParser first.
-  const parsed=prepared || (record.file ? {file:record.file,metadata:structuredClone(record.metadata),nativeScroll:true,savedMetadata:true} : record.metadata ? {html:record.html,metadata:structuredClone(record.metadata),nativeScroll:record.nativeScroll || record.metadata.execution?.allowScripts || record.byteSize>=4*1024*1024} : parseHTML(record.html,{title:record.title,source:record.source}));
+  const parsed=prepared || (record.file ? {file:record.file,metadata:structuredClone(record.metadata),nativeScroll:true,savedMetadata:true} : record.metadata ? (() => {
+    const metadata = structuredClone(record.metadata);
+    metadata.execution = {...(metadata.execution || {}), allowScripts: true};
+    const html = typeof record.html === 'string'
+      ? record.html.replace(/<meta\b[^>]*http-equiv\s*=\s*["']?content-security-policy\b[^>]*>/gi, `<meta http-equiv="Content-Security-Policy" content="${SCRIPT_CSP}">`)
+      : record.html;
+    return {html, metadata, nativeScroll: record.nativeScroll || metadata.execution?.allowScripts || record.byteSize >= 4 * 1024 * 1024, savedMetadata: true};
+  })() : parseHTML(record.html,{title:record.title,source:record.source,allowScripts:true}));
   const tab={id:uid(),type:'document',title:record.title,opening:true,record:{...record,nativeScroll:!!parsed.nativeScroll},host:null};tab.host=createHost(tab.id,'document');
   tab.queue=new SaveQueue(async()=>{
     await tab.reader.ready;

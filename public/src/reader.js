@@ -29,11 +29,16 @@ export class Reader {
         try {
           this.doc = this.frame.contentDocument;
           if (!this.doc?.body) throw new Error('HTML 문서를 표시하지 못했습니다.');
-          if (parsed.file) {
+          const needsPrepare = Boolean(parsed.file || !this.doc.body.hasAttribute('data-htmlmemo-anchor'));
+          this.bind({deferDynamicObserver: needsPrepare});
+          this.frame.style.pointerEvents = '';
+          if (needsPrepare) {
             // Let the browser paint the original File before preparation. Reuse
             // its DOM instead of decoding, parsing and copying the book again.
-            await new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done)));
-            if (this.disposed) { resolve(this); return; }
+            if (parsed.file) {
+              await new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done)));
+              if (this.disposed) { resolve(this); return; }
+            }
             const blockNavigation = event => {
               if (event.type !== 'click' && event.key !== 'Enter') return;
               const target = event.target?.nodeType === 1 ? event.target : event.target?.parentElement;
@@ -44,7 +49,6 @@ export class Reader {
               } else if (target?.closest?.('form')) event.preventDefault();
             };
             this.doc.addEventListener('click',blockNavigation,true);this.doc.addEventListener('keydown',blockNavigation,true);
-            this.frame.style.pointerEvents = '';
             const prepared = await prepareLoadedHTML(this.doc, this.metadata, () => this.disposed, {serialize:false});
             this.doc.removeEventListener('click',blockNavigation,true);this.doc.removeEventListener('keydown',blockNavigation,true);
             const openingScroll = {top:this.doc.defaultView.scrollY,left:this.doc.defaultView.scrollX};
@@ -67,7 +71,7 @@ export class Reader {
     } else this.frame.srcdoc = parsed.html;
   }
   baseEditorStyle() {
-    return `${this.nativeScroll ? '' : 'html{overflow:hidden!important;height:auto!important;min-height:0!important;scroll-behavior:auto!important}body{touch-action:pan-x pan-y;height:auto!important;min-height:0!important}'}html[data-htmlmemo-drawing] *{cursor:crosshair!important;user-select:none!important;touch-action:none!important}html[data-htmlmemo-drawing] aside,html[data-htmlmemo-drawing] aside *,html[data-htmlmemo-drawing] nav,html[data-htmlmemo-drawing] nav *,html[data-htmlmemo-drawing] header,html[data-htmlmemo-drawing] header *,html[data-htmlmemo-drawing] .toc,html[data-htmlmemo-drawing] .toc *,html[data-htmlmemo-drawing] #toc,html[data-htmlmemo-drawing] #toc *,html[data-htmlmemo-drawing] [data-htmlmemo-toc-sidebar],html[data-htmlmemo-drawing] [data-htmlmemo-toc-sidebar] *,html[data-htmlmemo-drawing] [data-htmlmemo-doc-topbar],html[data-htmlmemo-drawing] [data-htmlmemo-doc-topbar] *{cursor:auto!important;touch-action:auto!important}html[data-htmlmemo-drawing] aside a,html[data-htmlmemo-drawing] aside button,html[data-htmlmemo-drawing] aside summary,html[data-htmlmemo-drawing] nav a,html[data-htmlmemo-drawing] nav button,html[data-htmlmemo-drawing] nav summary,html[data-htmlmemo-drawing] .toc a,html[data-htmlmemo-drawing] .toc button,html[data-htmlmemo-drawing] .toc summary,html[data-htmlmemo-drawing] #toc a,html[data-htmlmemo-drawing] #toc button,html[data-htmlmemo-drawing] #toc summary,html[data-htmlmemo-drawing] [data-htmlmemo-toc-sidebar] a,html[data-htmlmemo-drawing] [data-htmlmemo-toc-sidebar] button,html[data-htmlmemo-drawing] [data-htmlmemo-toc-sidebar] summary,html[data-htmlmemo-drawing] [data-htmlmemo-doc-topbar] button,html[data-htmlmemo-drawing] [data-htmlmemo-doc-topbar] select{cursor:pointer!important}[data-htmlmemo-scroll-host]{position:relative!important}html[data-htmlmemo-toc-resizing],html[data-htmlmemo-toc-resizing] body{cursor:col-resize!important;user-select:none!important;-webkit-user-select:none!important}[data-htmlmemo-sidebar-grid]{grid-template-columns:var(--htmlmemo-toc-grid-columns)!important;transition:none!important}[data-htmlmemo-toc-sidebar],[data-htmlmemo-toc-item],[data-htmlmemo-sidebar-flex]{width:var(--htmlmemo-toc-width)!important;min-width:var(--htmlmemo-toc-width)!important;max-width:var(--htmlmemo-toc-width)!important;flex:0 0 var(--htmlmemo-toc-width)!important;box-sizing:border-box!important;transition:none!important}[data-htmlmemo-toc-sidebar]{overflow-x:hidden!important}[data-htmlmemo-toc-item-strip]{width:8px!important;min-width:8px!important;max-width:8px!important;flex:0 0 8px!important;padding-left:0!important;padding-right:0!important;overflow:hidden!important;box-sizing:border-box!important}[data-htmlmemo-toc-strip]{width:8px!important;min-width:8px!important;max-width:8px!important;flex:0 0 8px!important;padding-left:0!important;padding-right:0!important;overflow:hidden!important;box-sizing:border-box!important;cursor:col-resize!important;user-select:none!important;pointer-events:auto!important}[data-htmlmemo-toc-strip]>:not([data-htmlmemo-toc-resizer]):not([data-htmlmemo-toc-resizer-bound]){opacity:0!important;visibility:hidden!important;pointer-events:none!important}[data-htmlmemo-toc-strip] [data-htmlmemo-toc-resizer],[data-htmlmemo-toc-strip] [data-htmlmemo-toc-resizer-bound]{left:0!important;width:8px!important;min-width:8px!important;opacity:1!important;visibility:visible!important;pointer-events:auto!important}[data-htmlmemo-toc-resizer],[data-htmlmemo-toc-resizer-bound]{cursor:col-resize!important;touch-action:none!important;user-select:none!important;-webkit-user-select:none!important;transition:none!important}[data-htmlmemo-topbar-grid]{grid-template-rows:var(--htmlmemo-topbar-grid-rows)!important}[data-htmlmemo-topbar-pad]{padding-top:24px!important}[data-htmlmemo-topbar-offset]{top:24px!important}[data-htmlmemo-doc-topbar],[data-htmlmemo-doc-topbar-item]{height:24px!important;min-height:24px!important;max-height:24px!important;padding-top:0!important;padding-bottom:0!important;margin-top:0!important;margin-bottom:0!important;box-sizing:border-box!important;align-items:center!important}[data-htmlmemo-doc-topbar] *{padding-top:0!important;padding-bottom:0!important;margin-top:0!important;margin-bottom:0!important;min-height:0!important;box-sizing:border-box!important}[data-htmlmemo-doc-topbar]>div,[data-htmlmemo-doc-topbar]>nav{height:100%!important;max-height:24px!important;align-items:center!important}[data-htmlmemo-doc-topbar] h1,[data-htmlmemo-doc-topbar] h2,[data-htmlmemo-doc-topbar] h3,[data-htmlmemo-doc-topbar] strong,[data-htmlmemo-doc-topbar] [class*="title"]{font-size:13px!important;line-height:22px!important;white-space:nowrap!important}[data-htmlmemo-doc-topbar] button,[data-htmlmemo-doc-topbar] [role="button"],[data-htmlmemo-doc-topbar] input{height:20px!important;min-height:20px!important;max-height:20px!important;padding-top:0!important;padding-bottom:0!important;font-size:12px!important;line-height:18px!important;border-radius:4px!important;display:inline-flex!important;align-items:center!important;justify-content:center!important}[data-htmlmemo-doc-topbar] select{height:20px!important;min-height:20px!important;max-height:20px!important;padding-top:0!important;padding-bottom:0!important;font-size:12px!important;line-height:18px!important;border-radius:4px!important}[data-htmlmemo-doc-topbar] svg{width:14px!important;height:14px!important}`;
+    return `${this.nativeScroll ? '' : 'html{overflow:hidden!important;height:auto!important;min-height:0!important;scroll-behavior:auto!important}body{touch-action:pan-x pan-y;height:auto!important;min-height:0!important}'}html[data-htmlmemo-drawing] *{cursor:crosshair!important;user-select:none!important;touch-action:none!important}html[data-htmlmemo-drawing] aside,html[data-htmlmemo-drawing] aside *,html[data-htmlmemo-drawing] nav,html[data-htmlmemo-drawing] nav *,html[data-htmlmemo-drawing] header,html[data-htmlmemo-drawing] header *,html[data-htmlmemo-drawing] .toc,html[data-htmlmemo-drawing] .toc *,html[data-htmlmemo-drawing] #toc,html[data-htmlmemo-drawing] #toc *,html[data-htmlmemo-drawing] [data-htmlmemo-toc-sidebar],html[data-htmlmemo-drawing] [data-htmlmemo-toc-sidebar] *,html[data-htmlmemo-drawing] [data-htmlmemo-doc-topbar],html[data-htmlmemo-drawing] [data-htmlmemo-doc-topbar] *{cursor:auto!important;touch-action:auto!important}html[data-htmlmemo-drawing] aside a,html[data-htmlmemo-drawing] aside button,html[data-htmlmemo-drawing] aside summary,html[data-htmlmemo-drawing] nav a,html[data-htmlmemo-drawing] nav button,html[data-htmlmemo-drawing] nav summary,html[data-htmlmemo-drawing] .toc a,html[data-htmlmemo-drawing] .toc button,html[data-htmlmemo-drawing] .toc summary,html[data-htmlmemo-drawing] #toc a,html[data-htmlmemo-drawing] #toc button,html[data-htmlmemo-drawing] #toc summary,html[data-htmlmemo-drawing] [data-htmlmemo-toc-sidebar] a,html[data-htmlmemo-drawing] [data-htmlmemo-toc-sidebar] button,html[data-htmlmemo-drawing] [data-htmlmemo-toc-sidebar] summary,html[data-htmlmemo-drawing] [data-htmlmemo-doc-topbar] button,html[data-htmlmemo-drawing] [data-htmlmemo-doc-topbar] select{cursor:pointer!important}[data-htmlmemo-scroll-host]{position:relative!important}html[data-htmlmemo-toc-resizing],html[data-htmlmemo-toc-resizing] body{cursor:col-resize!important;user-select:none!important;-webkit-user-select:none!important}[data-htmlmemo-sidebar-grid]{grid-template-columns:var(--htmlmemo-toc-grid-columns)!important;transition:none!important}[data-htmlmemo-toc-sidebar],[data-htmlmemo-toc-item],[data-htmlmemo-sidebar-flex]{width:var(--htmlmemo-toc-width)!important;min-width:var(--htmlmemo-toc-width)!important;max-width:var(--htmlmemo-toc-width)!important;box-sizing:border-box!important;transition:none!important}[data-htmlmemo-sidebar-flex]{flex:0 0 var(--htmlmemo-toc-width)!important}[data-htmlmemo-toc-sidebar]{overflow-x:hidden!important}[data-htmlmemo-toc-item-strip]{width:8px!important;min-width:8px!important;max-width:8px!important;flex:0 0 8px!important;padding-left:0!important;padding-right:0!important;overflow:hidden!important;box-sizing:border-box!important}[data-htmlmemo-toc-strip]{width:8px!important;min-width:8px!important;max-width:8px!important;flex:0 0 8px!important;padding-left:0!important;padding-right:0!important;overflow:hidden!important;box-sizing:border-box!important;cursor:col-resize!important;user-select:none!important;pointer-events:auto!important}[data-htmlmemo-toc-strip]>:not([data-htmlmemo-toc-resizer]):not([data-htmlmemo-toc-resizer-bound]){opacity:0!important;visibility:hidden!important;pointer-events:none!important}[data-htmlmemo-toc-strip] [data-htmlmemo-toc-resizer],[data-htmlmemo-toc-strip] [data-htmlmemo-toc-resizer-bound]{left:0!important;width:8px!important;min-width:8px!important;opacity:1!important;visibility:visible!important;pointer-events:auto!important}[data-htmlmemo-toc-resizer],[data-htmlmemo-toc-resizer-bound]{cursor:col-resize!important;touch-action:none!important;user-select:none!important;-webkit-user-select:none!important;transition:none!important}[data-htmlmemo-topbar-grid]{grid-template-rows:var(--htmlmemo-topbar-grid-rows)!important}[data-htmlmemo-topbar-pad]{padding-top:24px!important}[data-htmlmemo-topbar-offset]{top:24px!important}[data-htmlmemo-doc-topbar],[data-htmlmemo-doc-topbar-item]{height:24px!important;min-height:24px!important;max-height:24px!important;padding-top:0!important;padding-bottom:0!important;margin-top:0!important;margin-bottom:0!important;box-sizing:border-box!important;align-items:center!important}[data-htmlmemo-doc-topbar] *{padding-top:0!important;padding-bottom:0!important;margin-top:0!important;margin-bottom:0!important;min-height:0!important;box-sizing:border-box!important}[data-htmlmemo-doc-topbar]>div,[data-htmlmemo-doc-topbar]>nav{height:100%!important;max-height:24px!important;align-items:center!important}[data-htmlmemo-doc-topbar] h1,[data-htmlmemo-doc-topbar] h2,[data-htmlmemo-doc-topbar] h3,[data-htmlmemo-doc-topbar] strong,[data-htmlmemo-doc-topbar] [class*="title"]{font-size:13px!important;line-height:22px!important;white-space:nowrap!important}[data-htmlmemo-doc-topbar] button,[data-htmlmemo-doc-topbar] [role="button"],[data-htmlmemo-doc-topbar] input{height:20px!important;min-height:20px!important;max-height:20px!important;padding-top:0!important;padding-bottom:0!important;font-size:12px!important;line-height:18px!important;border-radius:4px!important;display:inline-flex!important;align-items:center!important;justify-content:center!important}[data-htmlmemo-doc-topbar] select{height:20px!important;min-height:20px!important;max-height:20px!important;padding-top:0!important;padding-bottom:0!important;font-size:12px!important;line-height:18px!important;border-radius:4px!important}[data-htmlmemo-doc-topbar] svg{width:14px!important;height:14px!important}`;
   }
   setupEditorTocVars(customVars = this.tocCustomVars, defaultWidth = this.tocDefaultWidth || TOC_DEFAULT) {
     const editorStyle = this.doc?.getElementById('htmlmemo-editor-style');
@@ -80,10 +84,207 @@ export class Reader {
     const topVars = topNames.map(name => `${name}:24px!important`).join(';');
     editorStyle.textContent = this.baseEditorStyle() + `html[data-htmlmemo-toc-active],html[data-htmlmemo-toc-active] body,[data-htmlmemo-sidebar-grid],[data-htmlmemo-toc-sidebar],[data-htmlmemo-toc-item],[data-htmlmemo-toc-resizer-bound]{${mapVars}}html[data-htmlmemo-toc-resizing] [data-htmlmemo-toc-main]>:not([role="separator"]):not([data-htmlmemo-toc-resizer-bound]){${freezeVars}}html[data-htmlmemo-topbar-active],html[data-htmlmemo-topbar-active] body,[data-htmlmemo-doc-topbar],[data-htmlmemo-doc-topbar-item]{${topVars}}`;
   }
-  bind() {
-    const editorStyle = this.doc.createElement('style'); editorStyle.id = 'htmlmemo-editor-style';
-    editorStyle.textContent = this.baseEditorStyle(); this.doc.head.append(editorStyle);
+  isTocSubContainerVisible(container, trigger = null, item = null) {
+    if (!container) return false;
+    if (container.hidden || container.getAttribute?.('aria-hidden') === 'true') return false;
+    const inlineDisplay = container.style?.display;
+    if (inlineDisplay === 'none' || container.style?.visibility === 'hidden' || container.style?.maxHeight === '0px' || container.style?.maxHeight === '0') return false;
+    const cs = this.doc?.defaultView?.getComputedStyle?.(container);
+    if (cs && (cs.display === 'none' || cs.visibility === 'hidden' || cs.maxHeight === '0px')) return false;
+    const nodes = [container, trigger, item, container.previousElementSibling].filter(Boolean);
+    for (const n of nodes) {
+      if (n.classList?.contains('collapsed') || n.classList?.contains('closed') || n.classList?.contains('hidden') || n.classList?.contains('is-collapsed')) return false;
+      if (n.getAttribute?.('aria-expanded') === 'false' || n.dataset?.open === 'false' || n.dataset?.expanded === 'false') return false;
+    }
+    for (const n of nodes) {
+      if (n.classList?.contains('open') || n.classList?.contains('expanded') || n.classList?.contains('is-open')) return true;
+      if (n.getAttribute?.('aria-expanded') === 'true' || n.dataset?.open === 'true' || n.dataset?.expanded === 'true') return true;
+    }
+    const headerNode = container.previousElementSibling || trigger;
+    if (headerNode && !headerNode.contains?.(container) && !inlineDisplay) {
+      const text = (headerNode.textContent || '').trim();
+      if (/[▶▸]/.test(text) && !/[▼▾]/.test(text)) return false;
+    }
+    return true;
+  }
+  findTocSubContainer(target) {
+    const el = target?.nodeType === 1 ? target : target?.parentElement;
+    if (!el || !this.isInsideTocOrTopbar(el) || this.topbarNode?.contains?.(el)) return null;
+    if (el.closest?.('summary')) return null;
+    const subSelector = 'ul, ol, [role="group"], .toc-children, .toc-sub, .toc-items, .toc-list, .sub-toc, .sub-list, .submenu, .tree-children, .children, .nav-children, .chapter-items, .section-items, [data-toc-children], [data-children]';
+    const itemSelector = 'li, [role="treeitem"], .toc-item, .toc-group, .toc-section, .toc-node, .nav-item, .nav-group, .tree-node, .tree-item, [data-toc-group], [data-toc-item]';
+    const triggerSelector = 'button, a, [role="button"], [aria-expanded], [aria-controls], [data-target], [data-toggle], .toc-header, .toc-title, .toc-toggle, .toc-cat, .group-header, .section-header, .folder';
+    const item = el.closest?.(itemSelector);
+    const trigger = el.closest?.(triggerSelector);
+    for (const node of [trigger, el, item]) {
+      if (!node?.getAttribute) continue;
+      const ref = node.getAttribute('aria-controls') || node.getAttribute('data-target') || node.getAttribute('data-controls') || node.dataset?.target || node.dataset?.controls;
+      if (ref) {
+        const cleanId = ref.replace(/^#/, '');
+        const controlled = this.doc.getElementById(cleanId) || (ref.startsWith('#') || ref.startsWith('.') ? this.doc.querySelector(ref) : null);
+        if (controlled && controlled !== el && !controlled.contains?.(el) && this.isInsideTocOrTopbar(controlled)) return controlled;
+      }
+    }
+    const link = el.closest?.('a[href]');
+    if (link) {
+      const href = (link.getAttribute('href') || '').trim();
+      if (href.startsWith('#') && href.length > 1) {
+        let id; try { id = decodeURIComponent(href.slice(1)); } catch { id = href.slice(1); }
+        const hashTarget = id ? this.doc.getElementById(id) : null;
+        if (hashTarget && hashTarget !== el && !hashTarget.contains?.(el) && this.isInsideTocOrTopbar(hashTarget) && hashTarget.matches?.('ul, ol, div, section, [role="group"]')) {
+          return hashTarget;
+        }
+      }
+    }
+    if (item) {
+      for (const child of item.children || []) {
+        if (child === el || child.contains?.(el)) continue;
+        if (child.matches?.(subSelector) || ((child.localName === 'div' || child.localName === 'section') && child.querySelector?.('a[href], button, [data-page], [data-target], li'))) {
+          return child;
+        }
+      }
+    }
+    const row = trigger || el.closest?.('div, p, h1, h2, h3, h4, h5, h6, li, a, button');
+    for (const start of [row, trigger, el]) {
+      if (!start) continue;
+      let cur = start;
+      for (let depth = 0; depth < 2 && cur && this.isInsideTocOrTopbar(cur); depth++) {
+        if (cur === this.tocResize?.sidebar || cur.hasAttribute?.('data-htmlmemo-toc-sidebar')) break;
+        const next = cur.nextElementSibling;
+        if (next && next !== el && !next.contains?.(el)) {
+          const tag = next.localName || '';
+          const curText = (cur.textContent || '').trim();
+          const nextText = (next.textContent || '').trim();
+          if (
+            next.matches?.(subSelector) ||
+            ((tag === 'div' || tag === 'section') && (
+              !this.isTocSubContainerVisible(next, cur, item) ||
+              next.classList?.contains('open') ||
+              next.classList?.contains('expanded') ||
+              next.classList?.contains('collapsed') ||
+              next.classList?.contains('closed') ||
+              (/[▶▸▼▾]/.test(curText) && !/^[▶▸▼▾]/.test(nextText) && next.querySelector?.('a, button, div, span, li'))
+            ))
+          ) {
+            return next;
+          }
+        }
+        if (cur === item || /^(?:li|ul|ol|nav|aside)$/i.test(cur.localName || '')) break;
+        cur = cur.parentElement;
+      }
+    }
+    return null;
+  }
+  captureTocClickState(target) {
+    const el = target?.nodeType === 1 ? target : target?.parentElement;
+    if (!el) return null;
+    const summary = el.closest?.('summary');
+    const details = summary ? (summary.parentElement?.localName === 'details' ? summary.parentElement : summary.closest?.('details')) : null;
+    const container = details ? null : this.findTocSubContainer(el);
+    return {
+      details,
+      detailsOpen: details ? Boolean(details.open || details.hasAttribute?.('open')) : null,
+      container,
+      containerVisible: container ? this.isTocSubContainerVisible(container, el) : null
+    };
+  }
+  toggleTocSubContainer(target, container, forceOpen) {
+    if (!container) return false;
+    const el = target?.nodeType === 1 ? target : target?.parentElement;
+    const item = el?.closest?.('li, [role="treeitem"], .toc-item, .toc-group, .toc-section, .toc-node, .nav-item, .nav-group, .tree-node, .tree-item, [data-toc-group], [data-toc-item]') || container.parentElement;
+    const trigger = el?.closest?.('button, a, [role="button"], [aria-expanded], [aria-controls], [data-target], [data-toggle], .toc-header, .toc-title, .toc-toggle, .toc-cat, .group-header, .section-header, .folder, div, p, h1, h2, h3, h4, h5, h6') || el;
+    const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : !this.isTocSubContainerVisible(container, trigger, item);
+    if (shouldOpen) {
+      container.hidden = false;
+      container.removeAttribute?.('hidden');
+      if (container.hasAttribute?.('aria-hidden')) container.setAttribute('aria-hidden', 'false');
+      container.classList?.remove('collapsed', 'closed', 'hidden', 'is-collapsed');
+      container.classList?.add('open', 'expanded', 'is-open');
+      container.style?.setProperty?.('display', 'block', 'important');
+      const cs = this.doc?.defaultView?.getComputedStyle?.(container);
+      if (cs?.visibility === 'hidden' || container.style?.visibility === 'hidden') container.style?.setProperty?.('visibility', 'visible', 'important');
+      if (cs?.maxHeight === '0px' || container.style?.maxHeight === '0px' || container.style?.maxHeight === '0') container.style?.setProperty?.('max-height', 'none', 'important');
+      if (cs?.opacity === '0' || container.style?.opacity === '0') container.style?.setProperty?.('opacity', '1', 'important');
+    } else {
+      container.hidden = true;
+      if (container.hasAttribute?.('aria-hidden')) container.setAttribute('aria-hidden', 'true');
+      container.classList?.remove('open', 'expanded', 'is-open', 'active');
+      container.classList?.add('collapsed', 'closed');
+      container.style?.setProperty?.('display', 'none', 'important');
+    }
+    const headerNode = (container.previousElementSibling && !container.previousElementSibling.contains?.(container)) ? container.previousElementSibling : trigger;
+    for (const node of [trigger, headerNode, item]) {
+      if (!node || node === container || node === this.tocResize?.sidebar) continue;
+      if (node.hasAttribute?.('aria-expanded') || node === trigger || node === headerNode) {
+        node.setAttribute?.('aria-expanded', shouldOpen ? 'true' : 'false');
+      }
+      if (node.dataset && ('open' in node.dataset || 'expanded' in node.dataset || node === trigger || node === headerNode)) {
+        node.dataset.open = shouldOpen ? 'true' : 'false';
+      }
+      node.classList?.toggle('open', shouldOpen);
+      node.classList?.toggle('expanded', shouldOpen);
+      node.classList?.toggle('is-open', shouldOpen);
+      node.classList?.toggle('collapsed', !shouldOpen);
+      node.classList?.toggle('closed', !shouldOpen);
+    }
+    if (headerNode && !headerNode.contains?.(container)) {
+      const stack = [...(headerNode.childNodes || [])];
+      while (stack.length) {
+        const node = stack.shift();
+        if (node.nodeType === 3) {
+          const val = node.nodeValue || '';
+          if (shouldOpen && /[▶▸]/.test(val)) {
+            node.nodeValue = val.replace(/▶/g, '▼').replace(/▸/g, '▾');
+            break;
+          } else if (!shouldOpen && /[▼▾]/.test(val)) {
+            node.nodeValue = val.replace(/▼/g, '▶').replace(/▾/g, '▸');
+            break;
+          }
+        } else if (node.childNodes?.length && node !== container) {
+          stack.unshift(...node.childNodes);
+        }
+      }
+    }
+    return true;
+  }
+  startDynamicObserver() {
+    if (!this.metadata?.execution?.allowScripts || this.dynamicObserver) return;
+    this.dynamicAnchor = 0;
+    this.dynamicRoots = new Set([this.doc.body]);
+    const MO = this.doc.defaultView?.MutationObserver || (typeof MutationObserver !== 'undefined' ? MutationObserver : null);
+    if (MO) {
+      this.dynamicObserver = new MO(records => {
+        if (this.tocDrag) return;
+        const editor = node => (node.nodeType===3?node.parentElement:node)?.closest?.('#'+LAYER_ID+',#htmlmemo-annotation-style,#htmlmemo-editor-style,[data-htmlmemo-mark],[data-htmlmemo-search]');
+        let changed=false;
+        for(const record of records){
+          if(editor(record.target))continue;
+          const nodes=record.type==='characterData'?[record.target]:[...record.addedNodes,...record.removedNodes];
+          if(nodes.some(node=>!editor(node))){
+            changed=true;
+            this.dynamicRoots.add(record.target.nodeType===1?record.target:record.target.parentElement);
+          }
+        }
+        if(changed)this.scheduleDynamicRefresh();
+      });
+      this.observeDynamicDocument();
+      this.scheduleDynamicRefresh();
+    }
+  }
+  bind({deferDynamicObserver = false} = {}) {
+    let editorStyle = this.doc.getElementById('htmlmemo-editor-style');
+    if (!editorStyle) {
+      editorStyle = this.doc.createElement('style');
+      editorStyle.id = 'htmlmemo-editor-style';
+      editorStyle.textContent = this.baseEditorStyle();
+      (this.doc.head || this.doc.documentElement).append(editorStyle);
+    }
     this.setupDocumentTocResize();
+    if (this.bound) {
+      if (!deferDynamicObserver) this.startDynamicObserver();
+      return;
+    }
+    this.bound = true;
     this.doc.addEventListener('wheel', event => this.forwardWheel(event), {capture:true,passive:false});
     this.doc.addEventListener('pointerdown', event => { if(this.startTocResize(event))return; if(this.startMiddleScroll(event))return;this.stopMiddleScroll();this.callbacks.onSelectionDismiss?.(); this.pointerDown(event); }, true);
     this.doc.addEventListener('mousedown', event => { if(this.startTocResize(event))return; }, true);
@@ -109,6 +310,7 @@ export class Reader {
     };
     this.doc.addEventListener('click', event => {
       const target = event.target?.nodeType === 1 ? event.target : event.target?.parentElement;
+      this.lastTocClickState = this.captureTocClickState(target);
       if (this.tocResizeJustEnded || this.isTocResizerNode(target)) { this.tocResizeJustEnded = false; event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation?.(); return; }
       const annotation = target?.closest?.('[data-htmlmemo-id]');
       if (annotation && this.tool === 'select') { event.preventDefault(); event.stopPropagation(); this.selectedId = annotation.dataset.htmlmemoId; this.callbacks.onSelect?.(this.selectedId); return; }
@@ -134,21 +336,59 @@ export class Reader {
       else if (/^https?:/i.test(href)) this.callbacks.onLink?.(href);
     }, true);
     this.doc.addEventListener('click', event => {
-      if (event.defaultPrevented) return;
+      const stateBefore = this.lastTocClickState;
+      this.lastTocClickState = null;
+      const pagePrevented = event.defaultPrevented;
       const target = event.target?.nodeType === 1 ? event.target : event.target?.parentElement;
-      const link = target?.closest?.('a[href]');
-      if (!link) return;
-      const href = (link.getAttribute('href') || '').trim();
-      if (!href.startsWith('#')) return;
-      const summary = link.closest?.('summary');
+      if (!target) return;
+      const summary = target.closest?.('summary');
       const details = summary ? (summary.parentElement?.localName === 'details' ? summary.parentElement : summary.closest?.('details')) : null;
-      if (href === '#') {
-        if (!summary) event.preventDefault();
+      const link = target.closest?.('a[href]');
+      const href = link ? (link.getAttribute('href') || '').trim() : '';
+      const container = details ? null : ((stateBefore?.container?.isConnected ? stateBefore.container : null) || this.findTocSubContainer(target));
+      if (link && href.startsWith('#') && !pagePrevented) {
+        if (href === '#') {
+          if (!summary) event.preventDefault();
+        } else {
+          let id; try { id = decodeURIComponent(href.slice(1)); } catch { id = href.slice(1); }
+          const hashTarget = id ? (this.doc.getElementById(id) || [...this.doc.querySelectorAll('a[name]')].find(a => a.name === id)) : null;
+          if (hashTarget && hashTarget !== container) {
+            event.preventDefault();
+            if (this.tool === 'select' || this.isInsideTocOrTopbar(link)) jumpToHash(href);
+          } else if (hashTarget === container) {
+            event.preventDefault();
+          }
+        }
+      }
+      if (details && summary && !target.closest?.('input,select,textarea')) {
+        const isOpenNow = Boolean(details.open || details.hasAttribute?.('open'));
+        const wasOpen = stateBefore?.details === details ? stateBefore.detailsOpen : isOpenNow;
+        if (!pagePrevented && isOpenNow === wasOpen) {
+          event.preventDefault();
+          const nextOpen = !wasOpen;
+          details.open = nextOpen;
+          details.toggleAttribute?.('open', nextOpen);
+        } else {
+          event.preventDefault();
+          details.open = isOpenNow;
+          details.toggleAttribute?.('open', isOpenNow);
+        }
+        if (details.open) {
+          for (const child of details.children || []) {
+            if (child !== summary && !this.isTocSubContainerVisible(child, summary, details)) {
+              this.toggleTocSubContainer(summary, child, true);
+            }
+          }
+        }
         return;
       }
-      event.preventDefault();
-      if (details) details.open = !details.open;
-      if (this.tool === 'select' || this.isInsideTocOrTopbar(link)) jumpToHash(href);
+      if (container) {
+        const wasVisible = stateBefore && stateBefore.container === container ? stateBefore.containerVisible : this.isTocSubContainerVisible(container, target);
+        const nowVisible = this.isTocSubContainerVisible(container, target);
+        if (nowVisible === wasVisible) {
+          this.toggleTocSubContainer(target, container, !wasVisible);
+        }
+      }
     }, false);
     (this.nativeScroll ? this.doc : this.viewport).addEventListener('scroll', event => {
       const target = event?.target;
@@ -189,28 +429,7 @@ export class Reader {
       if (this.viewport instanceof Element) this.hostObserver.observe(this.viewport);
     }
     this.doc.fonts?.ready?.then?.(() => { if (!this.disposed && !this.tocDrag) { this.measure(); this.renderDrawingLayer(); } });
-    if (this.metadata.execution?.allowScripts) {
-      this.dynamicAnchor = 0;this.dynamicRoots=new Set([this.doc.body]);
-      const MO = this.doc.defaultView?.MutationObserver || (typeof MutationObserver !== 'undefined' ? MutationObserver : null);
-      if (MO) {
-        this.dynamicObserver = new MO(records => {
-          if (this.tocDrag) return;
-          const editor = node => (node.nodeType===3?node.parentElement:node)?.closest?.('#'+LAYER_ID+',#htmlmemo-annotation-style,#htmlmemo-editor-style,[data-htmlmemo-mark],[data-htmlmemo-search]');
-          let changed=false;
-          for(const record of records){
-            if(editor(record.target))continue;
-            const nodes=record.type==='characterData'?[record.target]:[...record.addedNodes,...record.removedNodes];
-            if(nodes.some(node=>!editor(node))){
-              changed=true;
-              this.dynamicRoots.add(record.target.nodeType===1?record.target:record.target.parentElement);
-            }
-          }
-          if(changed)this.scheduleDynamicRefresh();
-        });
-        this.observeDynamicDocument();
-        this.scheduleDynamicRefresh();
-      }
-    }
+    if (!deferDynamicObserver) this.startDynamicObserver();
   }
   storage() {
     try { return this.host?.ownerDocument?.defaultView?.localStorage || (typeof localStorage !== 'undefined' ? localStorage : null); } catch { return null; }
@@ -652,7 +871,7 @@ export class Reader {
     if (this.isTocResizerNode(target)) return true;
     const isStrip = sidebar.hasAttribute('data-htmlmemo-toc-strip');
     if (isStrip && target && (target === sidebar || sidebar.contains?.(target) || (sidebarItem && (target === sidebarItem || sidebarItem.contains?.(target))))) return true;
-    if (!isStrip && target?.closest?.('a,button,input,textarea,select,summary,[contenteditable],[data-htmlmemo-id]')) return false;
+    if (!isStrip && target && target !== sidebar && target !== sidebarItem) return false;
     const rect = (sidebarItem || sidebar).getBoundingClientRect?.();
     const clientX = this.eventDocX(event);
     return !!(rect && rect.width > 0 && Number.isFinite(clientX) && clientX >= rect.right - 10 && clientX <= rect.right + 12 && (!rect.height || event.clientY == null || (event.clientY >= rect.top - 4 && event.clientY <= rect.bottom + 4)));
@@ -899,7 +1118,10 @@ export class Reader {
       const unique=roots.filter(root=>{for(let parent=root.parentElement;parent;parent=parent.parentElement)if(rootSet.has(parent))return false;return true;});
       for(const root of unique){
         const inChrome = this.isInsideTocOrTopbar(root);
-        for(const element of [root,...root.querySelectorAll('*')]){
+        const descendants = root.hasAttribute?.('data-htmlmemo-anchor')
+          ? root.querySelectorAll(':not([data-htmlmemo-anchor])')
+          : root.querySelectorAll('*');
+        for(const element of [root,...descendants]){
           if (!element.closest('#'+LAYER_ID+', [data-htmlmemo-mark], [data-htmlmemo-search]') && !['script','style','meta','link','template'].includes(element.localName) && !element.hasAttribute('data-htmlmemo-anchor')) {
             element.setAttribute('data-htmlmemo-anchor','js'+this.dynamicAnchor++);
             added++;

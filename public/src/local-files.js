@@ -8,14 +8,21 @@ export async function readLocalHTML(input, {native = false, allowScripts = false
   // the browser streams/parses them without making a giant JS string first.
   let nativeFile = null;
   if (native && file.size >= 4 * 1024 * 1024 && typeof file.slice === 'function') {
-    const header = new Uint8Array(await file.slice(0,4096).arrayBuffer());
-    const charset = new TextDecoder().decode(header).match(/<meta\b[^>]*charset\s*=\s*["']?([\w-]+)/i)?.[1] || 'utf-8';
+    const header = new Uint8Array(await file.slice(0, 65536).arrayBuffer());
+    const charset = new TextDecoder().decode(header.subarray(0, 4096)).match(/<meta\b[^>]*charset\s*=\s*["']?([\w-]+)/i)?.[1] || 'utf-8';
     const utf16 = header[0] === 0xff && header[1] === 0xfe || header[0] === 0xfe && header[1] === 0xff;
     if (!utf16 && /^(utf-8|utf8)$/i.test(charset)) {
       const offset = header[0] === 0xef && header[1] === 0xbb && header[2] === 0xbf ? 3 : 0;
+      const lastGt = header.lastIndexOf(0x3e);
+      let bodyParts = [file.slice(offset)];
+      if (lastGt > offset) {
+        const prefixText = new TextDecoder('utf-8').decode(header.subarray(offset, lastGt + 1));
+        const cleanedPrefix = prefixText.replace(/<meta\b[^>]*http-equiv\s*=\s*["']?(?:content-security-policy|refresh)\b[^>]*>/gi, '');
+        bodyParts = [cleanedPrefix, file.slice(lastGt + 1)];
+      }
       // CSP precedes every source byte. The requested local-script policy
       // allows inline JS, eval, data/blob fetches and decompression workers.
-      nativeFile = new Blob(['<!doctype html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="' + (allowScripts ? SCRIPT_CSP : LOCAL_CSP) + '">',file.slice(offset)],{type:'text/html;charset=utf-8'});
+      nativeFile = new Blob(['<!doctype html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="' + (allowScripts ? SCRIPT_CSP : LOCAL_CSP) + '">', ...bodyParts], {type:'text/html;charset=utf-8'});
     }
   }
   let html;

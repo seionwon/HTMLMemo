@@ -275,3 +275,50 @@ test('TOC sections expand on click even when pen tool is active and collapsed 8p
   assert.equal(r.tocWidth,260);
   assert.equal(toc.hasAttribute('data-htmlmemo-toc-strip'),false);
 });
+test('clicking TOC items reliably expands and collapses sub-items across details/summary, sibling sub-lists, and nested TOC groups without double-toggling',()=>{
+  const doc=documentFor('<html><head><style>.toc-sub{display:none}.toc-sub.open{display:block}</style></head><body data-htmlmemo-anchor="body"><div class="layout" style="display:grid;grid-template-columns:260px 6px minmax(0,1fr)"><aside class="toc" style="width:260px"><h2>목차</h2><details id="d-hash"><summary><a id="sum-hash" href="#">바이브 코딩 입문 <span>16</span></a></summary><ul id="d-hash-list" style="display:none"><li><a href="#s1">1-1장</a></li></ul></details><details id="d-script"><summary id="sum-script"><a id="sum-script-link" href="#s1">스크립트 제어 목차</a></summary><ul><li><a href="#s1">1-2장</a></li></ul></details><div class="toc-group" id="grp1"><div class="toc-header" id="hdr1"><span>▶ 바이브 코딩 실전</span> <span>2302</span></div><div class="toc-sub" id="sub1"><a id="leaf1" href="#s2">2-1장 실전 프로젝트</a></div></div><ul><li class="toc-item" id="li-group"><button id="btn-group" type="button" aria-expanded="false">▶ 개발 용어 4790</button><ul id="sub2" hidden><li><a id="leaf2" href="#s3">3-1장 용어 정리</a></li></ul></li></ul></aside><div role="separator" title="목차 폭 조절"></div><main data-htmlmemo-anchor="n1" style="overflow-y:auto"><h1 id="s1" data-htmlmemo-anchor="n2">1장</h1><h1 id="s2" data-htmlmemo-anchor="n3">2장</h1><h1 id="s3" data-htmlmemo-anchor="n4">3장</h1></main></div></body></html>');
+  const toc=doc.querySelector('.toc'),sep=doc.querySelector('[role="separator"]'),main=doc.querySelector('main');
+  toc.getBoundingClientRect=()=>({left:0,top:0,right:260,bottom:800,width:260,height:800});
+  sep.getBoundingClientRect=()=>({left:260,top:0,right:266,bottom:800,width:6,height:800});
+  main.getBoundingClientRect=()=>({left:266,top:0,right:1200,bottom:800,width:934,height:800});
+  const dScript=doc.querySelector('#d-script'),sumScriptLink=doc.querySelector('#sum-script-link');
+  sumScriptLink.addEventListener('click',e=>{e.preventDefault();dScript.open=!dScript.open;});
+  const r=Object.create(Reader.prototype);
+  r.doc=doc;r.win=doc.defaultView;r.storage=()=>null;r.metadata={version:1,execution:{allowScripts:true},annotations:[],view:{scrollTop:0,scrollLeft:0,zoom:1,autoFit:true}};
+  r.frame={getBoundingClientRect:()=>({left:0,top:0,right:1200,bottom:800,width:1200,height:800}),style:{}};
+  r.viewport={scrollTop:0,scrollLeft:0,clientWidth:1200,clientHeight:800,addEventListener(){}};r.sizer={style:{}};
+  r.zoom=1;r.autoFit=true;r.nativeScroll=true;r.callbacks={};r.linkHistory=[];
+  r.bind();
+  // 1) <details><summary><a href="#"> toggles open and reveals hidden child ul
+  const dHash=doc.querySelector('#d-hash'),sumHash=doc.querySelector('#sum-hash'),dHashList=doc.querySelector('#d-hash-list');
+  sumHash.dispatchEvent(new r.win.Event('click',{bubbles:true,cancelable:true}));
+  assert.equal(dHash.open,true);
+  assert.equal(dHashList.style.getPropertyValue('display'),'block');
+  sumHash.dispatchEvent(new r.win.Event('click',{bubbles:true,cancelable:true}));
+  assert.equal(dHash.open,false);
+  // 2) <details> where page script already toggles details.open is NOT double-toggled back to false
+  sumScriptLink.dispatchEvent(new r.win.Event('click',{bubbles:true,cancelable:true}));
+  assert.equal(dScript.open,true);
+  // 3) Custom sibling/group TOC item (▶ 바이브 코딩 실전 2302) expands sub-items and flips arrow ▶ -> ▼
+  const hdr1=doc.querySelector('#hdr1'),sub1=doc.querySelector('#sub1'),leaf1=doc.querySelector('#leaf1');
+  assert.equal(r.startTocResize({button:0,clientX:255,clientY:120,target:hdr1,view:r.win}),false);
+  hdr1.dispatchEvent(new r.win.Event('click',{bubbles:true,cancelable:true}));
+  assert.equal(sub1.classList.contains('open'),true);
+  assert.equal(sub1.style.getPropertyValue('display'),'block');
+  assert.match(hdr1.textContent,/▼ 바이브 코딩 실전/);
+  // Clicking a leaf item inside the expanded sub-list navigates without collapsing the parent sub-list
+  leaf1.dispatchEvent(new r.win.Event('click',{bubbles:true,cancelable:true}));
+  assert.equal(sub1.classList.contains('open'),true);
+  assert.equal(sub1.style.getPropertyValue('display'),'block');
+  // Clicking the header again collapses the sub-list and restores ▶
+  hdr1.dispatchEvent(new r.win.Event('click',{bubbles:true,cancelable:true}));
+  assert.equal(sub1.classList.contains('collapsed'),true);
+  assert.equal(sub1.style.getPropertyValue('display'),'none');
+  assert.match(hdr1.textContent,/▶ 바이브 코딩 실전/);
+  // 4) Nested <li><button aria-expanded="false">▶ 개발 용어 4790</button><ul hidden> expands on click
+  const btnGroup=doc.querySelector('#btn-group'),sub2=doc.querySelector('#sub2');
+  btnGroup.dispatchEvent(new r.win.Event('click',{bubbles:true,cancelable:true}));
+  assert.equal(sub2.hidden,false);
+  assert.equal(btnGroup.getAttribute('aria-expanded'),'true');
+  assert.match(btnGroup.textContent,/▼ 개발 용어 4790/);
+});

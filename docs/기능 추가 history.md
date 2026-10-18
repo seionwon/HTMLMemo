@@ -953,3 +953,31 @@ ID: hist-20261014-024. tests/chrome.mjs가 macOS Codex/CodeMemo 제한 환경을
    - `findAnnotationScrollHost()`에서 전체 `section, div` 탐색을 제거하고 얕은 레이아웃 후보만 검사하도록 최적화했으며, `ResizeObserver`가 요소별 크기를 `WeakMap`으로 추적하도록 수정했습니다(`public/sw.js` 캐시 버전 `htmlmemo-v18` 갱신).
 
 **검증:** `npm run check`(62개 파일), `npm test`(**126개 단위 검사 모두 통과** — 펜 도구 활성 상태에서 `<details><summary>`·`<summary><a href="#...">` 클릭 펼침 및 접힌 `8px` 목차 스트립에서 포인터 흔들림을 동반한 클릭 복원 검사 포함), `codememo-browser` 헤드리스 브라우저 검증(`ok: true, status: 200`), `npm run build`, `git diff --check`를 모두 통과했습니다.
+
+**게시:** 2026-10-16 코드 커밋 `0f05deb`의 GitHub Actions·Pages 게시 성공을 확인했습니다.
+
+
+<a id="hist-20261018-001"></a>
+### 2026-10-18 22:18:00 +09:00 — 목차 항목 클릭 시 하부 항목(하위 목차) 펼침·접힘 동작 수정 및 재열기 CSP·성능 보강
+
+| ID | change-kind | status |
+|---|---|---|
+| hist-20261018-001 | 목차 하부 항목 클릭 펼침(`details/summary`·형제/자식 하위 목록·`aria-controls`) 및 재열기 스크립트 CSP·대용량 문서 바인딩 개선 | 구현·단위 127개·`codememo-browser` 검증·Pages 게시 진행 |
+
+**목적과 원인:**
+- `<details><summary>` 안에 `<a href="#">` 또는 `<button>`이 포함된 목차는 브라우저 기본 `<details>` 토글이 억제되는데, 기존 버블 클릭 핸들러가 `href === '#'`에서 `details.open`을 전환하지 않고 조기 반환하여 하위 항목이 펼쳐지지 않았고, 문서 자체 스크립트가 `details.open`을 이미 토글한 경우 버블 핸들러가 다시 `details.open = !details.open`을 실행해 도로 닫히는(이중 토글) 문제가 있었습니다.
+- 이미 직렬화·저장되었다가 다시 열린 대용량 책(`▶ 바이브 코딩 입문 16`, `▶ 바이브 코딩 실전 2302`, `▶ 개발 용어 4790` 등)이나 커스텀 DOM 구조(`.toc-group`, `.toc-header` + `.toc-sub`, `li > button + ul[hidden]`, `aria-controls`, `data-target`)로 렌더링된 목차에서, 이전 버전이 삽입한 `script-src 'none'` CSP 메타 태그가 4MiB 이상 파일 재열기 또는 IndexedDB(`record.html`) 재열기 경로에 남아 스크립트가 차단되거나 정적 하위 목록 컨테이너가 클릭 시 전환되지 않았습니다.
+- 또한 확장된 목차 사이드바 내부 항목 오른쪽 끝(페이지 번호 영역 등)을 클릭할 때 `isTocResizeTarget()`이 목차 폭 조절 드래그로 오인해 클릭을 가로채는 문제와, 대용량 문서 로드 시 `prepareLoadedHTML` 완료 전까지 `bind()`가 지연되고 `refreshDynamicDocument()`가 이미 앵커가 부여된 전체 DOM을 다시 순회하는 병목이 있었습니다.
+
+**변경 내용과 동작:**
+1. **목차 하부 항목 컨테이너 자동 탐지 및 클릭 펼침·접힘 보장(`public/src/reader.js`):**
+   - `captureTocClickState()`, `findTocSubContainer()`, `isTocSubContainerVisible()`, `toggleTocSubContainer()`를 추가해 `<details><summary>`(내부 `<a href="#">`, `<a href="#id">`, `<button>` 포함)뿐 아니라 자식·형제 하위 목록(`ul`, `ol`, `[role="group"]`, `.toc-sub`, `.toc-children`, `.toc-items`, `.sub-toc`, `hidden`·`display: none` 컨테이너) 및 `aria-controls`·`data-target`으로 연결된 하위 목차를 모두 지원합니다.
+   - 클릭 전후의 열림 상태를 비교해 문서 자체 스크립트가 이미 펼침 상태를 변경했거나 `preventDefault()`를 호출한 경우 이중 토글하지 않으며, 정적 상태로 남아 있는 경우 하위 목록의 `hidden`, `display`, `open`/`expanded`/`collapsed` 클래스, `aria-expanded` 속성과 화살표 표시(`▶`/`▸` ↔ `▼`/`▾`)를 함께 전환합니다. 펼쳐진 하위 목록 안의 개별 장·절 항목을 클릭할 때는 상위 하위 목록이 닫히지 않고 해당 본문 위치로 이동합니다.
+2. **목차 항목 클릭의 리사이즈 오인 방지 및 세로 플렉스 잠금 해제(`public/src/reader.js`):**
+   - 목차가 8px 스트립으로 접힌 상태가 아닐 때는 목차 내부 자식 요소를 클릭해도 `isTocResizeTarget()`이 `false`를 반환하도록 수정해 페이지 번호 등 우측 가장자리 근처 클릭이 리사이즈로 가로채이지 않게 했습니다.
+   - `baseEditorStyle()`에서 `flex: 0 0 var(--htmlmemo-toc-width)!important`를 가로 플렉스 항목(`[data-htmlmemo-sidebar-flex]`)에만 적용해 세로 플렉스 컨테이너 안의 목차 높이가 고정되지 않도록 수정했습니다.
+3. **4MiB 이상 로컬 파일 및 서재 재열기 시 레거시 CSP 제거와 즉시 바인딩(`public/src/local-files.js`, `public/src/app.js`, `public/src/reader.js`, `public/sw.js`):**
+   - `readLocalHTML`(`public/src/local-files.js`)과 `openRecord`(`public/src/app.js`)에서 이전 저장본에 남아 있던 `Content-Security-Policy` 메타 태그를 제거·교체(`SCRIPT_CSP`)하고 `allowScripts: true`를 유지해 재열기 후에도 목차 스크립트가 정상 동작합니다.
+   - `Reader` 로드 직후 `this.bind()`를 즉시 실행해 대용량 문서의 앵커 준비 중에도 목차 클릭이 바로 반응하도록 했으며, `refreshDynamicDocument()`는 `:not([data-htmlmemo-anchor])`만 조회하도록 최적화했습니다(`public/sw.js` 캐시 버전 `htmlmemo-v19` 갱신).
+
+**검증:** `npm run check`(62개 파일), `npm test`(**127개 단위 검사 모두 통과** — `<details><summary><a href="#">`, 스크립트 제어 `<details>` 이중 토글 방지, `▶ 바이브 코딩 실전 2302` 형제 하위 목록 펼침·화살표 전환·하위 항목 클릭 시 열림 유지·재클릭 접힘, `<li><button aria-expanded="false">▶ 개발 용어 4790</button><ul hidden>` 펼침 검사 포함), `codememo-browser` 헤드리스 브라우저 검증(`ok: true, status: 200`), `npm run build`, `git diff --check`를 모두 통과했습니다.
