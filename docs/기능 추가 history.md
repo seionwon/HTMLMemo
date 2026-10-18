@@ -962,7 +962,7 @@ ID: hist-20261014-024. tests/chrome.mjs가 macOS Codex/CodeMemo 제한 환경을
 
 | ID | change-kind | status |
 |---|---|---|
-| hist-20261018-001 | 목차 하부 항목 클릭 펼침(`details/summary`·형제/자식 하위 목록·`aria-controls`) 및 재열기 스크립트 CSP·대용량 문서 바인딩 개선 | 구현·단위 127개·`codememo-browser` 검증·Pages 게시 진행 |
+| hist-20261018-001 | 목차 하부 항목 클릭 펼침(`details/summary`·형제/자식 하위 목록·`aria-controls`) 및 재열기 스크립트 CSP·대용량 문서 바인딩 개선 | 구현·단위 127개·`codememo-browser` 검증·Pages 게시·온라인 확인 완료 |
 
 **목적과 원인:**
 - `<details><summary>` 안에 `<a href="#">` 또는 `<button>`이 포함된 목차는 브라우저 기본 `<details>` 토글이 억제되는데, 기존 버블 클릭 핸들러가 `href === '#'`에서 `details.open`을 전환하지 않고 조기 반환하여 하위 항목이 펼쳐지지 않았고, 문서 자체 스크립트가 `details.open`을 이미 토글한 경우 버블 핸들러가 다시 `details.open = !details.open`을 실행해 도로 닫히는(이중 토글) 문제가 있었습니다.
@@ -981,3 +981,6 @@ ID: hist-20261014-024. tests/chrome.mjs가 macOS Codex/CodeMemo 제한 환경을
    - `Reader` 로드 직후 `this.bind()`를 즉시 실행해 대용량 문서의 앵커 준비 중에도 목차 클릭이 바로 반응하도록 했으며, `refreshDynamicDocument()`는 `:not([data-htmlmemo-anchor])`만 조회하도록 최적화했습니다(`public/sw.js` 캐시 버전 `htmlmemo-v19` 갱신).
 
 **검증:** `npm run check`(62개 파일), `npm test`(**127개 단위 검사 모두 통과** — `<details><summary><a href="#">`, 스크립트 제어 `<details>` 이중 토글 방지, `▶ 바이브 코딩 실전 2302` 형제 하위 목록 펼침·화살표 전환·하위 항목 클릭 시 열림 유지·재클릭 접힘, `<li><button aria-expanded="false">▶ 개발 용어 4790</button><ul hidden>` 펼침 검사 포함), `codememo-browser` 헤드리스 브라우저 검증(`ok: true, status: 200`), `npm run build`, `git diff --check`를 모두 통과했습니다.
+
+**게시:** 2026-10-18 코드 커밋 `2cabc04`의 [GitHub Actions·Pages 게시](https://github.com/seionwon/HTMLMemo/actions/runs/39130970075) 성공 확인. 공개 주소 `https://seionwon.github.io/HTMLMemo/src/reader.js`가 로컬 빌드(`dist/src/reader.js`, SHA-256 `00cd379ff3062cec70949544811c60cb191c6c1ca59ddb50a2d82cf09d420651`)와 바이트 단위까지 일치함을 확인했습니다.
+
