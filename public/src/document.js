@@ -4,6 +4,55 @@ export const LAYER_ID = 'htmlmemo-annotation-layer';
 export const DATA_ID = 'htmlmemo-data';
 export const LOCAL_CSP = "default-src 'none'; img-src data: blob:; style-src 'unsafe-inline' data:; font-src data:; media-src data:; script-src 'none'; connect-src 'none'; form-action 'none'; base-uri 'none'";
 export const SCRIPT_CSP = "default-src 'none'; img-src data: blob:; style-src 'unsafe-inline' data:; font-src data:; media-src data: blob:; script-src 'unsafe-inline' 'unsafe-eval' data: blob: https: http:; worker-src data: blob:; connect-src data: blob:; form-action 'none'; base-uri 'none'";
+export const BOOK_DATA_MISSING = '이 파일에는 책의 목차 제목만 남아 있고 본문 데이터 또는 실행 코드가 빠져 있습니다. 완전한 원본 HTML 파일을 가져와 주세요. 기존 문서와 주석은 보관함에 유지됩니다.';
+export function inspectBookDocument(doc) {
+  const data = doc.getElementById('book-manifest');
+  let manifest;
+  try { manifest = JSON.parse(data?.textContent || 'null'); } catch { /* Report damaged book data below. */ }
+  if (manifest?.format !== 'memosuite-book-html-v1' && !(doc.getElementById('reader-tree') && doc.getElementById('reader-content'))) return null;
+  const executable = [...doc.querySelectorAll('script')].some(script =>
+    (!script.type || /^(?:module|(?:text|application)\/javascript)$/i.test(script.type)) &&
+    (script.getAttribute('src') || script.textContent.trim()));
+  const complete = manifest?.format === 'memosuite-book-html-v1' &&
+    Array.isArray(manifest.volumes) && manifest.volumes.length > 0 &&
+    manifest.volumes.every((volume, index) => Array.isArray(volume?.sections) && volume.sections.length > 0 &&
+      doc.getElementById('book-volume-' + index)?.textContent.trim()) && executable;
+  return {complete: !!complete, message: complete ? '' : BOOK_DATA_MISSING};
+}
+
+// A live book DOM contains only the current section, and its renderer releases
+// image payloads after decoding them. Export the immutable source bytes instead.
+// Only the small head is read; the book's compressed bodies/images stay Blobs.
+export async function serializeBookSource(source, metadata) {
+  if (!(source instanceof Blob)) throw new Error('보관한 책 원본을 찾지 못했습니다.');
+  const decoder = new TextDecoder('utf-8', {ignoreBOM:true});
+  let header = '', read = 0, end = -1;
+  while (read < source.size && end < 0) {
+    const next = Math.min(source.size, read + 65536);
+    header += decoder.decode(await source.slice(read, next).arrayBuffer(), {stream: next < source.size});
+    read = next;
+    end = header.search(/<\/head\s*>|<body\b/i);
+    if (end < 0 && read >= 16 * 1024 * 1024) throw new Error('책 원본의 HTML 헤더를 읽지 못했습니다. 완전한 원본 파일을 가져와 주세요.');
+  }
+  if (end < 0) throw new Error('책 원본의 HTML 헤더가 손상되었습니다. 완전한 원본 파일을 가져와 주세요.');
+  const encoder = new TextEncoder(), parts = [];
+  let offset = 0;
+  const head = header.slice(0, end);
+  // HTMLMemo metadata is always an inert JSON script in the head. Keep every
+  // other source byte, including nonce attributes, styles and book payloads.
+  for (const match of head.matchAll(/<script\b((?:[^"'<>]|"[^"]*"|'[^']*')*)>[\s\S]*?<\/script\s*>/gi)) {
+    const tag = new DOMParser().parseFromString('<html><head>' + match[0] + '</head><body></body></html>', 'text/html').querySelector('script');
+    if (tag?.id !== DATA_ID) continue;
+    const start = encoder.encode(head.slice(0, match.index)).length;
+    const finish = start + encoder.encode(match[0]).length;
+    parts.push(source.slice(offset, start)); offset = finish;
+  }
+  const boundary = encoder.encode(head).length;
+  parts.push(source.slice(offset, boundary));
+  const doc = new DOMParser().parseFromString('<html><head></head><body></body></html>', 'text/html');
+  parts.push(metadataElement(doc, metadata).outerHTML, source.slice(boundary));
+  return new Blob(parts, {type:'text/html;charset=utf-8'});
+}
 export function cleanAnnotations(doc) {
   doc.getElementById(LAYER_ID)?.remove();
   doc.getElementById(DATA_ID)?.remove();
@@ -108,6 +157,8 @@ function* prepareHTML(html, defaults, {includeMetadata = false, document: loaded
   let source = embedded.source || defaults.source || '';
   try { const url=new URL(source); source=['http:','https:'].includes(url.protocol)&&!url.username&&!url.password?url.href:''; } catch { source=''; }
   allowScripts = (allowScripts ?? defaults.execution?.allowScripts ?? embedded.execution?.allowScripts ?? false) === true;
+  const book = inspectBookDocument(doc);
+  if (book?.complete && !allowScripts) throw new Error('이 책은 화면 캡처로 보관하면 본문과 목차가 사라집니다. 완전한 원본 HTML 파일을 가져와 주세요.');
   clearReaderSidebarArtifacts(doc);
   cleanAnnotations(doc);
   yield* sanitizeTree(doc, source,0,allowScripts);
@@ -129,7 +180,7 @@ function* prepareHTML(html, defaults, {includeMetadata = false, document: loaded
     version: FORMAT_VERSION, title: String(embedded.title || doc.title || defaults.title || 'HTML 문서').slice(0,1000),
     source, capturedAt: embedded.capturedAt || Date.now(), viewport: {width: Math.min(4096, Math.max(320, Number(viewport.width) || 1100)), height: Number(viewport.height) || 800},
     execution:{allowScripts:!!allowScripts}, annotations: embedded.annotations || [], view: {scrollTop:Math.max(0,Number(view.scrollTop)||0),scrollLeft:Math.max(0,Number(view.scrollLeft)||0),zoom:Number.isFinite(view.zoom)?Math.min(8,Math.max(.2,view.zoom)):null,autoFit:view.autoFit==null?!Number.isFinite(view.zoom):view.autoFit!==false,...(Number.isFinite(view.tocWidth)?{tocWidth:Math.min(640,Math.max(8,Math.round(Number(view.tocWidth))))}:{})}, bookmarks,
-    warnings: (Array.isArray(embedded.warnings) ? embedded.warnings : defaults.warnings || []).filter(w=>typeof w==='string').slice(0,5000),
+    warnings: [...new Set([...(Array.isArray(embedded.warnings) ? embedded.warnings : defaults.warnings || []), ...(book && !book.complete ? [BOOK_DATA_MISSING] : [])])].filter(w=>typeof w==='string').slice(0,5000),
   };
   const nativeScroll = !!allowScripts || !!loadedDocument || html.length >= 4 * 1024 * 1024 || n >= 20000;
   // Native-scrolling local documents retain their own viewport rules. This is
@@ -150,6 +201,8 @@ function metadataElement(doc, metadata) {
   return script;
 }
 export function serializeHTML(doc, metadata) {
+  const book = inspectBookDocument(doc);
+  if (book && !book.complete) throw new Error(BOOK_DATA_MISSING);
   const clone = doc.documentElement.cloneNode(true);
   clone.querySelector('#' + DATA_ID)?.remove();
   for (const mark of [...clone.querySelectorAll('[data-htmlmemo-search]')].reverse()) mark.replaceWith(...mark.childNodes);

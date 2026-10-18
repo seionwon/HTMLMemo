@@ -1,0 +1,36 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Complete three-volume fixture</title>
+<style>html,body{height:100%;margin:0;overflow:hidden}.layout{display:grid;grid-template-columns:260px 1fr;height:100%}nav,main{overflow:auto;padding:12px}summary{padding:8px;cursor:pointer}.toc-children{padding-left:12px}a{display:block;padding:8px}p{line-height:1.7}</style>
+</head><body><div class="layout"><nav id="reader-nav"><h2>목차</h2><div id="reader-tree"></div></nav><main id="reader-main"><article id="reader-content"></article></main></div>
+<script id="book-manifest" type="application/json">{"format":"memosuite-book-html-v1","volumes":[{"label":"입문","sections":[{"key":"v0:first"},{"key":"v0:last"}]},{"label":"실전","sections":[{"key":"v1:first"},{"key":"v1:last"}]},{"label":"용어","sections":[{"key":"v2:first"},{"key":"v2:last"}]}]}</script>
+<script id="book-volume-0" type="application/octet-stream">["Introduction first","Introduction last"]</script>
+<script id="book-volume-1" type="application/octet-stream">["Practice first","Practice last"]</script>
+<script id="book-volume-2" type="application/octet-stream">["Glossary first","Glossary last"]</script>
+<script id="book-asset-0" type="application/octet-stream">original-image-payload</script>
+<script>
+(() => {
+  const manifest=JSON.parse(document.getElementById('book-manifest').textContent);
+  const tree=document.getElementById('reader-tree'),content=document.getElementById('reader-content');
+  for(const [index,volume] of manifest.volumes.entries()){
+    const group=document.createElement('details');group.className='toc-volume';
+    const summary=document.createElement('summary');summary.textContent=volume.label+' 2';group.append(summary);
+    group.addEventListener('toggle',()=>{
+      if(!group.open||group.children.length>1)return;
+      const children=document.createElement('div');children.className='toc-children';
+      for(const section of volume.sections){const link=document.createElement('a');link.href='#'+encodeURIComponent(section.key);link.textContent=section.key;children.append(link);}
+      group.append(children);
+    });tree.append(group);
+  }
+  function show(){
+    const key=decodeURIComponent(location.hash.slice(1))||'v0:first',match=/^v(\d+):(first|last)$/.exec(key);
+    if(!match)return;
+    const texts=JSON.parse(document.getElementById('book-volume-'+match[1]).textContent);
+    const text=texts[match[2]==='first'?0:1],p=document.createElement('p');
+    p.textContent=(text+' readable section with stable annotation text and enough surrounding context. ').repeat(6);
+    content.replaceChildren(p);content.dataset.section=key;
+    // Like the production reader, release a decoded asset from the live DOM.
+    document.getElementById('book-asset-0')?.remove();document.documentElement.dataset.readerReady='true';
+  }
+  addEventListener('hashchange',show);show();
+})();
+</script></body></html>

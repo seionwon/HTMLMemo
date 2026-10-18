@@ -1,5 +1,5 @@
 import { $, $$, icon, escapeHTML as esc, uid, filename, normalizeURL, displayHost, formatDate, formatBytes, download } from './utils.js';
-import { parseHTML, SCRIPT_CSP } from './document.js';
+import { parseHTML, SCRIPT_CSP, serializeBookSource } from './document.js';
 import { SaveQueue } from './model.js';
 import { Reader } from './reader.js';
 import { listDocuments, getDocument, deleteDocument, getSetting, setSetting, saveDocumentHTML, listRevisionSummaries, getRevision, putDocumentRevision, writeExternalHTML } from './storage.js';
@@ -211,6 +211,13 @@ function saveStatus(tab) {
     if(!retry){retry=document.createElement('button');retry.id='retry-save';retry.className='text-button';status.append(retry);}
     retry.textContent='저장 재시도';retry.onclick=safely(async()=>{tab.queue.schedule();await tab.queue.flush();});
   }else retry?.remove();
+  let bookNotice = $('[data-book-incomplete]', status);
+  if (tab.reader?.bookIntegrity?.complete === false) {
+    if (!bookNotice) { bookNotice = document.createElement('button'); bookNotice.className = 'text-button save-error'; bookNotice.dataset.bookIncomplete = ''; status.append(bookNotice); }
+    bookNotice.textContent = '책 본문 누락 · 원본 HTML 가져오기';
+    bookNotice.title = tab.reader.bookIntegrity.message;
+    bookNotice.onclick = safely(importFiles);
+  } else bookNotice?.remove();
 }
 async function closeTab(id) {
   const tab=tabs.find(t=>t.id===id);if(!tab)return;
@@ -236,10 +243,11 @@ async function createDocument(snapshot, handle = null, name = null, local = {}) 
   tab.queue.schedule();
   try { await tab.queue.flush(); } catch(error) { showError(error); }
   if(tab.closing || !tabs.includes(tab)){tab.opening=false;return tab;}
-  if(handle && !local.originalHandle && !tab.queue.error)await writeExternalHTML(tab.record,tab.reader.html());
+  if(handle && !local.originalHandle && !tab.queue.error && tab.reader.bookIntegrity?.complete !== false)await writeExternalHTML(tab.record,tab.reader.html());
   tab.opening=false;renderLibrary();activate(tab.id);
   if(tab.queue.error)return tab;
-  if(parsed.metadata.warnings.length)toast(`페이지를 저장했습니다. ${parsed.metadata.warnings.length}개의 리소스를 보관하지 못했습니다. 문서 정보에서 확인할 수 있어요.`,true);
+  if(tab.reader.bookIntegrity?.complete === false)toast(tab.reader.bookIntegrity.message, true);
+  else if(parsed.metadata.warnings.length)toast(`페이지를 저장했습니다. ${parsed.metadata.warnings.length}개의 리소스를 보관하지 못했습니다. 문서 정보에서 확인할 수 있어요.`,true);
   else toast(local.originalHandle||name?'로컬 HTML을 주석 탭에서 열었습니다.':'HTML 파일로 저장하고 새 탭에서 열었습니다.');
   return tab;
 }
@@ -292,6 +300,7 @@ async function savePage() {
   } finally {updateChrome();}
 }
 async function exportDocument(tab) {
+  if (tab.reader.bookIntegrity?.complete === false) throw new Error(tab.reader.bookIntegrity.message);
   // Invoke the picker before awaiting persistence, while the click still has user activation.
   let handle;
   if(savePicker()) {
@@ -299,7 +308,8 @@ async function exportDocument(tab) {
     catch(error){if(!['SecurityError','NotSupportedError'].includes(error.name))throw error;}
   }
   await tab.reader.ready;await tab.queue.flush();
-  const html=tab.reader.html();
+  const source = tab.reader.bookIntegrity?.complete ? await getDocument(tab.record.id) : null;
+  const html=source ? await serializeBookSource(source.file || new Blob([source.html], {type:'text/html;charset=utf-8'}), tab.reader.metadata) : tab.reader.html();
   if(handle){const disk=await handle.getFile();await writeExternalHTML({fileHandle:handle,diskStamp:{modified:disk.lastModified,size:disk.size}},html);}
   else download(html,tab.record.name);
   toast('현재 주석을 포함한 HTML을 내보냈습니다. 이후 주석은 앱에 자동 저장됩니다.');

@@ -9,6 +9,13 @@
     return `data:${type || 'application/octet-stream'};base64,${btoa(binary)}`;
   };
   async function captureDocument(doc, options = {}) {
+    // Standalone books generate their TOC lazily and keep unopened chapters in
+    // script data blocks. A static capture would silently delete those blocks.
+    let book = !!(doc.getElementById('reader-tree') && doc.getElementById('reader-content'));
+    try { book ||= JSON.parse(doc.getElementById('book-manifest')?.textContent || 'null')?.format === 'memosuite-book-html-v1'; } catch { /* Incomplete books still have the reader layout. */ }
+    if (book) {
+      throw new Error('이 책은 화면 캡처로 보관하면 본문과 목차가 사라집니다. HTMLMemo의 HTML 파일 가져오기로 완전한 원본 파일을 열어 주세요.');
+    }
     const warnings = [];
     const cache = new Map();
     let totalBytes = 0;

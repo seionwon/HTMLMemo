@@ -1,7 +1,7 @@
 import { createReadAloud } from './read-aloud.js';
 import { clamp, uid } from './utils.js';
 import { History, TEXT_TOOLS, DRAW_TOOLS } from './model.js';
-import { LAYER_ID, prepareLoadedHTML, cleanAnnotations, textIndex, selectionAnchor, resolveTextAnchor, wrapOffsets, rangeFromOffsets, serializeHTML } from './document.js';
+import { LAYER_ID, prepareLoadedHTML, cleanAnnotations, textIndex, selectionAnchor, resolveTextAnchor, wrapOffsets, rangeFromOffsets, serializeHTML, inspectBookDocument } from './document.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const TOC_WIDTH_KEY = 'htmlmemo-doc-toc-width-v1', TOC_EXPANDED_WIDTH_KEY = 'htmlmemo-doc-toc-expanded-width-v1', TOC_MIN = 8, TOC_STRIP_SNAP = 48, TOC_MAX = 640, TOC_DEFAULT = 260;
@@ -29,6 +29,7 @@ export class Reader {
         try {
           this.doc = this.frame.contentDocument;
           if (!this.doc?.body) throw new Error('HTML 문서를 표시하지 못했습니다.');
+          this.bookIntegrity = inspectBookDocument(this.doc);
           const needsPrepare = Boolean(parsed.file || !this.doc.body.hasAttribute('data-htmlmemo-anchor'));
           this.bind({deferDynamicObserver: needsPrepare});
           this.frame.style.pointerEvents = '';
