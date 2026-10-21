@@ -1260,7 +1260,7 @@ ID: hist-20261014-024. tests/chrome.mjs가 macOS Codex/CodeMemo 제한 환경을
 
 | ID | change-kind | status |
 |---|---|---|
-| hist-20261021-016 | 주석 목록 항목 정보 확장 | 구현·단위 149개·로컬 실제 Chrome 23개 통과, 게시 결과는 아래에 보충 |
+| hist-20261021-016 | 주석 목록 항목 정보 확장 | 구현·단위 149개·실제 Chrome 23개·Pages 게시·게시 후 검사 완료 |
 
 **요청과 원인:** 「"주석 목록"에 "펜 그림"으로만 나오는데, 더 많은 정보가 나오게 할 수는 없어?」 — 그림 주석(펜·사각형·타원·화살표·영역)은 글자를 직접 선택하지 않으므로 목록에 종류 이름만 보였습니다. 그림이 문서의 어디에 있는지 목록만 보고는 알 수 없었습니다.
 
@@ -1273,3 +1273,5 @@ ID: hist-20261014-024. tests/chrome.mjs가 macOS Codex/CodeMemo 제한 환경을
 **저장 형식:** 주석 데이터는 바꾸지 않았습니다. 이미 저장된 기준 위치(`anchorTarget`)·표시 문장(`textAnchor`)·만든 시각(`created`)을 읽어 표시만 합니다.
 
 **검증:** `npm run check` 66개 JavaScript·JSON, `npm test` 149개(새 검사: 실제 Reader로 펜 그림·형광펜·메모 세 줄의 본문·제목·시각 표시), `npm run build`, `git diff --check`, 로컬 `npm run test:browser` 실제 Chrome 23개를 통과했습니다. 기존 두 브라우저 검사는 줄 전체 글자 대신 첫 줄 내용을 확인하도록 고쳤습니다. 300px 사이드바 모양은 임시 Chrome 캡처로 확인했습니다(긴 본문은 두 줄로 줄이고, 종류·제목·시각 줄은 줄바꿈).
+
+**게시·온라인 확인 (2026-10-21 23:51:20 +09:00):** 커밋 `86e9555`의 [GitHub Actions 39620136817](https://github.com/seionwon/HTMLMemo/actions/runs/39620136817)이 build(단위·문법·전체 실제 Chrome·빌드)·deploy(Pages)·verify(게시 후 검사)를 모두 성공했습니다. 공개 주소 `https://seionwon.github.io/HTMLMemo/`의 `src/app.js`·`src/reader.js`·`styles.css`·`src/version.js`(1.2.12)는 로컬 빌드와 SHA-256이 같습니다. `sw.js`는 빌드마다 바뀌는 캐시 이름 한 줄만 다릅니다.
