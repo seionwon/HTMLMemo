@@ -308,6 +308,59 @@ test('real Chrome: an annotated file is first shown with restored notes, zoom an
   }finally{if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
 });
 
+test('real Chrome: delayed annotation anchors never paint drawings stretched over the whole document',{timeout:60000},async()=>{
+  await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-delayed-annotations-'));await cp(join(root,'public'),folder,{recursive:true});
+  const server=createServer(folder);let chrome;
+  try{
+    await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));chrome=await launchChrome();const page=chrome.page;
+    await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
+    await page.navigate(process.env.HTMLMEMO_OPENING_TEST_URL||`http://127.0.0.1:${server.address().port}/`);
+    await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
+    await page.evaluate(`window.observeDelayedAnnotations=()=>{
+      window.delayedSamples=[];window.delayedDone=false;let count=0;
+      const sample=()=>{const frame=document.querySelector('.document-host:not([hidden]) iframe'),doc=frame?.contentDocument;
+        if(doc?.title==='Delayed annotated content'){
+          const stroke=doc.querySelector('[data-htmlmemo-id="delayed-stroke"]'),target=doc.getElementById('generated-note-target');
+          const box=stroke?.getBoundingClientRect(),anchor=target?.getBoundingClientRect();
+          window.delayedSamples.push({visible:getComputedStyle(frame).visibility==='visible',target:!!target,stroke:!!stroke,height:box?.height,relativeTop:box&&anchor?box.top-anchor.top:null});
+        }
+        if(++count<120)requestAnimationFrame(sample);else window.delayedDone=true;
+      };requestAnimationFrame(sample);
+    };window.importDelayedAnnotations=(savedAnchor=false,packedBook=false,durableTarget=false)=>{
+      window.observeDelayedAnnotations();
+      const text='The saved drawing belongs only to this paragraph.';
+      const metadata={version:${FORMAT_VERSION},title:'Delayed annotated content',viewport:{width:1100,height:800},view:{zoom:1,autoFit:false,scrollTop:0,scrollLeft:0},annotations:[{id:'delayed-stroke',type:'pen',anchor:durableTarget?'n999':packedBook?'n2':'js0',...(durableTarget?{anchorTarget:{tag:'p',id:'generated-note-target',rootId:'content',path:[0],quote:text,section:''}}:{}),points:[{x:.2,y:.1},{x:.8,y:.9}],color:'#ef4444',width:3,opacity:1}]};
+      const bookData=packedBook?'<script id="book-manifest" type="application/json">'+JSON.stringify({format:'memosuite-book-html-v1',volumes:[{sections:[{key:'v0:first'}]}]})+'<'+'/script><script id="book-volume-0" type="application/octet-stream">original compressed content<'+'/script>':'';
+      const html='<html><head><title>Delayed annotated content</title><style>body{margin:0}main{height:8000px}#generated-note-target{width:400px;height:120px;margin-top:60px;background:#edf3ff}</style><script id="htmlmemo-data" type="application/json">'+JSON.stringify(metadata)+'<'+'/script>'+bookData+'</head><body><main id="content">'+(packedBook?'<article id="reader-content"></article>':'Loading section')+'</main><script>setTimeout(()=>{const target=document.createElement("p");target.id="generated-note-target";target.textContent='+JSON.stringify(text)+';'+(savedAnchor?'target.setAttribute("data-htmlmemo-anchor","js0");':'')+'document.getElementById("'+(packedBook?'reader-content':'content')+'").replaceChildren(target);document.documentElement.dataset.readerReady="true";},650);<'+'/script><!--'+'x'.repeat(4*1024*1024)+'--></body></html>';
+      const transfer=new DataTransfer();transfer.items.add(new File([html],'delayed-annotations.html',{type:'text/html'}));const input=document.querySelector('#file-input');input.files=transfer.files;input.dispatchEvent(new Event('change',{bubbles:true}));
+    };`);
+    const check=async()=>{
+      await page.waitFor('window.delayedDone');
+      const samples=await page.evaluate('window.delayedSamples'),shown=samples.filter(sample=>sample.visible),drawn=shown.filter(sample=>sample.stroke);
+      console.log('Delayed annotation geometry:',JSON.stringify({samples:samples.length,shown:shown.length,unresolvedDrawings:shown.filter(sample=>sample.stroke&&!sample.target).length,maxHeight:Math.max(...drawn.map(sample=>sample.height)),first:drawn[0],last:drawn.at(-1)}));
+      assert.ok(shown.length>0);assert.ok(drawn.length>0,'the saved drawing returns when its paragraph is ready');
+      assert.equal(shown.some(sample=>sample.stroke&&!sample.target),false,'an unresolved paragraph must never fall back to the full page');
+      assert.ok(drawn.every(sample=>Math.abs(sample.height-96)<1&&Math.abs(sample.relativeTop-12)<1),'every displayed drawing must use its actual paragraph geometry');
+    };
+    await page.evaluate('window.importDelayedAnnotations()');await check();
+    await page.waitFor('document.querySelector("#status-left").textContent.includes("자동 저장됨")');
+    await page.click('#tabs .tab.active .tab-close');await page.waitFor('document.querySelectorAll("#tabs .tab").length===0');
+    await page.send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
+    await page.evaluate('window.observeDelayedAnnotations()');await page.click('[data-open]');await check();
+    // A script can insert an already anchored element; this must also retry
+    // pending drawings when no new anchor IDs need to be generated.
+    await page.evaluate('window.importDelayedAnnotations(true)');await check();
+    await page.evaluate(`(()=>{const doc=document.querySelector('.document-host:not([hidden]) iframe').contentDocument,p=doc.createElement('p');p.id='new-generated-paragraph';p.textContent='Another generated paragraph';doc.getElementById('content').prepend(p);})()`);
+    await page.waitFor(`document.querySelector('.document-host:not([hidden]) iframe').contentDocument.querySelector('#new-generated-paragraph')?.hasAttribute('data-htmlmemo-anchor')`);
+    assert.equal(await page.evaluate(`document.querySelector('.document-host:not([hidden]) iframe').contentDocument.querySelectorAll('[data-htmlmemo-anchor="js0"]').length`),1,'new content must not reuse a saved target ID');
+    await page.evaluate('window.importDelayedAnnotations(false,true)');await check();
+    assert.equal(await page.evaluate('window.delayedSamples.filter(s=>s.visible).every(s=>s.stroke)'),true,'packed books first appear only after their generated paragraph and saved drawing are ready');
+    await page.evaluate('window.importDelayedAnnotations(false,false,true)');await check();
+    await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/annotation-delayed-mobile.png'),await page.screenshot());
+    assert.deepEqual(chrome.errors,[]);
+  }finally{if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
+});
+
 test('real Chrome: self-observing HTML settles without overlay resize feedback or scroll jitter',{timeout:45000},async()=>{
   await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-jitter-test-'));await cp(join(root,'public'),folder,{recursive:true});
   const server=createServer(folder);let chrome;

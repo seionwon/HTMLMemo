@@ -18,6 +18,13 @@ export function validateAnnotations(value) {
     } else {
       if (!Array.isArray(item.points) || !item.points.length || item.points.length > 100000 || item.points.some(p => !p || !Number.isFinite(p.x) || !Number.isFinite(p.y) || Math.abs(p.x) > 1e8 || Math.abs(p.y) > 1e8)) throw new Error('주석 좌표가 올바르지 않습니다.');
       if (item.anchor && !/^(body|n\d+|js\d+)$/.test(item.anchor)) throw new Error('주석의 문서 위치가 손상되었습니다.');
+      if (item.anchorTarget != null) {
+        const target = item.anchorTarget;
+        if (!target || typeof target !== 'object' || !/^[a-z][a-z0-9-]{0,63}$/.test(target.tag) ||
+          ['id','rootId','section'].some(key=>typeof target[key] !== 'string' || target[key].length > 1000) ||
+          typeof target.quote !== 'string' || target.quote.length > 160 ||
+          !Array.isArray(target.path) || target.path.length > 64 || target.path.some(index=>!Number.isSafeInteger(index) || index < 0 || index > 1000000)) throw new Error('주석의 본문 기준 위치가 손상되었습니다.');
+      }
     }
     if (item.text != null && (typeof item.text !== 'string' || item.text.length > 10000)) throw new Error('메모가 너무 길거나 올바르지 않습니다.');
     return structuredClone(item);

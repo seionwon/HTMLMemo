@@ -45,3 +45,10 @@ test('annotation validation rejects damaged data instead of silently erasing it'
   const annotation={id:'x',type:'highlight',color:'#edcf67',width:3,opacity:.35,textAnchor:{start:0,end:5,quote:'hello'}};assert.equal(validateAnnotations([annotation]).length,1);
   for(const data of [[annotation,annotation],[{...annotation,color:'url(evil)'}],[{...annotation,width:NaN}],[{...annotation,textAnchor:{start:-1,end:2,quote:'bad'}}],[{...annotation,type:'script'}],[{...annotation,type:'pen',points:[{x:Infinity,y:1}]}]])assert.throws(()=>validateAnnotations(data));
 });
+test('drawing target context is optional, survives validation, and rejects unusable imported locations',()=>{
+  const stroke={id:'stroke',type:'pen',anchor:'n5',points:[{x:.1,y:.2}],color:'#edcf67',width:3,opacity:1};
+  const target={tag:'p',id:'',rootId:'reader-content',path:[2,0],quote:'A saved paragraph',section:'v0:first'};
+  assert.deepEqual(validateAnnotations([stroke]),[stroke]);
+  assert.deepEqual(validateAnnotations([{...stroke,anchorTarget:target}])[0].anchorTarget,target);
+  for(const broken of [{...target,path:[-1]},{...target,path:[1.5]},{...target,path:Array(65).fill(0)},{...target,tag:'p,script'},{...target,quote:'x'.repeat(161)},{...target,rootId:null}])assert.throws(()=>validateAnnotations([{...stroke,anchorTarget:broken}]),/기준 위치/);
+});

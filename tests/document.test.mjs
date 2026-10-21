@@ -14,6 +14,50 @@ test('embedded annotations, source and viewport round trip in one HTML file',()=
   const parsed=parseHTML('<html><head><title>Test</title></head><body><p>Hello world</p></body></html>',{source:'https://example.test/article',viewport:{width:960,height:800}});const doc=documentFor(parsed.html);parsed.metadata.annotations=[annotation];wrapOffsets(doc,0,5,{'data-htmlmemo-mark':'','data-htmlmemo-id':'a-1'},'background:#edcf6780');
   const html=serializeHTML(doc,parsed.metadata);assert.match(html,/data-htmlmemo-mark/);assert.match(html,/id="htmlmemo-data"/);const reopened=parseHTML(html);assert.deepEqual(reopened.metadata.annotations,[annotation]);assert.equal(reopened.metadata.source,'https://example.test/article');assert.equal(reopened.metadata.viewport.width,960);assert.equal(documentFor(reopened.html).body.textContent,'Hello world');assert.equal(documentFor(reopened.html).querySelector('[data-htmlmemo-mark]'),null);
 });
+test('preparing an annotated export preserves existing drawing targets and allocates unique anchors',async()=>{
+  const doc=documentFor('<html><head></head><body><p id="new">New unanchored content</p><section data-htmlmemo-anchor="n0"><p id="saved" data-htmlmemo-anchor="js0">Saved drawing target</p></section><p data-htmlmemo-anchor="n0">Duplicate</p></body></html>');
+  const stroke={id:'saved-stroke',type:'pen',anchor:'js0',points:[{x:.2,y:.1},{x:.8,y:.9}],color:'#ef4444',width:3,opacity:1};
+  const exported=serializeHTML(doc,{version:1,annotations:[stroke]});
+  for(const prepared of [parseHTML(exported),await prepareLoadedHTML(documentFor(exported))]){
+    const reopened=documentFor(prepared.html),keys=[...reopened.querySelectorAll('[data-htmlmemo-anchor]')].map(node=>node.getAttribute('data-htmlmemo-anchor'));
+    assert.equal(reopened.querySelector('#saved').getAttribute('data-htmlmemo-anchor'),'js0');
+    assert.equal(reopened.querySelector('section').getAttribute('data-htmlmemo-anchor'),'n0');
+    assert.notEqual(reopened.querySelector('#new').getAttribute('data-htmlmemo-anchor'),'n0');
+    assert.equal(new Set(keys).size,keys.length);assert.deepEqual(prepared.metadata.annotations,[stroke]);
+  }
+});
+test('a missing drawing target is retained in metadata without substituting full-page coordinates',()=>{
+  const doc=documentFor('<html><head></head><body data-htmlmemo-anchor="body"><main></main></body></html>');
+  doc.body.getBoundingClientRect=()=>({left:0,top:0,width:1100,height:8000});
+  const r=Object.create(Reader.prototype);r.doc=doc;r.naturalWidth=1100;r.naturalHeight=8000;
+  const stroke={id:'delayed-stroke',type:'pen',anchor:'js0',points:[{x:.2,y:.1},{x:.8,y:.9}],color:'#ef4444',width:3,opacity:1};
+  r.metadata={annotations:[stroke]};r.renderDrawingLayer();
+  assert.deepEqual(r.absolutePoints(stroke),[]);assert.equal(r.layer.querySelector('[data-htmlmemo-id]'),null);
+  assert.deepEqual(r.metadata.annotations,[stroke]);
+  const target=doc.createElement('p');target.setAttribute('data-htmlmemo-anchor','js0');target.getBoundingClientRect=()=>({left:40,top:60,width:400,height:120});doc.querySelector('main').append(target);
+  r.renderDrawingLayer();assert.deepEqual(r.absolutePoints(stroke),[{x:120,y:72},{x:360,y:168}]);
+  assert.equal(r.layer.querySelector('[data-htmlmemo-id]').getAttribute('d'),'M120.00,72.00 L360.00,168.00');
+  target.remove();r.renderDrawingLayer();assert.equal(r.layer.querySelector('[data-htmlmemo-id]'),null);
+  assert.deepEqual(r.metadata.annotations,[stroke]);
+  assert.deepEqual(r.absolutePoints({...stroke,anchor:'body'}),[{x:220,y:800},{x:880,y:7200}]);
+});
+test('drawing targets recover renumbered paragraphs by content and stay within their saved book section',()=>{
+  const doc=documentFor('<html><head></head><body data-htmlmemo-anchor="body"><main><article id="reader-content" data-section="v0:first"><p data-htmlmemo-anchor="n5">The saved paragraph.</p><p>Other content.</p></article></main></body></html>');
+  const r=Object.create(Reader.prototype);r.doc=doc;
+  const p=doc.querySelector('p'),target=r.describeDrawingTarget(p);
+  const stroke={id:'persistent-target',type:'pen',anchor:'n5',anchorTarget:target,points:[{x:.1,y:.2},{x:.8,y:.9}],color:'#ef4444',width:3,opacity:1};
+  assert.equal(r.resolveDrawingTarget(stroke),p);
+  p.setAttribute('data-htmlmemo-anchor','n99');
+  const inserted=doc.createElement('p');inserted.textContent='Inserted before the saved paragraph';inserted.setAttribute('data-htmlmemo-anchor','n5');p.before(inserted);
+  assert.equal(r.resolveDrawingTarget(stroke),p);
+  r.resolvedDrawingTargets=null;assert.equal(r.resolveDrawingTarget(stroke),p);
+  p.innerHTML='<span data-htmlmemo-mark>The saved</span> paragraph.';
+  assert.equal(r.resolveDrawingTarget(stroke),p,'text marks do not change the paragraph identity');
+  const saved=parseHTML(serializeHTML(doc,{version:1,annotations:[stroke]}));
+  assert.deepEqual(saved.metadata.annotations[0].anchorTarget,target);
+  doc.getElementById('reader-content').dataset.section='v1:first';assert.equal(r.resolveDrawingTarget(stroke),null);
+  doc.getElementById('reader-content').dataset.section='v0:first';p.remove();assert.equal(r.resolveDrawingTarget(stroke),null);
+});
 test('JSON metadata cannot close its script element',()=>{
   const parsed=parseHTML('<html><head></head><body><p>body</p></body></html>');parsed.metadata.annotations=[{id:'n-1',type:'note',color:'#edcf67',width:3,opacity:1,points:[{x:1,y:1}],text:'</script><img src=x onerror=steal()>'}];const html=serializeHTML(documentFor(parsed.html),parsed.metadata);assert.ok(html.includes('\\u003c/script>'));const reopened=parseHTML(html);assert.equal(reopened.metadata.annotations[0].text,'</script><img src=x onerror=steal()>');assert.equal(documentFor(html).querySelectorAll('img').length,0);
 });

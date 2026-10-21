@@ -37,6 +37,8 @@ export class Reader {
           this.doc = this.frame.contentDocument;
           if (!this.doc?.body) throw new Error('HTML 문서를 표시하지 못했습니다.');
           this.bookIntegrity = inspectBookDocument(this.doc);
+          await this.waitForBookContent();
+          if (this.disposed) { resolve(this); return; }
           const needsPrepare = Boolean(parsed.file || !this.doc.body.hasAttribute('data-htmlmemo-anchor'));
           this.bind({deferDynamicObserver: needsPrepare});
           if (needsPrepare) {
@@ -91,6 +93,24 @@ export class Reader {
       this.documentURL = URL.createObjectURL(parsed.file || new Blob([parsed.html], {type:'text/html;charset=utf-8'}));
       this.frame.src = this.documentURL;
     } else this.frame.srcdoc = parsed.html;
+  }
+  waitForBookContent() {
+    if (!this.bookIntegrity?.complete) return Promise.resolve();
+    const content = this.doc.getElementById('reader-content');
+    if (!content) return Promise.resolve();
+    const ready = () => this.doc.documentElement.dataset.readerReady === 'true' ||
+      (content.childElementCount > 0 && !this.doc.getElementById('reader-status')?.textContent.trim());
+    if (ready()) return Promise.resolve();
+    // Packed books finish their first section after the iframe load event.
+    // Assigning anchors before that point makes IDs depend on decode timing.
+    return new Promise((resolve, reject) => {
+      const finish = error => { observer.disconnect();clearTimeout(timer);this.cancelOpeningWait=null;error ? reject(error) : resolve(); };
+      const observer = new this.doc.defaultView.MutationObserver(() => { if (this.disposed || ready()) finish(); });
+      const timer = setTimeout(() => finish(new Error('책 본문 준비를 완료하지 못했습니다. 다시 열어 주세요.')), 30000);
+      this.cancelOpeningWait = () => finish();
+      observer.observe(this.doc.documentElement,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['data-reader-ready']});
+      if (this.disposed || ready()) finish();
+    });
   }
   baseEditorStyle() {
     return `${this.nativeScroll ? '' : 'html{overflow:hidden!important;height:auto!important;min-height:0!important;scroll-behavior:auto!important}body{touch-action:pan-x pan-y;height:auto!important;min-height:0!important}'}html[data-htmlmemo-drawing] *{cursor:crosshair!important;user-select:none!important;touch-action:none!important}html[data-htmlmemo-drawing] aside,html[data-htmlmemo-drawing] aside *,html[data-htmlmemo-drawing] nav,html[data-htmlmemo-drawing] nav *,html[data-htmlmemo-drawing] header,html[data-htmlmemo-drawing] header *,html[data-htmlmemo-drawing] .toc,html[data-htmlmemo-drawing] .toc *,html[data-htmlmemo-drawing] #toc,html[data-htmlmemo-drawing] #toc *,html[data-htmlmemo-drawing] [data-htmlmemo-toc-sidebar],html[data-htmlmemo-drawing] [data-htmlmemo-toc-sidebar] *,html[data-htmlmemo-drawing] [data-htmlmemo-doc-topbar],html[data-htmlmemo-drawing] [data-htmlmemo-doc-topbar] *{cursor:auto!important;touch-action:auto!important}html[data-htmlmemo-drawing] aside a,html[data-htmlmemo-drawing] aside button,html[data-htmlmemo-drawing] aside summary,html[data-htmlmemo-drawing] nav a,html[data-htmlmemo-drawing] nav button,html[data-htmlmemo-drawing] nav summary,html[data-htmlmemo-drawing] .toc a,html[data-htmlmemo-drawing] .toc button,html[data-htmlmemo-drawing] .toc summary,html[data-htmlmemo-drawing] #toc a,html[data-htmlmemo-drawing] #toc button,html[data-htmlmemo-drawing] #toc summary,html[data-htmlmemo-drawing] [data-htmlmemo-toc-sidebar] a,html[data-htmlmemo-drawing] [data-htmlmemo-toc-sidebar] button,html[data-htmlmemo-drawing] [data-htmlmemo-toc-sidebar] summary,html[data-htmlmemo-drawing] [data-htmlmemo-doc-topbar] button,html[data-htmlmemo-drawing] [data-htmlmemo-doc-topbar] select{cursor:pointer!important}[data-htmlmemo-scroll-host]{position:relative!important}html[data-htmlmemo-toc-resizing],html[data-htmlmemo-toc-resizing] body{cursor:col-resize!important;user-select:none!important;-webkit-user-select:none!important}[data-htmlmemo-sidebar-grid]{grid-template-columns:var(--htmlmemo-toc-grid-columns)!important;transition:none!important}[data-htmlmemo-toc-sidebar],[data-htmlmemo-toc-item],[data-htmlmemo-sidebar-flex]{width:var(--htmlmemo-toc-width)!important;min-width:var(--htmlmemo-toc-width)!important;max-width:var(--htmlmemo-toc-width)!important;box-sizing:border-box!important;transition:none!important}[data-htmlmemo-sidebar-flex]{flex:0 0 var(--htmlmemo-toc-width)!important}[data-htmlmemo-toc-sidebar]{overflow-x:hidden!important}[data-htmlmemo-toc-item-strip]{width:8px!important;min-width:8px!important;max-width:8px!important;flex:0 0 8px!important;padding-left:0!important;padding-right:0!important;overflow:hidden!important;box-sizing:border-box!important}[data-htmlmemo-toc-strip]{width:8px!important;min-width:8px!important;max-width:8px!important;flex:0 0 8px!important;padding-left:0!important;padding-right:0!important;overflow:hidden!important;box-sizing:border-box!important;cursor:col-resize!important;user-select:none!important;pointer-events:auto!important}[data-htmlmemo-toc-strip]>:not([data-htmlmemo-toc-resizer]):not([data-htmlmemo-toc-resizer-bound]){opacity:0!important;visibility:hidden!important;pointer-events:none!important}[data-htmlmemo-toc-strip] [data-htmlmemo-toc-resizer],[data-htmlmemo-toc-strip] [data-htmlmemo-toc-resizer-bound]{left:0!important;width:8px!important;min-width:8px!important;opacity:1!important;visibility:visible!important;pointer-events:auto!important}[data-htmlmemo-toc-resizer],[data-htmlmemo-toc-resizer-bound]{cursor:col-resize!important;touch-action:none!important;user-select:none!important;-webkit-user-select:none!important;transition:none!important}[data-htmlmemo-topbar-grid]{grid-template-rows:var(--htmlmemo-topbar-grid-rows)!important}[data-htmlmemo-topbar-pad]{padding-top:24px!important}[data-htmlmemo-topbar-offset]{top:24px!important}[data-htmlmemo-doc-topbar],[data-htmlmemo-doc-topbar-item]{height:24px!important;min-height:24px!important;max-height:24px!important;padding-top:0!important;padding-bottom:0!important;margin-top:0!important;margin-bottom:0!important;box-sizing:border-box!important;align-items:center!important}[data-htmlmemo-doc-topbar] *{padding-top:0!important;padding-bottom:0!important;margin-top:0!important;margin-bottom:0!important;min-height:0!important;box-sizing:border-box!important}[data-htmlmemo-doc-topbar]>div,[data-htmlmemo-doc-topbar]>nav{height:100%!important;max-height:24px!important;align-items:center!important}[data-htmlmemo-doc-topbar] h1,[data-htmlmemo-doc-topbar] h2,[data-htmlmemo-doc-topbar] h3,[data-htmlmemo-doc-topbar] strong,[data-htmlmemo-doc-topbar] [class*="title"]{font-size:13px!important;line-height:22px!important;white-space:nowrap!important}[data-htmlmemo-doc-topbar] button,[data-htmlmemo-doc-topbar] [role="button"],[data-htmlmemo-doc-topbar] input{height:20px!important;min-height:20px!important;max-height:20px!important;padding-top:0!important;padding-bottom:0!important;font-size:12px!important;line-height:18px!important;border-radius:4px!important;display:inline-flex!important;align-items:center!important;justify-content:center!important}[data-htmlmemo-doc-topbar] select{height:20px!important;min-height:20px!important;max-height:20px!important;padding-top:0!important;padding-bottom:0!important;font-size:12px!important;line-height:18px!important;border-radius:4px!important}[data-htmlmemo-doc-topbar] svg{width:14px!important;height:14px!important}`;
@@ -1138,6 +1158,16 @@ export class Reader {
       // A clock or a small generated paragraph must not rescan a 50,000-page book.
       const rootSet=new Set(roots);
       const unique=roots.filter(root=>{for(let parent=root.parentElement;parent;parent=parent.parentElement)if(rootSet.has(parent))return false;return true;});
+      // Reserve IDs supplied by scripts before assigning any new IDs, including
+      // when an already anchored paragraph arrives after the initial load.
+      for (const root of unique) {
+        for (const element of [root,...root.querySelectorAll('[data-htmlmemo-anchor^="js"]')]) {
+          const key = element.getAttribute('data-htmlmemo-anchor');
+          const index = /^js\d+$/.test(key) ? Number(key.slice(2)) : -1;
+          if (Number.isSafeInteger(index) && index >= this.dynamicAnchor) this.dynamicAnchor = index + 1;
+          if((++count&255)===0&&performance.now()-start>=10){await new Promise(resolve=>setTimeout(resolve,0));if(this.disposed)return;start=performance.now();}
+        }
+      }
       for(const root of unique){
         const inChrome = this.isInsideTocOrTopbar(root);
         const descendants = root.hasAttribute?.('data-htmlmemo-anchor')
@@ -1160,6 +1190,9 @@ export class Reader {
         if (mainAdded > 0) this.render();
         this.callbacks.onView?.();
       }
+      // Generated content may restore its own saved anchors, with no new IDs
+      // to assign. Retry pending drawings without rebuilding all text marks.
+      if (mainAdded === 0) this.renderDrawingLayer();
     } finally {
       this.dynamicRunning = false;
       if (this.dynamicDirty && !this.disposed) this.scheduleDynamicRefresh();
@@ -1386,7 +1419,47 @@ export class Reader {
       height:Math.max(1, r.height),
     };
   }
-  elementAnchor(target) {
+  drawingTargetQuote(element) {
+    if (element === this.doc.body || element === this.doc.documentElement) return '';
+    const walker = this.doc.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    let text = '', count = 0;
+    while (count++ < 1000 && text.length < 320 && walker.nextNode()) {
+      if (!walker.currentNode.parentElement?.closest('script,style,svg,template,[data-htmlmemo-ui]')) text += walker.currentNode.textContent.slice(0, 320 - text.length);
+    }
+    return text.replace(/\s+/g, ' ').trim().slice(0, 160);
+  }
+  describeDrawingTarget(element) {
+    const root = element.parentElement?.closest('[id]') || this.doc.body;
+    const path = [];let node = element;
+    while (node !== root && node?.parentElement && path.length < 64) {
+      path.unshift([...node.parentElement.children].indexOf(node));node = node.parentElement;
+    }
+    return {tag:element.localName,id:element.id || '',rootId:root.id || '',path:node === root ? path : [],
+      quote:this.drawingTargetQuote(element),section:element.closest('#reader-content')?.dataset.section || ''};
+  }
+  resolveDrawingTarget(annotation) {
+    const direct = this.doc.querySelector(`[data-htmlmemo-anchor="${annotation.anchor}"]`);
+    const target = annotation.anchorTarget;
+    if (!target) return direct;
+    if (target.section && this.doc.getElementById('reader-content')?.dataset.section !== target.section) return null;
+    const root = target.rootId ? this.doc.getElementById(target.rootId) : this.doc.body;
+    if (!root) return null;
+    const matches = node => node?.isConnected && node.localName === target.tag &&
+      (!target.id || node.id === target.id) && (!target.quote || this.drawingTargetQuote(node) === target.quote);
+    this.resolvedDrawingTargets ||= new WeakMap();
+    const cached = this.resolvedDrawingTargets.get(annotation);
+    if (cached && root.contains(cached) && matches(cached)) return cached;
+    let node = target.id ? this.doc.getElementById(target.id) : root;
+    if (!target.id) for (const index of target.path) node = node?.children[index];
+    if (!matches(node) || !root.contains(node)) node = root.contains(direct) && matches(direct) ? direct : null;
+    if (!node && target.quote) {
+      const candidates = [...root.querySelectorAll(target.tag)].filter(matches);
+      if (candidates.length === 1) node = candidates[0];
+    }
+    if (node) this.resolvedDrawingTargets.set(annotation,node);
+    return node;
+  }
+  elementAnchor(target, describe = false) {
     const origin = this.layerOrigin();
     const scrollHost = origin.scrollHost;
     let element = target?.closest?.('[data-htmlmemo-anchor]') || scrollHost || this.doc.body;
@@ -1400,7 +1473,7 @@ export class Reader {
     }
     if (scrollHost && !scrollHost.contains(element)) element = scrollHost;
     const box = this.anchorBox(element, origin);
-    return {key:element.dataset?.htmlmemoAnchor || 'body', ...box};
+    return {key:element.dataset?.htmlmemoAnchor || 'body', ...box, ...(describe ? {target:this.describeDrawingTarget(element)} : {})};
   }
   pointerDown(event) {
     if (event.button !== 0) return;
@@ -1415,7 +1488,7 @@ export class Reader {
       event.preventDefault(); event.stopPropagation();
       const scrollHost = this.findAnnotationScrollHost();
       if (!this.layer?.isConnected || (scrollHost && this.layer.parentElement !== scrollHost)) this.renderDrawingLayer();
-      const anchor = this.elementAnchor(event.target); const p = this.point(event);
+      const anchor = this.elementAnchor(event.target,true); const p = this.point(event);
       this.gesture = {pointerId:event.pointerId, type:this.tool, anchor, points:[p]};
       event.target.setPointerCapture?.(event.pointerId);
     }
@@ -1435,12 +1508,12 @@ export class Reader {
       const points = g.points.map(p => ({x:(p.x - g.anchor.x) / g.anchor.width, y:(p.y - g.anchor.y) / g.anchor.height}));
       if (['note','text'].includes(g.type)) {
         const text = await this.callbacks.requestText?.(g.type);
-        if (text?.trim()) this.commit([...this.metadata.annotations, this.annotation(g.type, {anchor:g.anchor.key, points:[points[0]], text:text.trim()})]);
+        if (text?.trim()) this.commit([...this.metadata.annotations, this.annotation(g.type, {anchor:g.anchor.key, anchorTarget:g.anchor.target, points:[points[0]], text:text.trim()})]);
       } else if (g.points.length > 1) {
-        const next = this.annotation(g.type, {anchor:g.anchor.key, points});
+        const next = this.annotation(g.type, {anchor:g.anchor.key, anchorTarget:g.anchor.target, points});
         if (g.type === 'pen' && this.penTTL > 0) {
-          const temporary = this.drawAnnotation(next); temporary.dataset.htmlmemoPreview = ''; this.layer.append(temporary);
-          setTimeout(() => temporary.remove(), this.penTTL * 1000);
+          const temporary = this.drawAnnotation(next);
+          if (temporary) { temporary.dataset.htmlmemoPreview = ''; this.layer.append(temporary);setTimeout(() => temporary.remove(), this.penTTL * 1000); }
         } else this.commit([...this.metadata.annotations, next]);
       }
       return;
@@ -1477,8 +1550,11 @@ export class Reader {
     if (!annotation.anchor) return annotation.points;
     const origin = this.layerOrigin();
     const scrollHost = origin.scrollHost;
-    let element = this.doc.querySelector(`[data-htmlmemo-anchor="${annotation.anchor}"]`) || scrollHost || this.doc.body;
-    if (scrollHost && !scrollHost.contains(element)) element = scrollHost;
+    const element = this.resolveDrawingTarget(annotation);
+    // A delayed/absent paragraph is not the whole page. Keep its saved data,
+    // and draw only once that actual target exists and has a rendered box.
+    if (!element || element.getClientRects?.().length === 0) return [];
+    if (scrollHost && !scrollHost.contains(element) && element !== this.doc.body && element !== this.doc.documentElement && !element.contains(scrollHost)) return [];
     const box = this.anchorBox(element, origin);
     return annotation.points.map(p => ({x:box.x + p.x * box.width, y:box.y + p.y * box.height}));
   }
@@ -1595,5 +1671,5 @@ export class Reader {
     this.readAloud?.toggle();
   }
   stopSpeech() { this.readAloud?.close(); this.host?.ownerDocument?.defaultView?.speechSynthesis?.cancel(); }
-  dispose() { this.stopMiddleScroll();this.readAloud?.dispose();this.readAloud=null;this.stopSpeech(); this.disposed=true; clearTimeout(this.positionTimer);clearTimeout(this.dynamicTimer);this.dynamicObserver?.disconnect(); this.resizeObserver?.disconnect(); this.hostObserver?.disconnect(); this.frame.srcdoc=''; if(this.documentURL){URL.revokeObjectURL(this.documentURL);this.documentURL=null;} this.host.remove(); }
+  dispose() { this.stopMiddleScroll();this.readAloud?.dispose();this.readAloud=null;this.stopSpeech(); this.disposed=true;this.cancelOpeningWait?.(); clearTimeout(this.positionTimer);clearTimeout(this.dynamicTimer);this.dynamicObserver?.disconnect(); this.resizeObserver?.disconnect(); this.hostObserver?.disconnect(); this.frame.srcdoc=''; if(this.documentURL){URL.revokeObjectURL(this.documentURL);this.documentURL=null;} this.host.remove(); }
 }

@@ -169,9 +169,25 @@ function* prepareHTML(html, defaults, {includeMetadata = false, document: loaded
   doc.head.prepend(csp);
   let n = 0;
   doc.body.setAttribute('data-htmlmemo-anchor', 'body');
+  // Exported files can already contain targets created by the document's
+  // scripts. Renumbering them disconnects their saved relative coordinates.
+  const reservedAnchors = new Set();
+  for (const element of doc.body.querySelectorAll('[data-htmlmemo-anchor]')) {
+    yield;
+    const key = element.getAttribute('data-htmlmemo-anchor');
+    if (/^(?:n|js)\d+$/.test(key)) reservedAnchors.add(key);
+  }
+  const assignedAnchors = new Set(['body']);
   for (const element of doc.body.querySelectorAll('*')) {
     yield;
-    if (!['style','meta','link','template'].includes(element.localName)) element.setAttribute('data-htmlmemo-anchor', 'n' + n++);
+    if (['style','meta','link','template'].includes(element.localName)) continue;
+    const key = element.getAttribute('data-htmlmemo-anchor');
+    if (reservedAnchors.has(key) && !assignedAnchors.has(key)) assignedAnchors.add(key);
+    else {
+      while (reservedAnchors.has('n' + n)) n++;
+      const next = 'n' + n++;
+      element.setAttribute('data-htmlmemo-anchor', next);assignedAnchors.add(next);
+    }
   }
   const viewport = embedded.viewport || defaults.viewport || {width: 1100, height: 800};
   const view=embedded.view||{};
