@@ -95,6 +95,24 @@ test('the visible source TOC gets inline choices without moving its tree, listen
   assert.equal(textIndex(doc).text,text);a.r.setupDocumentSidebar();assert.equal(toc.querySelectorAll('[data-htmlmemo-doc-sidebar-ui]').length,1);
 });
 
+test('the source book strong title is hidden without removing its drawer close button or chapter labels',()=>{
+  installDOM();const a=sidebar();
+  const doc=documentFor('<html><head></head><body><nav id="reader-nav"><div class="nav-head"><strong>목차</strong><button id="reader-close">×</button></div><input placeholder="책 전체 검색"><div id="reader-tree"><h2>목차</h2><div class="nav-head"><strong>목차</strong></div><a href="#chapter">목차</a></div></nav><main><h1 id="chapter">목차</h1></main></body></html>');
+  const toc=doc.querySelector('nav'),title=toc.querySelector('.nav-head>strong'),close=toc.querySelector('#reader-close'),tree=toc.querySelector('#reader-tree'),before=textIndex(doc).text;let closed=0;close.onclick=()=>closed++;
+  Object.setPrototypeOf(a.r,Reader.prototype);a.r.doc=doc;a.r.tocResize={sidebar:toc};
+  a.r.callbacks={onSidebarView:(mode,panel,documentReader)=>a.context.renderSidebar(mode,{panel,embedded:true,documentReader})};
+  a.r.setupDocumentSidebar();
+  assert.strictEqual(doc.querySelector('[data-htmlmemo-redundant-toc-title]'),title);assert.equal(doc.querySelectorAll('[data-htmlmemo-redundant-toc-title]').length,1);
+  assert.equal(tree.querySelector('[data-htmlmemo-redundant-toc-title]'),null);assert.equal(doc.querySelector('main [data-htmlmemo-redundant-toc-title]'),null);
+  assert.deepEqual([...a.r.documentSidebarUI.querySelectorAll('[data-sidebar-view]')].map(button=>button.textContent),['목차','검색','주석']);
+  assert.equal(toc.querySelector('input').getAttribute('placeholder'),'책 전체 검색');assert.strictEqual(toc.querySelector('#reader-close'),close);close.onclick();assert.equal(closed,1);assert.equal(textIndex(doc).text,before);
+  const exported=documentFor(serializeHTML(doc,a.r.metadata));
+  assert.equal(exported.querySelector('#reader-nav>.nav-head>strong').textContent,'목차');assert.ok(exported.querySelector('#reader-close'));assert.equal(exported.querySelector('[data-htmlmemo-redundant-toc-title]'),null);
+  // Without a source header, a chapter's heading must not become the title.
+  title.parentElement.remove();a.r.documentSidebarUI.remove();a.r.setupDocumentSidebar();
+  assert.equal(tree.querySelector('[data-htmlmemo-redundant-toc-title]'),null);
+});
+
 test('opening and exporting strip inline panel state while preserving the source TOC and scripts',()=>{
   installDOM();const html='<html><head><style id="htmlmemo-doc-sidebar-style">[data-htmlmemo-sidebar-view=search]>h2{display:none}</style></head><body><nav id="reader-nav" data-htmlmemo-native-sidebar data-htmlmemo-sidebar-view="search"><section data-htmlmemo-doc-sidebar-ui data-htmlmemo-ui><h2>주석 목록</h2><button>문서 검색</button></section><h2 data-htmlmemo-redundant-toc-title>목차</h2><details open><summary>원래 트리</summary><a href="#chapter">첫 장</a></details></nav><main><h1 id="chapter">본문</h1></main><script>window.originalScript=true</script></body></html>';
   const metadata=parseHTML('<html><head></head><body></body></html>').metadata;

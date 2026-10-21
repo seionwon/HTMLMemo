@@ -823,7 +823,9 @@ export class Reader {
     if(this.documentSidebarUI?.isConnected&&sidebar.contains(this.documentSidebarUI))return;
     const panel=this.doc.createElement('section');panel.setAttribute('data-htmlmemo-ui','');panel.setAttribute('data-htmlmemo-doc-sidebar-ui','');
     // Keep every source TOC node and listener in place. Only editor-owned UI is added.
-    const title=[...sidebar.querySelectorAll('h1,h2,h3,h4,h5,h6,[role="heading"]')].find(node=>node.textContent.trim()==='목차');
+    // Exported books use .nav-head > strong, not necessarily a heading tag.
+    // Do not mistake a chapter named "목차" or an editor tab for this label.
+    const title=[...sidebar.querySelectorAll('h1,h2,h3,h4,h5,h6,[role="heading"],.nav-head > strong')].find(node=>node.textContent.trim()==='목차'&&!node.closest('[data-htmlmemo-ui],#reader-tree,details,summary,a,button'));
     title?.setAttribute('data-htmlmemo-redundant-toc-title','');
     sidebar.setAttribute('data-htmlmemo-native-sidebar','');sidebar.prepend(panel);this.documentSidebarUI=panel;
     panel.addEventListener('click',event=>event.stopPropagation());
