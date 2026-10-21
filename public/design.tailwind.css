@@ -124,6 +124,7 @@ body[data-codememo-design]{margin:0;font-family:var(--app-font);background:var(-
 /* Reused inside the document iframe; every rule is scoped to editor-owned UI. */
 [data-htmlmemo-doc-sidebar-ui]{display:block;position:relative;isolation:isolate;flex:0 0 auto;min-width:0;max-width:100%;background:var(--surface);color:var(--text);font:12px/1.6 var(--app-font);text-align:left}
 [data-htmlmemo-native-sidebar][data-htmlmemo-sidebar-view=outline]>[data-htmlmemo-doc-sidebar-ui]{position:sticky;top:0;z-index:2}
+[data-htmlmemo-native-sidebar] [data-htmlmemo-redundant-toc-title]{display:none!important}
 [data-htmlmemo-doc-sidebar-ui] *{box-sizing:border-box}
 [data-htmlmemo-doc-sidebar-ui] [hidden]{display:none!important}
 [data-htmlmemo-doc-sidebar-ui] button{display:flex;align-items:center;margin:0;border:0;border-radius:5px;padding:6px;background:transparent;color:inherit;font:inherit;cursor:pointer;text-align:left}

@@ -77,12 +77,14 @@ test('annotation list names what each annotation marks, the heading above it and
 
 test('the visible source TOC gets inline choices without moving its tree, listeners or text anchors',()=>{
   installDOM();const a=sidebar();
-  const doc=documentFor('<html><head></head><body><nav id="reader-nav"><h2>목차</h2><details open><summary>첫 권</summary><a href="#chapter">본문으로</a></details></nav><main><h1 id="chapter">첫 장</h1><p>원래 본문입니다.</p></main></body></html>');
+  const doc=documentFor('<html><head></head><body><nav id="reader-nav"><h2>목차</h2><input placeholder="책 전체 검색"><details open><summary>첫 권</summary><a href="#chapter">본문으로</a></details></nav><main><h1 id="chapter">첫 장</h1><h2>목차</h2><p>원래 본문입니다.</p></main></body></html>');
   const toc=doc.querySelector('nav'),tree=doc.querySelector('details'),text=textIndex(doc).text;let clicks=0;tree.querySelector('summary').onclick=()=>clicks++;
   Object.setPrototypeOf(a.r,Reader.prototype);a.r.doc=doc;a.r.tocResize={sidebar:toc};
   a.r.callbacks={onSidebarView:(mode,panel,documentReader)=>a.context.renderSidebar(mode,{panel,embedded:true,documentReader})};
   a.r.setupDocumentSidebar();const panel=a.r.documentSidebarUI;
   assert.strictEqual(toc.firstElementChild,panel);assert.deepEqual([...panel.querySelectorAll('[data-sidebar-view]')].map(button=>button.textContent),['목차','검색','주석']);
+  assert.equal(toc.querySelector('h2:not([hidden])').hasAttribute('data-htmlmemo-redundant-toc-title'),true);assert.equal(doc.querySelectorAll('[data-htmlmemo-redundant-toc-title]').length,1);
+  assert.equal(doc.querySelector('main h2').hasAttribute('data-htmlmemo-redundant-toc-title'),false);assert.equal(toc.querySelector('input').getAttribute('placeholder'),'책 전체 검색');
   toc.scrollTop=37;a.r.tocStrip=true;a.r.tocExpandedWidth=260;let expanded=0,synced=0;
   a.r.applyTocWidth=width=>{expanded=width;a.r.tocStrip=false;};a.r.syncAfterTocResize=()=>synced++;
   panel.querySelector('[data-sidebar-view=search]').onclick();assert.equal(expanded,260);assert.equal(synced,1);assert.equal(toc.scrollTop,0);
@@ -94,10 +96,10 @@ test('the visible source TOC gets inline choices without moving its tree, listen
 });
 
 test('opening and exporting strip inline panel state while preserving the source TOC and scripts',()=>{
-  installDOM();const html='<html><head><style id="htmlmemo-doc-sidebar-style">[data-htmlmemo-sidebar-view=search]>h2{display:none}</style></head><body><nav id="reader-nav" data-htmlmemo-native-sidebar data-htmlmemo-sidebar-view="search"><section data-htmlmemo-doc-sidebar-ui data-htmlmemo-ui><h2>주석 목록</h2><button>문서 검색</button></section><h2>목차</h2><details open><summary>원래 트리</summary><a href="#chapter">첫 장</a></details></nav><main><h1 id="chapter">본문</h1></main><script>window.originalScript=true</script></body></html>';
+  installDOM();const html='<html><head><style id="htmlmemo-doc-sidebar-style">[data-htmlmemo-sidebar-view=search]>h2{display:none}</style></head><body><nav id="reader-nav" data-htmlmemo-native-sidebar data-htmlmemo-sidebar-view="search"><section data-htmlmemo-doc-sidebar-ui data-htmlmemo-ui><h2>주석 목록</h2><button>문서 검색</button></section><h2 data-htmlmemo-redundant-toc-title>목차</h2><details open><summary>원래 트리</summary><a href="#chapter">첫 장</a></details></nav><main><h1 id="chapter">본문</h1></main><script>window.originalScript=true</script></body></html>';
   const metadata=parseHTML('<html><head></head><body></body></html>').metadata;
   for(const result of [parseHTML(html,{}, {allowScripts:true}).html,serializeHTML(documentFor(html),metadata)]){
-    const doc=documentFor(result);assert.equal(doc.querySelector('[data-htmlmemo-doc-sidebar-ui],#htmlmemo-doc-sidebar-style,[data-htmlmemo-native-sidebar],[data-htmlmemo-sidebar-view]'),null);
+    const doc=documentFor(result);assert.equal(doc.querySelector('[data-htmlmemo-doc-sidebar-ui],#htmlmemo-doc-sidebar-style,[data-htmlmemo-native-sidebar],[data-htmlmemo-sidebar-view],[data-htmlmemo-redundant-toc-title]'),null);
     assert.equal(doc.querySelector('#reader-nav h2').textContent,'목차');assert.equal(doc.querySelector('#reader-nav details').hasAttribute('open'),true);assert.match(result,/window.originalScript=true/);
   }
 });

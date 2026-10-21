@@ -571,15 +571,23 @@ test('real Chrome: native sidebar view choices are visible on open and preserve 
   const server=createServer(folder);let chrome;
   try{
     await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));chrome=await launchChrome();const page=chrome.page;
-    const url=process.env.HTMLMEMO_SIDEBAR_TEST_URL||`http://127.0.0.1:${server.address().port}/`,source=await readFile(join(root,'tests/fixtures/book.html'),'utf8');
+    const url=process.env.HTMLMEMO_SIDEBAR_TEST_URL||`http://127.0.0.1:${server.address().port}/`,book=await readFile(join(root,'tests/fixtures/book.html'),'utf8');
+    // Model the source book's real drawer rule: the menu is useful below 761px,
+    // but hidden on wider document viewports. Reader must not force it visible.
+    const source=book.replace('</style>','.reader-head{display:flex;align-items:center;gap:8px;height:44px;flex:none}body{display:flex;flex-direction:column}.layout{flex:1;height:auto;min-height:0}@media(min-width:761px){#reader-menu{display:none}}@media(max-width:760px){.layout{grid-template-columns:minmax(0,1fr)}#reader-nav{display:none;position:fixed;top:24px;bottom:0;left:0;z-index:6;background:white}body.toc-open #reader-nav{display:block}}</style>')
+      .replace('<body>','<body><header class="reader-head"><button id="reader-menu" aria-controls="reader-nav" aria-expanded="false" title="목차">☰</button><span class="reader-title">검증용 책</span></header><script>{const menu=document.getElementById("reader-menu");menu.addEventListener("click",()=>menu.setAttribute("aria-expanded",String(document.body.classList.toggle("toc-open"))));}</script>')
+      .replace('<h2>목차</h2>','<h2>목차</h2><input id="book-search" placeholder="책 전체 검색">');
     await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});await page.navigate(url);
     await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
-    await page.evaluate(`(async()=>{const {putDocumentRevision}=await import('./src/storage.js'),{parseHTML}=await import('./src/document.js');const parsed=parseHTML(${JSON.stringify(source)},{title:'원본 목차 검증'},{allowScripts:true});parsed.metadata.annotations=[{id:'native-note',type:'note',text:'책의 메모',color:'#334155',width:3,opacity:1,points:[{x:30,y:120}]}];await putDocumentRevision({id:'native-sidebar-document',title:'원본 목차 검증',name:'native-book.html',created:Date.now(),modified:Date.now(),html:parsed.html,metadata:parsed.metadata});})()`);
+    await page.evaluate(`(async()=>{const {putDocumentRevision}=await import('./src/storage.js'),{parseHTML}=await import('./src/document.js');const parsed=parseHTML(${JSON.stringify(source)},{title:'원본 목차 검증'},{allowScripts:true});parsed.metadata.annotations=[{id:'native-note',type:'note',text:'책의 메모',color:'#334155',width:3,opacity:1,points:[{x:30,y:120}]}];await putDocumentRevision({id:'native-sidebar-document',title:'원본 목차 검증',name:'native-book.html',created:Date.now(),modified:Date.now(),html:parsed.html,metadata:parsed.metadata});const narrow=structuredClone(parsed.metadata);narrow.viewport.width=720;await putDocumentRevision({id:'native-narrow-sidebar-document',title:'좁은 목차 검증',name:'narrow-book.html',created:Date.now(),modified:Date.now(),html:parsed.html,metadata:narrow});})()`);
     await page.navigate(url);await page.waitFor('!!document.querySelector("[data-open=native-sidebar-document]")');await page.click('[data-open=native-sidebar-document]');
     const frame='document.querySelector(".document-host:not([hidden]) iframe")',doc=frame+'.contentDocument';
     await page.waitFor(`${doc}?.querySelectorAll('[data-htmlmemo-doc-sidebar-ui] [data-sidebar-view]').length===3&&!${frame}.hasAttribute('aria-hidden')`);
     assert.equal(await page.evaluate('document.querySelector("#sidebar").hidden'),true);
     assert.deepEqual(await page.evaluate(`[...${doc}.querySelectorAll('[data-htmlmemo-doc-sidebar-ui] [data-sidebar-view]')].map(button=>button.textContent)`),['목차','검색','주석']);
+    assert.equal(await page.evaluate(`${doc}.defaultView.getComputedStyle(${doc}.querySelector('[data-htmlmemo-redundant-toc-title]')).display`),'none');
+    assert.equal(await page.evaluate(`${doc}.defaultView.getComputedStyle(${doc}.querySelector('#reader-menu')).display`),'none');
+    assert.notEqual(await page.evaluate(`${doc}.defaultView.getComputedStyle(${doc}.querySelector('#book-search')).display`),'none');
     await page.evaluate(`window.nativeSidebarTree=${doc}.querySelector('#reader-tree');`);
     for(const mode of ['search','annotations']){
       await page.click('[data-action=more]');assert.equal(await page.evaluate(`document.querySelector('[data-more=${mode}]').textContent.trim()`),mode==='search'?'검색':'주석');await page.click(`[data-more=${mode}]`);
@@ -609,6 +617,7 @@ test('real Chrome: native sidebar view choices are visible on open and preserve 
       await chooseNative('search');assert.equal(await page.evaluate(`${doc}.querySelector('input').value`),'Introduction');
       await chooseNative('outline');assert.equal(await page.evaluate(`${doc}.querySelector('#reader-tree')===window.nativeSidebarTree`),true);
       assert.notEqual(await page.evaluate(`${doc}.defaultView.getComputedStyle(${doc}.querySelector('#reader-tree')).display`),'none');
+      assert.equal(await page.evaluate(`${doc}.defaultView.getComputedStyle(${doc}.querySelector('[data-htmlmemo-redundant-toc-title]')).display`),'none');
       assert.equal(await page.evaluate(`${doc}.querySelectorAll('[data-htmlmemo-doc-sidebar-ui]').length`),1);
       await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,`test-results/sidebar-views-native-${width}.png`),await page.screenshot());
     }
@@ -617,8 +626,18 @@ test('real Chrome: native sidebar view choices are visible on open and preserve 
     await clickNative('[data-sidebar-view=annotations]');await clickNative('[data-delete-annotation=native-note]');
     await page.waitFor(`${doc}.querySelector('.panel-empty')?.textContent.includes('아직 주석')`);
     await page.evaluate(`window.showSaveFilePicker=async()=> (await navigator.storage.getDirectory()).getFileHandle('native-sidebar-export.html',{create:true});`);await page.click('#save-page');
-    const exported=await page.evaluate(`(async()=>{const root=await navigator.storage.getDirectory();let file;for(let i=0;i<50;i++){try{file=await(await root.getFileHandle('native-sidebar-export.html')).getFile();if(file.size)break;}catch{}await new Promise(resolve=>setTimeout(resolve,50));}const html=await file.text(),doc=new DOMParser().parseFromString(html,'text/html');return {runtime:!!doc.querySelector('[data-htmlmemo-doc-sidebar-ui],[data-htmlmemo-native-sidebar],[data-htmlmemo-sidebar-view],#htmlmemo-doc-sidebar-style'),volumes:[0,1,2].every(i=>!!doc.getElementById('book-volume-'+i)),notes:JSON.parse(doc.getElementById('htmlmemo-data').textContent).annotations.length};})()`);
-    assert.deepEqual(exported,{runtime:false,volumes:true,notes:0});assert.equal(await page.evaluate('document.querySelector("#sidebar").hidden'),true);assert.deepEqual(chrome.errors,[]);
+    const exported=await page.evaluate(`(async()=>{const root=await navigator.storage.getDirectory();let file;for(let i=0;i<50;i++){try{file=await(await root.getFileHandle('native-sidebar-export.html')).getFile();if(file.size)break;}catch{}await new Promise(resolve=>setTimeout(resolve,50));}const html=await file.text(),doc=new DOMParser().parseFromString(html,'text/html');return {runtime:!!doc.querySelector('[data-htmlmemo-doc-sidebar-ui],[data-htmlmemo-native-sidebar],[data-htmlmemo-sidebar-view],[data-htmlmemo-redundant-toc-title],#htmlmemo-doc-sidebar-style'),volumes:[0,1,2].every(i=>!!doc.getElementById('book-volume-'+i)),notes:JSON.parse(doc.getElementById('htmlmemo-data').textContent).annotations.length,title:doc.querySelector('#reader-nav h2').textContent,menu:!!doc.getElementById('reader-menu')};})()`);
+    assert.deepEqual(exported,{runtime:false,volumes:true,notes:0,title:'목차',menu:true});assert.equal(await page.evaluate('document.querySelector("#sidebar").hidden'),true);
+    await page.click('#library-tab');await page.waitFor('!!document.querySelector("[data-open=native-narrow-sidebar-document]")');await page.click('[data-open=native-narrow-sidebar-document]');
+    await page.waitFor(`${doc}?.defaultView.innerWidth===720&&!${frame}.hasAttribute('aria-hidden')`);
+    assert.notEqual(await page.evaluate(`${doc}.defaultView.getComputedStyle(${doc}.querySelector('#reader-menu')).display`),'none');
+    assert.equal(await page.evaluate(`${doc}.defaultView.getComputedStyle(${doc}.querySelector('#reader-nav')).display`),'none');
+    await clickNative('#reader-menu');await page.waitFor(`${doc}.querySelector('#reader-menu').getAttribute('aria-expanded')==='true'`);
+    assert.notEqual(await page.evaluate(`${doc}.defaultView.getComputedStyle(${doc}.querySelector('#reader-nav')).display`),'none');
+    assert.equal(await page.evaluate(`${doc}.defaultView.getComputedStyle(${doc}.querySelector('[data-htmlmemo-redundant-toc-title]')).display`),'none');
+    await writeFile(join(root,'test-results/sidebar-views-controls-narrow.png'),await page.screenshot());
+    await clickNative('#reader-menu');await page.waitFor(`${doc}.defaultView.getComputedStyle(${doc}.querySelector('#reader-nav')).display==='none'`);
+    assert.deepEqual(chrome.errors,[]);
   }finally{if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
 });
 
