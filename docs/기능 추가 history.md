@@ -1012,10 +1012,10 @@ ID: hist-20261014-024. tests/chrome.mjs가 macOS Codex/CodeMemo 제한 환경을
 
 | ID | change-kind | status |
 |---|---|---|
-| hist-20261021-001 | 설정 버튼 아이콘 변경 | 구현·검사·빌드·실제 Chrome 확인 완료 / Pages 게시 대기 |
+| hist-20261021-001 | 설정 버튼 아이콘 변경 | 구현·검사·빌드·실제 Chrome·Pages 게시·온라인 확인 완료 |
 
 화면 오른쪽 위 설정 버튼의 슬라이더 모양 SVG를 가운데 구멍과 톱니가 있는 SVG로 바꿨습니다. 기존 아이콘의 크기·색상·선 스타일과 `설정` 접근성 이름을 유지하고, 서비스 워커 캐시를 갱신했습니다.
 
 **검증:** `npm run check`, `npm test` 130개, `npm run build`, `git diff --check` 통과. 별도 임시 프로필의 실제 Chrome에서 톱니바퀴 표시와 설정 버튼 클릭 시 `HTMLMemo 설정` 대화상자 열림을 확인했습니다. 브라우저 예외는 없었습니다.
 
-**게시:** Actions·Pages 게시와 공개 화면 확인 결과를 후속 기록합니다.
+**게시·온라인 확인 (2026-10-21 11:01 +09:00):** 커밋 `fd9716e28269746c6626ae8d041f6c7c674fd0cf`의 [GitHub Actions·Pages 게시](https://github.com/seionwon/HTMLMemo/actions/runs/39530416129)가 성공했습니다. 공개 앱의 `src/utils.js`와 로컬 소스의 바이트 일치를 확인했습니다. 공개 주소에서도 실제 Chrome으로 톱니바퀴 표시와 설정창 열림을 확인했으며 브라우저 예외는 없었습니다.
