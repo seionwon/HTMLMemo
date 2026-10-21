@@ -126,7 +126,9 @@ test('the single header menu preserves library, web opening, HTML import, app de
   assert.ok(doc.querySelector('#tabs').closest('.addressbar'));
   assert.equal(doc.querySelector('#tabs').closest('#app-menu'),null);
   assert.equal(doc.querySelector('#open-tabs-menu'),null);
-  for(const id of ['#library-tab','#execution-tab','#new-tab','#install-button','#connection-button','#settings-button','#about-button'])assert.ok(doc.querySelector(id).closest('#app-menu'));
+  for(const id of ['#execution-tab','#new-tab','#install-button','#connection-button','#settings-button','#about-button'])assert.ok(doc.querySelector(id).closest('#app-menu'));
+  assert.equal(doc.querySelector('#import-button').previousElementSibling.id,'library-tab');
+  assert.equal(doc.querySelector('#library-tab').textContent,'');assert.equal(doc.querySelector('#library-tab').title,'내 서재');
   for(const id of ['#library-tab','#execution-tab','#new-tab','#import-button'])assert.ok(doc.querySelector(id).closest('header'));
   assert.equal(doc.querySelector('#library-tab').getAttribute('aria-current'),'page');
   click('#execution-tab');
@@ -157,8 +159,8 @@ test('the dropdown opens without a modal and supports keyboard navigation, Escap
   const key=value=>{const event=new doc.defaultView.Event('keydown',{bubbles:true,cancelable:true});event.key=value;doc.activeElement.dispatchEvent(event);};
   assert.equal(menu.hidden,true);trigger.onclick();
   assert.equal(menu.hidden,false);assert.equal(trigger.getAttribute('aria-expanded'),'true');assert.ok(!doc.querySelector('#dialog').open);
-  assert.equal(doc.activeElement.id,'library-tab');key('ArrowDown');assert.equal(doc.activeElement.id,'new-tab');
-  key('End');assert.equal(doc.activeElement.id,'about-button');key('Home');assert.equal(doc.activeElement.id,'library-tab');
+  assert.equal(doc.activeElement.id,'new-tab');key('ArrowDown');assert.equal(doc.activeElement.id,'execution-tab');
+  key('End');assert.equal(doc.activeElement.id,'about-button');key('Home');assert.equal(doc.activeElement.id,'new-tab');
   key('Escape');assert.equal(menu.hidden,true);assert.equal(trigger.getAttribute('aria-expanded'),'false');assert.equal(doc.activeElement,trigger);
   trigger.onclick();doc.body.dispatchEvent(new doc.defaultView.Event('pointerdown',{bubbles:true}));assert.equal(menu.hidden,true);
   trigger.onclick();doc.querySelector('#new-tab').click();assert.equal(menu.hidden,true);assert.equal(doc.activeElement.id,'address');
