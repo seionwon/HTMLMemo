@@ -99,7 +99,7 @@ function connectionDialog() {
 function updateConnection() { $('#connection-button').classList.toggle('connected',bridgeAvailable()); const label=bridgeAvailable()?'Chrome 연결됨':'Chrome 연결';$('#connection-button span').textContent=label;$('#connection-button').title=label;$('#connection-button').setAttribute('aria-label',label); }
 function settingsDialog() {
   modal(`<div class="dialog-heading"><h2>HTMLMemo 설정</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><p class="local-only-note">${icon('check',15)} 모든 문서·주석·설정은 이 기기에만 저장됩니다.</p><div class="setting-row"><div><strong>자동 저장 폴더</strong><p>${folder?esc(folder.name):settingsFolderHint?'백업 폴더: '+esc(settingsFolderHint)+' · 다시 연결해주세요.':'앱 내부에 HTML 파일로 보관 중'}</p></div><button id="settings-folder" class="secondary-button">${folder?'변경':'폴더 연결'}</button></div><p class="dialog-description small">폴더 권한은 설정 파일로 옮길 수 없어 새 기기에서 한 번 연결해야 합니다.</p><div class="setting-row"><div><strong>화면 테마</strong><p>서재와 도구의 밝기를 선택하세요.</p></div><select id="appearance"><option value="light">밝게</option><option value="dark">어둡게</option><option value="system">시스템</option></select></div><div class="setting-row"><div><strong>툴바 위치</strong><p>옮긴 위치도 설정 파일에 보관합니다.</p></div><button id="reset-toolbar-position" class="secondary-button">가운데로</button></div><div class="settings-backup"><h3>설정 파일</h3><p class="dialog-description small">테마·정렬 기준과 방향·주석 색상·굵기·투명도·표시 시간·툴바 위치를 JSON 파일로 저장하고 다시 불러옵니다.</p><p id="settings-file-name" class="settings-file-name">${settingsFileHandle?esc(settingsFileHandle.name):'연결한 설정 파일이 없습니다.'}</p><div class="settings-file-actions"><button id="settings-save" class="secondary-button">${icon('save',15)} 설정 파일 저장</button><button id="settings-load" class="secondary-button">${icon('folder',15)} 설정 파일 불러오기</button><button id="settings-reload" class="secondary-button" ${settingsFileHandle?'':'disabled'}>${icon('reload',15)} 다시 불러오기</button></div></div><div class="setting-row"><div><strong>Chrome 연결</strong><p>${bridgeAvailable()?'연결되어 있습니다.':'웹 페이지를 저장하기'}</p></div><button id="settings-chrome" class="secondary-button">설정 방법</button></div><div class="setting-row"><div><strong>기기 보관함 유지</strong><p>브라우저의 자동 공간 정리에서 보호 요청</p></div><button id="persist-storage" class="secondary-button">보관 유지</button></div><p class="dialog-description small">앱 데이터 삭제 시 내부 보관함도 지워집니다. 중요한 문서는 HTML 파일로 내보내주세요.</p>`,()=>{
-    $('#settings-folder').onclick=safely(async()=>{await chooseFolder();settingsDialog();});$('#settings-chrome').onclick=connectionDialog;
+    $('#settings-folder').onclick=safely(()=>chooseFolder({onConnected:settingsDialog}));$('#settings-chrome').onclick=connectionDialog;
     $('#appearance').value=preferences.theme; $('#appearance').onchange=safely(e=>changePreferences({theme:e.target.value}));
     $('#settings-save').onclick=safely(saveSettingsBackup);$('#settings-load').onclick=safely(importSettingsBackup);$('#settings-reload').onclick=safely(async()=>{await restoreSettings(settingsFileHandle);settingsDialog();});
     $('#reset-toolbar-position').onclick=safely(()=>{changePreferences({toolbarPosition:null});toast('툴바를 가운데로 옮겼습니다.');});
@@ -289,9 +289,26 @@ async function createDocument(snapshot, handle = null, name = null, local = {}) 
   else toast(local.originalHandle||name?'로컬 HTML을 주석 탭에서 열었습니다.':'HTML 파일로 저장하고 새 탭에서 열었습니다.');
   return tab;
 }
-async function chooseFolder() {
+function chooseFolder({onConnected} = {}) {
   if(!window.showDirectoryPicker){toast('이 브라우저는 외부 폴더 연결을 지원하지 않습니다. 앱에 자동 저장되며 HTML 내보내기를 사용할 수 있어요.');return;}
-  folder=await window.showDirectoryPicker({id:'htmlmemo-storage',mode:'readwrite'});await setSetting('folder',folder);renderLibrary();toast(folder.name+' 폴더에 새 문서를 자동 저장합니다.');
+  modal(`<div class="dialog-heading"><h2>저장 폴더 연결</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><p class="dialog-description">문서나 다운로드 폴더 안의 <strong>HTMLMemo 전용 하위 폴더</strong>를 선택하세요.</p><p class="dialog-description"><code>문서/HTMLMemo</code> 또는 <code>다운로드/HTMLMemo</code><br>선택 창에서 HTMLMemo 폴더를 새로 만들거나 기존 하위 폴더를 선택하면 됩니다.</p><p class="dialog-description small">홈·문서·다운로드 폴더 전체와 시스템 폴더는 브라우저가 연결을 제한합니다. “Can't open this folder”가 나오면 전용 하위 폴더를 선택하세요.</p><p id="folder-connection-status" class="dialog-description" role="status">${folder?'현재 연결: '+esc(folder.name):'폴더를 연결하지 않아도 문서와 주석은 앱에 자동 저장됩니다.'}</p><div class="dialog-actions"><button class="secondary-button" data-dialog-close>닫기</button><button id="select-storage-folder" class="primary-button">폴더 선택</button></div>`,()=>{
+    const button=$('#select-storage-folder'),status=$('#folder-connection-status');
+    button.onclick=safely(async()=>{
+      if(button.disabled)return;
+      button.disabled=true;let selected;
+      try{
+        selected=await window.showDirectoryPicker({id:'htmlmemo-storage-v2',mode:'readwrite',startIn:folder||'documents'});
+        await setSetting('folder',selected);
+      }catch(error){
+        if(error?.name==='AbortError')status.textContent='폴더 연결은 변경하지 않았습니다. 연결하려면 전용 하위 폴더를 선택하세요.';
+        else if(selected)status.textContent='폴더 연결 정보를 저장하지 못했습니다. 기존 연결은 유지됩니다. 다시 시도해 주세요.';
+        else if(['NotAllowedError','SecurityError'].includes(error?.name))status.textContent='브라우저가 폴더 연결을 허용하지 않았습니다. 문서/HTMLMemo 같은 전용 하위 폴더를 선택하세요.';
+        else status.textContent='폴더를 연결하지 못했습니다. '+(error?.message||String(error));
+        return;
+      }finally{button.disabled=false;}
+      folder=selected;renderLibrary();$('#dialog').close();if(typeof onConnected==='function')onConnected();toast(folder.name+' 폴더에 새 문서를 자동 저장합니다.');
+    });
+  });
 }
 async function folderFile(title) {
   if(!folder||!await permission(folder))return null;

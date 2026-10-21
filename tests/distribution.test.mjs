@@ -67,18 +67,18 @@ test('a real build removes retired distribution artifacts and writes the Pages w
 
 // Executes the real standalone bundle with a DOM model and local IndexedDB
 // contract. It verifies event handlers, not Chrome rendering or OS file dialogs.
-async function fileApp({address='file:///Users/beginner/HTMLMemo.html',navigator={},documents=[],localEntries=[]}={}){
+async function fileApp({address='file:///Users/beginner/HTMLMemo.html',navigator={},documents=[],localEntries=[],settings=[]}={}){
   const html=standaloneHTML(assets),doc=new DOMParser().parseFromString(html,'text/html'),blobs=[],local=new Map(localEntries);
   const selectPrototype=Object.getPrototypeOf(doc.querySelector('select'));Object.defineProperty(selectPrototype,'value',{configurable:true,get(){return this.getAttribute('data-test-value')??this.querySelector('option[selected]')?.value??this.querySelector('option')?.value??'';},set(value){this.setAttribute('data-test-value',value);}});
   Object.defineProperty(doc,'activeElement',{value:doc.body,writable:true,configurable:true});doc.defaultView.HTMLElement.prototype.focus=function(){this.ownerDocument.activeElement=this;};
   const dialog=doc.querySelector('#dialog');dialog.showModal=()=>dialog.open=true;dialog.close=()=>dialog.open=false;
-  const stores=new Map([['documents',new Map(documents.map(record=>[record.id,record]))],['settings',new Map()]]);
+  const stores=new Map([['documents',new Map(documents.map(record=>[record.id,record]))],['settings',new Map(settings)]]);
   const database={objectStoreNames:{contains:name=>stores.has(name)},createObjectStore:name=>{if(!stores.has(name))stores.set(name,new Map());return {createIndex(){}};},transaction:name=>{const tx={};tx.objectStore=()=>{const store=stores.get(name);return {getAll:()=>({result:[...store.values()]}),get:key=>({result:store.get(key)}),put:(value,key)=>{store.set(key??value.id,value);return {result:key??value.id};},delete:key=>{store.delete(key);return {};}};};queueMicrotask(()=>tx.oncomplete?.());return tx;}};
   const indexedDB={open:()=>{const request={result:database};queueMicrotask(()=>{request.onupgradeneeded?.();request.onsuccess?.();});return request;}};
   class LocalURL extends URL{static createObjectURL(blob){blobs.push(blob);return 'blob:local-test';}static revokeObjectURL(){}}
   const events=new Map();const window={addEventListener(name,fn){if(!events.has(name))events.set(name,[]);events.get(name).push(fn);},postMessage(){},dispatchEvent(){}};
   const context=vm.createContext({document:doc,window,indexedDB,localStorage:{getItem:key=>local.get(key)??null,setItem:(key,value)=>local.set(key,value)},location:new URL(address),navigator:{onLine:false,storage:{},...navigator},URL:LocalURL,Blob,File,crypto,TextEncoder,TextDecoder,Uint8Array,DataView,atob,btoa,structuredClone,Event,innerWidth:1200,innerHeight:850,matchMedia:()=>({matches:false}),setInterval(){},setTimeout(fn,ms){if(ms===800)queueMicrotask(fn);return 1;},clearTimeout(){},requestAnimationFrame:fn=>fn(),fetch:()=>{throw new Error('An embedded app must not fetch a server');}});
-  const script=[...doc.querySelectorAll('script')].find(el=>el.type!=='application/json');new vm.Script(script.textContent).runInContext(context);await new Promise(resolve=>setImmediate(resolve));assert.match(doc.querySelector('#status-left').textContent,/개의 문서/);return {doc,context,blobs,local,emit:(name,event)=>events.get(name)?.forEach(fn=>fn(event))};
+  const script=[...doc.querySelectorAll('script')].find(el=>el.type!=='application/json');new vm.Script(script.textContent).runInContext(context);await new Promise(resolve=>setImmediate(resolve));assert.match(doc.querySelector('#status-left').textContent,/개의 문서/);return {doc,context,blobs,local,settings:stores.get('settings'),emit:(name,event)=>events.get(name)?.forEach(fn=>fn(event))};
 }
 test('execution shares only the canonical URL, with no app package or installation download',async()=>{
   const copied=[];const app=await fileApp({address:'https://preview.example/app/?private=secret#note',navigator:{clipboard:{writeText:async value=>copied.push(value)}}});
@@ -183,4 +183,29 @@ test('card and list views sort by both directions for saved date, modified date 
   assert.equal(restored.doc.querySelectorAll('#library-sort option').length,6);
   assert.equal(restored.doc.querySelector('#document-grid').dataset.view,'list');
   assert.deepEqual([...restored.doc.querySelectorAll('.document-card')].map(element=>element.dataset.record),['c','b','a']);
+});
+
+test('folder setup guides users to a subfolder and saves a handle only after an explicit picker action',async()=>{
+  const app=await fileApp(),doc=app.doc,selected={kind:'directory',name:'HTMLMemo'};let options,calls=0;
+  app.context.window.showDirectoryPicker=async value=>{options=value;calls++;return selected;};
+  doc.querySelector('#choose-folder').onclick();assert.equal(calls,0);
+  assert.match(doc.querySelector('#dialog-content').textContent,/전용 하위 폴더/);assert.match(doc.querySelector('#dialog-content').textContent,/문서\/HTMLMemo/);
+  doc.querySelector('#select-storage-folder').onclick();await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(calls,1);assert.equal(options.mode,'readwrite');assert.equal(options.startIn,'documents');assert.equal(options.id,'htmlmemo-storage-v2');
+  assert.equal(app.settings.get('folder'),selected);assert.equal(doc.querySelector('#dialog').open,false);assert.match(doc.querySelector('#choose-folder').textContent,/HTMLMemo 연결됨/);
+});
+
+test('folder cancellation, blocked access and failed persistence preserve the previous connection and allow retry',async()=>{
+  const previous={kind:'directory',name:'Previous'},next={kind:'directory',name:'New HTMLMemo'},app=await fileApp({settings:[['folder',previous]]}),doc=app.doc;
+  let fail='AbortError';app.context.window.showDirectoryPicker=async()=>{if(fail){const error=new Error('Blocked or cancelled');error.name=fail;throw error;}return next;};
+  doc.querySelector('#menu-folder').onclick();
+  for(const name of ['AbortError','NotAllowedError']){
+    fail=name;doc.querySelector('#select-storage-folder').onclick();await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(app.settings.get('folder'),previous);assert.equal(doc.querySelector('#dialog').open,true);assert.equal(doc.querySelector('#select-storage-folder').disabled,false);
+    assert.match(doc.querySelector('#folder-connection-status').textContent,/하위/u);assert.match(doc.querySelector('#choose-folder').textContent,/Previous 연결됨/);
+  }
+  fail='';const set=app.settings.set.bind(app.settings);app.settings.set=()=>{throw Error('Storage unavailable');};
+  doc.querySelector('#select-storage-folder').onclick();await new Promise(resolve=>setImmediate(resolve));assert.equal(app.settings.get('folder'),previous);assert.match(doc.querySelector('#folder-connection-status').textContent,/저장하지 못했습니다/);
+  app.settings.set=set;doc.querySelector('#select-storage-folder').onclick();await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(app.settings.get('folder'),next);assert.equal(doc.querySelector('#dialog').open,false);assert.match(doc.querySelector('#choose-folder').textContent,/New HTMLMemo 연결됨/);
 });
