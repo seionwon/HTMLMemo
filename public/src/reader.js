@@ -83,6 +83,7 @@ export class Reader {
           await new Promise(done => requestAnimationFrame(done));
           if (this.disposed) { resolve(this); return; }
           this.measure(); this.renderDrawingLayer();
+          this.setupDocumentSidebar();
           this.frame.style.visibility = 'visible'; this.frame.style.pointerEvents = '';
           this.frame.removeAttribute('aria-hidden'); this.viewport.setAttribute('aria-busy', 'false');this.loading.remove();
           this.callbacks.onView?.(); resolve(this);
@@ -151,7 +152,7 @@ export class Reader {
   }
   findTocSubContainer(target) {
     const el = target?.nodeType === 1 ? target : target?.parentElement;
-    if (!el || !this.isInsideTocOrTopbar(el) || this.topbarNode?.contains?.(el)) return null;
+    if (!el || el.closest?.('[data-htmlmemo-ui]') || !this.isInsideTocOrTopbar(el) || this.topbarNode?.contains?.(el)) return null;
     if (el.closest?.('summary')) return null;
     const subSelector = 'ul, ol, [role="group"], .toc-children, .toc-sub, .toc-items, .toc-list, .sub-toc, .sub-list, .submenu, .tree-children, .children, .nav-children, .chapter-items, .section-items, [data-toc-children], [data-children]';
     const itemSelector = 'li, [role="treeitem"], .toc-item, .toc-group, .toc-section, .toc-node, .nav-item, .nav-group, .tree-node, .tree-item, [data-toc-group], [data-toc-item]';
@@ -297,7 +298,7 @@ export class Reader {
     if (MO) {
       this.dynamicObserver = new MO(records => {
         if (this.tocDrag) return;
-        const editor = node => (node.nodeType===3?node.parentElement:node)?.closest?.('#'+LAYER_ID+',#htmlmemo-annotation-style,#htmlmemo-editor-style,[data-htmlmemo-mark],[data-htmlmemo-search]');
+        const editor = node => (node.nodeType===3?node.parentElement:node)?.closest?.('#'+LAYER_ID+',#htmlmemo-annotation-style,#htmlmemo-editor-style,[data-htmlmemo-ui],[data-htmlmemo-mark],[data-htmlmemo-search]');
         let changed=false;
         for(const record of records){
           if(editor(record.target))continue;
@@ -757,6 +758,7 @@ export class Reader {
   ensureDocumentTocResize() {
     if (this.disposed || !this.doc?.body) return null;
     if (this.tocResize?.sidebar?.isConnected && (!this.tocResize.resizer || this.tocResize.resizer.isConnected)) {
+      if (!this.documentSidebarUI?.isConnected) this.setupDocumentSidebar();
       if (!this.topbarNode?.isConnected) this.setupDocumentTopbar();
       return this.tocResize;
     }
@@ -792,7 +794,34 @@ export class Reader {
       if (info.resizer) info.resizer.setAttribute('aria-valuenow', String(this.tocWidth));
     }
     this.setupDocumentTopbar();
+    this.setupDocumentSidebar();
     return info;
+  }
+  setupDocumentSidebar() {
+    const sidebar=this.tocResize?.sidebar;
+    if(this.preparing||this.disposed||!sidebar?.isConnected||!this.callbacks?.onSidebarView)return;
+    if(this.documentSidebarUI?.isConnected&&sidebar.contains(this.documentSidebarUI))return;
+    const panel=this.doc.createElement('section');panel.setAttribute('data-htmlmemo-ui','');panel.setAttribute('data-htmlmemo-doc-sidebar-ui','');
+    // Keep every source TOC node and listener in place. Only editor-owned UI is added.
+    sidebar.setAttribute('data-htmlmemo-native-sidebar','');sidebar.prepend(panel);this.documentSidebarUI=panel;
+    panel.addEventListener('click',event=>event.stopPropagation());
+    this.showDocumentSidebarView(this.documentSidebarMode||'outline');
+  }
+  showDocumentSidebarView(mode) {
+    if(!['outline','search','annotations'].includes(mode)||!this.documentSidebarUI?.isConnected)return;
+    const sidebar=this.tocResize.sidebar,previous=this.documentSidebarMode||'outline';
+    if(mode!=='outline'&&this.tocStrip){
+      this.applyTocWidth(Math.max(TOC_STRIP_SNAP,this.tocExpandedWidth||this.tocDefaultWidth||TOC_DEFAULT),{persist:true,snapStrip:true});
+      this.syncAfterTocResize();
+    }
+    if(previous==='outline'&&mode!=='outline')this.documentTocScrollTop=sidebar.scrollTop;
+    this.documentSidebarMode=mode;sidebar.setAttribute('data-htmlmemo-sidebar-view',mode);
+    this.callbacks.onSidebarView(mode,this.documentSidebarUI,this);
+    if(mode==='outline'&&Number.isFinite(this.documentTocScrollTop))sidebar.scrollTop=this.documentTocScrollTop;
+    else if(mode!==previous)sidebar.scrollTop=0;
+  }
+  refreshDocumentSidebar() {
+    if(this.documentSidebarMode==='annotations')this.showDocumentSidebarView('annotations');
   }
   applyTocWidth(value, {persist = false, snapStrip = true} = {}) {
     const info = this.tocResize?.sidebar?.isConnected ? this.tocResize : this.ensureDocumentTocResize();
@@ -1174,7 +1203,7 @@ export class Reader {
           ? root.querySelectorAll(':not([data-htmlmemo-anchor])')
           : root.querySelectorAll('*');
         for(const element of [root,...descendants]){
-          if (!element.closest('#'+LAYER_ID+', [data-htmlmemo-mark], [data-htmlmemo-search]') && !['script','style','meta','link','template'].includes(element.localName) && !element.hasAttribute('data-htmlmemo-anchor')) {
+          if (!element.closest('#'+LAYER_ID+', [data-htmlmemo-ui], [data-htmlmemo-mark], [data-htmlmemo-search]') && !['script','style','meta','link','template'].includes(element.localName) && !element.hasAttribute('data-htmlmemo-anchor')) {
             element.setAttribute('data-htmlmemo-anchor','js'+this.dynamicAnchor++);
             added++;
             if (!inChrome && !this.isInsideTocOrTopbar(element)) mainAdded++;
@@ -1648,7 +1677,7 @@ export class Reader {
     this.scrollLeft=Math.max(0,(rect.left-origin.left+rect.width/2)*this.zoom-this.viewport.clientWidth/2);
     wrapOffsets(this.doc,result.start,result.end,{'data-htmlmemo-search':''},'background:#f0a85b80;outline:2px solid #df9057;border-radius:2px;color:inherit');
   }
-  outline() { return [...this.doc.querySelectorAll('h1,h2,h3,h4,h5,h6')].filter(n=>n.textContent.trim()).map(node=>({node,level:Number(node.localName[1]),title:node.textContent.trim()})); }
+  outline() { return [...this.doc.querySelectorAll('h1,h2,h3,h4,h5,h6')].filter(n=>n.textContent.trim()&&!n.closest('[data-htmlmemo-ui]')).map(node=>({node,level:Number(node.localName[1]),title:node.textContent.trim()})); }
   addBookmark(title) { this.metadata.bookmarks.push({id:uid(),title,top:this.scrollTop/this.zoom,left:this.scrollLeft/this.zoom}); this.callbacks.onChange?.(); }
   speakSelection() {
     const anchor = this.selection || (() => {
@@ -1671,5 +1700,5 @@ export class Reader {
     this.readAloud?.toggle();
   }
   stopSpeech() { this.readAloud?.close(); this.host?.ownerDocument?.defaultView?.speechSynthesis?.cancel(); }
-  dispose() { this.stopMiddleScroll();this.readAloud?.dispose();this.readAloud=null;this.stopSpeech(); this.disposed=true;this.cancelOpeningWait?.(); clearTimeout(this.positionTimer);clearTimeout(this.dynamicTimer);this.dynamicObserver?.disconnect(); this.resizeObserver?.disconnect(); this.hostObserver?.disconnect(); this.frame.srcdoc=''; if(this.documentURL){URL.revokeObjectURL(this.documentURL);this.documentURL=null;} this.host.remove(); }
+  dispose() { this.stopMiddleScroll();this.readAloud?.dispose();this.readAloud=null;this.stopSpeech(); this.disposed=true;this.cancelOpeningWait?.(); clearTimeout(this.positionTimer);clearTimeout(this.dynamicTimer);clearTimeout(this.documentSidebarUI?.sidebarSearchTimer);this.dynamicObserver?.disconnect(); this.resizeObserver?.disconnect(); this.hostObserver?.disconnect(); this.frame.srcdoc=''; if(this.documentURL){URL.revokeObjectURL(this.documentURL);this.documentURL=null;} this.host.remove(); }
 }

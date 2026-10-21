@@ -121,6 +121,27 @@ body[data-codememo-design]{margin:0;font-family:var(--app-font);background:var(-
 .sidebar-views button[aria-pressed=true]{background:var(--green-light);color:var(--green);font-weight:600}
 .sidebar-views button:focus-visible{outline-offset:-2px}
 .sidebar-content{min-height:0}
+/* Reused inside the document iframe; every rule is scoped to editor-owned UI. */
+[data-htmlmemo-doc-sidebar-ui]{display:block;position:relative;isolation:isolate;flex:0 0 auto;min-width:0;max-width:100%;background:var(--surface);color:var(--text);font:12px/1.6 var(--app-font);text-align:left}
+[data-htmlmemo-native-sidebar][data-htmlmemo-sidebar-view=outline]>[data-htmlmemo-doc-sidebar-ui]{position:sticky;top:0;z-index:2}
+[data-htmlmemo-doc-sidebar-ui] *{box-sizing:border-box}
+[data-htmlmemo-doc-sidebar-ui] [hidden]{display:none!important}
+[data-htmlmemo-doc-sidebar-ui] button{display:flex;align-items:center;margin:0;border:0;border-radius:5px;padding:6px;background:transparent;color:inherit;font:inherit;cursor:pointer;text-align:left}
+[data-htmlmemo-doc-sidebar-ui] button:hover{background:var(--surface-muted)}
+[data-htmlmemo-doc-sidebar-ui] button:focus-visible{outline:2px solid var(--green);outline-offset:-2px}
+[data-htmlmemo-doc-sidebar-ui] svg{flex-shrink:0;width:14px;height:14px}
+[data-htmlmemo-doc-sidebar-ui] .sidebar-views{display:grid;grid-template-columns:.75fr 1fr 1fr;gap:3px;padding:6px 2px;border-bottom:1px solid var(--line)}
+[data-htmlmemo-doc-sidebar-ui] .sidebar-views button{justify-content:center;gap:3px;min-width:0;padding:6px 2px;font-size:11px;white-space:nowrap}
+[data-htmlmemo-doc-sidebar-ui] .sidebar-views button[aria-pressed=true]{background:var(--green-light);color:var(--green);font-weight:600}
+[data-htmlmemo-doc-sidebar-ui] .sidebar-content{padding:10px 2px;overflow-wrap:anywhere}
+[data-htmlmemo-doc-sidebar-ui] .search-field input{width:100%;min-width:0;border:1px solid var(--line);border-radius:5px;background:var(--bg);color:var(--text);padding:8px;font:inherit}
+[data-htmlmemo-doc-sidebar-ui] .search-navigation{display:flex;align-items:center;gap:3px;margin:8px 0;color:var(--muted);font-size:11px}
+[data-htmlmemo-doc-sidebar-ui] .search-navigation span{margin-right:auto}
+[data-htmlmemo-doc-sidebar-ui] .search-result{display:block;width:100%;padding:8px 2px;border-bottom:1px solid var(--line);font-size:11px;line-height:1.8}
+[data-htmlmemo-doc-sidebar-ui] .panel-empty{font-size:12px;color:var(--muted)}
+[data-htmlmemo-doc-sidebar-ui] .annotation-row{display:flex;align-items:center;gap:4px;border-bottom:1px solid var(--line)}
+[data-htmlmemo-doc-sidebar-ui] .annotation-item{flex:1;min-width:0;gap:6px;font-size:12px;overflow-wrap:anywhere}
+[data-htmlmemo-native-sidebar][data-htmlmemo-sidebar-view=search]>:not([data-htmlmemo-doc-sidebar-ui]):not([data-htmlmemo-toc-resizer]):not([data-htmlmemo-toc-resizer-bound]),[data-htmlmemo-native-sidebar][data-htmlmemo-sidebar-view=annotations]>:not([data-htmlmemo-doc-sidebar-ui]):not([data-htmlmemo-toc-resizer]):not([data-htmlmemo-toc-resizer-bound]){display:none!important}
 @media(max-width:480px){
  .addressbar>.menu-toggle{padding:0 5px}
 }

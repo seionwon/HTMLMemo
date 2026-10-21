@@ -78,6 +78,9 @@ function clearReaderSidebarArtifacts(root) {
   root.querySelector?.('#htmlmemo-toc-toggle-style')?.remove();
   root.querySelector?.('#htmlmemo-sidebar-style')?.remove();
   root.querySelector?.('#htmlmemo-toc-resize-style')?.remove();
+  root.querySelector?.('#htmlmemo-doc-sidebar-style')?.remove();
+  for(const panel of root.querySelectorAll?.('[data-htmlmemo-doc-sidebar-ui]')||[])panel.remove();
+  for(const sidebar of root.querySelectorAll?.('[data-htmlmemo-native-sidebar],[data-htmlmemo-sidebar-view]')||[]){sidebar.removeAttribute('data-htmlmemo-native-sidebar');sidebar.removeAttribute('data-htmlmemo-sidebar-view');}
   for (const element of root.querySelectorAll?.('[data-htmlmemo-toc-toggle],[data-htmlmemo-toc-resizer]') || []) element.remove();
   const nodes = [root, ...(root.querySelectorAll?.('[data-htmlmemo-toc-active],[data-htmlmemo-toc-main],[data-htmlmemo-toc-collapsed],[data-htmlmemo-sidebar-folded],[data-htmlmemo-sidebar-grid],[data-htmlmemo-sidebar-grid-item],[data-htmlmemo-sidebar-flex],[data-htmlmemo-toc-sidebar],[data-htmlmemo-toc-item],[data-htmlmemo-toc-strip],[data-htmlmemo-toc-item-strip],[data-htmlmemo-toc-resizer-bound],[data-htmlmemo-toc-resizer-bound-left],[data-htmlmemo-toc-resizing],[data-htmlmemo-topbar-active],[data-htmlmemo-doc-topbar],[data-htmlmemo-doc-topbar-item],[data-htmlmemo-topbar-grid],[data-htmlmemo-topbar-pad],[data-htmlmemo-topbar-offset],[data-htmlmemo-scroll-host],[style*="--htmlmemo-toc-grid-columns"],[style*="--htmlmemo-toc-width"],[style*="--htmlmemo-topbar-grid-rows"]') || [])];
   for (const element of nodes) {

@@ -107,7 +107,7 @@ function settingsDialog() {
     $('#persist-storage').onclick=safely(async()=>toast(await navigator.storage.persist()?'이 기기에서 보관함을 유지합니다.':'브라우저가 보관 유지를 허용하지 않았습니다. HTML 내보내기로 파일을 보관해주세요.'));
   });
 }
-function applyTheme(theme) { document.documentElement.dataset.theme=theme==='system'?(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light'):theme; }
+function applyTheme(theme) { document.documentElement.dataset.theme=theme==='system'?(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light'):theme;for(const tab of tabs)if(tab.reader?.documentSidebarUI)styleNativeSidebar(tab.reader.documentSidebarUI); }
 function applyToolbarPosition(){const bar=$('#toolbar'),p=preferences.toolbarPosition;if(!p){bar.style.left='50%';bar.style.top='';bar.style.bottom='';bar.style.transform='';return;}bar.style.transform='none';bar.style.bottom='auto';bar.style.left=(8+p.x*Math.max(0,innerWidth-bar.offsetWidth-16))+'px';bar.style.top=(8+p.y*Math.max(0,innerHeight-bar.offsetHeight-42))+'px';}
 function changePreferences(patch){preferences=storePreferences({...preferences,...patch,annotation:{...preferences.annotation,...patch.annotation}},localStorage);applyTheme(preferences.theme);$('#library-sort').value=preferences.librarySort+':'+preferences.librarySortDirection;for(const tab of tabs)if(tab.reader)Object.assign(tab.reader,preferences.annotation);applyToolbarPosition();renderLibrary();if(reader())updateToolbarState();}
 async function restoreSettings(input){
@@ -256,12 +256,13 @@ async function openRecord(record, prepared = null, {deferReady = false} = {}) {
   },()=>{if(activeId===tab.id)saveStatus(tab);renderTabs();});
   tabs.push(tab);activate(tab.id);
   tab.reader=new Reader(tab.host,parsed,{
-    onChange:()=>{tab.queue.schedule();if(activeId===tab.id){renderToolbar();if(sidebarMode==='annotations')renderSidebar('annotations');}},
+    onChange:()=>{tab.queue.schedule();if(activeId===tab.id){renderToolbar();if(sidebarMode==='annotations')renderSidebar('annotations');tab.reader?.refreshDocumentSidebar();}},
     onPosition:()=>{tab.queue.schedule({background:true});},onView:()=>{if(activeId===tab.id){updateChrome();updateToolbarState();}},
     onTextSelection:()=>{if(activeId===tab.id)showSelectionMenu(tab.reader);},
     onSelectionDismiss:()=>{if(popoverName==='selection')closePopover();},
     onLink:url=>safely(openBrowser)(url),onKey:handleKey,requestText:promptText,onError:showError,
     onDocumentFocus:()=>{if(activeId===tab.id)void toggleReaderFocus();},
+    onSidebarView:(mode,panel,documentReader)=>renderSidebar(mode,{panel,embedded:true,documentReader}),
     onSelect:id=>{if(activeId===tab.id)annotationDialog(tab,id);},
   });
   Object.assign(tab.reader,preferences.annotation);
@@ -679,7 +680,7 @@ function toolAction(action) {
       $$('[data-more]',$('#tool-popover')).forEach(button=>button.onclick=safely(()=>{const id=button.dataset.more;closePopover();return toolAction(id);}));
     });return;
   }
-  if(['search','outline','annotations'].includes(action)){closePopover();renderSidebar(action);return;}
+  if(['search','outline','annotations'].includes(action)){closePopover();if(action!=='outline'&&r.documentSidebarUI)r.showDocumentSidebarView(action);else renderSidebar(action);return;}
   if(action==='connect')return safely(()=>exportDocument(active()))();
   if(action==='history')return safely(()=>annotationHistory(active()))();
   if(action==='info')return documentInfo(active());
@@ -694,33 +695,46 @@ function bindToolbarDrag() {
     const end=()=>{grip.removeEventListener('pointermove',move);grip.removeEventListener('pointerup',end);grip.removeEventListener('pointercancel',end);const rect=bar.getBoundingClientRect();safely(()=>changePreferences({toolbarPosition:{x:Math.max(0,Math.min(1,(rect.left-8)/Math.max(1,innerWidth-rect.width-16))),y:Math.max(0,Math.min(1,(rect.top-8)/Math.max(1,innerHeight-rect.height-42)))}}))();};grip.addEventListener('pointermove',move);grip.addEventListener('pointerup',end);grip.addEventListener('pointercancel',end);
   };
 }
-function closeSidebar() {clearTimeout(renderSidebar.searchTimer);sidebarMode='';$('#sidebar').hidden=true;const r=reader();if(r){r.sidebarSearchQuery='';r.search('');}}
-function renderSidebar(mode) {
-  const r=reader();if(!r)return;clearTimeout(renderSidebar.searchTimer);sidebarMode=mode;closePopover();const panel=$('#sidebar');panel.hidden=false;
+function closeSidebar() {const panel=$('#sidebar'),wasOpen=!panel.hidden;clearTimeout(panel.sidebarSearchTimer);panel.sidebarMode='';sidebarMode='';panel.hidden=true;const r=reader();if(wasOpen&&r&&r.documentSidebarMode!=='search'){r.sidebarSearchQuery='';r.search('');}}
+function styleNativeSidebar(panel) {
+  const doc=panel.ownerDocument;
+  if(!doc.getElementById('htmlmemo-doc-sidebar-style')){
+    // Reuse only the namespaced rules from the locally compiled Tailwind asset.
+    const rules=[];
+    for(const sheet of document.styleSheets||[]){try{for(const rule of sheet.cssRules||[]){if(!rule.selectorText)continue;const selectors=rule.selectorText.split(',').filter(selector=>selector.includes('[data-htmlmemo-doc-sidebar-ui]')||selector.includes('[data-htmlmemo-native-sidebar]'));if(selectors.length)rules.push(selectors.join(',')+'{'+rule.style.cssText+'}');}}catch{/* App-owned same-origin stylesheets provide these rules. */}}
+    const style=doc.createElement('style');style.id='htmlmemo-doc-sidebar-style';style.setAttribute('data-htmlmemo-ui','');style.textContent=rules.join('\n');doc.head.append(style);
+  }
+  const theme=getComputedStyle(document.documentElement);
+  for(const name of ['--bg','--surface','--surface-muted','--text','--muted','--line','--green','--green-light','--app-font'])panel.style.setProperty(name,theme.getPropertyValue(name));
+}
+function renderSidebar(mode,{panel=$('#sidebar'),embedded=false,documentReader=reader()}={}) {
+  const r=documentReader;if(!r)return;clearTimeout(panel.sidebarSearchTimer);panel.sidebarMode=mode;if(!embedded){sidebarMode=mode;closePopover();}else styleNativeSidebar(panel);panel.hidden=false;
+  const id=name=>(embedded?'htmlmemo-native-':'')+name,q=name=>$('#'+id(name),panel);
   const title={search:'문서 검색',outline:'목차 · 북마크',annotations:'주석 목록'}[mode];
   if(!$('.sidebar-views',panel)){
-    const views=[['outline','list','목차·북마크'],['search','search','문서 검색'],['annotations','note','주석 목록']];
-    panel.innerHTML=`<div class="sidebar-heading"><h2 id="sidebar-title"></h2><button class="icon-button" id="close-sidebar" aria-label="패널 닫기">${icon('close')}</button></div><div class="sidebar-views" role="group" aria-label="사이드바 보기">${views.map(([id,name,label])=>`<button type="button" data-sidebar-view="${id}" aria-pressed="false" aria-controls="sidebar-content">${icon(name,14)}<span>${label}</span></button>`).join('')}</div><div id="sidebar-content" class="sidebar-content" role="region" aria-labelledby="sidebar-title"></div>`;
-    $('#close-sidebar').onclick=closeSidebar;
-    $$('[data-sidebar-view]',panel).forEach(button=>button.onclick=()=>renderSidebar(button.dataset.sidebarView));
+    const views=[['outline','list',embedded?'목차':'목차·북마크'],['search','search','문서 검색'],['annotations','note','주석 목록']];
+    panel.innerHTML=`${embedded?`<h2 id="${id('sidebar-title')}" hidden></h2>`:`<div class="sidebar-heading"><h2 id="sidebar-title"></h2><button class="icon-button" id="close-sidebar" aria-label="패널 닫기">${icon('close')}</button></div>`}<div class="sidebar-views" role="group" aria-label="사이드바 보기">${views.map(([view,name,label])=>`<button type="button" data-sidebar-view="${view}" aria-pressed="false" aria-controls="${id('sidebar-content')}">${icon(name,14)}<span>${label}</span></button>`).join('')}</div><div id="${id('sidebar-content')}" class="sidebar-content" role="region" aria-labelledby="${id('sidebar-title')}"></div>`;
+    if(!embedded)q('close-sidebar').onclick=closeSidebar;
+    $$('[data-sidebar-view]',panel).forEach(button=>button.onclick=()=>embedded?r.showDocumentSidebarView(button.dataset.sidebarView):renderSidebar(button.dataset.sidebarView));
   }
-  $('#sidebar-title').textContent=title;panel.setAttribute('aria-labelledby','sidebar-title');
+  q('sidebar-title').textContent=embedded&&mode==='outline'?'목차':title;panel.setAttribute('aria-labelledby',id('sidebar-title'));
   $$('[data-sidebar-view]',panel).forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.sidebarView===mode)));
-  const content=$('.sidebar-content',panel);
+  const content=$('.sidebar-content',panel);content.hidden=embedded&&mode==='outline';
+  if(content.hidden){content.replaceChildren();return;}
   if(mode==='search'){
-    content.innerHTML='<div class="search-field"><input id="document-search" aria-label="문서 검색어" placeholder="문서 안에서 찾기" autocomplete="off"></div><div class="search-navigation"><span id="search-count">검색어를 입력하세요.</span><button id="search-prev" class="icon-button" aria-label="이전 검색 결과">'+icon('back')+'</button><button id="search-next" class="icon-button" aria-label="다음 검색 결과">'+icon('forward')+'</button></div><div id="search-results"></div>';
-    const input=$('#document-search',panel);input.value=r.sidebarSearchQuery??r.searchQuery??'';
-    const run=()=>{if(sidebarMode!=='search'||reader()!==r||!input.isConnected)return;const results=r.search(input.value);$('#search-count',panel).textContent=results.length?`${results.length}${results.length===3000?'+':''}개 결과`:'검색 결과가 없습니다.';$('#search-results',panel).innerHTML=results.slice(0,150).map((result,index)=>`<button class="search-result" data-search-index="${index}">${esc(result.quote)}</button>`).join('');$$('[data-search-index]',panel).forEach(button=>button.onclick=()=>{r.searchPosition=Number(button.dataset.searchIndex)-1;r.nextSearch(1);});};
-    input.oninput=()=>{r.sidebarSearchQuery=input.value;clearTimeout(renderSidebar.searchTimer);renderSidebar.searchTimer=setTimeout(run,120);};input.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();r.nextSearch(e.shiftKey?-1:1);}};
-    $('#search-prev').onclick=()=>r.nextSearch(-1);$('#search-next').onclick=()=>r.nextSearch(1);input.focus();if(input.value)run();
+    content.innerHTML=`<div class="search-field"><input id="${id('document-search')}" aria-label="문서 검색어" placeholder="문서 안에서 찾기" autocomplete="off"></div><div class="search-navigation"><span id="${id('search-count')}">검색어를 입력하세요.</span><button id="${id('search-prev')}" class="icon-button" aria-label="이전 검색 결과">${icon('back')}</button><button id="${id('search-next')}" class="icon-button" aria-label="다음 검색 결과">${icon('forward')}</button></div><div id="${id('search-results')}"></div>`;
+    const input=q('document-search');input.value=r.sidebarSearchQuery??r.searchQuery??'';
+    const run=()=>{if(panel.sidebarMode!=='search'||reader()!==r||!input.isConnected)return;const results=r.search(input.value);q('search-count').textContent=results.length?`${results.length}${results.length===3000?'+':''}개 결과`:'검색 결과가 없습니다.';q('search-results').innerHTML=results.slice(0,150).map((result,index)=>`<button class="search-result" data-search-index="${index}">${esc(result.quote)}</button>`).join('');$$('[data-search-index]',panel).forEach(button=>button.onclick=()=>{r.searchPosition=Number(button.dataset.searchIndex)-1;r.nextSearch(1);});};
+    input.oninput=()=>{r.sidebarSearchQuery=input.value;clearTimeout(panel.sidebarSearchTimer);panel.sidebarSearchTimer=setTimeout(run,120);};input.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();r.nextSearch(e.shiftKey?-1:1);}};
+    q('search-prev').onclick=()=>r.nextSearch(-1);q('search-next').onclick=()=>r.nextSearch(1);input.focus();if(input.value)run();
   }else if(mode==='outline'){
     const outline=r.outline();content.innerHTML=`<p class="panel-label">목차</p>${outline.length?outline.map((item,index)=>`<button class="outline-item" style="padding-left:${12+(item.level-1)*12}px" data-heading="${index}">${esc(item.title)}</button>`).join(''):'<p class="panel-empty">이 문서에 제목 목차가 없습니다.</p>'}<p class="panel-label">북마크</p>${r.metadata.bookmarks.map(mark=>`<div class="bookmark-row"><button class="outline-item" data-bookmark="${esc(mark.id)}">${icon('bookmark',14)} ${esc(mark.title)}</button><button class="icon-button" data-delete-bookmark="${esc(mark.id)}" aria-label="북마크 삭제">${icon('close',13)}</button></div>`).join('')}<button id="add-bookmark" class="text-button">+ 현재 위치 저장</button>`;
-    $$('[data-heading]').forEach(button=>button.onclick=()=>r.jump(outline[Number(button.dataset.heading)].node));
-    $$('[data-bookmark]').forEach(button=>button.onclick=()=>{const mark=r.metadata.bookmarks.find(m=>m.id===button.dataset.bookmark);r.scrollTop=mark.top*r.zoom;r.scrollLeft=mark.left*r.zoom;});
-    $$('[data-delete-bookmark]').forEach(button=>button.onclick=()=>{r.metadata.bookmarks=r.metadata.bookmarks.filter(m=>m.id!==button.dataset.deleteBookmark);active().queue.schedule();renderSidebar('outline');});$('#add-bookmark').onclick=()=>toolAction('bookmark');
+    $$('[data-heading]',panel).forEach(button=>button.onclick=()=>r.jump(outline[Number(button.dataset.heading)].node));
+    $$('[data-bookmark]',panel).forEach(button=>button.onclick=()=>{const mark=r.metadata.bookmarks.find(m=>m.id===button.dataset.bookmark);r.scrollTop=mark.top*r.zoom;r.scrollLeft=mark.left*r.zoom;});
+    $$('[data-delete-bookmark]',panel).forEach(button=>button.onclick=()=>{r.metadata.bookmarks=r.metadata.bookmarks.filter(m=>m.id!==button.dataset.deleteBookmark);active().queue.schedule();renderSidebar('outline');});q('add-bookmark').onclick=()=>toolAction('bookmark');
   }else{
     content.innerHTML=r.metadata.annotations.length?r.metadata.annotations.map(a=>`<div class="annotation-row"><button class="annotation-item" data-annotation="${esc(a.id)}"><span class="annotation-type" style="color:${a.color}">${icon(a.type==='pen'?'pen':a.type==='note'?'note':a.type==='highlight'?'highlight':a.type==='underline'?'underline':'shapes',16)}</span><span>${esc(a.text||a.textAnchor?.quote||({pen:'펜 그림',rect:'사각형',ellipse:'타원',arrow:'화살표',area:'영역 강조','area-underline':'영역 밑줄',strike:'취소선'})[a.type]||'주석')}</span></button><button class="icon-button" data-delete-annotation="${esc(a.id)}" aria-label="주석 삭제">${icon('trash',14)}</button></div>`).join(''):'<p class="panel-empty">아직 주석이 없어요.<br>툴바에서 도구를 골라 생각을 남겨보세요.</p>';
-    $$('[data-annotation]').forEach(button=>button.onclick=()=>r.jumpAnnotation(button.dataset.annotation));$$('[data-delete-annotation]').forEach(button=>button.onclick=()=>r.remove(button.dataset.deleteAnnotation));
+    $$('[data-annotation]',panel).forEach(button=>button.onclick=()=>r.jumpAnnotation(button.dataset.annotation));$$('[data-delete-annotation]',panel).forEach(button=>button.onclick=()=>r.remove(button.dataset.deleteAnnotation));
   }
 }
 function annotationDialog(tab,id) {
@@ -779,12 +793,12 @@ function documentMenu(record) {
 }
 function handleKey(event) {
   const isField=/^(INPUT|TEXTAREA|SELECT)$/.test(event.target?.tagName)||event.target?.isContentEditable;
-  if(event.key==='Escape') {if(reader()?.readAloud?.escape()){event.preventDefault();return;}reader()?.stopSpeech();if($('#dialog').open)return;if(!$('#tool-popover').hidden)closePopover();else if(!$('#sidebar').hidden)closeSidebar();else if(readerFocused)void leaveReaderFocus();else if(reader())reader().setTool('select');return;}
+  if(event.key==='Escape') {if(reader()?.readAloud?.escape()){event.preventDefault();return;}reader()?.stopSpeech();if($('#dialog').open)return;if(!$('#tool-popover').hidden)closePopover();else if(!$('#sidebar').hidden)closeSidebar();else if(reader()?.documentSidebarUI&&reader().documentSidebarMode!=='outline')reader().showDocumentSidebarView('outline');else if(readerFocused)void leaveReaderFocus();else if(reader())reader().setTool('select');return;}
   if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='s'){event.preventDefault();if(reader())safely(()=>{const tab=active();tab.reader.rememberPosition();return tab.queue.flush();})();else safely(savePage)();return;}
   if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='l'){event.preventDefault();focusAddress();return;}
   if(!reader()||isField||$('#dialog').open)return;
   if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='z'){event.preventDefault();event.shiftKey?reader().redo():reader().undo();return;}
-  if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='f'){event.preventDefault();renderSidebar('search');return;}
+  if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='f'){event.preventDefault();if(reader().documentSidebarUI)reader().showDocumentSidebarView('search');else renderSidebar('search');return;}
   if(event.ctrlKey||event.metaKey||event.altKey)return;
   if(event.key.toLowerCase()==='f'){event.preventDefault();void toggleReaderFocus();return;}
   const tools={v:'select',p:'pen',h:'highlight',u:'underline',e:'eraser',n:'note'};const tool=tools[event.key.toLowerCase()];if(tool){event.preventDefault();toolAction(tool);}
