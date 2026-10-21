@@ -67,12 +67,12 @@ test('a real build removes retired distribution artifacts and writes the Pages w
 
 // Executes the real standalone bundle with a DOM model and local IndexedDB
 // contract. It verifies event handlers, not Chrome rendering or OS file dialogs.
-async function fileApp({address='file:///Users/beginner/HTMLMemo.html',navigator={}}={}){
-  const html=standaloneHTML(assets),doc=new DOMParser().parseFromString(html,'text/html'),blobs=[],local=new Map();
+async function fileApp({address='file:///Users/beginner/HTMLMemo.html',navigator={},documents=[],localEntries=[]}={}){
+  const html=standaloneHTML(assets),doc=new DOMParser().parseFromString(html,'text/html'),blobs=[],local=new Map(localEntries);
   const selectPrototype=Object.getPrototypeOf(doc.querySelector('select'));Object.defineProperty(selectPrototype,'value',{configurable:true,get(){return this.getAttribute('data-test-value')??this.querySelector('option[selected]')?.value??this.querySelector('option')?.value??'';},set(value){this.setAttribute('data-test-value',value);}});
   Object.defineProperty(doc,'activeElement',{value:doc.body,writable:true,configurable:true});doc.defaultView.HTMLElement.prototype.focus=function(){this.ownerDocument.activeElement=this;};
   const dialog=doc.querySelector('#dialog');dialog.showModal=()=>dialog.open=true;dialog.close=()=>dialog.open=false;
-  const stores=new Map([['documents',new Map()],['settings',new Map()]]);
+  const stores=new Map([['documents',new Map(documents.map(record=>[record.id,record]))],['settings',new Map()]]);
   const database={objectStoreNames:{contains:name=>stores.has(name)},createObjectStore:name=>{if(!stores.has(name))stores.set(name,new Map());return {createIndex(){}};},transaction:name=>{const tx={};tx.objectStore=()=>{const store=stores.get(name);return {getAll:()=>({result:[...store.values()]}),get:key=>({result:store.get(key)}),put:(value,key)=>{store.set(key??value.id,value);return {result:key??value.id};},delete:key=>{store.delete(key);return {};}};};queueMicrotask(()=>tx.oncomplete?.());return tx;}};
   const indexedDB={open:()=>{const request={result:database};queueMicrotask(()=>{request.onupgradeneeded?.();request.onsuccess?.();});return request;}};
   class LocalURL extends URL{static createObjectURL(blob){blobs.push(blob);return 'blob:local-test';}static revokeObjectURL(){}}
@@ -156,4 +156,28 @@ test('the dropdown opens without a modal and supports keyboard navigation, Escap
   key('Escape');assert.equal(menu.hidden,true);assert.equal(trigger.getAttribute('aria-expanded'),'false');assert.equal(doc.activeElement,trigger);
   trigger.onclick();doc.body.dispatchEvent(new doc.defaultView.Event('pointerdown',{bubbles:true}));assert.equal(menu.hidden,true);
   trigger.onclick();doc.querySelector('#new-tab').click();assert.equal(menu.hidden,true);assert.equal(doc.activeElement.id,'address');
+});
+
+test('card and list views sort by both directions for saved date, modified date and title, and restore the selection',async()=>{
+  const day=n=>Date.UTC(2026,0,n),documents=[
+    {id:'a',title:'가나다',created:day(1),modified:day(6)},
+    {id:'b',title:'나다라',created:day(3),modified:day(5)},
+    {id:'c',title:'다라마',created:day(2),modified:day(4)}
+  ].map(record=>({...record,name:record.id+'.html',source:'',metadata:{annotations:[]}}));
+  const app=await fileApp({documents}),doc=app.doc;
+  const select=(id,value)=>{const element=doc.querySelector(id);element.value=value;element.onchange({target:element});};
+  const order=()=>[...doc.querySelectorAll('.document-card')].map(element=>element.dataset.record);
+  const cases=[['created','asc',['a','c','b']],['created','desc',['b','c','a']],['modified','asc',['c','b','a']],['modified','desc',['a','b','c']],['title','asc',['a','b','c']],['title','desc',['c','b','a']]];
+  for(const view of ['card','list']){
+    doc.querySelector('#library-'+view+'-view').onclick();
+    for(const [field,direction,expected] of cases){
+      select('#library-sort',field);select('#library-sort-direction',direction);assert.deepEqual(order(),expected);
+      assert.match(doc.querySelector('.list-date').getAttribute('title'),field==='created'?/^저장일:/u:/^수정일:/u);
+    }
+  }
+  const restored=await fileApp({documents,localEntries:[...app.local]});
+  assert.equal(restored.doc.querySelector('#library-sort').value,'title');
+  assert.equal(restored.doc.querySelector('#library-sort-direction').value,'desc');
+  assert.equal(restored.doc.querySelector('#document-grid').dataset.view,'list');
+  assert.deepEqual([...restored.doc.querySelectorAll('.document-card')].map(element=>element.dataset.record),['c','b','a']);
 });

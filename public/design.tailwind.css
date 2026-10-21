@@ -197,3 +197,12 @@ body[data-codememo-design]{margin:0;font-family:var(--app-font);background:var(-
  .document-grid[data-view=list] .list-progress{font-size:0}
  .document-grid[data-view=list] .list-progress svg{width:14px;height:14px}
 }
+
+/* Keep search and both sort controls readable alongside the library view switch. */
+@media(max-width:720px){
+ .library-heading{align-items:flex-start;flex-direction:column;gap:15px}
+ .library-controls{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;width:100%;gap:7px}
+ .library-search{grid-column:1 / -1;min-width:0}
+ .library-search input{width:100%;min-width:0}
+ .library-controls select{min-width:0;width:100%}
+}
