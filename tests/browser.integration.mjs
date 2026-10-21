@@ -740,7 +740,7 @@ test('real Chrome: annotations move to a new edition of a book, and annotations 
     await page.evaluate('window.pick("edition-1.html")');await page.click('#import-button');
     await page.waitFor(`${frame}?.contentDocument?.querySelectorAll('[data-htmlmemo-mark]').length >= 2 && !document.querySelector('#toolbar').hidden && document.querySelector("#status-left").textContent.includes("자동 저장됨")`,20000);
     await page.evaluate('window.pick("edition-2.html")');
-    await page.click('[data-action=more]');await page.click('[data-more=migrate]');
+    await page.click('[data-action=more]');assert.equal(await page.evaluate('(()=>{const b=document.querySelector("[data-more=migrate]");b.scrollIntoView({block:"center"});const r=b.getBoundingClientRect();return b.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));})()'),true,'the menu item is reachable');await page.click('[data-more=migrate]');
     try{await page.waitFor('!!document.querySelector("#dialog[open] .migrate-summary")',30000);}
     catch(error){throw new Error(error.message+' — '+JSON.stringify(await page.evaluate('({toast:document.querySelector("#toast").textContent,dialog:document.querySelector("#dialog").open&&document.querySelector("#dialog").innerText,popover:!document.querySelector("#tool-popover").hidden})'))+' '+chrome.errors.join(' | '));}
     const summary=await page.evaluate('document.querySelector("#dialog").innerText');
