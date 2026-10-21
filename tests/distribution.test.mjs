@@ -112,7 +112,7 @@ test('the real app uses the same button for native installation and iPhone Chrom
   const iphone=await fileApp({address:PUBLIC_APP_URL,navigator:{userAgent:'iPhone CriOS/140'}});assert.equal(iphone.doc.querySelector('#install-button').hidden,false);
   iphone.doc.querySelector('#install-button').onclick();await new Promise(resolve=>setImmediate(resolve));assert.match(iphone.doc.querySelector('#dialog-content').textContent,/Chrome/);assert.match(iphone.doc.querySelector('#dialog-content').textContent,/공유/);assert.match(iphone.doc.querySelector('#dialog-content').textContent,/홈 화면에 추가/);
 });
-test('settings can be saved and reloaded through file input when native pickers are unavailable',async()=>{const app=await fileApp();app.doc.querySelector('#settings-button').onclick();app.doc.querySelector('#appearance').value='dark';app.doc.querySelector('#appearance').onchange({target:app.doc.querySelector('#appearance')});app.doc.querySelector('#settings-save').onclick();await new Promise(resolve=>setImmediate(resolve));assert.equal(JSON.parse(await app.blobs[0].text()).preferences.theme,'dark');const input=app.doc.querySelector('#settings-file-input');const file=new File([serializeSettings({theme:'system',librarySort:'title',annotation:{width:8}})],'settings.json');input.onchange({target:{files:[file],value:'settings.json'}});await new Promise(resolve=>setImmediate(resolve));const restored=JSON.parse(app.local.get(PREFERENCES_KEY));assert.equal(restored.theme,'system');assert.equal(restored.librarySort,'title');assert.equal(restored.annotation.width,8);assert.equal(app.doc.querySelector('#library-sort').value,'title');});
+test('settings can be saved and reloaded through file input when native pickers are unavailable',async()=>{const app=await fileApp();app.doc.querySelector('#settings-button').onclick();app.doc.querySelector('#appearance').value='dark';app.doc.querySelector('#appearance').onchange({target:app.doc.querySelector('#appearance')});app.doc.querySelector('#settings-save').onclick();await new Promise(resolve=>setImmediate(resolve));assert.equal(JSON.parse(await app.blobs[0].text()).preferences.theme,'dark');const input=app.doc.querySelector('#settings-file-input');const file=new File([serializeSettings({theme:'system',librarySort:'title',annotation:{width:8}})],'settings.json');input.onchange({target:{files:[file],value:'settings.json'}});await new Promise(resolve=>setImmediate(resolve));const restored=JSON.parse(app.local.get(PREFERENCES_KEY));assert.equal(restored.theme,'system');assert.equal(restored.librarySort,'title');assert.equal(restored.annotation.width,8);assert.equal(app.doc.querySelector('#library-sort').value,'title:asc');});
 
 test('library switches between persistent card and one-line list views',async()=>{const app=await fileApp(),grid=app.doc.querySelector('#document-grid'),card=app.doc.querySelector('#library-card-view'),list=app.doc.querySelector('#library-list-view');assert.equal(grid.dataset.view,'card');assert.equal(card.getAttribute('aria-pressed'),'true');list.onclick();assert.equal(grid.dataset.view,'list');assert.equal(list.getAttribute('aria-pressed'),'true');assert.equal(card.getAttribute('aria-pressed'),'false');assert.equal(JSON.parse(app.local.get(PREFERENCES_KEY)).libraryView,'list');card.onclick();assert.equal(grid.dataset.view,'card');assert.equal(JSON.parse(app.local.get(PREFERENCES_KEY)).libraryView,'card');});
 
@@ -171,13 +171,14 @@ test('card and list views sort by both directions for saved date, modified date 
   for(const view of ['card','list']){
     doc.querySelector('#library-'+view+'-view').onclick();
     for(const [field,direction,expected] of cases){
-      select('#library-sort',field);select('#library-sort-direction',direction);assert.deepEqual(order(),expected);
+      select('#library-sort',field+':'+direction);assert.deepEqual(order(),expected);
       assert.match(doc.querySelector('.list-date').getAttribute('title'),field==='created'?/^저장일:/u:/^수정일:/u);
     }
   }
   const restored=await fileApp({documents,localEntries:[...app.local]});
-  assert.equal(restored.doc.querySelector('#library-sort').value,'title');
-  assert.equal(restored.doc.querySelector('#library-sort-direction').value,'desc');
+  assert.equal(restored.doc.querySelector('#library-sort').value,'title:desc');
+  assert.equal(restored.doc.querySelector('#library-sort-direction'),null);
+  assert.equal(restored.doc.querySelectorAll('#library-sort option').length,6);
   assert.equal(restored.doc.querySelector('#document-grid').dataset.view,'list');
   assert.deepEqual([...restored.doc.querySelectorAll('.document-card')].map(element=>element.dataset.record),['c','b','a']);
 });
