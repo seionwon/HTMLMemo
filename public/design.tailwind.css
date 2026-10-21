@@ -72,7 +72,7 @@ body[data-codememo-design]{margin:0;font-family:var(--app-font);background:var(-
 #tool-popover.selection[hidden] { display:none; }
 #tool-popover.selection button { font-size:11px;padding:4px 9px; }
 
-/* One address row with a single dropdown for navigation, documents and app controls. */
+/* One header row: visible file tabs and a single dropdown for app controls. */
 .chrome{position:relative;padding-block:0;margin-block:0}
 .chrome.app-menu-open{z-index:60}
 .addressbar{height:24px;min-height:0;padding-block:0;margin-block:0}
@@ -91,14 +91,22 @@ body[data-codememo-design]{margin:0;font-family:var(--app-font);background:var(-
 .app-menu .menu-button{width:100%;height:auto;min-height:34px;padding:8px 10px;display:flex;align-items:center;justify-content:flex-start;gap:9px;border:0;border-radius:6px;text-align:left;white-space:normal;font-size:12px;color:var(--muted)}
 .app-menu .menu-button svg{display:block;width:16px;height:16px}
 .app-menu .menu-button span{font-size:inherit}
-.app-menu .menu-button:hover,.app-menu .menu-button[aria-current=page],.app-menu .tab.active{background:var(--green-light);color:var(--green)}
+.app-menu .menu-button:hover,.app-menu .menu-button[aria-current=page]{background:var(--green-light);color:var(--green)}
 .app-menu #connection-button i{position:static;margin-left:auto}
-.app-menu #tabs{display:flex;flex-direction:column;align-items:stretch;height:auto;gap:2px;overflow:visible}
-.app-menu .tab{width:100%;max-width:none;min-width:0;height:auto;min-height:34px;padding:0;gap:0;border:0;border-radius:6px;align-items:center;flex-shrink:0}
-.app-menu .tab-select{flex:1;min-width:0;padding:8px 10px;display:flex;align-items:center;gap:8px;text-align:left;font-size:12px;color:inherit;border-radius:6px}
-.app-menu .tab-title{max-width:none;min-width:0;white-space:normal;overflow-wrap:anywhere;line-height:1.5}
-.app-menu .tab-close{width:28px;height:28px;margin:0 4px 0 0}
-.app-menu .tab-select:hover,.app-menu .tab-close:hover{background:var(--surface-muted)}
+.addressbar>#tabs{display:flex;flex:1;min-width:0;height:24px;align-items:stretch;gap:3px;overflow-x:auto;overflow-y:hidden;overscroll-behavior-x:contain;scrollbar-width:none}
+.addressbar>#tabs::-webkit-scrollbar{display:none}
+.chrome:not([data-page=document]) #tabs{flex:0 1 40%}
+.chrome[data-page=document]:not(.address-editing) #address-form{display:none}
+.chrome.address-editing #tabs{display:none}
+.addressbar .tab{display:flex;flex:0 0 auto;max-width:min(220px,100%);min-width:0;height:24px;padding:0;gap:0;border:1px solid var(--line);border-radius:5px;color:var(--muted)}
+.addressbar .tab.active{background:var(--green-light);color:var(--green);border-bottom-color:var(--green)}
+.addressbar .tab-select{display:flex;align-items:center;gap:5px;flex:1;min-width:0;padding:0 6px;height:22px;font-size:11px;text-align:left;color:inherit;border-radius:4px}
+.addressbar .tab-icon{display:flex}
+.addressbar .tab-title{max-width:none;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.addressbar .tab-close{width:20px;height:20px;flex-shrink:0;margin:0 2px 0 0;align-self:center;border-radius:3px}
+.addressbar .tab-close svg{width:12px;height:12px}
+.addressbar .tab-select:hover,.addressbar .tab-close:hover{background:var(--surface-muted)}
+.addressbar .tab-select:focus-visible,.addressbar .tab-close:focus-visible{outline-offset:-2px}
 .about-brand{display:flex;align-items:center;gap:14px;margin:18px 0}
 .about-brand h3{font-size:24px;margin:0 0 5px}
 .about-brand p{font-size:12px;color:var(--muted);margin:0}

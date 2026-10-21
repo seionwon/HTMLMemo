@@ -14,6 +14,7 @@ let records = []; const tabs = []; let activeId = 'library'; let folder = null; 
 let preferences=normalizePreferences(), settingsFileHandle=null, settingsFolderHint='';
 let sharingApp=false, installController;
 let readerFocused=false, nativeReaderFullscreen=false, focusBusy=false;
+let tabLayout='';
 const appAddress=()=>{const url=new URL(location.href);url.search='';url.hash='';return url.href;};
 const active = () => tabs.find(tab => tab.id === activeId);
 const reader = () => active()?.reader;
@@ -148,31 +149,61 @@ function renderLibrary() {
 }
 function renderTabs() {
   const container=$('#tabs'),nodes=new Map($$('[data-tab]',container).map(el=>[el.dataset.tab,el]));
+  const focusId=tabs.some(tab=>tab.id===activeId)?activeId:tabs[0]?.id;
   for(const tab of tabs){
     let el=nodes.get(tab.id);
     if(!el){
       el=document.createElement('div');el.dataset.tab=tab.id;el.setAttribute('role','presentation');
-      el.innerHTML=`<button class="tab-select" role="menuitem"><span class="tab-icon">${icon(tab.type==='document'?'file':'globe',15)}</span><span class="tab-title"></span><i class="tab-dirty" hidden></i></button><button class="tab-close" role="menuitem" data-close="${tab.id}">${icon('close',13)}</button>`;
+      el.innerHTML=`<button class="tab-select" role="tab"><span class="tab-icon">${icon(tab.type==='document'?'file':'globe',15)}</span><span class="tab-title"></span><i class="tab-dirty" hidden></i></button><button class="tab-close" data-close="${tab.id}">${icon('close',13)}</button>`;
       $('.tab-select',el).onclick=()=>activate(tab.id);
       $('[data-close]',el).onclick=safely(e=>{e.stopPropagation();return closeTab(tab.id);});container.append(el);
     }
-    el.className=`tab ${tab.id===activeId?'active':''} ${tab.type}`;el.title=tab.title;$('.tab-select',el).setAttribute('aria-current',tab.id===activeId?'page':'false');
+    const selected=tab.id===activeId,button=$('.tab-select',el);
+    el.className=`tab ${selected?'active':''} ${tab.type}`;el.title=tab.record?.name?tab.title+' · '+tab.record.name:tab.title;
+    button.id='tab-'+tab.id;button.setAttribute('aria-selected',String(selected));button.setAttribute('aria-controls',tab.host.id);button.tabIndex=tab.id===focusId?0:-1;
+    tab.host.setAttribute('role','tabpanel');tab.host.setAttribute('aria-labelledby',button.id);
     const title=$('.tab-title',el);if(title.textContent!==tab.title)title.textContent=tab.title;
     $('.tab-dirty',el).hidden=!tab.opening && !tab.queue?.editsPending;
     $('[data-close]',el).setAttribute('aria-label',tab.title+' 탭 닫기');
+    $('[data-close]',el).title=tab.title+' 탭 닫기';$('[data-close]',el).tabIndex=selected?0:-1;
     nodes.delete(tab.id);
   }
   for(const node of nodes.values())node.remove();
-  $('#open-tabs-menu').hidden=tabs.length===0;
+  container.hidden=tabs.length===0;
+  // Reveal a changed selection, without snapping back when autosave reports.
+  const layout=activeId+':'+tabs.map(tab=>tab.id).join(',');
+  if(layout!==tabLayout){tabLayout=layout;requestAnimationFrame(revealActiveTab);}
   $('#library-tab').classList.toggle('active',activeId==='library');
   $('#library-tab').setAttribute('aria-current',activeId==='library'?'page':'false');
   $('#execution-tab').setAttribute('aria-current',activeId==='execution'?'page':'false');
   $('#execution-tab').classList.toggle('active',activeId==='execution');
 }
+function revealActiveTab() {
+  const container=$('#tabs'),tab=$('.tab.active',container);if(!tab||container.hidden)return;
+  const bounds=container.getBoundingClientRect(),rect=tab.getBoundingClientRect();if(!bounds.width)return;
+  if(rect.left<bounds.left)container.scrollLeft-=bounds.left-rect.left;
+  else if(rect.right>bounds.right)container.scrollLeft+=rect.right-bounds.right;
+}
+function focusAddress() {
+  $('.chrome').classList.add('address-editing');$('#address').focus();$('#address').select?.();
+}
+function bindTabs() {
+  $('#tabs').addEventListener('keydown',safely(async event=>{
+    if(!event.target.matches('.tab-select'))return;
+    const buttons=$$('.tab-select',$('#tabs')),index=buttons.indexOf(event.target);
+    if(event.key==='Delete'){
+      event.preventDefault();await closeTab(event.target.closest('[data-tab]').dataset.tab);
+      ($('.tab.active .tab-select',$('#tabs'))||$('#import-button')).focus();return;
+    }
+    if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
+    event.preventDefault();const next=event.key==='Home'?0:event.key==='End'?buttons.length-1:(index+(event.key==='ArrowRight'?1:-1)+buttons.length)%buttons.length;
+    activate(buttons[next].closest('[data-tab]').dataset.tab);buttons[next].focus();
+  }));
+}
 function activate(id) {
   if(id!==activeId)reader()?.stopSpeech();
   if(readerFocused && id!==activeId)void leaveReaderFocus();
-  closeAppMenu(true); closePopover(); closeSidebar(); activeId=id; $('#library').hidden=id!=='library';$('#execution').hidden=id!=='execution';$('#workspace').hidden=id==='library'||id==='execution';
+  closeAppMenu(true); closePopover(); closeSidebar();$('.chrome').classList.remove('address-editing');activeId=id; $('#library').hidden=id!=='library';$('#execution').hidden=id!=='execution';$('#workspace').hidden=id==='library'||id==='execution';
   tabs.forEach(tab=>tab.host.hidden=tab.id!==id);renderTabs();updateChrome();
   if(reader()){renderToolbar();if(reader().dynamicDirty)reader().scheduleDynamicRefresh();}else $('#toolbar').hidden=true;
   if(id==='library')renderLibrary();
@@ -180,7 +211,9 @@ function activate(id) {
 }
 function updateChrome() {
   const tab=active(); const r=reader(); const local=tab?.type==='document';const execution=activeId==='execution';
-  $('#address').value=local?tab.record.name:tab?.url||'';$('#address-icon').innerHTML=icon(local?'file':'globe',15);$('#local-label').hidden=!local;
+  $('.chrome').dataset.page=local?'document':tab?'browser':activeId;
+  if(!$('.chrome').classList.contains('address-editing'))$('#address').value=local?tab.record.name:tab?.url||'';
+  $('#address-icon').innerHTML=icon(local?'file':'globe',15);$('#local-label').hidden=!local;
   $('#back').disabled=local?!r?.linkHistory.length:!tab||!tab.chromeId&&tab.cursor<=0;
   $('#forward').disabled=!tab||local||!tab.chromeId&&tab.cursor>=tab.history.length-1;
   $('#reload').disabled=!tab||local;
@@ -741,7 +774,7 @@ function handleKey(event) {
   const isField=/^(INPUT|TEXTAREA|SELECT)$/.test(event.target?.tagName)||event.target?.isContentEditable;
   if(event.key==='Escape') {if(reader()?.readAloud?.escape()){event.preventDefault();return;}reader()?.stopSpeech();if($('#dialog').open)return;if(!$('#tool-popover').hidden)closePopover();else if(!$('#sidebar').hidden)closeSidebar();else if(readerFocused)void leaveReaderFocus();else if(reader())reader().setTool('select');return;}
   if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='s'){event.preventDefault();if(reader())safely(()=>{const tab=active();tab.reader.rememberPosition();return tab.queue.flush();})();else safely(savePage)();return;}
-  if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='l'){event.preventDefault();$('#address').focus();$('#address').select();return;}
+  if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='l'){event.preventDefault();focusAddress();return;}
   if(!reader()||isField||$('#dialog').open)return;
   if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='z'){event.preventDefault();event.shiftKey?reader().redo():reader().undo();return;}
   if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='f'){event.preventDefault();renderSidebar('search');return;}
@@ -787,14 +820,18 @@ async function copyAppURL(){
 function bindUI() {
   document.addEventListener('fullscreenchange',()=>{if(document.fullscreenElement===$('#app') && readerFocused)nativeReaderFullscreen=true;else if(nativeReaderFullscreen){nativeReaderFullscreen=false;setReaderFocus(false);}});
   [['#library-tab','library','내 서재'],['#new-tab','globe','웹 페이지 열기'],['#execution-tab','external','실행과 앱 전달'],['#back','back'],['#forward','forward'],['#reload','reload'],['#import-button','folder'],['#save-page','save'],['#app-menu-button','chevron-down','메뉴'],['#settings-button','settings','설정'],['#menu-folder','folder','저장 폴더 연결'],['#about-button','info','About'],['#library-search-icon','search'],['#empty-icon','file'],['#library-card-view','grid','카드'],['#library-list-view','list','목록']].forEach(([id,name,label])=>setButton(id,name,label));
-  bindAppMenu();$('#menu-folder').onclick=safely(chooseFolder);$('#about-button').onclick=aboutDialog;
-  $('#library-tab').onclick=()=>activate('library');$('#new-tab').onclick=()=>{activate('library');$('#address').focus();};$('#browse-start').onclick=()=>$('#address').focus();
+  bindAppMenu();bindTabs();$('#menu-folder').onclick=safely(chooseFolder);$('#about-button').onclick=aboutDialog;
+  $('#library-tab').onclick=()=>activate('library');$('#new-tab').onclick=()=>{activate('library');focusAddress();};$('#browse-start').onclick=focusAddress;
   $('#execution-tab').onclick=()=>activate('execution');$('#execution-import').onclick=safely(importFiles);$('#execution-chrome').onclick=connectionDialog;$('#execution-settings').onclick=settingsDialog;
   $('#share-url').value=PUBLIC_APP_URL;$('#shared-app-link').href=PUBLIC_APP_URL;
   $('#share-app').onclick=safely(copyAppURL);
   installController=new InstallController({window,navigator,location,matchMedia,onChange:updateInstall,onGuide:installGuide});
   $('#install-button').onclick=$('#execution-install').onclick=safely(async()=>{const result=await installController.install();if(result==='dismissed')toast('설치를 취소했습니다. 앱 설치 버튼에서 다시 안내를 볼 수 있어요.');});
-  $('#address-form').onsubmit=safely(async event=>{event.preventDefault();const value=$('#address').value;await openBrowser(value,active()?.type!=='browser');});
+  const addressForm=$('#address-form');
+  addressForm.addEventListener('focusin',()=>$('.chrome').classList.add('address-editing'));
+  addressForm.addEventListener('focusout',event=>{if(!addressForm.contains(event.relatedTarget)){$('.chrome').classList.remove('address-editing');updateChrome();requestAnimationFrame(revealActiveTab);}});
+  addressForm.addEventListener('keydown',event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();$('#address').blur();$('.tab.active .tab-select',$('#tabs'))?.focus();}});
+  addressForm.onsubmit=safely(async event=>{event.preventDefault();const value=$('#address').value;$('.chrome').classList.remove('address-editing');$('#address').blur();await openBrowser(value,active()?.type!=='browser');});
   $('#back').onclick=safely(()=>browserHistory(-1));$('#forward').onclick=safely(()=>browserHistory(1));$('#reload').onclick=safely(async()=>{const tab=active();if(tab?.chromeId)await bridge('reloadTab',{tabId:tab.chromeId});else if(tab?.frame)tab.frame.src=tab.url;});
   $('#save-page').onclick=safely(savePage);$('#import-button').onclick=safely(importFiles);$('#hero-import').onclick=safely(importFiles);$('#choose-folder').onclick=safely(chooseFolder);
   $('#file-input').onchange=safely(async event=>{const files=[...event.target.files];event.target.value='';for(const file of files)await openLocalFile(file);});
@@ -808,7 +845,7 @@ function bindUI() {
   document.addEventListener('visibilitychange',()=>{if(document.hidden)savePositions();});
   window.addEventListener('pagehide',savePositions);
   window.addEventListener('online',network);window.addEventListener('offline',network);window.addEventListener('htmlmemo-chrome-ready',()=>{updateConnection();safely(receiveCaptures)();});window.addEventListener('htmlmemo-capture-ready',safely(receiveCaptures));
-  window.addEventListener('resize',()=>{closePopover();applyToolbarPosition();});
+  window.addEventListener('resize',()=>{closePopover();applyToolbarPosition();requestAnimationFrame(revealActiveTab);});
   window.addEventListener('dragover',event=>{if([...event.dataTransfer.types].includes('Files'))event.preventDefault();});window.addEventListener('drop',safely(async event=>{if(![...(event.dataTransfer.types||[])].includes('Files'))return;event.preventDefault();for(const file of await droppedHTMLFiles(event.dataTransfer))await openLocalFile(file);}));
 }
 function network() {$('#network-status').textContent=navigator.onLine?'온라인':'오프라인';$('#network-status').classList.toggle('offline',!navigator.onLine);}

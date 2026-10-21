@@ -122,6 +122,10 @@ test('the single header menu preserves library, web opening, HTML import, app de
   const click=id=>doc.querySelector(id).onclick(new Event('click'));
   assert.equal(doc.querySelector('.desk-nav,#desk-resizer,.chrome-topline,#home-button'),null);
   assert.equal(doc.querySelectorAll('#app-menu-button').length,1);
+  assert.equal(doc.querySelector('#tabs').getAttribute('role'),'tablist');
+  assert.ok(doc.querySelector('#tabs').closest('.addressbar'));
+  assert.equal(doc.querySelector('#tabs').closest('#app-menu'),null);
+  assert.equal(doc.querySelector('#open-tabs-menu'),null);
   for(const id of ['#library-tab','#execution-tab','#new-tab','#install-button','#connection-button','#settings-button','#about-button'])assert.ok(doc.querySelector(id).closest('#app-menu'));
   for(const id of ['#library-tab','#execution-tab','#new-tab','#import-button'])assert.ok(doc.querySelector(id).closest('header'));
   assert.equal(doc.querySelector('#library-tab').getAttribute('aria-current'),'page');

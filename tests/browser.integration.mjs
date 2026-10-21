@@ -115,13 +115,13 @@ test('real Chrome: browsing, capture, local annotation, file writes, reopen and 
     await t.test('local file import activates annotation independent of original website URL',async()=>{
       await page.evaluate(`window.showOpenFilePicker=async()=>{const root=await navigator.storage.getDirectory();return [await root.getFileHandle('picked-document.html')];};`);await page.click('#import-button');await page.waitFor('document.querySelectorAll(".tab.document").length === 2 && !document.querySelector("#toolbar").hidden');assert.equal(await page.evaluate('document.querySelector("#local-label").hidden'),false);assert.equal(await page.evaluate('document.querySelector(".document-host:not([hidden]) iframe").contentDocument.querySelectorAll("[data-htmlmemo-mark]").length > 0'),true);
     });
-    await t.test('opened documents can be switched from the dropdown without adding a header row',async()=>{
+    await t.test('opened documents have visible tabs that switch without adding a header row',async()=>{
       assert.deepEqual(await page.evaluate(`(()=>{const button=document.querySelector('#save-page');return {text:button.textContent,title:button.title,label:button.getAttribute('aria-label')};})()`),{text:'',title:'HTML 내보내기',label:'HTML 내보내기'});
       const previous=await page.evaluate('document.querySelector(".tab.document.active").dataset.tab');
-      await clickAppMenu(page,'.tab.document:not(.active) .tab-select');
+      await page.click('.tab.document:not(.active) .tab-select');
       assert.notEqual(await page.evaluate('document.querySelector(".tab.document.active").dataset.tab'),previous);
       assert.equal(await page.evaluate('document.querySelector("#app-menu").hidden'),true);
-      await clickAppMenu(page,`[data-tab="${previous}"] .tab-select`);
+      await page.click(`[data-tab="${previous}"] .tab-select`);
       assert.equal(await page.evaluate('document.querySelector(".chrome").getBoundingClientRect().height'),25);
     });
     await t.test('document fullscreen retains every compact toolbar button and saves annotations',async()=>{
@@ -171,7 +171,7 @@ test('real Chrome: browsing, capture, local annotation, file writes, reopen and 
       await page.evaluate(`document.querySelector('.document-host:not([hidden]) iframe').contentDocument.querySelector('#change').click()`);assert.equal(await page.evaluate('document.querySelector(".document-host:not([hidden]) iframe").contentDocument.querySelector("#change").textContent'),'123');
       await page.evaluate(`(()=>{const doc=document.querySelector('.document-host:not([hidden]) iframe').contentDocument;const range=doc.createRange();range.selectNodeContents(doc.querySelector('#generated'));const selection=doc.getSelection();selection.removeAllRanges();selection.addRange(range);doc.dispatchEvent(new Event('selectionchange'));})()`);
       await page.click('[data-action="underline"]');await page.waitFor('document.querySelector(".document-host:not([hidden]) iframe").contentDocument.querySelector("[data-htmlmemo-mark]") && document.querySelector("#status-left").textContent.includes("자동 저장됨")',30000);
-      await clickAppMenu(page,'.tab.active .tab-close');await clickAppMenu(page,'#library-tab');
+      await page.click('.tab.active .tab-close');await clickAppMenu(page,'#library-tab');
       await page.evaluate(`(()=>{const card=[...document.querySelectorAll('.document-card')].find(card=>card.textContent.includes('Script generated book'));if(!card)throw Error('Missing saved script book');card.querySelector('[data-open]').click();})()`);
       await page.waitFor('document.querySelector(".document-host:not([hidden]) iframe")?.contentDocument?.title === "Script generated book" && !document.querySelector("#toolbar").hidden');
       await page.evaluate('new Promise(resolve=>setTimeout(resolve,800))');
@@ -244,7 +244,7 @@ test('real Chrome: separate annotations, immutable source, durable history, rest
     await page.send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await writeFile(join(root,'test-results/annotation-history-mobile.png'),await page.screenshot());
     assert.equal(await page.evaluate(`document.querySelector('#dialog').getBoundingClientRect().width <= innerWidth`),true);
     await page.evaluate(`document.querySelector('#dialog').close()`);await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
-    await clickAppMenu(page,'.tab.document.active .tab-close');await page.waitFor('document.querySelectorAll(".tab.document").length===0');await page.evaluate(`document.querySelector('[data-open]').click()`);await page.waitFor(`document.querySelector('.document-host:not([hidden]) iframe')?.contentDocument?.querySelectorAll('[data-htmlmemo-mark]').length===2`);
+    await page.click('.tab.document.active .tab-close');await page.waitFor('document.querySelectorAll(".tab.document").length===0');await page.evaluate(`document.querySelector('[data-open]').click()`);await page.waitFor(`document.querySelector('.document-host:not([hidden]) iframe')?.contentDocument?.querySelectorAll('[data-htmlmemo-mark]').length===2`);
     await page.waitFor(`!document.querySelector('.tab-dirty:not([hidden])')`);const beforeReload=await state();
     await page.navigate(url);await page.waitFor(`!!document.querySelector('[data-open]')`);await page.evaluate(`document.querySelector('[data-open]').click()`);await page.waitFor(`document.querySelector('.document-host:not([hidden]) iframe')?.contentDocument?.querySelectorAll('[data-htmlmemo-mark]').length===2`);
     assert.equal((await state()).revisions.length,beforeReload.revisions.length);
@@ -253,7 +253,7 @@ test('real Chrome: separate annotations, immutable source, durable history, rest
     const exported=await page.evaluate(`(async()=>{const root=await navigator.storage.getDirectory();const source=await (await (await root.getFileHandle('source.html')).getFile()).text();const html=await (await (await root.getFileHandle('exported.html')).getFile()).text();const doc=new DOMParser().parseFromString(html,'text/html');return {source,annotations:JSON.parse(doc.getElementById('htmlmemo-data').textContent).annotations.length};})()`);
     assert.equal(exported.source,'<html><head><title>Annotation history</title></head><body><p id="selection">Local source text remains unchanged across annotation history.</p></body></html>');assert.equal(exported.annotations,2);
     // Simulate legacy v1 data and verify upgrade without losing documents or preferences.
-    await clickAppMenu(page,'.tab.document.active .tab-close');await page.waitFor(`document.querySelectorAll('.tab.document').length===0`);
+    await page.click('.tab.document.active .tab-close');await page.waitFor(`document.querySelectorAll('.tab.document').length===0`);
     await page.evaluate(`(async()=>{await new Promise((resolve,reject)=>{const r=indexedDB.deleteDatabase('HTMLMemo-v1');r.onsuccess=resolve;r.onerror=()=>reject(r.error);});await new Promise((resolve,reject)=>{const r=indexedDB.open('HTMLMemo-v1',1);r.onupgradeneeded=()=>{r.result.createObjectStore('documents',{keyPath:'id'});r.result.createObjectStore('settings');};r.onsuccess=()=>{const db=r.result,tx=db.transaction(['documents','settings'],'readwrite');tx.objectStore('documents').put({...${JSON.stringify(first)},title:'Annotation history',name:'source.html',created:Date.now(),modified:Date.now()});tx.objectStore('settings').put('legacy retained','migration-test');tx.oncomplete=()=>{db.close();resolve();};tx.onabort=()=>reject(tx.error);};r.onerror=()=>reject(r.error);});})()`);
     await page.navigate(url);await page.waitFor(`!!document.querySelector('[data-open]')`);await page.evaluate(`document.querySelector('[data-open]').click()`);await page.waitFor(`!!document.querySelector('[data-action="more"]')`);
     const migrated=await state();assert.equal(migrated.id,first.id);assert.equal(migrated.html,first.html);assert.equal(migrated.revisions.length,1);
@@ -305,7 +305,7 @@ test('real Chrome: large library and annotation autosave never deserialize book 
   console.log('Large-library measurement:',JSON.stringify(result));
   await page.evaluate(`document.querySelector('[data-open="large-1"]').click()`);await page.waitFor(`document.querySelector('.document-host:not([hidden]) iframe')?.contentDocument?.getElementById('large') && document.querySelector('#status-left').textContent.includes('자동 저장됨')`);
   assert.equal(await page.evaluate('window.contentReads'),1);
-  await clickAppMenu(page,'.tab.document.active .tab-close');await page.waitFor(`document.querySelectorAll('.tab.document').length===0`);assert.equal(await page.evaluate('window.contentReads'),1);
+  await page.click('.tab.document.active .tab-close');await page.waitFor(`document.querySelectorAll('.tab.document').length===0`);assert.equal(await page.evaluate('window.contentReads'),1);
   assert.deepEqual(chrome.errors,[]);
  }finally{if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
 });
@@ -340,6 +340,67 @@ test('real Chrome: saved date, modified date and title sort in both directions a
       if(width===1280||width===320){await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,`test-results/library-sort-${width}.png`),await page.screenshot());}
     }
     assert.deepEqual(chrome.errors,[]);
+  }finally{if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
+});
+
+test('real Chrome: visible file tabs keep one header row and preserve documents through switching and closing',{timeout:60000},async()=>{
+  await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-visible-tabs-'));await cp(join(root,'public'),folder,{recursive:true});
+  const server=createServer(folder);let chrome;
+  try{
+    await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));chrome=await launchChrome();const page=chrome.page;
+    const url=process.env.HTMLMEMO_TABS_TEST_URL||`http://127.0.0.1:${server.address().port}/`;
+    await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});await page.navigate(url);
+    await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
+    await clickAppMenu(page,'#settings-button');await page.evaluate(`(()=>{const appearance=document.querySelector('#appearance');appearance.value='dark';appearance.dispatchEvent(new Event('change'));document.querySelector('#dialog').close();})()`);
+    // The native picker is simulated; actual OPFS handles exercise multi-file reading.
+    await page.evaluate(`(async()=>{const root=await navigator.storage.getDirectory(),handles=[];for(const [index,title] of ['입문','실전','개발 용어','긴 이름의 문서도 탭으로 전환하고 파일 이름을 확인합니다'].entries()){const handle=await root.getFileHandle('book-'+index+'.html',{create:true}),writer=await handle.createWritable();await writer.write('<html><head><title>'+title+'</title></head><body><h1>'+title+'</h1><p id="selection">Annotations belong to this document when switching between tabs.</p><main style="height:4000px">Reading content for '+title+'</main></body></html>');await writer.close();handles.push(handle);}window.showOpenFilePicker=async options=>{window.pickerAllowsMultiple=options.multiple;return handles;};})()`);
+    await page.click('#import-button');await page.waitFor('document.querySelectorAll("#tabs .tab.document").length===4&&document.querySelector("#status-left").textContent.includes("자동 저장됨")');
+    assert.equal(await page.evaluate('window.pickerAllowsMultiple'),true);
+    assert.equal(await page.evaluate('!!document.querySelector("#app-menu #tabs")'),false);
+    assert.equal(await page.evaluate('document.querySelector("#tabs").hidden'),false);
+    const ids=await page.evaluate('[...document.querySelectorAll("#tabs [data-tab]")].map(element=>element.dataset.tab)');
+    const frame='document.querySelector(".document-host:not([hidden]) iframe")';
+    await page.evaluate(`window.originalTabFrames=[...document.querySelectorAll('#tabs [role=tab]')].map(button=>document.getElementById(button.getAttribute('aria-controls')).querySelector('iframe'));`);
+    const key=async value=>{const code={Home:36,End:35,ArrowLeft:37,ArrowRight:39,Escape:27,Delete:46}[value];await page.send('Input.dispatchKeyEvent',{type:'keyDown',key:value,code:value,windowsVirtualKeyCode:code});await page.send('Input.dispatchKeyEvent',{type:'keyUp',key:value,code:value,windowsVirtualKeyCode:code});};
+    for(const width of [1280,800,390,320]){
+      await page.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
+      await page.evaluate(`document.querySelector('#tabs .tab.active .tab-select').focus()`);
+      for(const [value,id] of [['Home',ids[0]],['End',ids.at(-1)]]){
+        await key(value);await page.waitFor(`document.querySelector('#tabs .tab.active').dataset.tab===${JSON.stringify(id)}`);
+        await page.waitFor(`(()=>{const strip=document.querySelector('#tabs').getBoundingClientRect(),active=document.querySelector('#tabs .tab.active').getBoundingClientRect();return active.left>=strip.left-1&&active.right<=strip.right+1;})()`);
+      }
+      const layout=await page.evaluate(`(()=>{const header=document.querySelector('.chrome').getBoundingClientRect(),strip=document.querySelector('#tabs').getBoundingClientRect();return {height:header.height,stripVisible:strip.width>0&&strip.left>=0&&strip.right<=innerWidth,selected:document.querySelectorAll('#tabs [aria-selected=true]').length,panels:document.querySelectorAll('.workspace-host:not([hidden])').length,controls:['#import-button','#save-page','#app-menu-button'].every(selector=>{const element=document.querySelector(selector),r=element.getBoundingClientRect();return r.width>0&&r.right<=innerWidth&&element.contains(document.elementFromPoint(r.left+r.width/2,r.top+r.height/2));})};})()`);
+      assert.deepEqual(layout,{height:25,stripVisible:true,selected:1,panels:1,controls:true});
+      assert.equal(await page.evaluate(`document.querySelector('#tabs .tab.active').title.includes('book-3.html')`),true);
+      if(width===1280||width===320){await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,`test-results/visible-tabs-${width}.png`),await page.screenshot());}
+    }
+    assert.equal(await page.evaluate('document.querySelector("#tabs").scrollWidth>document.querySelector("#tabs").clientWidth'),true);
+    await page.evaluate(`(async()=>{document.querySelector('#tabs').scrollLeft=0;${frame}.contentWindow.scrollTo(0,60);await new Promise(resolve=>setTimeout(resolve,2600));})()`);
+    assert.equal(await page.evaluate('document.querySelector("#tabs").scrollLeft'),0,'background position saving must not reset tab scrolling');
+    // Ctrl/Cmd+L can still edit an address without replacing the visible file tabs permanently.
+    await page.evaluate(`document.dispatchEvent(new KeyboardEvent('keydown',{key:'l',ctrlKey:true,bubbles:true,cancelable:true}));document.querySelector('#address').value='https://example.org/typed-address';${frame}.contentWindow.scrollTo(0,100);`);
+    await page.evaluate('new Promise(resolve=>setTimeout(resolve,400))');
+    assert.equal(await page.evaluate('document.querySelector("#address").value'),'https://example.org/typed-address');await key('Escape');
+    await page.waitFor('!document.querySelector(".chrome").classList.contains("address-editing")');
+    await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
+    await page.click(`[data-tab="${ids[0]}"] .tab-select`);
+    await page.evaluate(`(()=>{const doc=${frame}.contentDocument,range=doc.createRange();range.setStart(doc.querySelector('#selection').firstChild,0);range.setEnd(doc.querySelector('#selection').firstChild,11);doc.getSelection().removeAllRanges();doc.getSelection().addRange(range);doc.dispatchEvent(new Event('selectionchange'));})()`);
+    await page.click('[data-action="highlight"]');await page.waitFor('document.querySelector("#status-left").textContent.includes("자동 저장됨")&&!document.querySelector(".tab-dirty:not([hidden])")');
+    await page.click(`[data-tab="${ids[1]}"] .tab-select`);assert.equal(await page.evaluate(`${frame}.contentDocument.querySelectorAll('[data-htmlmemo-mark]').length`),0);
+    await page.click(`[data-tab="${ids[0]}"] .tab-select`);assert.equal(await page.evaluate(`${frame}.contentDocument.querySelectorAll('[data-htmlmemo-mark]').length`),1);
+    assert.equal(await page.evaluate(`${frame}===window.originalTabFrames[0]`),true);
+    await page.click(`[data-tab="${ids[1]}"] .tab-close`);assert.equal(await page.evaluate('document.querySelector("#tabs .tab.active").dataset.tab'),ids[0]);
+    await page.evaluate(`${frame}.contentWindow.scrollTo(0,500);`);await page.click(`[data-tab="${ids[0]}"] .tab-close`);
+    await page.waitFor('document.querySelectorAll("#tabs .tab.document").length===2');
+    const saved=await page.evaluate(`(async()=>{const {listDocuments}=await import('./src/storage.js');return (await listDocuments()).find(record=>record.title==='입문');})()`);
+    assert.equal(saved.metadata.annotations.length,1);assert.ok(saved.metadata.view.scrollTop>0);
+    await clickAppMenu(page,'#library-tab');await page.click(`[data-open="${saved.id}"]`);
+    await page.waitFor(`${frame}?.contentDocument?.querySelector('[data-htmlmemo-mark]')&&${frame}.contentWindow.scrollY>=499`);
+    await page.evaluate('document.querySelector("#tabs .tab.active .tab-select").focus()');await key('Delete');await page.waitFor('document.querySelectorAll("#tabs .tab.document").length===2');
+    assert.equal(await page.evaluate('document.querySelector("#app-menu").hidden'),true);
+    for(const remaining of [1,0]){await page.click('#tabs .tab.active .tab-close');await page.waitFor(`document.querySelectorAll('#tabs .tab').length===${remaining}`);}
+    assert.equal(await page.evaluate('document.querySelector("#tabs").hidden'),true);
+    assert.equal(await page.evaluate('document.querySelector("#library").hidden'),false);assert.deepEqual(chrome.errors,[]);
   }finally{if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
 });
 
@@ -395,7 +456,7 @@ test('real Chrome: scrolling saves quietly in batches, preserves annotation hist
     const edited=await state();assert.equal(edited.revisions,baseline.revisions+1);assert.equal(edited.html,baseline.html);
     // Closing before the debounce expires captures the current position synchronously.
     await page.evaluate(`${frame}.contentDocument.querySelector('main').scrollTop=1400;`);
-    await clickAppMenu(page,'.tab.document.active .tab-close');await page.waitFor('document.querySelectorAll(".tab.document").length===0');
+    await page.click('.tab.document.active .tab-close');await page.waitFor('document.querySelectorAll(".tab.document").length===0');
     const closed=await state();assert.ok(Math.abs(closed.view.scrollTop-1400*closed.view.zoom)<1);assert.equal(closed.revisions,edited.revisions);
     await page.click('[data-open]');await page.waitFor(`${frame}?.contentDocument?.querySelector('main')?.scrollTop>=1399`);
     // Leaving the app also bypasses the delay. The lifecycle event is simulated;
