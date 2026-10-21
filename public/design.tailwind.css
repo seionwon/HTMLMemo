@@ -80,8 +80,8 @@ body[data-codememo-design]{margin:0;font-family:var(--app-font);background:var(-
 .addressbar .icon-button{width:26px;height:24px;min-height:0;padding-block:0;border-radius:5px}
 #address-form{height:24px;min-height:0;padding-block:0;margin-block:0;border-radius:5px}
 #address{height:100%;min-width:0;padding-block:0;line-height:1}
-.addressbar .open-button{width:auto;height:24px;min-height:0;padding:0 8px;border-radius:5px;display:inline-flex;align-items:center;justify-content:center;gap:5px;font-size:11px;white-space:nowrap;flex-shrink:0}
-.addressbar .save-button{height:24px;min-height:0;padding:0 10px;border-radius:5px;line-height:1;flex-shrink:0}
+.addressbar .open-button{width:26px;height:24px;min-height:0;padding:0;border-radius:5px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+.addressbar .save-button{width:26px;height:24px;min-height:0;padding:0;border-radius:5px;line-height:1;flex-shrink:0}
 .addressbar>.menu-toggle{display:inline-flex;align-items:center;justify-content:center;gap:4px;height:24px;padding:0 7px;border:1px solid var(--line);border-radius:5px;font-size:11px;color:var(--muted);white-space:nowrap;flex-shrink:0}
 .menu-toggle svg{width:14px;height:14px}
 .menu-toggle:hover,.menu-toggle[aria-expanded=true]{background:var(--green-light);color:var(--green)}
@@ -104,12 +104,7 @@ body[data-codememo-design]{margin:0;font-family:var(--app-font);background:var(-
 .about-brand p{font-size:12px;color:var(--muted);margin:0}
 .about-version{font-size:13px;margin:18px 0}
 .sidebar{top:var(--chrome-height,25px)}
-@media(max-width:800px){
- .addressbar .open-button{width:26px;padding:0}
- .addressbar .open-button span{display:none}
-}
 @media(max-width:480px){
- .addressbar .save-button{width:26px;padding:0}
  .addressbar>.menu-toggle{padding:0 5px}
 }
 

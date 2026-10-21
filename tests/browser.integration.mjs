@@ -79,6 +79,7 @@ test('real Chrome: browsing, capture, local annotation, file writes, reopen and 
         const layout=await page.evaluate(`(()=>{const main=document.querySelector('#main').getBoundingClientRect(),header=document.querySelector('.chrome').getBoundingClientRect(),row=document.querySelector('.addressbar').getBoundingClientRect();return {left:main.left,width:main.width,viewport:innerWidth,oldNavigation:!!document.querySelector('.chrome-topline,.desk-nav,#desk-resizer'),rows:header.height-row.height,controls:['#import-button','#save-page','#app-menu-button'].map(id=>{const element=document.querySelector(id),r=element.getBoundingClientRect(),hit=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);return {id,visible:r.width>0&&r.height>0&&r.left>=0&&r.right<=innerWidth&&element.contains(hit)};})};})()`);
         assert.equal(layout.oldNavigation,false);assert.equal(layout.left,0);assert.equal(layout.width,layout.viewport);assert.equal(layout.rows,1);
         assert.ok(layout.controls.every(control=>control.visible),JSON.stringify({width,...layout}));
+        assert.deepEqual(await page.evaluate(`['#import-button','#save-page'].map(id=>{const element=document.querySelector(id);return {text:element.textContent,title:element.title,label:element.getAttribute('aria-label'),width:element.getBoundingClientRect().width,icon:!!element.querySelector('svg')};})`),[{text:'',title:'HTML 파일 가져오기',label:'HTML 파일 가져오기',width:26,icon:true},{text:'',title:'페이지 저장',label:'페이지 저장',width:26,icon:true}]);
         await page.click('#app-menu-button');
         const dropdown=await page.evaluate(`(()=>{const menu=document.querySelector('#app-menu'),m=menu.getBoundingClientRect(),header=document.querySelector('.chrome').getBoundingClientRect();return {anchored:m.top>=header.bottom&&m.left>=0&&m.right<=innerWidth,modal:document.querySelector('#dialog').open,items:[...menu.querySelectorAll('button')].filter(e=>!e.hidden).map(element=>{const r=element.getBoundingClientRect(),hit=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);return element.contains(hit);})};})()`);
         assert.equal(dropdown.anchored,true);assert.equal(dropdown.modal,false);assert.ok(dropdown.items.every(Boolean));
@@ -97,6 +98,7 @@ test('real Chrome: browsing, capture, local annotation, file writes, reopen and 
     await t.test('browser navigation and single-file capture',async()=>{
       await page.evaluate(`document.querySelector('#address').value=${JSON.stringify(url+'fixtures/capture.html')};document.querySelector('#address-form').requestSubmit();`);
       await page.waitFor('document.querySelector(".browser-frame")?.contentDocument?.title === "캡처 검증 문서"');
+      assert.equal(await page.evaluate('document.querySelector("#save-page").title'),'페이지 저장');
       // A native OPFS FileSystemFileHandle exercises the same browser write and
       // IndexedDB structured-clone contracts as an external picked file.
       await page.evaluate(`window.showSaveFilePicker=async()=>{const root=await navigator.storage.getDirectory();return root.getFileHandle('picked-document.html',{create:true});};`);
@@ -114,6 +116,7 @@ test('real Chrome: browsing, capture, local annotation, file writes, reopen and 
       await page.evaluate(`window.showOpenFilePicker=async()=>{const root=await navigator.storage.getDirectory();return [await root.getFileHandle('picked-document.html')];};`);await page.click('#import-button');await page.waitFor('document.querySelectorAll(".tab.document").length === 2 && !document.querySelector("#toolbar").hidden');assert.equal(await page.evaluate('document.querySelector("#local-label").hidden'),false);assert.equal(await page.evaluate('document.querySelector(".document-host:not([hidden]) iframe").contentDocument.querySelectorAll("[data-htmlmemo-mark]").length > 0'),true);
     });
     await t.test('opened documents can be switched from the dropdown without adding a header row',async()=>{
+      assert.deepEqual(await page.evaluate(`(()=>{const button=document.querySelector('#save-page');return {text:button.textContent,title:button.title,label:button.getAttribute('aria-label')};})()`),{text:'',title:'HTML 내보내기',label:'HTML 내보내기'});
       const previous=await page.evaluate('document.querySelector(".tab.document.active").dataset.tab');
       await clickAppMenu(page,'.tab.document:not(.active) .tab-select');
       assert.notEqual(await page.evaluate('document.querySelector(".tab.document.active").dataset.tab'),previous);

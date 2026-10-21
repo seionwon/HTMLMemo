@@ -88,7 +88,7 @@ test('execution shares only the canonical URL, with no app package or installati
   app.doc.querySelector('#share-app').onclick();await new Promise(resolve=>setImmediate(resolve));
   app.doc.querySelector('#save-page').onclick();await new Promise(resolve=>setImmediate(resolve));
   assert.deepEqual(copied,[PUBLIC_APP_URL,PUBLIC_APP_URL]);assert.equal(app.blobs.length,0);assert.match(app.doc.querySelector('#share-status').textContent,/이 주소만 보내/);
-  assert.match(app.doc.querySelector('#save-page').textContent,/URL 복사/);assert.equal(app.doc.querySelector('#save-page').disabled,false);
+  assert.equal(app.doc.querySelector('#save-page').textContent,'');assert.equal(app.doc.querySelector('#save-page').title,'URL 복사');assert.equal(app.doc.querySelector('#save-page').getAttribute('aria-label'),'URL 복사');assert.equal(app.doc.querySelector('#save-page').disabled,false);
 });
 test('clipboard absence or denial selects the visible URL and restores the share controls',async()=>{
   for(const navigator of [{},{clipboard:{writeText:async()=>{throw new Error('Clipboard denied');}}}]){
@@ -139,6 +139,8 @@ test('the single header menu preserves library, web opening, HTML import, app de
   assert.equal(doc.querySelector('#library-tab').getAttribute('aria-current'),'page');
   let picked=false;doc.querySelector('#file-input').click=()=>picked=true;
   await click('#import-button');assert.equal(picked,true);
+  assert.equal(doc.querySelector('#import-button').textContent,'');assert.equal(doc.querySelector('#import-button').title,'HTML 파일 가져오기');
+  assert.equal(doc.querySelector('#save-page').textContent,'');assert.equal(doc.querySelector('#save-page').title,'페이지 저장');
   click('#about-button');assert.equal(doc.querySelector('#dialog').open,true);
   assert.equal(doc.querySelector('.about-brand h3').textContent,'HTMLMemo');
   const {version}=JSON.parse(await readFile(new URL('../package.json',import.meta.url),'utf8'));

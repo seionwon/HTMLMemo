@@ -24,6 +24,7 @@ const safely = fn => (...args) => { try { Promise.resolve(fn(...args)).catch(sho
 function toast(message, error = false) { const el=$('#toast'); el.textContent=message; el.classList.toggle('error',error); el.hidden=false; clearTimeout(toast.timer); toast.timer=setTimeout(()=>el.hidden=true,error?6500:3500); }
 function showError(error) { if (error?.name !== 'AbortError') toast(error?.message || String(error),true); }
 function setButton(selector, name, label = '') { $(selector).innerHTML=icon(name)+(label ? `<span>${label}</span>`:''); }
+function setIconButton(selector, name, label, size = 18) { const button=$(selector);button.innerHTML=icon(name,size);button.title=label;button.setAttribute('aria-label',label); }
 function modal(html, bind = () => {}) {
   closeAppMenu(true); closePopover(); $('#dialog-content').innerHTML=html; const dialog=$('#dialog'); dialog.returnValue=''; if (!dialog.open) dialog.showModal();
   $$('[data-dialog-close]',dialog).forEach(button=>button.onclick=()=>dialog.close()); bind(dialog);
@@ -183,7 +184,7 @@ function updateChrome() {
   $('#back').disabled=local?!r?.linkHistory.length:!tab||!tab.chromeId&&tab.cursor<=0;
   $('#forward').disabled=!tab||local||!tab.chromeId&&tab.cursor>=tab.history.length-1;
   $('#reload').disabled=!tab||local;
-  $('#save-page').innerHTML=icon(execution?'globe':local?'download':'save',17)+`<span>${execution?'URL 복사':local?'HTML 내보내기':'페이지 저장'}</span>`;
+  setIconButton('#save-page',execution?'globe':local?'download':'save',execution?'URL 복사':local?'HTML 내보내기':'페이지 저장',17);
   $('#save-page').disabled=execution?sharingApp:!tab;
   if(local)saveStatus(tab); else if(tab)$('#status-left').textContent=tab.chromeId?'실제 Chrome 탭에서 탐색 중':'웹 탐색 · 로컬로 저장하면 주석을 남길 수 있어요.';
   document.title=tab?tab.title+' · HTMLMemo':'HTMLMemo · 나만의 웹 서재';
@@ -324,7 +325,7 @@ async function savePage() {
   let handle=null;
   if(folder){if(!await permission(folder,true))throw new Error('저장 폴더 쓰기 권한이 필요합니다.');}
   else if(savePicker()){try{handle=await window.showSaveFilePicker({suggestedName:filename(tab.title),types:htmlTypes});}catch(error){if(!['SecurityError','NotSupportedError'].includes(error.name))throw error;}}
-  $('#save-page').disabled=true;$('#save-page').innerHTML=icon('reload',17)+'<span>페이지 보관 중…</span>';
+  $('#save-page').disabled=true;setIconButton('#save-page','reload','페이지 보관 중…',17);
   try {
     let snapshot;
     if(live)snapshot=await HTMLMemoCapture.captureDocument(live);
@@ -759,7 +760,7 @@ async function copyAppURL(){
 }
 function bindUI() {
   document.addEventListener('fullscreenchange',()=>{if(document.fullscreenElement===$('#app') && readerFocused)nativeReaderFullscreen=true;else if(nativeReaderFullscreen){nativeReaderFullscreen=false;setReaderFocus(false);}});
-  [['#library-tab','library','내 서재'],['#new-tab','globe','웹 페이지 열기'],['#execution-tab','external','실행과 앱 전달'],['#back','back'],['#forward','forward'],['#reload','reload'],['#import-button','folder','HTML 파일 가져오기'],['#save-page','save'],['#app-menu-button','chevron-down','메뉴'],['#settings-button','settings','설정'],['#menu-folder','folder','저장 폴더 연결'],['#about-button','info','About'],['#library-search-icon','search'],['#empty-icon','file'],['#library-card-view','grid','카드'],['#library-list-view','list','목록']].forEach(([id,name,label])=>setButton(id,name,label));
+  [['#library-tab','library','내 서재'],['#new-tab','globe','웹 페이지 열기'],['#execution-tab','external','실행과 앱 전달'],['#back','back'],['#forward','forward'],['#reload','reload'],['#import-button','folder'],['#save-page','save'],['#app-menu-button','chevron-down','메뉴'],['#settings-button','settings','설정'],['#menu-folder','folder','저장 폴더 연결'],['#about-button','info','About'],['#library-search-icon','search'],['#empty-icon','file'],['#library-card-view','grid','카드'],['#library-list-view','list','목록']].forEach(([id,name,label])=>setButton(id,name,label));
   bindAppMenu();$('#menu-folder').onclick=safely(chooseFolder);$('#about-button').onclick=aboutDialog;
   $('#library-tab').onclick=()=>activate('library');$('#new-tab').onclick=()=>{activate('library');$('#address').focus();};$('#browse-start').onclick=()=>$('#address').focus();
   $('#execution-tab').onclick=()=>activate('execution');$('#execution-import').onclick=safely(importFiles);$('#execution-chrome').onclick=connectionDialog;$('#execution-settings').onclick=settingsDialog;
