@@ -34,3 +34,9 @@ export async function launchChrome(){
   const errors=[];page.on('Runtime.exceptionThrown',e=>errors.push(e.exceptionDetails.exception?.description||e.exceptionDetails.text));
   return {page,errors,process:child,profile,async close(){await page.close();child.kill('SIGTERM');await Promise.race([new Promise(resolve=>child.once('exit',resolve)),delay(5000)]);if(child.exitCode===null)child.kill('SIGKILL');await rm(profile,{recursive:true,force:true,maxRetries:5,retryDelay:100});}};
 }
+
+// The app keeps document switching and closing inside its single header menu.
+export async function clickAppMenu(page,selector){
+  if(await page.evaluate('document.querySelector("#app-menu").hidden'))await page.click('#app-menu-button');
+  await page.click(selector);
+}

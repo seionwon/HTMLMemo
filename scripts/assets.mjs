@@ -30,6 +30,8 @@ export async function packageAssets(){
   return {app,extension};
 }
 export async function prepareAssets(){
+  const {version}=JSON.parse(await readFile(join(root,'package.json'),'utf8'));
+  await writeFile(join(root,'public/src/version.js'),'// Generated from package.json by scripts/assets.mjs.\nexport const APP_VERSION = '+JSON.stringify(version)+';\n');
   await mkdir(join(root,'public/icons'),{recursive:true});await mkdir(join(root,'public/downloads'),{recursive:true});
   await writeFile(join(root,'public/icons/icon-192.png'),createIcon(192));await writeFile(join(root,'public/icons/icon-512.png'),createIcon(512));
   await writeFile(join(root,'extension/capture.js'),await readFile(join(root,'public/shared/capture.js')));

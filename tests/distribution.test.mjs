@@ -70,6 +70,7 @@ test('a real build removes retired distribution artifacts and writes the Pages w
 async function fileApp({address='file:///Users/beginner/HTMLMemo.html',navigator={}}={}){
   const html=standaloneHTML(assets),doc=new DOMParser().parseFromString(html,'text/html'),blobs=[],local=new Map();
   const selectPrototype=Object.getPrototypeOf(doc.querySelector('select'));Object.defineProperty(selectPrototype,'value',{configurable:true,get(){return this.getAttribute('data-test-value')??this.querySelector('option[selected]')?.value??this.querySelector('option')?.value??'';},set(value){this.setAttribute('data-test-value',value);}});
+  Object.defineProperty(doc,'activeElement',{value:doc.body,writable:true,configurable:true});doc.defaultView.HTMLElement.prototype.focus=function(){this.ownerDocument.activeElement=this;};
   const dialog=doc.querySelector('#dialog');dialog.showModal=()=>dialog.open=true;dialog.close=()=>dialog.open=false;
   const stores=new Map([['documents',new Map()],['settings',new Map()]]);
   const database={objectStoreNames:{contains:name=>stores.has(name)},createObjectStore:name=>{if(!stores.has(name))stores.set(name,new Map());return {createIndex(){}};},transaction:name=>{const tx={};tx.objectStore=()=>{const store=stores.get(name);return {getAll:()=>({result:[...store.values()]}),get:key=>({result:store.get(key)}),put:(value,key)=>{store.set(key??value.id,value);return {result:key??value.id};},delete:key=>{store.delete(key);return {};}};};queueMicrotask(()=>tx.oncomplete?.());return tx;}};
@@ -116,10 +117,12 @@ test('settings can be saved and reloaded through file input when native pickers 
 test('library switches between persistent card and one-line list views',async()=>{const app=await fileApp(),grid=app.doc.querySelector('#document-grid'),card=app.doc.querySelector('#library-card-view'),list=app.doc.querySelector('#library-list-view');assert.equal(grid.dataset.view,'card');assert.equal(card.getAttribute('aria-pressed'),'true');list.onclick();assert.equal(grid.dataset.view,'list');assert.equal(list.getAttribute('aria-pressed'),'true');assert.equal(card.getAttribute('aria-pressed'),'false');assert.equal(JSON.parse(app.local.get(PREFERENCES_KEY)).libraryView,'list');card.onclick();assert.equal(grid.dataset.view,'card');assert.equal(JSON.parse(app.local.get(PREFERENCES_KEY)).libraryView,'card');});
 
 
-test('header navigation preserves library, web opening, HTML import and app delivery without a left sidebar',async()=>{
+test('the single header menu preserves library, web opening, HTML import, app delivery and offline About',async()=>{
   const {doc}=await fileApp();
   const click=id=>doc.querySelector(id).onclick(new Event('click'));
-  assert.equal(doc.querySelector('.desk-nav,#desk-resizer'),null);
+  assert.equal(doc.querySelector('.desk-nav,#desk-resizer,.chrome-topline,#home-button'),null);
+  assert.equal(doc.querySelectorAll('#app-menu-button').length,1);
+  for(const id of ['#library-tab','#execution-tab','#new-tab','#install-button','#connection-button','#settings-button','#about-button'])assert.ok(doc.querySelector(id).closest('#app-menu'));
   for(const id of ['#library-tab','#execution-tab','#new-tab','#import-button'])assert.ok(doc.querySelector(id).closest('header'));
   assert.equal(doc.querySelector('#library-tab').getAttribute('aria-current'),'page');
   click('#execution-tab');
@@ -136,5 +139,21 @@ test('header navigation preserves library, web opening, HTML import and app deli
   assert.equal(doc.querySelector('#library-tab').getAttribute('aria-current'),'page');
   let picked=false;doc.querySelector('#file-input').click=()=>picked=true;
   await click('#import-button');assert.equal(picked,true);
-  assert.match(doc.querySelector('.brand-icon img').getAttribute('src'),/^data:image\/svg\+xml;base64,/);
+  click('#about-button');assert.equal(doc.querySelector('#dialog').open,true);
+  assert.equal(doc.querySelector('.about-brand h3').textContent,'HTMLMemo');
+  const {version}=JSON.parse(await readFile(new URL('../package.json',import.meta.url),'utf8'));
+  assert.equal(doc.querySelector('#app-version').textContent,version);
+  assert.match(doc.querySelector('.about-brand img').getAttribute('src'),/^data:image\/svg\+xml;base64,/);
+});
+
+test('the dropdown opens without a modal and supports keyboard navigation, Escape and outside click',async()=>{
+  const {doc}=await fileApp(),menu=doc.querySelector('#app-menu'),trigger=doc.querySelector('#app-menu-button');
+  const key=value=>{const event=new doc.defaultView.Event('keydown',{bubbles:true,cancelable:true});event.key=value;doc.activeElement.dispatchEvent(event);};
+  assert.equal(menu.hidden,true);trigger.onclick();
+  assert.equal(menu.hidden,false);assert.equal(trigger.getAttribute('aria-expanded'),'true');assert.ok(!doc.querySelector('#dialog').open);
+  assert.equal(doc.activeElement.id,'library-tab');key('ArrowDown');assert.equal(doc.activeElement.id,'new-tab');
+  key('End');assert.equal(doc.activeElement.id,'about-button');key('Home');assert.equal(doc.activeElement.id,'library-tab');
+  key('Escape');assert.equal(menu.hidden,true);assert.equal(trigger.getAttribute('aria-expanded'),'false');assert.equal(doc.activeElement,trigger);
+  trigger.onclick();doc.body.dispatchEvent(new doc.defaultView.Event('pointerdown',{bubbles:true}));assert.equal(menu.hidden,true);
+  trigger.onclick();doc.querySelector('#new-tab').click();assert.equal(menu.hidden,true);assert.equal(doc.activeElement.id,'address');
 });

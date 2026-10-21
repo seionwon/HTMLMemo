@@ -22,7 +22,7 @@
 .toast{position:fixed;bottom:112px;left:50%;transform:translateX(-50%);background:#324b3c;color:#fffefb;border:1px solid #ffffff20;font-size:12px;padding:11px 17px;border-radius:8px;box-shadow:0 8px 25px #0002;z-index:100;max-width:min(550px,calc(100vw - 30px));line-height:1.6;text-align:center}.toast.error{background:#80613d}dialog{border:1px solid var(--line);background:var(--surface);color:var(--text);border-radius:13px;padding:27px;width:470px;max-width:calc(100vw - 28px);max-height:calc(100dvh - 40px);box-shadow:0 20px 100px #16261b26}dialog::backdrop{background:#192f2a4d;backdrop-filter:blur(2px)}.dialog-heading{display:flex;align-items:center;justify-content:space-between;gap:15px;margin-bottom:17px}.dialog-heading h2{font-size:18px;font-weight:600;line-height:1.6;margin:0;letter-spacing:-.5px}.dialog-description{color:var(--muted);font-size:12px;line-height:1.9}.dialog-description.small{font-size:11px}.dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:22px;flex-wrap:wrap}.dialog-actions .primary-button,.dialog-actions .secondary-button{padding:8px 13px}.setup-steps{font-size:12px;line-height:1.9;padding-left:22px}.setup-steps li{margin:13px 0;padding-left:3px}.setup-steps a{text-decoration:none;font-weight:600}.setup-steps code{font-size:11px;background:var(--bg);padding:2px 4px;border:1px solid var(--line);border-radius:3px}.copy-url{display:flex;align-items:center;gap:7px;margin:18px 0}.copy-url input{flex:1;min-width:0;font-size:11px;border:1px solid var(--line);border-radius:5px;background:var(--bg);padding:10px}.copy-url .secondary-button{padding:8px 12px}.setting-row{display:flex;justify-content:space-between;align-items:center;gap:20px;padding:17px 0;border-bottom:1px solid var(--line)}.setting-row strong{font-size:12px;font-weight:600}.setting-row p{color:var(--muted);font-size:10px;line-height:1.7;margin:5px 0 0}.setting-row .secondary-button{padding:7px 10px;font-size:11px;flex-shrink:0}.note-form textarea{width:100%;resize:vertical;border:1px solid var(--line);border-radius:6px;padding:13px;font-size:13px;background:var(--bg);line-height:1.8}.document-info{display:grid;grid-template-columns:65px 1fr;gap:15px;font-size:12px;margin:22px 0}.document-info dt{color:var(--muted)}.document-info dd{margin:0;overflow-wrap:anywhere;line-height:1.7}.capture-warnings{font-size:11px;color:#ac8152;line-height:1.8}.capture-warnings li{overflow-wrap:anywhere;margin:7px 0}.annotation-quote{font-size:13px;line-height:1.8;background:var(--bg);border-radius:6px;padding:15px;max-height:200px;overflow:auto;white-space:pre-wrap}.danger{color:#b77653}
 @media(min-width:1500px){.library-inner{max-width:1200px}.hero{padding-top:80px;padding-bottom:75px;grid-template-columns:1fr 470px}.hero-art{transform:scale(1.1)}}
 @media(max-width:1000px){.library-inner{padding:0 32px}.hero{grid-template-columns:1fr 300px;gap:20px;padding:45px 0}.hero-art{transform:scale(.85);width:300px}h1{font-size:37px}.hero-actions{flex-wrap:wrap}.document-grid{gap:13px}.sidebar{width:280px}}
-@media(max-width:720px){.app-caption{display:none}.titlebar{padding:0 15px;height:49px}.title-actions{gap:8px}.tabbar{padding:0 10px;height:33px}.addressbar{padding:0 10px;gap:6px;height:51px}.navigation{gap:0}.navigation .icon-button{width:25px}.navigation #forward{display:none}#address-form{padding:0 9px;gap:6px}.save-button{padding:7px 10px}.save-button svg{width:16px}.open-button{width:31px}.addressbar>#app-menu-button{display:none}.library-inner{padding:0 24px}.hero{grid-template-columns:1fr 215px;padding:35px 0 36px;gap:10px;min-height:340px}.hero-art{transform:scale(.68);transform-origin:center;width:220px}.eyebrow{font-size:8px;letter-spacing:1.3px;margin-bottom:15px}h1{font-size:31px;letter-spacing:-1.3px}.hero-description{font-size:11px}.hero-actions{gap:7px;margin-bottom:15px}.hero-actions .primary-button,.hero-actions .secondary-button{font-size:10px;padding:9px 10px;min-width:0}.feature-tags{font-size:8px;gap:7px}.feature-tags span+span:before{margin-right:7px}.library-heading h2{font-size:16px}.library-heading p{font-size:10px}.library-controls{gap:7px}.library-search input{width:105px}.library-search{padding:7px}.document-grid{grid-template-columns:repeat(2,1fr);gap:12px}.sidebar{top:133px}.statusbar{padding:0 12px}.statusbar>div:last-child{display:none}.browser-note{padding:0 14px;gap:10px}.reader-viewport{padding:15px 0 90px}.tool-popover{width:255px}}
+@media(max-width:720px){.app-caption{display:none}.titlebar{padding:0 15px;height:49px}.title-actions{gap:8px}.tabbar{padding:0 10px;height:33px}.addressbar{padding:0 10px;gap:6px;height:51px}.navigation{gap:0}.navigation .icon-button{width:25px}.navigation #forward{display:none}#address-form{padding:0 9px;gap:6px}.save-button{padding:7px 10px}.save-button svg{width:16px}.open-button{width:31px}.library-inner{padding:0 24px}.hero{grid-template-columns:1fr 215px;padding:35px 0 36px;gap:10px;min-height:340px}.hero-art{transform:scale(.68);transform-origin:center;width:220px}.eyebrow{font-size:8px;letter-spacing:1.3px;margin-bottom:15px}h1{font-size:31px;letter-spacing:-1.3px}.hero-description{font-size:11px}.hero-actions{gap:7px;margin-bottom:15px}.hero-actions .primary-button,.hero-actions .secondary-button{font-size:10px;padding:9px 10px;min-width:0}.feature-tags{font-size:8px;gap:7px}.feature-tags span+span:before{margin-right:7px}.library-heading h2{font-size:16px}.library-heading p{font-size:10px}.library-controls{gap:7px}.library-search input{width:105px}.library-search{padding:7px}.document-grid{grid-template-columns:repeat(2,1fr);gap:12px}.sidebar{top:133px}.statusbar{padding:0 12px}.statusbar>div:last-child{display:none}.browser-note{padding:0 14px;gap:10px}.reader-viewport{padding:15px 0 90px}.tool-popover{width:255px}}
 @media(max-width:480px){.titlebar{height:46px}.brand strong{font-size:16px}.brand-icon{height:24px;width:24px;font-size:20px}.connection span{font-size:9px}.connection{gap:5px}.title-actions{gap:3px}.title-actions>.icon-button{width:28px}.tabbar{height:32px}.addressbar{height:49px}.navigation #reload{display:none}#address{font-size:11px}.save-button{width:32px;padding:6px}.save-button span{display:none}.save-button svg{height:16px;width:16px}.library-inner{padding:0 20px}.hero{display:block;position:relative;overflow:hidden;padding:35px 0 28px;min-height:0}.hero-copy{position:relative;z-index:1}.hero-art{position:absolute;right:-120px;top:50px;opacity:.4;transform:scale(.57)}h1{font-size:35px}.hero-description{font-size:12px}.hero-actions .primary-button,.hero-actions .secondary-button{font-size:11px;padding:10px 12px}.feature-tags{font-size:9px}.library-heading{align-items:flex-start;flex-direction:column;gap:15px;padding:22px 0 16px}.library-controls{width:100%}.library-search{flex:1}.library-search input{width:100%;min-width:0}.document-grid{gap:10px}.card-preview{height:120px;padding:16px 14px}.card-preview h3{font-size:14px}.card-details{padding:12px}.card-details h3{font-size:11px}.card-meta{font-size:8px}.card-meta>span:last-child{font-size:0}.card-meta>span:last-child svg{width:12px}.preview-annotation{font-size:7px;gap:3px;padding:4px}.library-footer{gap:15px;font-size:8px}.library-footer .text-button{font-size:9px}.library-footer>span{gap:4px}.floating-toolbar{height:43px;gap:1px;padding:4px}.tool-button{width:29px;height:31px}.tool-group{gap:0}.toolbar-history{display:none}.toolbar-divider{margin:0 2px}.toolbar-grip{width:14px}.zoom-button{width:38px}.floating-toolbar svg{width:17px;height:17px}.toolbar-grip svg{width:12px}.sidebar{top:127px;max-width:90vw;width:280px}.browser-note{height:auto;min-height:38px;flex-wrap:wrap;padding:8px 12px;font-size:9px;gap:8px}.browser-note>span{width:100%}.chrome-page-card{padding:30px 15px}.chrome-page-card h2{font-size:21px}.chrome-page-card>div:last-of-type{flex-direction:column}.toast{font-size:11px}.tool-popover{padding:15px}.statusbar{font-size:9px}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
 .reader-viewport.reader-native-scroll{padding:0;overflow-y:hidden}
@@ -43,40 +43,6 @@ body[data-codememo-design]{margin:0;font-family:var(--app-font);background:var(-
 .desk-shell{display:flex;flex:1;min-width:0;min-height:0;position:relative}
 #main{min-width:0;flex:1}.chrome{background:var(--surface)}.library-inner{max-width:1120px}.hero{display:block;min-height:0;padding:44px 0 32px}.hero-art{display:none}.hero h1{font-size:40px}.hero-description{max-width:540px}.eyebrow{color:var(--green)}.document-card,.execution-cards article,.empty-library{border-radius:18px}.card-preview{background:var(--surface-muted)}.empty-library{background:var(--surface);border:1px solid var(--line);margin:20px 0}.library-heading{padding-top:24px}
 @media(max-width:767px){.hero{padding:28px 0}.hero h1{font-size:35px}}
-
-/* Keep the brand, tabs and app controls on one row, including narrow/zoomed screens. */
-.chrome-topline{display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"brand tabs actions";align-items:center;gap:12px;padding:0 18px;min-width:0}
-.chrome-topline>.titlebar{grid-area:brand;padding:0;height:44px;white-space:nowrap;min-width:0;width:max-content;justify-self:start;gap:12px}
-.chrome-topline>.title-actions{grid-area:actions;height:44px;margin-left:0;white-space:nowrap;gap:10px;min-width:0}
-.chrome-topline>.tabbar{grid-area:tabs;height:44px;padding:0;min-width:0;width:100%;overflow:hidden}
-.chrome-topline #tabs{align-items:center;flex:0 1 auto;min-width:0;max-width:100%}
-.chrome-topline .brand{gap:8px}
-.chrome-topline .brand-icon{width:28px;height:28px}
-.chrome-topline .brand-icon img{width:100%;height:100%}
-.chrome-topline .tab,.chrome-topline .library-tab,.chrome-topline .execution-tab{border-radius:7px;flex-shrink:0}
-.chrome-topline .tab.active,.chrome-topline .library-tab.active,.chrome-topline .execution-tab.active{border-bottom-color:var(--line)}
-.chrome-topline .library-tab{width:32px}
-.chrome-topline #new-tab{flex-shrink:0}
-#install-button{display:inline-flex;align-items:center;justify-content:center;gap:5px}
-#install-button svg,#connection-button svg{display:none}
-.sidebar{top:var(--chrome-height,146px)}
-@media(max-width:1100px){.chrome-topline .app-caption{display:none}}
-@media(max-width:800px){
- .chrome-topline{padding:0 12px;gap:8px}
- .chrome-topline>.title-actions{gap:4px}
- #install-button,#connection-button{height:28px;width:28px;padding:0}
- #install-button svg,#connection-button svg{display:block}
- #install-button span,#connection-button span{display:none}
- #connection-button{justify-content:center;position:relative}
- #connection-button i{position:absolute;right:1px;top:2px;width:4px;height:4px}
-}
-@media(max-width:600px){
- .chrome-topline{padding:0 8px;gap:6px}
- .chrome-topline>.titlebar,.chrome-topline>.title-actions,.chrome-topline>.tabbar{height:40px}
- .chrome-topline .brand strong{display:none}
- .chrome-topline .execution-tab{padding:0 8px}
- .chrome-topline .title-actions .icon-button{width:28px;height:28px}
-}
 
 /* Preserve every annotation button; remove only container and separator space. */
 .floating-toolbar{height:auto;min-height:0;padding:0 1px;gap:0;border-radius:8px}
@@ -106,55 +72,45 @@ body[data-codememo-design]{margin:0;font-family:var(--app-font);background:var(-
 #tool-popover.selection[hidden] { display:none; }
 #tool-popover.selection button { font-size:11px;padding:4px 9px; }
 
-/* Compact the two top header rows (.chrome-topline and .addressbar) with zero vertical padding/margins while preserving all controls. */
-.chrome{padding-block:0;margin-block:0}
-.chrome-topline{padding-block:0;margin-block:0;min-height:0}
-.chrome-topline>.titlebar,.chrome-topline>.title-actions,.chrome-topline>.tabbar{height:22px;min-height:0;padding-block:0;margin-block:0}
-.chrome-topline #tabs{height:22px;min-height:0;padding-block:0;margin-block:0;align-items:center}
-.chrome-topline .brand{gap:7px;padding-block:0;line-height:1}
-.chrome-topline .brand-icon{width:20px;height:20px}
-.chrome-topline .brand strong{font-size:14px;line-height:1}
-.chrome-topline .app-caption{padding-block:0;line-height:1}
-.chrome-topline .tab,.chrome-topline .library-tab,.chrome-topline .execution-tab{height:22px;min-height:0;padding-block:0;margin-block:0;border-radius:5px;line-height:1}
-.chrome-topline .tab-close{width:18px;height:18px}
-.chrome-topline .icon-button,.chrome-topline #new-tab{width:26px;height:22px;min-height:0;padding-block:0;border-radius:5px}
-.chrome-topline .quiet-button{height:22px;min-height:0;padding:0 8px;line-height:1}
-.chrome-topline .connection{height:22px;min-height:0;padding-block:0;line-height:1}
+/* One address row with a single dropdown for navigation, documents and app controls. */
+.chrome{position:relative;padding-block:0;margin-block:0}
+.chrome.app-menu-open{z-index:60}
 .addressbar{height:24px;min-height:0;padding-block:0;margin-block:0}
 .addressbar .navigation{align-items:center}
 .addressbar .icon-button{width:26px;height:24px;min-height:0;padding-block:0;border-radius:5px}
 #address-form{height:24px;min-height:0;padding-block:0;margin-block:0;border-radius:5px}
-#address{height:100%;padding-block:0;line-height:1}
-.addressbar .open-button{width:26px;height:24px;min-height:0;padding:0;border-radius:5px;display:inline-flex;align-items:center;justify-content:center}
-.addressbar .save-button{height:24px;min-height:0;padding:0 10px;border-radius:5px;line-height:1}
-.sidebar{top:var(--chrome-height,47px)}
+#address{height:100%;min-width:0;padding-block:0;line-height:1}
+.addressbar .open-button{width:auto;height:24px;min-height:0;padding:0 8px;border-radius:5px;display:inline-flex;align-items:center;justify-content:center;gap:5px;font-size:11px;white-space:nowrap;flex-shrink:0}
+.addressbar .save-button{height:24px;min-height:0;padding:0 10px;border-radius:5px;line-height:1;flex-shrink:0}
+.addressbar>.menu-toggle{display:inline-flex;align-items:center;justify-content:center;gap:4px;height:24px;padding:0 7px;border:1px solid var(--line);border-radius:5px;font-size:11px;color:var(--muted);white-space:nowrap;flex-shrink:0}
+.menu-toggle svg{width:14px;height:14px}
+.menu-toggle:hover,.menu-toggle[aria-expanded=true]{background:var(--green-light);color:var(--green)}
+.app-menu{position:fixed;top:calc(var(--chrome-height,25px) + 6px);right:10px;width:320px;max-width:calc(100vw - 16px);max-height:calc(100dvh - var(--chrome-height,25px) - 16px);overflow-y:auto;overscroll-behavior:contain;padding:5px;border:1px solid var(--line);border-radius:10px;background:var(--surface);box-shadow:0 10px 32px #0003;color:var(--text)}
+.app-menu-group+.app-menu-group{border-top:1px solid var(--line);margin-top:4px;padding-top:4px}
+.app-menu-label{font-size:10px;color:var(--muted);margin:6px 10px}
+.app-menu .menu-button{width:100%;height:auto;min-height:34px;padding:8px 10px;display:flex;align-items:center;justify-content:flex-start;gap:9px;border:0;border-radius:6px;text-align:left;white-space:normal;font-size:12px;color:var(--muted)}
+.app-menu .menu-button svg{display:block;width:16px;height:16px}
+.app-menu .menu-button span{font-size:inherit}
+.app-menu .menu-button:hover,.app-menu .menu-button[aria-current=page],.app-menu .tab.active{background:var(--green-light);color:var(--green)}
+.app-menu #connection-button i{position:static;margin-left:auto}
+.app-menu #tabs{display:flex;flex-direction:column;align-items:stretch;height:auto;gap:2px;overflow:visible}
+.app-menu .tab{width:100%;max-width:none;min-width:0;height:auto;min-height:34px;padding:0;gap:0;border:0;border-radius:6px;align-items:center;flex-shrink:0}
+.app-menu .tab-select{flex:1;min-width:0;padding:8px 10px;display:flex;align-items:center;gap:8px;text-align:left;font-size:12px;color:inherit;border-radius:6px}
+.app-menu .tab-title{max-width:none;min-width:0;white-space:normal;overflow-wrap:anywhere;line-height:1.5}
+.app-menu .tab-close{width:28px;height:28px;margin:0 4px 0 0}
+.app-menu .tab-select:hover,.app-menu .tab-close:hover{background:var(--surface-muted)}
+.about-brand{display:flex;align-items:center;gap:14px;margin:18px 0}
+.about-brand h3{font-size:24px;margin:0 0 5px}
+.about-brand p{font-size:12px;color:var(--muted);margin:0}
+.about-version{font-size:13px;margin:18px 0}
+.sidebar{top:var(--chrome-height,25px)}
 @media(max-width:800px){
- #install-button,#connection-button{height:22px;width:26px;padding:0}
-}
-@media(max-width:720px){
- .addressbar{height:24px;padding-block:0}
- .addressbar .open-button{width:26px;height:24px}
-}
-@media(max-width:600px){
- .chrome-topline>.titlebar,.chrome-topline>.title-actions,.chrome-topline>.tabbar{height:22px}
- .chrome-topline .title-actions .icon-button{width:26px;height:22px}
+ .addressbar .open-button{width:26px;padding:0}
+ .addressbar .open-button span{display:none}
 }
 @media(max-width:480px){
- .addressbar{height:24px;padding-block:0}
- .addressbar .save-button{width:26px;height:24px;padding:0}
-}
-
-/* App navigation lives in the header; the document uses the full available width. */
-.chrome-topline .library-tab,.chrome-topline #new-tab{display:inline-flex;align-items:center;justify-content:center;gap:5px;width:auto;padding:0 8px;font-size:11px;white-space:nowrap}
-.chrome-topline .library-tab svg,.chrome-topline #new-tab svg,.addressbar .open-button svg{flex-shrink:0}
-.addressbar .open-button{width:auto;padding:0 8px;gap:5px;font-size:11px;white-space:nowrap;flex-shrink:0}
-@media(max-width:800px){
- .chrome-topline #new-tab,.addressbar .open-button{width:26px;padding:0}
- .chrome-topline #new-tab span,.addressbar .open-button span{display:none}
-}
-@media(max-width:480px){
- .chrome-topline .library-tab{width:26px;padding:0}
- .chrome-topline .library-tab span{display:none}
+ .addressbar .save-button{width:26px;padding:0}
+ .addressbar>.menu-toggle{padding:0 5px}
 }
 
 /* Full-set palette (20 presets + user custom colors/palettes) and interactive Color Picker. */

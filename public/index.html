@@ -17,23 +17,6 @@
 <body data-codememo-design="canvas" class="font-design bg-canvas text-ink">
   <div id="app">
     <header class="chrome">
-      <div class="chrome-topline single-row">
-      <div class="titlebar">
-        <a class="brand" href="#" id="home-button" aria-label="HTMLMemo 서재"><span class="brand-icon"><img src="./icons/icon.svg" alt="" width="32" height="32"></span><strong>HTMLMemo</strong></a>
-        <span class="app-caption">나만의 웹 서재</span>
-      </div>
-      <nav class="tabbar" aria-label="서재 메뉴와 열린 탭">
-        <button id="library-tab" class="library-tab active" title="내 서재" aria-label="내 서재" aria-current="page"></button>
-        <button id="execution-tab" class="execution-tab" title="실행과 앱 전달">실행과 앱 전달</button>
-        <div id="tabs" role="tablist"></div>
-        <button id="new-tab" class="icon-button" aria-label="웹 페이지 열기" title="웹 페이지 열기 (새 탭)"></button>
-      </nav>
-      <div class="title-actions">
-        <button id="install-button" class="quiet-button" aria-label="앱 설치" title="앱 설치">앱 설치</button>
-        <button id="connection-button" class="connection" title="Chrome 연결 설정" aria-label="Chrome 연결 설정"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c-5 5-5 13 0 18M12 3c5 5 5 13 0 18"/></svg><i></i><span>Chrome 연결</span></button>
-        <button id="settings-button" class="icon-button" aria-label="설정"></button>
-      </div>
-      </div>
       <div class="addressbar">
         <div class="navigation">
           <button id="back" class="icon-button" aria-label="뒤로" disabled></button>
@@ -43,7 +26,27 @@
         <form id="address-form"><span id="address-icon"></span><input id="address" aria-label="웹 주소 또는 검색어" placeholder="웹 주소 입력 또는 검색" autocomplete="off" spellcheck="false"><span id="local-label" hidden>LOCAL</span></form>
         <button id="import-button" class="open-button" title="HTML 파일 가져오기" aria-label="HTML 파일 가져오기"></button>
         <button id="save-page" class="primary-button save-button"></button>
-        <button id="app-menu-button" class="icon-button" aria-label="추가 메뉴"></button>
+        <button id="app-menu-button" class="menu-toggle" aria-label="앱 메뉴" title="앱 메뉴" aria-haspopup="menu" aria-expanded="false" aria-controls="app-menu"></button>
+      </div>
+      <div id="app-menu" class="app-menu" role="menu" aria-label="앱 메뉴" hidden>
+        <div class="app-menu-group" role="group" aria-label="탐색">
+          <button id="library-tab" class="menu-button active" role="menuitem" aria-current="page"></button>
+          <button id="new-tab" class="menu-button" role="menuitem"></button>
+          <button id="execution-tab" class="menu-button" role="menuitem"></button>
+        </div>
+        <div id="open-tabs-menu" class="app-menu-group" role="group" aria-labelledby="open-tabs-label" hidden>
+          <p id="open-tabs-label" class="app-menu-label" role="presentation">열린 문서와 웹 페이지</p>
+          <div id="tabs" role="presentation"></div>
+        </div>
+        <div class="app-menu-group" role="group" aria-label="앱 관리">
+          <button id="install-button" class="menu-button" role="menuitem" aria-label="앱 설치">앱 설치</button>
+          <button id="menu-folder" class="menu-button" role="menuitem"></button>
+          <button id="connection-button" class="menu-button connection" role="menuitem" aria-label="Chrome 연결 설정"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c-5 5-5 13 0 18M12 3c5 5 5 13 0 18"/></svg><span>Chrome 연결</span><i></i></button>
+          <button id="settings-button" class="menu-button" role="menuitem" aria-label="설정"></button>
+        </div>
+        <div class="app-menu-group" role="group" aria-label="앱 정보">
+          <button id="about-button" class="menu-button" role="menuitem">About</button>
+        </div>
       </div>
     </header>
     <div class="desk-shell">
@@ -77,6 +80,7 @@
     <aside id="sidebar" class="sidebar" hidden></aside>
     <div id="toast" class="toast" role="status" hidden></div>
     <dialog id="dialog"><div id="dialog-content"></div></dialog>
+    <template id="about-content"><div class="about-brand"><img src="./icons/icon.svg" alt="" width="48" height="48"><div><h3>HTMLMemo</h3><p>나만의 웹 서재</p></div></div><p class="about-version">버전 <strong id="app-version"></strong></p><p class="dialog-description">웹 페이지를 한 파일로 보관하고, 읽고, 주석을 남깁니다.</p><p class="local-only-note">문서·주석·설정은 이 기기에 저장됩니다.</p></template>
     <input type="file" id="file-input" accept=".html,.htm,text/html" multiple hidden>
     <input type="file" id="settings-file-input" accept=".json,application/json" hidden>
   </div>

@@ -2,13 +2,14 @@
 // These are real browser checks, separate from the DOM/unit test suite.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, cp, rm, writeFile, mkdir } from 'node:fs/promises';
+import { mkdtemp, cp, rm, writeFile, mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { root, prepareAssets } from '../scripts/assets.mjs';
 import { createServer } from '../scripts/server.mjs';
-import { launchChrome } from './chrome.mjs';
+import { launchChrome, clickAppMenu } from './chrome.mjs';
 import { FORMAT_VERSION } from '../public/src/model.js';
+const appVersion=JSON.parse(await readFile(new URL('../package.json',import.meta.url),'utf8')).version;
 test('real Chrome: standalone book export keeps lazy chapters and released assets; incomplete copies stay recoverable', {timeout:60000}, async () => {
   await prepareAssets();
   const folder=await mkdtemp(join(tmpdir(),'htmlmemo-book-test-'));
@@ -66,20 +67,24 @@ test('real Chrome: browsing, capture, local annotation, file writes, reopen and 
   try{
     await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});const url=`http://127.0.0.1:${server.address().port}/`;chrome=await launchChrome();const page=chrome.page;
     await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});await page.navigate(url);await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
-    await t.test('header menus remain usable at desktop and mobile widths with the full document area',async()=>{
-      // Old sidebar preferences must not reserve space after upgrading.
-      await page.evaluate("localStorage.setItem('htmlmemo-desk-nav-width-v1','360');localStorage.setItem('htmlmemo-desk-nav-expanded-width-v1','360');");
+    await t.test('one address row and one dropdown preserve every action on desktop and mobile',async()=>{
+      await page.evaluate("localStorage.setItem('htmlmemo-desk-nav-width-v1','360');");
       await page.navigate(url);await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
       await page.evaluate('window.importCalls=0;window.showOpenFilePicker=async()=>{window.importCalls++;return [];};');
       for(const width of [1280,800,390,320]){
         await page.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
-        const layout=await page.evaluate(`(()=>{const main=document.querySelector('#main').getBoundingClientRect(),header=document.querySelector('.chrome');return {left:main.left,width:main.width,viewport:innerWidth,sidebar:!!document.querySelector('.desk-nav,#desk-resizer'),controls:['#library-tab','#execution-tab','#new-tab','#import-button'].map(id=>{const element=document.querySelector(id),r=element.getBoundingClientRect();return {id,visible:r.width>0&&r.height>0&&r.left>=0&&r.right<=innerWidth&&header.contains(element)};})};})()`);
-        assert.equal(layout.sidebar,false);assert.equal(layout.left,0);assert.equal(layout.width,layout.viewport);
+        const layout=await page.evaluate(`(()=>{const main=document.querySelector('#main').getBoundingClientRect(),header=document.querySelector('.chrome').getBoundingClientRect(),row=document.querySelector('.addressbar').getBoundingClientRect();return {left:main.left,width:main.width,viewport:innerWidth,oldNavigation:!!document.querySelector('.chrome-topline,.desk-nav,#desk-resizer'),rows:header.height-row.height,controls:['#import-button','#save-page','#app-menu-button'].map(id=>{const element=document.querySelector(id),r=element.getBoundingClientRect(),hit=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);return {id,visible:r.width>0&&r.height>0&&r.left>=0&&r.right<=innerWidth&&element.contains(hit)};})};})()`);
+        assert.equal(layout.oldNavigation,false);assert.equal(layout.left,0);assert.equal(layout.width,layout.viewport);assert.equal(layout.rows,1);
         assert.ok(layout.controls.every(control=>control.visible),JSON.stringify({width,...layout}));
-        await page.click('#execution-tab');await page.waitFor('!document.querySelector("#execution").hidden');
-        assert.equal(await page.evaluate('document.querySelector("#execution-tab").getAttribute("aria-current")'),'page');
-        await page.click('#new-tab');await page.waitFor('!document.querySelector("#library").hidden && document.activeElement.id==="address"');
-        await page.click('#execution-tab');await page.click('#library-tab');await page.waitFor('!document.querySelector("#library").hidden');
+        await page.click('#app-menu-button');
+        const dropdown=await page.evaluate(`(()=>{const menu=document.querySelector('#app-menu'),m=menu.getBoundingClientRect(),header=document.querySelector('.chrome').getBoundingClientRect();return {anchored:m.top>=header.bottom&&m.left>=0&&m.right<=innerWidth,modal:document.querySelector('#dialog').open,items:[...menu.querySelectorAll('button')].filter(e=>!e.hidden).map(element=>{const r=element.getBoundingClientRect(),hit=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);return element.contains(hit);})};})()`);
+        assert.equal(dropdown.anchored,true);assert.equal(dropdown.modal,false);assert.ok(dropdown.items.every(Boolean));
+        await clickAppMenu(page,'#about-button');await page.waitFor(`document.querySelector("#dialog").open && document.querySelector("#app-version")?.textContent===${JSON.stringify(appVersion)}`);
+        assert.equal(await page.evaluate('document.querySelector(".about-brand h3").textContent'),'HTMLMemo');
+        await page.click('#dialog [data-dialog-close]');
+        await clickAppMenu(page,'#execution-tab');await page.waitFor('!document.querySelector("#execution").hidden');
+        await clickAppMenu(page,'#new-tab');await page.waitFor('!document.querySelector("#library").hidden && document.activeElement.id==="address"');
+        await clickAppMenu(page,'#execution-tab');await clickAppMenu(page,'#library-tab');await page.waitFor('!document.querySelector("#library").hidden');
         await page.click('#import-button');
       }
       assert.equal(await page.evaluate('window.importCalls'),4);
@@ -105,6 +110,14 @@ test('real Chrome: browsing, capture, local annotation, file writes, reopen and 
     await t.test('local file import activates annotation independent of original website URL',async()=>{
       await page.evaluate(`window.showOpenFilePicker=async()=>{const root=await navigator.storage.getDirectory();return [await root.getFileHandle('picked-document.html')];};`);await page.click('#import-button');await page.waitFor('document.querySelectorAll(".tab.document").length === 2 && !document.querySelector("#toolbar").hidden');assert.equal(await page.evaluate('document.querySelector("#local-label").hidden'),false);assert.equal(await page.evaluate('document.querySelector(".document-host:not([hidden]) iframe").contentDocument.querySelectorAll("[data-htmlmemo-mark]").length > 0'),true);
     });
+    await t.test('opened documents can be switched from the dropdown without adding a header row',async()=>{
+      const previous=await page.evaluate('document.querySelector(".tab.document.active").dataset.tab');
+      await clickAppMenu(page,'.tab.document:not(.active) .tab-select');
+      assert.notEqual(await page.evaluate('document.querySelector(".tab.document.active").dataset.tab'),previous);
+      assert.equal(await page.evaluate('document.querySelector("#app-menu").hidden'),true);
+      await clickAppMenu(page,`[data-tab="${previous}"] .tab-select`);
+      assert.equal(await page.evaluate('document.querySelector(".chrome").getBoundingClientRect().height'),25);
+    });
     await t.test('document fullscreen retains every compact toolbar button and saves annotations',async()=>{
       const buttons=await page.evaluate('[...document.querySelectorAll("#toolbar [data-action]")].map(button=>button.dataset.action)');
       await page.evaluate(`document.querySelector('.document-host:not([hidden]) iframe').contentDocument.body.dispatchEvent(new MouseEvent('dblclick',{bubbles:true,button:0,cancelable:true}));`);await page.waitFor('document.querySelector("#app").classList.contains("reader-focus")');
@@ -123,7 +136,7 @@ test('real Chrome: browsing, capture, local annotation, file writes, reopen and 
       await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
     });
     await t.test('library reopen and offline app shell',async()=>{
-      await page.click('#library-tab');await page.waitFor('document.querySelectorAll(".document-card").length === 2');await page.click('[data-open]');await page.waitFor('!document.querySelector("#toolbar").hidden');
+      await clickAppMenu(page,'#library-tab');await page.waitFor('document.querySelectorAll(".document-card").length === 2');await page.click('[data-open]');await page.waitFor('!document.querySelector("#toolbar").hidden');
       // Fullscreen now persists zoom/position changes. Wait for every tab's
       // save indicator to clear before navigation can raise beforeunload.
       await page.waitFor('document.querySelectorAll(".tab-dirty:not([hidden])").length === 0');
@@ -152,7 +165,7 @@ test('real Chrome: browsing, capture, local annotation, file writes, reopen and 
       await page.evaluate(`document.querySelector('.document-host:not([hidden]) iframe').contentDocument.querySelector('#change').click()`);assert.equal(await page.evaluate('document.querySelector(".document-host:not([hidden]) iframe").contentDocument.querySelector("#change").textContent'),'123');
       await page.evaluate(`(()=>{const doc=document.querySelector('.document-host:not([hidden]) iframe').contentDocument;const range=doc.createRange();range.selectNodeContents(doc.querySelector('#generated'));const selection=doc.getSelection();selection.removeAllRanges();selection.addRange(range);doc.dispatchEvent(new Event('selectionchange'));})()`);
       await page.click('[data-action="underline"]');await page.waitFor('document.querySelector(".document-host:not([hidden]) iframe").contentDocument.querySelector("[data-htmlmemo-mark]") && document.querySelector("#status-left").textContent.includes("자동 저장됨")',30000);
-      await page.click('.tab.active .tab-close');await page.click('#library-tab');
+      await clickAppMenu(page,'.tab.active .tab-close');await clickAppMenu(page,'#library-tab');
       await page.evaluate(`(()=>{const card=[...document.querySelectorAll('.document-card')].find(card=>card.textContent.includes('Script generated book'));if(!card)throw Error('Missing saved script book');card.querySelector('[data-open]').click();})()`);
       await page.waitFor('document.querySelector(".document-host:not([hidden]) iframe")?.contentDocument?.title === "Script generated book" && !document.querySelector("#toolbar").hidden');
       await page.evaluate('new Promise(resolve=>setTimeout(resolve,800))');
@@ -225,7 +238,7 @@ test('real Chrome: separate annotations, immutable source, durable history, rest
     await page.send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await writeFile(join(root,'test-results/annotation-history-mobile.png'),await page.screenshot());
     assert.equal(await page.evaluate(`document.querySelector('#dialog').getBoundingClientRect().width <= innerWidth`),true);
     await page.evaluate(`document.querySelector('#dialog').close()`);await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
-    await page.click('.tab.document.active .tab-close');await page.waitFor('document.querySelectorAll(".tab.document").length===0');await page.evaluate(`document.querySelector('[data-open]').click()`);await page.waitFor(`document.querySelector('.document-host:not([hidden]) iframe')?.contentDocument?.querySelectorAll('[data-htmlmemo-mark]').length===2`);
+    await clickAppMenu(page,'.tab.document.active .tab-close');await page.waitFor('document.querySelectorAll(".tab.document").length===0');await page.evaluate(`document.querySelector('[data-open]').click()`);await page.waitFor(`document.querySelector('.document-host:not([hidden]) iframe')?.contentDocument?.querySelectorAll('[data-htmlmemo-mark]').length===2`);
     await page.waitFor(`!document.querySelector('.tab-dirty:not([hidden])')`);const beforeReload=await state();
     await page.navigate(url);await page.waitFor(`!!document.querySelector('[data-open]')`);await page.evaluate(`document.querySelector('[data-open]').click()`);await page.waitFor(`document.querySelector('.document-host:not([hidden]) iframe')?.contentDocument?.querySelectorAll('[data-htmlmemo-mark]').length===2`);
     assert.equal((await state()).revisions.length,beforeReload.revisions.length);
@@ -234,7 +247,7 @@ test('real Chrome: separate annotations, immutable source, durable history, rest
     const exported=await page.evaluate(`(async()=>{const root=await navigator.storage.getDirectory();const source=await (await (await root.getFileHandle('source.html')).getFile()).text();const html=await (await (await root.getFileHandle('exported.html')).getFile()).text();const doc=new DOMParser().parseFromString(html,'text/html');return {source,annotations:JSON.parse(doc.getElementById('htmlmemo-data').textContent).annotations.length};})()`);
     assert.equal(exported.source,'<html><head><title>Annotation history</title></head><body><p id="selection">Local source text remains unchanged across annotation history.</p></body></html>');assert.equal(exported.annotations,2);
     // Simulate legacy v1 data and verify upgrade without losing documents or preferences.
-    await page.click('.tab.document.active .tab-close');await page.waitFor(`document.querySelectorAll('.tab.document').length===0`);
+    await clickAppMenu(page,'.tab.document.active .tab-close');await page.waitFor(`document.querySelectorAll('.tab.document').length===0`);
     await page.evaluate(`(async()=>{await new Promise((resolve,reject)=>{const r=indexedDB.deleteDatabase('HTMLMemo-v1');r.onsuccess=resolve;r.onerror=()=>reject(r.error);});await new Promise((resolve,reject)=>{const r=indexedDB.open('HTMLMemo-v1',1);r.onupgradeneeded=()=>{r.result.createObjectStore('documents',{keyPath:'id'});r.result.createObjectStore('settings');};r.onsuccess=()=>{const db=r.result,tx=db.transaction(['documents','settings'],'readwrite');tx.objectStore('documents').put({...${JSON.stringify(first)},title:'Annotation history',name:'source.html',created:Date.now(),modified:Date.now()});tx.objectStore('settings').put('legacy retained','migration-test');tx.oncomplete=()=>{db.close();resolve();};tx.onabort=()=>reject(tx.error);};r.onerror=()=>reject(r.error);});})()`);
     await page.navigate(url);await page.waitFor(`!!document.querySelector('[data-open]')`);await page.evaluate(`document.querySelector('[data-open]').click()`);await page.waitFor(`!!document.querySelector('[data-action="more"]')`);
     const migrated=await state();assert.equal(migrated.id,first.id);assert.equal(migrated.html,first.html);assert.equal(migrated.revisions.length,1);
@@ -286,7 +299,7 @@ test('real Chrome: large library and annotation autosave never deserialize book 
   console.log('Large-library measurement:',JSON.stringify(result));
   await page.evaluate(`document.querySelector('[data-open="large-1"]').click()`);await page.waitFor(`document.querySelector('.document-host:not([hidden]) iframe')?.contentDocument?.getElementById('large') && document.querySelector('#status-left').textContent.includes('자동 저장됨')`);
   assert.equal(await page.evaluate('window.contentReads'),1);
-  await page.click('.tab.document.active .tab-close');await page.waitFor(`document.querySelectorAll('.tab.document').length===0`);assert.equal(await page.evaluate('window.contentReads'),1);
+  await clickAppMenu(page,'.tab.document.active .tab-close');await page.waitFor(`document.querySelectorAll('.tab.document').length===0`);assert.equal(await page.evaluate('window.contentReads'),1);
   assert.deepEqual(chrome.errors,[]);
  }finally{if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
 });
