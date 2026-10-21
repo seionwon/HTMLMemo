@@ -67,6 +67,9 @@ test('real Chrome: browsing, capture, local annotation, file writes, reopen and 
   try{
     await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});const url=`http://127.0.0.1:${server.address().port}/`;chrome=await launchChrome();const page=chrome.page;
     await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});await page.navigate(url);await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
+    // The library renders before offline installation finishes. Do not interrupt
+    // the first service worker's installation with the navigation below.
+    await page.waitFor('!!navigator.serviceWorker.controller');
     await t.test('one address row and one dropdown preserve every action on desktop and mobile',async()=>{
       await page.evaluate("localStorage.setItem('htmlmemo-desk-nav-width-v1','360');");
       await page.navigate(url);await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
