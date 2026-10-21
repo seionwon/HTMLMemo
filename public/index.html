@@ -22,11 +22,11 @@
         <a class="brand" href="#" id="home-button" aria-label="HTMLMemo 서재"><span class="brand-icon"><img src="./icons/icon.svg" alt="" width="32" height="32"></span><strong>HTMLMemo</strong></a>
         <span class="app-caption">나만의 웹 서재</span>
       </div>
-      <nav class="tabbar" aria-label="열린 탭">
-        <button id="library-tab" class="library-tab active" title="서재" aria-label="서재"></button>
-        <button id="execution-tab" class="execution-tab" title="실행과 앱 전달">실행</button>
+      <nav class="tabbar" aria-label="서재 메뉴와 열린 탭">
+        <button id="library-tab" class="library-tab active" title="내 서재" aria-label="내 서재" aria-current="page"></button>
+        <button id="execution-tab" class="execution-tab" title="실행과 앱 전달">실행과 앱 전달</button>
         <div id="tabs" role="tablist"></div>
-        <button id="new-tab" class="icon-button" aria-label="새 탭"></button>
+        <button id="new-tab" class="icon-button" aria-label="웹 페이지 열기" title="웹 페이지 열기 (새 탭)"></button>
       </nav>
       <div class="title-actions">
         <button id="install-button" class="quiet-button" aria-label="앱 설치" title="앱 설치">앱 설치</button>
@@ -41,20 +41,12 @@
           <button id="reload" class="icon-button" aria-label="새로고침" disabled></button>
         </div>
         <form id="address-form"><span id="address-icon"></span><input id="address" aria-label="웹 주소 또는 검색어" placeholder="웹 주소 입력 또는 검색" autocomplete="off" spellcheck="false"><span id="local-label" hidden>LOCAL</span></form>
-        <button id="import-button" class="open-button" title="로컬 HTML 파일 열기"></button>
+        <button id="import-button" class="open-button" title="HTML 파일 가져오기" aria-label="HTML 파일 가져오기"></button>
         <button id="save-page" class="primary-button save-button"></button>
         <button id="app-menu-button" class="icon-button" aria-label="추가 메뉴"></button>
       </div>
     </header>
     <div class="desk-shell">
-      <nav class="desk-nav" aria-label="서재 탐색">
-        <strong class="text-sm font-semibold">나만의 웹 서재</strong>
-        <button id="desk-library" aria-current="page">내 서재</button>
-        <button id="desk-browse">웹 페이지 열기</button>
-        <button id="desk-import">HTML 파일 가져오기</button>
-        <button id="desk-execution">실행과 앱 전달</button>
-      </nav>
-      <div id="desk-resizer" class="desk-resizer" role="separator" aria-orientation="vertical" aria-label="사이드바 경계선 이동" aria-valuemin="8" aria-valuemax="360" aria-valuenow="180" tabindex="0" title="마우스로 끌어 사이드바 폭 조절"></div>
     <main id="main">
       <section id="library" class="library">
         <div class="library-inner">

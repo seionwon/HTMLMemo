@@ -114,101 +114,25 @@ test('the real app uses the same button for native installation and iPhone Chrom
 test('settings can be saved and reloaded through file input when native pickers are unavailable',async()=>{const app=await fileApp();app.doc.querySelector('#settings-button').onclick();app.doc.querySelector('#appearance').value='dark';app.doc.querySelector('#appearance').onchange({target:app.doc.querySelector('#appearance')});app.doc.querySelector('#settings-save').onclick();await new Promise(resolve=>setImmediate(resolve));assert.equal(JSON.parse(await app.blobs[0].text()).preferences.theme,'dark');const input=app.doc.querySelector('#settings-file-input');const file=new File([serializeSettings({theme:'system',librarySort:'title',annotation:{width:8}})],'settings.json');input.onchange({target:{files:[file],value:'settings.json'}});await new Promise(resolve=>setImmediate(resolve));const restored=JSON.parse(app.local.get(PREFERENCES_KEY));assert.equal(restored.theme,'system');assert.equal(restored.librarySort,'title');assert.equal(restored.annotation.width,8);assert.equal(app.doc.querySelector('#library-sort').value,'title');});
 
 
-test('Library Desk navigation preserves routes, file import and offline brand icon',async()=>{
+test('header navigation preserves library, web opening, HTML import and app delivery without a left sidebar',async()=>{
   const {doc}=await fileApp();
   const click=id=>doc.querySelector(id).onclick(new Event('click'));
-  assert.equal(doc.querySelector('#desk-library').getAttribute('aria-current'),'page');
-  click('#desk-execution');
+  assert.equal(doc.querySelector('.desk-nav,#desk-resizer'),null);
+  for(const id of ['#library-tab','#execution-tab','#new-tab','#import-button'])assert.ok(doc.querySelector(id).closest('header'));
+  assert.equal(doc.querySelector('#library-tab').getAttribute('aria-current'),'page');
+  click('#execution-tab');
   assert.equal(doc.querySelector('#execution').hidden,false);
   assert.equal(doc.querySelector('#library').hidden,true);
-  assert.equal(doc.querySelector('#desk-execution').getAttribute('aria-current'),'page');
-  click('#desk-library');
+  assert.equal(doc.querySelector('#execution-tab').getAttribute('aria-current'),'page');
+  assert.equal(doc.querySelector('#library-tab').getAttribute('aria-current'),'false');
+  let focused=false;doc.querySelector('#address').focus=()=>focused=true;
+  click('#new-tab');assert.equal(focused,true);
   assert.equal(doc.querySelector('#library').hidden,false);
   assert.equal(doc.querySelector('#execution').hidden,true);
-  let focused=false;doc.querySelector('#address').focus=()=>focused=true;
-  click('#desk-browse');assert.equal(focused,true);
+  click('#execution-tab');click('#library-tab');
+  assert.equal(doc.querySelector('#library').hidden,false);
+  assert.equal(doc.querySelector('#library-tab').getAttribute('aria-current'),'page');
   let picked=false;doc.querySelector('#file-input').click=()=>picked=true;
-  await click('#desk-import');assert.equal(picked,true);
+  await click('#import-button');assert.equal(picked,true);
   assert.match(doc.querySelector('.brand-icon img').getAttribute('src'),/^data:image\/svg\+xml;base64,/);
-});
-
-test('Library Desk vertical boundary line can be dragged with the mouse down to a narrow strip and expanded back',async()=>{
-  const {doc,local}=await fileApp();
-  const nav=doc.querySelector('.desk-nav'),resizer=doc.querySelector('#desk-resizer'),appRoot=doc.querySelector('#app');
-  const makeEvent=(type,props={})=>Object.assign(new doc.defaultView.Event(type,{bubbles:true,cancelable:true}),props);
-  assert.ok(resizer);
-  assert.equal(resizer.getAttribute('role'),'separator');
-  assert.equal(resizer.getAttribute('aria-orientation'),'vertical');
-  assert.equal(nav.style.width,'180px');
-  assert.equal(nav.classList.contains('is-strip'),false);
-
-  // Drag the boundary line wider (180px -> 240px)
-  resizer.onpointerdown({button:0,pointerId:1,clientX:180,currentTarget:resizer,preventDefault(){}});
-  assert.equal(appRoot.hasAttribute('data-resizing-desk'),true);
-  assert.equal(resizer.classList.contains('is-dragging'),true);
-  resizer.dispatchEvent(makeEvent('pointermove',{pointerId:1,clientX:240}));
-  assert.equal(nav.style.width,'240px');
-  resizer.dispatchEvent(makeEvent('pointerup',{pointerId:1,clientX:240}));
-  assert.equal(appRoot.hasAttribute('data-resizing-desk'),false);
-  assert.equal(resizer.classList.contains('is-dragging'),false);
-  assert.equal(local.get('htmlmemo-desk-nav-width-v1'),'240');
-
-  // Drag the boundary line all the way to the left through intermediate widths -> collapses to 8px narrow strip
-  resizer.releasePointerCapture=()=>{throw new Error('No active pointer');};
-  resizer.onpointerdown({button:0,pointerId:2,clientX:240,currentTarget:resizer,preventDefault(){}});
-  resizer.dispatchEvent(makeEvent('pointermove',{pointerId:2,clientX:52}));
-  resizer.dispatchEvent(makeEvent('pointermove',{pointerId:2,clientX:48}));
-  resizer.dispatchEvent(makeEvent('pointermove',{pointerId:2,clientX:4}));
-  assert.equal(nav.style.width,'8px');
-  assert.equal(nav.classList.contains('is-strip'),true);
-  assert.equal(nav.dataset.collapsed,'true');
-  resizer.dispatchEvent(makeEvent('pointerup',{pointerId:2,clientX:4}));
-  delete resizer.releasePointerCapture;
-  assert.equal(nav.style.width,'8px');
-  assert.equal(resizer.getAttribute('aria-valuenow'),'8');
-  assert.equal(local.get('htmlmemo-desk-nav-width-v1'),'8');
-  for(const button of nav.querySelectorAll('button')){
-    assert.equal(button.getAttribute('tabindex'),'-1');
-    assert.equal(button.getAttribute('aria-hidden'),'true');
-  }
-
-  // Clicking the collapsed strip restores the previous expanded width (240px), not 48px
-  resizer.onpointerdown({button:0,pointerId:20,clientX:8,currentTarget:resizer,preventDefault(){}});
-  resizer.dispatchEvent(makeEvent('pointerup',{pointerId:20,clientX:8}));
-  assert.equal(nav.style.width,'240px');
-  assert.equal(nav.classList.contains('is-strip'),false);
-
-  // A canceled pointer without movement keeps the current width instead of collapsing
-  resizer.onpointerdown({button:0,pointerId:21,clientX:240,currentTarget:resizer,preventDefault(){}});
-  resizer.dispatchEvent(makeEvent('pointercancel',{pointerId:21}));
-  assert.equal(nav.style.width,'240px');
-  assert.equal(nav.classList.contains('is-strip'),false);
-
-  // Collapse again and drag from the narrow strip itself back to the right -> expands to 165px
-  resizer.onkeydown({key:'Home',preventDefault(){}});
-  assert.equal(nav.style.width,'8px');
-  nav.dispatchEvent(makeEvent('mousedown',{button:0,clientX:6}));
-  doc.dispatchEvent(makeEvent('mousemove',{clientX:163}));
-  doc.dispatchEvent(makeEvent('mouseup',{clientX:163}));
-  assert.equal(nav.style.width,'165px');
-  assert.equal(nav.classList.contains('is-strip'),false);
-  assert.equal(nav.dataset.collapsed,'false');
-  for(const button of nav.querySelectorAll('button')){
-    assert.equal(button.hasAttribute('tabindex'),false);
-    assert.equal(button.hasAttribute('aria-hidden'),false);
-  }
-
-  // Stationary click and keyboard separator controls toggle and step cleanly
-  resizer.onpointerdown({button:0,pointerId:3,clientX:165,currentTarget:resizer,preventDefault(){}});
-  resizer.dispatchEvent(makeEvent('pointerup',{pointerId:3,clientX:165}));
-  assert.equal(nav.style.width,'8px');
-  assert.equal(nav.classList.contains('is-strip'),true);
-  resizer.onpointerdown({button:0,pointerId:4,clientX:8,currentTarget:resizer,preventDefault(){}});
-  resizer.dispatchEvent(makeEvent('pointerup',{pointerId:4,clientX:8}));
-  assert.equal(nav.style.width,'165px');
-  assert.equal(nav.classList.contains('is-strip'),false);
-  resizer.onkeydown({key:'Home',preventDefault(){}});
-  assert.equal(nav.style.width,'8px');
-  resizer.onkeydown({key:'End',preventDefault(){}});
-  assert.equal(nav.style.width,'180px');
 });

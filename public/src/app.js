@@ -127,8 +127,8 @@ function renderTabs() {
   }
   for(const node of nodes.values())node.remove();
   $('#library-tab').classList.toggle('active',activeId==='library');
-  $('#desk-library').setAttribute('aria-current',activeId==='library'?'page':'false');
-  $('#desk-execution').setAttribute('aria-current',activeId==='execution'?'page':'false');
+  $('#library-tab').setAttribute('aria-current',activeId==='library'?'page':'false');
+  $('#execution-tab').setAttribute('aria-current',activeId==='execution'?'page':'false');
   $('#execution-tab').classList.toggle('active',activeId==='execution');
 }
 function activate(id) {
@@ -722,11 +722,7 @@ async function copyAppURL(){
 }
 function bindUI() {
   document.addEventListener('fullscreenchange',()=>{if(document.fullscreenElement===$('#app') && readerFocused)nativeReaderFullscreen=true;else if(nativeReaderFullscreen){nativeReaderFullscreen=false;setReaderFocus(false);}});
-  [['#library-tab','library'],['#new-tab','plus'],['#back','back'],['#forward','forward'],['#reload','reload'],['#import-button','folder'],['#save-page','save'],['#app-menu-button','more'],['#settings-button','settings'],['#library-search-icon','search'],['#empty-icon','file']].forEach(([id,name])=>setButton(id,name));
-  $('#desk-library').onclick=()=>activate('library');
-  $('#desk-execution').onclick=()=>activate('execution');
-  $('#desk-browse').onclick=()=>{activate('library');$('#address').focus();};
-  $('#desk-import').onclick=safely(importFiles);
+  [['#library-tab','library','내 서재'],['#new-tab','globe','웹 페이지 열기'],['#back','back'],['#forward','forward'],['#reload','reload'],['#import-button','folder','HTML 파일 가져오기'],['#save-page','save'],['#app-menu-button','more'],['#settings-button','settings'],['#library-search-icon','search'],['#empty-icon','file']].forEach(([id,name,label])=>setButton(id,name,label));
   $('#home-button').onclick=e=>{e.preventDefault();activate('library');};$('#library-tab').onclick=()=>activate('library');$('#new-tab').onclick=()=>{activate('library');$('#address').focus();};$('#browse-start').onclick=()=>$('#address').focus();
   $('#execution-tab').onclick=()=>activate('execution');$('#execution-import').onclick=safely(importFiles);$('#execution-chrome').onclick=connectionDialog;$('#execution-settings').onclick=settingsDialog;
   $('#share-url').value=PUBLIC_APP_URL;$('#shared-app-link').href=PUBLIC_APP_URL;
@@ -748,140 +744,10 @@ function bindUI() {
   window.addEventListener('beforeunload',event=>{if(tabs.some(t=>t.queue?.pending||t.queue?.error)){event.preventDefault();event.returnValue='';}});
   document.addEventListener('visibilitychange',()=>{if(document.hidden)for(const tab of tabs)if(tab.reader?.doc){tab.reader.rememberPosition();tab.queue.flush().catch(()=>{});}});
   window.addEventListener('online',network);window.addEventListener('offline',network);window.addEventListener('htmlmemo-chrome-ready',()=>{updateConnection();safely(receiveCaptures)();});window.addEventListener('htmlmemo-capture-ready',safely(receiveCaptures));
-  window.addEventListener('resize',()=>{closePopover();applyToolbarPosition();applyDeskNavWidth(deskNavWidth,{persist:false,snapStrip:true});});
+  window.addEventListener('resize',()=>{closePopover();applyToolbarPosition();});
   window.addEventListener('dragover',event=>{if([...event.dataTransfer.types].includes('Files'))event.preventDefault();});window.addEventListener('drop',safely(async event=>{if(![...(event.dataTransfer.types||[])].includes('Files'))return;event.preventDefault();for(const file of await droppedHTMLFiles(event.dataTransfer))await openLocalFile(file);}));
-  bindDeskResize();
 }
 function network() {$('#network-status').textContent=navigator.onLine?'온라인':'오프라인';$('#network-status').classList.toggle('offline',!navigator.onLine);}
-const DESK_NAV_WIDTH_KEY='htmlmemo-desk-nav-width-v1',DESK_NAV_EXPANDED_WIDTH_KEY='htmlmemo-desk-nav-expanded-width-v1',DESK_NAV_DEFAULT=180,DESK_NAV_MIN=8,DESK_NAV_STRIP_SNAP=48,DESK_NAV_MAX=360;
-let deskNavWidth=DESK_NAV_DEFAULT,deskNavExpandedWidth=DESK_NAV_DEFAULT,deskDrag=null;
-function maxDeskNavWidth() {
-  if(deskDrag&&Number.isFinite(deskDrag.maxWidth))return deskDrag.maxWidth;
-  const shellWidth=$('.desk-shell')?.clientWidth||innerWidth||1280;
-  return Math.max(96,Math.min(DESK_NAV_MAX,shellWidth-160));
-}
-function clampDeskNavWidth(value,snapStrip=true) {
-  const numeric=Number(value);
-  if(!Number.isFinite(numeric))return DESK_NAV_DEFAULT;
-  if(numeric<=24||(snapStrip&&numeric<DESK_NAV_STRIP_SNAP))return DESK_NAV_MIN;
-  return Math.max(DESK_NAV_MIN,Math.min(maxDeskNavWidth(),Math.round(numeric)));
-}
-function applyDeskNavWidth(value,{persist=false,snapStrip=true}={}) {
-  const nav=$('.desk-nav'),resizer=$('#desk-resizer');if(!nav)return DESK_NAV_DEFAULT;
-  const width=clampDeskNavWidth(value,snapStrip),strip=width<DESK_NAV_STRIP_SNAP;
-  if(!strip&&(persist||width>=96)){
-    deskNavExpandedWidth=width;
-    if(persist){try{localStorage?.setItem(DESK_NAV_EXPANDED_WIDTH_KEY,String(width));}catch{/* Ignore storage quota/privacy errors. */}}
-  }
-  const prevStrip=nav.classList.contains('is-strip');
-  if(width===deskNavWidth&&!persist&&nav.style.width===width+'px'&&prevStrip===strip)return width;
-  deskNavWidth=width;
-  nav.style.setProperty?.('--desk-nav-width',width+'px');
-  nav.style.width=width+'px';nav.style.minWidth=width+'px';nav.style.maxWidth=width+'px';
-  nav.classList.toggle('is-strip',strip);
-  nav.classList.toggle('is-compact',!strip&&width<136);
-  nav.dataset.collapsed=strip?'true':'false';
-  if(strip!==prevStrip||persist)$$('button',nav).forEach(button=>{if(strip){button.setAttribute('tabindex','-1');button.setAttribute('aria-hidden','true');}else{button.removeAttribute('tabindex');button.removeAttribute('aria-hidden');}});
-  if(resizer){
-    resizer.setAttribute('aria-valuenow',String(width));
-    if(!deskDrag||persist)resizer.setAttribute('aria-valuemax',String(maxDeskNavWidth()));
-    resizer.dataset.collapsed=strip?'true':'false';
-  }
-  if(persist){try{localStorage?.setItem(DESK_NAV_WIDTH_KEY,String(width));}catch{/* Ignore storage quota/privacy errors. */}}
-  const r=reader();if(r?.doc){if(r.autoFit)r.zoom=r.fitZoom();if(r.nativeScroll||r.autoFit)r.applyZoom();updateToolbarState();}
-  return width;
-}
-function bindDeskResize() {
-  const nav=$('.desk-nav'),resizer=$('#desk-resizer'),main=$('#main');if(!nav||!resizer)return;
-  let saved=null,savedExpanded=null;try{saved=localStorage?.getItem(DESK_NAV_WIDTH_KEY);savedExpanded=localStorage?.getItem(DESK_NAV_EXPANDED_WIDTH_KEY);}catch{saved=null;savedExpanded=null;}
-  if(savedExpanded!==null&&savedExpanded!==''&&Number.isFinite(Number(savedExpanded))&&Number(savedExpanded)>=DESK_NAV_STRIP_SNAP)deskNavExpandedWidth=clampDeskNavWidth(Number(savedExpanded),true);
-  applyDeskNavWidth(saved!==null&&saved!==''?Number(saved):DESK_NAV_DEFAULT,{persist:false,snapStrip:true});
-  const startDrag=event=>{
-    if(event.button!=null&&event.button!==0)return;
-    event.preventDefault?.();
-    if(deskDrag)return;
-    const shellLeft=$('.desk-shell')?.getBoundingClientRect?.().left||0;
-    const maxWidth=maxDeskNavWidth();
-    const initialWidth=deskNavWidth;
-    const startX=Number.isFinite(event.clientX)?event.clientX:shellLeft+initialWidth;
-    const offset=Math.abs(startX-(shellLeft+initialWidth))<=16?startX-(shellLeft+initialWidth):0;
-    const state={pointerId:event.pointerId,startX,shellLeft,maxWidth,initialWidth,offset,moved:false,target:event.currentTarget||resizer};
-    deskDrag=state;
-    $('#app')?.setAttribute('data-resizing-desk','');
-    resizer.classList.add('is-dragging');
-    try{if(event.pointerId!=null)state.target.setPointerCapture?.(event.pointerId);}catch{/* Synthetic or mouse events may not have an active pointerId. */}
-    const cleanup=()=>{
-      deskDrag=null;
-      $('#app')?.removeAttribute('data-resizing-desk');
-      resizer.classList.remove('is-dragging');
-      try{if(state.pointerId!=null)state.target.releasePointerCapture?.(state.pointerId);}catch{/* Pointer capture may already be released by the browser. */}
-      for(const target of [resizer,nav,document,window]){
-        target?.removeEventListener?.('pointermove',move);target?.removeEventListener?.('mousemove',move);
-        target?.removeEventListener?.('pointerup',end);target?.removeEventListener?.('mouseup',end);
-        target?.removeEventListener?.('pointercancel',cancel);
-      }
-    };
-    const move=e=>{
-      if(deskDrag!==state)return;
-      if(state.pointerId!=null&&e.pointerId!=null&&e.pointerId!==state.pointerId)return;
-      if(state.moved&&e.buttons===0){end(e);return;}
-      const clientX=Number.isFinite(e.clientX)?e.clientX:state.startX;
-      if(Math.abs(clientX-state.startX)>=(state.initialWidth<=DESK_NAV_MIN?6:1))state.moved=true;
-      if(!state.moved)return;
-      const nextW=applyDeskNavWidth(clientX-state.shellLeft-state.offset,{persist:false,snapStrip:false});
-      if(nextW>=DESK_NAV_STRIP_SNAP)state.expandedDuringDrag=true;
-    };
-    const end=e=>{
-      if(deskDrag!==state)return;
-      if(state.pointerId!=null&&e?.pointerId!=null&&e.pointerId!==state.pointerId)return;
-      cleanup();
-      let next;
-      if(!state.moved)next=state.initialWidth<=DESK_NAV_MIN?Math.max(DESK_NAV_STRIP_SNAP,deskNavExpandedWidth||DESK_NAV_DEFAULT):DESK_NAV_MIN;
-      else if(state.initialWidth<=DESK_NAV_MIN&&deskNavWidth<DESK_NAV_STRIP_SNAP&&!state.expandedDuringDrag)next=Math.max(DESK_NAV_STRIP_SNAP,deskNavExpandedWidth||DESK_NAV_DEFAULT);
-      else next=deskNavWidth;
-      applyDeskNavWidth(next,{persist:true,snapStrip:true});
-      reader()?.measure?.();
-    };
-    const cancel=e=>{
-      if(deskDrag!==state)return;
-      if(state.pointerId!=null&&e?.pointerId!=null&&e.pointerId!==state.pointerId)return;
-      cleanup();
-      applyDeskNavWidth(state.moved?deskNavWidth:state.initialWidth,{persist:state.moved,snapStrip:true});
-      reader()?.measure?.();
-    };
-    for(const target of [resizer,nav,document,window]){
-      target?.addEventListener?.('pointermove',move);target?.addEventListener?.('mousemove',move);
-      target?.addEventListener?.('pointerup',end);target?.addEventListener?.('mouseup',end);
-      target?.addEventListener?.('pointercancel',cancel);
-    }
-  };
-  resizer.onpointerdown=startDrag;
-  resizer.onmousedown=startDrag;
-  resizer.ondragstart=event=>event.preventDefault?.();
-  const navStart=event=>{
-    if(event.button!=null&&event.button!==0)return;
-    const rect=nav.getBoundingClientRect?.();
-    const nearEdge=rect&&rect.width>0&&Number.isFinite(event.clientX)&&event.clientX>=rect.right-10;
-    if(nav.classList.contains('is-strip')||nearEdge)startDrag(event);
-  };
-  nav.addEventListener('pointerdown',navStart);
-  nav.addEventListener('mousedown',navStart);
-  const mainStart=event=>{
-    if(event.button!=null&&event.button!==0)return;
-    if(event.target?.closest?.('button,a,input,select,textarea,[role="tab"]'))return;
-    const rect=main?.getBoundingClientRect?.();
-    if(rect&&Number.isFinite(event.clientX)&&event.clientX<=rect.left+6)startDrag(event);
-  };
-  main?.addEventListener?.('pointerdown',mainStart);
-  main?.addEventListener?.('mousedown',mainStart);
-  resizer.onkeydown=event=>{
-    if(event.key==='ArrowLeft'){event.preventDefault();applyDeskNavWidth(deskNavWidth-16,{persist:true,snapStrip:true});reader()?.measure?.();}
-    else if(event.key==='ArrowRight'){event.preventDefault();const base=deskNavWidth<DESK_NAV_STRIP_SNAP?Math.max(DESK_NAV_STRIP_SNAP,deskNavExpandedWidth||DESK_NAV_DEFAULT):deskNavWidth+16;applyDeskNavWidth(base,{persist:true,snapStrip:true});reader()?.measure?.();}
-    else if(event.key==='Home'){event.preventDefault();applyDeskNavWidth(DESK_NAV_MIN,{persist:true,snapStrip:true});reader()?.measure?.();}
-    else if(event.key==='End'){event.preventDefault();applyDeskNavWidth(DESK_NAV_DEFAULT,{persist:true,snapStrip:true});reader()?.measure?.();}
-    else if(event.key==='Enter'||event.key===' '){event.preventDefault();const next=deskNavWidth<=DESK_NAV_MIN?Math.max(DESK_NAV_STRIP_SNAP,deskNavExpandedWidth||DESK_NAV_DEFAULT):DESK_NAV_MIN;applyDeskNavWidth(next,{persist:true,snapStrip:true});reader()?.measure?.();}
-  };
-}
 function fitHeader() {
   const header=$('.chrome'),row=$('.chrome-topline');
   if(!row || typeof ResizeObserver==='undefined')return;

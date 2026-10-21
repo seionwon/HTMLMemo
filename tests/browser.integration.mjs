@@ -66,6 +66,26 @@ test('real Chrome: browsing, capture, local annotation, file writes, reopen and 
   try{
     await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});const url=`http://127.0.0.1:${server.address().port}/`;chrome=await launchChrome();const page=chrome.page;
     await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});await page.navigate(url);await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
+    await t.test('header menus remain usable at desktop and mobile widths with the full document area',async()=>{
+      // Old sidebar preferences must not reserve space after upgrading.
+      await page.evaluate("localStorage.setItem('htmlmemo-desk-nav-width-v1','360');localStorage.setItem('htmlmemo-desk-nav-expanded-width-v1','360');");
+      await page.navigate(url);await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
+      await page.evaluate('window.importCalls=0;window.showOpenFilePicker=async()=>{window.importCalls++;return [];};');
+      for(const width of [1280,800,390,320]){
+        await page.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
+        const layout=await page.evaluate(`(()=>{const main=document.querySelector('#main').getBoundingClientRect(),header=document.querySelector('.chrome');return {left:main.left,width:main.width,viewport:innerWidth,sidebar:!!document.querySelector('.desk-nav,#desk-resizer'),controls:['#library-tab','#execution-tab','#new-tab','#import-button'].map(id=>{const element=document.querySelector(id),r=element.getBoundingClientRect();return {id,visible:r.width>0&&r.height>0&&r.left>=0&&r.right<=innerWidth&&header.contains(element)};})};})()`);
+        assert.equal(layout.sidebar,false);assert.equal(layout.left,0);assert.equal(layout.width,layout.viewport);
+        assert.ok(layout.controls.every(control=>control.visible),JSON.stringify({width,...layout}));
+        await page.click('#execution-tab');await page.waitFor('!document.querySelector("#execution").hidden');
+        assert.equal(await page.evaluate('document.querySelector("#execution-tab").getAttribute("aria-current")'),'page');
+        await page.click('#new-tab');await page.waitFor('!document.querySelector("#library").hidden && document.activeElement.id==="address"');
+        await page.click('#execution-tab');await page.click('#library-tab');await page.waitFor('!document.querySelector("#library").hidden');
+        await page.click('#import-button');
+      }
+      assert.equal(await page.evaluate('window.importCalls'),4);
+      await page.evaluate('delete window.showOpenFilePicker;');
+      await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
+    });
     await t.test('browser navigation and single-file capture',async()=>{
       await page.evaluate(`document.querySelector('#address').value=${JSON.stringify(url+'fixtures/capture.html')};document.querySelector('#address-form').requestSubmit();`);
       await page.waitFor('document.querySelector(".browser-frame")?.contentDocument?.title === "캡처 검증 문서"');
@@ -84,19 +104,6 @@ test('real Chrome: browsing, capture, local annotation, file writes, reopen and 
     });
     await t.test('local file import activates annotation independent of original website URL',async()=>{
       await page.evaluate(`window.showOpenFilePicker=async()=>{const root=await navigator.storage.getDirectory();return [await root.getFileHandle('picked-document.html')];};`);await page.click('#import-button');await page.waitFor('document.querySelectorAll(".tab.document").length === 2 && !document.querySelector("#toolbar").hidden');assert.equal(await page.evaluate('document.querySelector("#local-label").hidden'),false);assert.equal(await page.evaluate('document.querySelector(".document-host:not([hidden]) iframe").contentDocument.querySelectorAll("[data-htmlmemo-mark]").length > 0'),true);
-    });
-    await t.test('sidebar vertical boundary line drags down to a narrow strip and expands back',async()=>{
-      const start=await page.evaluate(`(()=>{const r=document.querySelector('#desk-resizer').getBoundingClientRect(),m=document.querySelector('#main').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2,mainWidth:m.width};})()`);
-      await page.send('Input.dispatchMouseEvent',{type:'mousePressed',x:start.x,y:start.y,button:'left',clickCount:1});
-      await page.send('Input.dispatchMouseEvent',{type:'mouseMoved',x:4,y:start.y,button:'left',buttons:1});
-      await page.send('Input.dispatchMouseEvent',{type:'mouseReleased',x:4,y:start.y,button:'left',clickCount:1});
-      const collapsed=await page.evaluate(`(()=>{const n=document.querySelector('.desk-nav'),m=document.querySelector('#main');return {navWidth:Math.round(n.getBoundingClientRect().width),strip:n.classList.contains('is-strip'),mainWidth:m.getBoundingClientRect().width};})()`);
-      assert.equal(collapsed.navWidth,8);assert.equal(collapsed.strip,true);assert.ok(collapsed.mainWidth>start.mainWidth+160);
-      await page.send('Input.dispatchMouseEvent',{type:'mousePressed',x:8,y:start.y,button:'left',clickCount:1});
-      await page.send('Input.dispatchMouseEvent',{type:'mouseMoved',x:180,y:start.y,button:'left',buttons:1});
-      await page.send('Input.dispatchMouseEvent',{type:'mouseReleased',x:180,y:start.y,button:'left',clickCount:1});
-      const expanded=await page.evaluate(`(()=>{const n=document.querySelector('.desk-nav');return {navWidth:Math.round(n.getBoundingClientRect().width),strip:n.classList.contains('is-strip')};})()`);
-      assert.equal(expanded.navWidth,180);assert.equal(expanded.strip,false);
     });
     await t.test('document fullscreen retains every compact toolbar button and saves annotations',async()=>{
       const buttons=await page.evaluate('[...document.querySelectorAll("#toolbar [data-action]")].map(button=>button.dataset.action)');
