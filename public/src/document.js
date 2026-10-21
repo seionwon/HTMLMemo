@@ -139,7 +139,7 @@ export async function prepareLoadedHTML(doc, defaults = {}, isCancelled = () => 
         const step=work.next();if(step.done)return step.value;
         if((count&255)===255&&performance.now()-start>=8)break;
       }
-      // Yield between bounded batches so the native document can paint/scroll.
+      // Yield between bounded batches so the app stays responsive while opening.
       await new Promise(resolve=>setTimeout(resolve,0));
     }
   } finally { work.return(); }

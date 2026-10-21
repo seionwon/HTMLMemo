@@ -13,17 +13,24 @@ export class Reader {
     this.nativeScroll = !!parsed.nativeScroll;
     this.selection = null; this.selectedId = null; this.linkHistory = []; this.searchResults = []; this.searchPosition = -1; this.autoFit = this.metadata.view.autoFit !== false;
     this.middleScroll = null; this.tocResize = null; this.tocDrag = null;
+    this.preparing = true;
     this.viewport = document.createElement('div'); this.viewport.className = 'reader-viewport';
+    this.viewport.setAttribute('aria-busy', 'true');
     this.viewport.classList.toggle('reader-native-scroll', this.nativeScroll);
     this.sizer = document.createElement('div'); this.sizer.className = 'reader-sizer';
     this.frame = document.createElement('iframe'); this.frame.className = 'document-frame'; this.frame.title = this.metadata.title;
+    // Keep streamed source, saved overlays and intermediate coordinates off-screen
+    // while preserving the iframe's layout and the document's own scripts.
+    this.frame.style.visibility = 'hidden'; this.frame.style.pointerEvents = 'none';
+    this.frame.setAttribute('aria-hidden', 'true');
     // Local documents explicitly enable scripts; captures retain static mode.
     // Forms, popups and top-level navigation remain sandboxed.
     this.frame.setAttribute('sandbox', this.metadata.execution?.allowScripts ? 'allow-same-origin allow-scripts' : 'allow-same-origin'); this.frame.referrerPolicy = 'no-referrer';
     this.naturalWidth = this.metadata.viewport.width; this.frame.style.height = '100%'; this.frame.style.width = this.naturalWidth + 'px';
     this.sizer.append(this.frame); this.viewport.append(this.sizer); host.append(this.viewport);
+    this.loading = document.createElement('div'); this.loading.className = 'reader-loading';
+    this.loading.setAttribute('role', 'status'); this.loading.textContent = '문서를 준비하는 중…'; host.append(this.loading);
     if (this.nativeScroll) this.applyZoom();
-    if (parsed.file) this.frame.style.pointerEvents = 'none';
     this.ready = new Promise((resolve, reject) => {
       this.frame.addEventListener('load', async () => {
         try {
@@ -32,10 +39,9 @@ export class Reader {
           this.bookIntegrity = inspectBookDocument(this.doc);
           const needsPrepare = Boolean(parsed.file || !this.doc.body.hasAttribute('data-htmlmemo-anchor'));
           this.bind({deferDynamicObserver: needsPrepare});
-          this.frame.style.pointerEvents = '';
           if (needsPrepare) {
-            // Let the browser paint the original File before preparation. Reuse
-            // its DOM instead of decoding, parsing and copying the book again.
+            // Let the app paint its loading state before preparation. Reuse the
+            // streamed DOM instead of decoding and copying the entire book.
             if (parsed.file) {
               await new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done)));
               if (this.disposed) { resolve(this); return; }
@@ -60,9 +66,24 @@ export class Reader {
             this.frame.style.width = this.naturalWidth + 'px';
             this.openingScroll = openingScroll;
           }
-          this.bind(); this.frame.style.pointerEvents = ''; this.measure(); this.render();
+          this.bind();
           this.zoom = clamp(this.autoFit ? this.fitZoom() : (this.metadata.view.zoom || this.fitZoom()), .2, 8); this.applyZoom();
-          requestAnimationFrame(() => { if(this.disposed){resolve(this);return;} this.scrollTop = this.openingScroll?.top ? this.openingScroll.top*this.zoom : Number(this.metadata.view.scrollTop) || 0; this.scrollLeft = this.openingScroll?.left ? this.openingScroll.left*this.zoom : Number(this.metadata.view.scrollLeft) || 0; this.callbacks.onView?.(); resolve(this); });
+          if (this.doc.fonts?.status === 'loading') await this.doc.fonts.ready;
+          if (this.disposed) { resolve(this); return; }
+          this.preparing = false; this.measure(); this.render();
+          await new Promise(done => requestAnimationFrame(done));
+          if (this.disposed) { resolve(this); return; }
+          this.scrollTop = this.openingScroll?.top ? this.openingScroll.top*this.zoom : Number(this.metadata.view.scrollTop) || 0;
+          this.scrollLeft = this.openingScroll?.left ? this.openingScroll.left*this.zoom : Number(this.metadata.view.scrollLeft) || 0;
+          this.measure(); this.renderDrawingLayer();
+          // Scroll restoration and source ResizeObservers settle before the
+          // first visible frame, so annotations do not flash at the page top.
+          await new Promise(done => requestAnimationFrame(done));
+          if (this.disposed) { resolve(this); return; }
+          this.measure(); this.renderDrawingLayer();
+          this.frame.style.visibility = 'visible'; this.frame.style.pointerEvents = '';
+          this.frame.removeAttribute('aria-hidden'); this.viewport.setAttribute('aria-busy', 'false');this.loading.remove();
+          this.callbacks.onView?.(); resolve(this);
         } catch (error) { reject(error); }
       }, {once:true});
     });
@@ -1484,7 +1505,7 @@ export class Reader {
     return null;
   }
   renderDrawingLayer() {
-    if (!this.doc || this.disposed) return;
+    if (!this.doc || this.disposed || this.preparing) return;
     // Keep one overlay: source Mutation/ResizeObservers must not see a removed
     // and reinserted SVG every time their own layout changes.
     const scrollHost=this.ensureAnnotationLayerHost();

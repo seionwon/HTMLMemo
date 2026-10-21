@@ -266,6 +266,48 @@ test('real Chrome: separate annotations, immutable source, durable history, rest
   } finally {if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
 });
 
+test('real Chrome: an annotated file is first shown with restored notes, zoom and reading position',{timeout:60000},async()=>{
+  await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-annotation-opening-'));await cp(join(root,'public'),folder,{recursive:true});
+  const server=createServer(folder);let chrome;
+  try{
+    await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));chrome=await launchChrome();const page=chrome.page;
+    const url=process.env.HTMLMEMO_OPENING_TEST_URL||`http://127.0.0.1:${server.address().port}/`;
+    await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});await page.navigate(url);
+    await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
+    await page.evaluate(`window.observeOpening=()=>{window.openingSamples=[];window.openingDone=false;let count=0;const sample=()=>{const frame=document.querySelector('.document-host:not([hidden]) iframe'),doc=frame?.contentDocument;if(doc?.title==='Restored annotations'){const style=getComputedStyle(frame);window.openingSamples.push({visible:style.visibility==='visible'&&Number(style.opacity)>0,legacy:!!doc.querySelector('#legacy-preview'),notes:doc.querySelectorAll('[data-htmlmemo-id="saved-note"]').length,marks:doc.querySelectorAll('[data-htmlmemo-mark]').length,scroll:doc.defaultView.scrollY,scale:parseFloat(frame.style.transform.slice(6))||1});}if(++count<90)requestAnimationFrame(sample);else window.openingDone=true;};requestAnimationFrame(sample);};`);
+    await page.evaluate(`(()=>{
+      window.observeOpening();
+      const metadata={version:${FORMAT_VERSION},title:'Restored annotations',viewport:{width:1100,height:800},view:{zoom:.75,autoFit:false,scrollTop:600,scrollLeft:0},bookmarks:[],annotations:[{id:'saved-note',type:'note',anchor:'body',points:[{x:.1,y:.2}],text:'Saved note',color:'#edcf67',width:3,opacity:1},{id:'saved-highlight',type:'highlight',color:'#edcf67',width:3,opacity:.35,textAnchor:{start:0,end:7,quote:'Opening'}}]};
+      const html='<html><head><title>Restored annotations</title><style>body{margin:0}main{height:6000px;background:linear-gradient(#fff,#eef3ff)}</style><script id="htmlmemo-data" type="application/json">'+JSON.stringify(metadata)+'<'+'/script></head><body><p><span data-htmlmemo-mark data-htmlmemo-id="saved-highlight">Opening</span> content keeps its original annotations.</p><main>Reading content</main><svg id="htmlmemo-annotation-layer" style="position:absolute;left:0;top:0;overflow:visible"><g data-htmlmemo-id="saved-note"><text id="legacy-preview" x="10" y="20">Saved note</text></g></svg><!--'+'x'.repeat(4*1024*1024)+'--></body></html>';
+      const transfer=new DataTransfer();transfer.items.add(new File([html],'annotated-opening.html',{type:'text/html'}));const input=document.querySelector('#file-input');input.files=transfer.files;input.dispatchEvent(new Event('change',{bubbles:true}));
+    })()`);
+    const checkOpening=async()=>{
+      await page.waitFor('window.openingDone');
+      const samples=await page.evaluate('window.openingSamples'),shown=samples.filter(sample=>sample.visible);
+      console.log('Annotation opening:',JSON.stringify({samples:samples.length,shown:shown.length,legacyShown:shown.filter(sample=>sample.legacy).length,first:shown[0]}));
+      assert.ok(samples.length>0);assert.ok(shown.length>0);
+      assert.equal(shown.some(sample=>sample.legacy),false,'the saved overlay must never paint before restoration');
+      assert.ok(shown.every(sample=>sample.notes===1&&sample.marks===1&&sample.scale===.75&&Math.abs(sample.scroll-800)<1),JSON.stringify(shown.slice(0,5)));
+      assert.equal(await page.evaluate('document.querySelector(".document-host:not([hidden]) .reader-viewport").getAttribute("aria-busy")'),'false');
+      assert.equal(await page.evaluate('!!document.querySelector(".document-host:not([hidden]) .reader-loading")'),false);
+    };
+    await checkOpening();
+    await page.waitFor('document.querySelector("#status-left").textContent.includes("자동 저장됨")');
+    await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/annotation-opening-ready.png'),await page.screenshot());
+    await page.click('#tabs .tab.active .tab-close');await page.waitFor('document.querySelectorAll("#tabs .tab").length===0');
+    await page.send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
+    await page.evaluate('window.observeOpening()');await page.click('[data-open]');await checkOpening();
+    await writeFile(join(root,'test-results/annotation-opening-mobile.png'),await page.screenshot());
+    // A preparation failure must remove the hidden document and loading state.
+    await page.evaluate(`(()=>{const html='<html><head><title>Invalid annotations</title><script id="htmlmemo-data" type="application/json">{"version":999,"annotations":[]}<'+'/script></head><body>Invalid annotations<!--'+'x'.repeat(4*1024*1024)+'--></body></html>';const transfer=new DataTransfer();transfer.items.add(new File([html],'invalid-annotations.html',{type:'text/html'}));const input=document.querySelector('#file-input');input.files=transfer.files;input.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+    await page.waitFor('document.querySelector("#toast").textContent.includes("이 파일의 HTMLMemo 버전을 지원하지 않습니다")');
+    assert.equal(await page.evaluate('!!document.querySelector(".reader-loading")'),false);
+    assert.equal(await page.evaluate('document.querySelector("#library").hidden'),false);
+    assert.equal(await page.evaluate('document.querySelectorAll("#tabs .tab.document").length'),1);
+    assert.deepEqual(chrome.errors,[]);
+  }finally{if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
+});
+
 test('real Chrome: self-observing HTML settles without overlay resize feedback or scroll jitter',{timeout:45000},async()=>{
   await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-jitter-test-'));await cp(join(root,'public'),folder,{recursive:true});
   const server=createServer(folder);let chrome;
