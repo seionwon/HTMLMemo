@@ -579,10 +579,10 @@ test('real Chrome: native sidebar view choices are visible on open and preserve 
     const frame='document.querySelector(".document-host:not([hidden]) iframe")',doc=frame+'.contentDocument';
     await page.waitFor(`${doc}?.querySelectorAll('[data-htmlmemo-doc-sidebar-ui] [data-sidebar-view]').length===3&&!${frame}.hasAttribute('aria-hidden')`);
     assert.equal(await page.evaluate('document.querySelector("#sidebar").hidden'),true);
-    assert.deepEqual(await page.evaluate(`[...${doc}.querySelectorAll('[data-htmlmemo-doc-sidebar-ui] [data-sidebar-view]')].map(button=>button.textContent)`),['목차','문서 검색','주석 목록']);
+    assert.deepEqual(await page.evaluate(`[...${doc}.querySelectorAll('[data-htmlmemo-doc-sidebar-ui] [data-sidebar-view]')].map(button=>button.textContent)`),['목차','검색','주석']);
     await page.evaluate(`window.nativeSidebarTree=${doc}.querySelector('#reader-tree');`);
     for(const mode of ['search','annotations']){
-      await page.click('[data-action=more]');await page.click(`[data-more=${mode}]`);
+      await page.click('[data-action=more]');assert.equal(await page.evaluate(`document.querySelector('[data-more=${mode}]').textContent.trim()`),mode==='search'?'검색':'주석');await page.click(`[data-more=${mode}]`);
       await page.waitFor(`${doc}.querySelector('#reader-nav').dataset.htmlmemoSidebarView==='${mode}'`);
       assert.equal(await page.evaluate('document.querySelector("#sidebar").hidden'),true);
     }
@@ -601,6 +601,7 @@ test('real Chrome: native sidebar view choices are visible on open and preserve 
     for(const width of [1280,390]){
       await page.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
       await clickNative('[data-sidebar-view=search]');await page.waitFor(`${doc}.querySelector('#reader-nav').dataset.htmlmemoSidebarView==='search'`);
+      assert.equal(await page.evaluate(`${doc}.querySelector('input').placeholder`),'불러온 부분에서 찾기');
       await page.evaluate(`${doc}.querySelector('input').select()`);
       await page.send('Input.insertText',{text:'Introduction'});await page.waitFor(`${doc}.querySelectorAll('[data-search-index]').length===6`);
       assert.equal(await page.evaluate(`${doc}.defaultView.getComputedStyle(${doc}.querySelector('#reader-tree')).display`),'none');
@@ -639,11 +640,12 @@ test('real Chrome: sidebar view choices preserve search drafts, navigate saved n
     const original=await page.evaluate(`(async()=>{const {getDocument}=await import('./src/storage.js');const record=await getDocument('sidebar-document');return {html:record.html,annotations:record.metadata.annotations,bookmarks:record.metadata.bookmarks};})()`);
     await page.evaluate('window.sidebarFrame=document.querySelector(".document-host:not([hidden]) iframe")');
     await page.click('[data-action=more]');await page.click('[data-more=outline]');
-    assert.deepEqual(await page.evaluate('[...document.querySelectorAll("[data-sidebar-view]")].map(button=>button.textContent)'),['목차·북마크','문서 검색','주석 목록']);
+    assert.deepEqual(await page.evaluate('[...document.querySelectorAll("[data-sidebar-view]")].map(button=>button.textContent)'),['목차·북마크','검색','주석']);
     for(const width of [1280,390,320]){
       await page.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
       const visible=await page.evaluate('[...document.querySelectorAll("[data-sidebar-view]")].every(button=>{const r=button.getBoundingClientRect();return r.width>0&&r.left>=0&&r.right<=innerWidth&&button.contains(document.elementFromPoint(r.left+r.width/2,r.top+r.height/2));})');assert.equal(visible,true);
       await page.click('[data-sidebar-view=search]');
+      assert.equal(await page.evaluate('document.querySelector("#document-search").placeholder'),'불러온 부분에서 찾기');assert.equal(await page.evaluate('document.querySelector("#sidebar-title").textContent'),'검색');
       await page.evaluate(`(()=>{const input=document.querySelector('#document-search');input.value='검색어';input.dispatchEvent(new Event('input'));})()`);
       await page.waitFor('document.querySelectorAll("[data-search-index]").length===2');await page.click('[data-search-index="1"]');
       await page.click('[data-sidebar-view=annotations]');assert.equal(await page.evaluate('document.querySelector("[data-annotation=sidebar-note] .annotation-main").textContent'),'보관한 메모');await page.click('[data-annotation=sidebar-note]');

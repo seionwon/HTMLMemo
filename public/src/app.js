@@ -677,7 +677,7 @@ function toolAction(action) {
     $('#zoom-out').onclick=()=>r.setZoom(r.zoom/1.2);$('#zoom-in').onclick=()=>r.setZoom(r.zoom*1.2);$('#zoom-value').onchange=e=>r.setZoom(Number(e.target.value)/100);$('#zoom-fit').onclick=()=>{r.setZoom(1,true);closePopover();};$('#zoom-reset').onclick=()=>{r.setZoom(1);closePopover();};
   });return;}
   if(action==='more') {
-    const items=[['search','search','문서 검색'],['outline','list','목차 · 북마크'],['annotations','note','주석 목록'],['rect','rect','사각형'],['ellipse','ellipse','타원'],['arrow','arrow','화살표'],['area','area','영역 형광펜'],['area-underline','underline','영역 밑줄'],['strike','strike','취소선'],['text','text','텍스트'],['undo','undo','실행 취소'],['redo','redo','다시 실행'],['bookmark','bookmark','현재 위치 북마크'],['history','undo','주석 저장 이력'],['migrate','file','새 판으로 주석 옮기기'],['connect','save','HTML 내보내기'],['info','file','문서 정보'],['clear','trash','주석 모두 지우기']];
+    const items=[['search','search','검색'],['outline','list','목차 · 북마크'],['annotations','note','주석'],['rect','rect','사각형'],['ellipse','ellipse','타원'],['arrow','arrow','화살표'],['area','area','영역 형광펜'],['area-underline','underline','영역 밑줄'],['strike','strike','취소선'],['text','text','텍스트'],['undo','undo','실행 취소'],['redo','redo','다시 실행'],['bookmark','bookmark','현재 위치 북마크'],['history','undo','주석 저장 이력'],['migrate','file','새 판으로 주석 옮기기'],['connect','save','HTML 내보내기'],['info','file','문서 정보'],['clear','trash','주석 모두 지우기']];
     showPopover('more',`<div class="popover-heading"><h3>문서 도구</h3><button class="icon-button popover-close" data-popover-close aria-label="문서 도구 닫기" title="닫기">${icon('close',16)}</button></div><div class="more-grid">${items.map(([id,name,label])=>`<button class="menu-button" data-more="${id}">${icon(name,16)}<span>${label}</span></button>`).join('')}</div>`,()=>{
       $('[data-popover-close]',$('#tool-popover')).onclick=closePopover;
       $$('[data-more]',$('#tool-popover')).forEach(button=>button.onclick=safely(()=>{const id=button.dataset.more;closePopover();return toolAction(id);}));
@@ -714,9 +714,9 @@ function styleNativeSidebar(panel) {
 function renderSidebar(mode,{panel=$('#sidebar'),embedded=false,documentReader=reader()}={}) {
   const r=documentReader;if(!r)return;clearTimeout(panel.sidebarSearchTimer);panel.sidebarMode=mode;if(!embedded){sidebarMode=mode;closePopover();}else styleNativeSidebar(panel);panel.hidden=false;
   const id=name=>(embedded?'htmlmemo-native-':'')+name,q=name=>$('#'+id(name),panel);
-  const title={search:'문서 검색',outline:'목차 · 북마크',annotations:'주석 목록'}[mode];
+  const title={search:'검색',outline:'목차 · 북마크',annotations:'주석'}[mode];
   if(!$('.sidebar-views',panel)){
-    const views=[['outline','list',embedded?'목차':'목차·북마크'],['search','search','문서 검색'],['annotations','note','주석 목록']];
+    const views=[['outline','list',embedded?'목차':'목차·북마크'],['search','search','검색'],['annotations','note','주석']];
     panel.innerHTML=`${embedded?`<h2 id="${id('sidebar-title')}" hidden></h2>`:`<div class="sidebar-heading"><h2 id="sidebar-title"></h2><button class="icon-button" id="close-sidebar" aria-label="패널 닫기">${icon('close')}</button></div>`}<div class="sidebar-views" role="group" aria-label="사이드바 보기">${views.map(([view,name,label])=>`<button type="button" data-sidebar-view="${view}" aria-pressed="false" aria-controls="${id('sidebar-content')}">${icon(name,14)}<span>${label}</span></button>`).join('')}</div><div id="${id('sidebar-content')}" class="sidebar-content" role="region" aria-labelledby="${id('sidebar-title')}"></div>`;
     if(!embedded)q('close-sidebar').onclick=closeSidebar;
     $$('[data-sidebar-view]',panel).forEach(button=>button.onclick=()=>embedded?r.showDocumentSidebarView(button.dataset.sidebarView):renderSidebar(button.dataset.sidebarView));
@@ -726,7 +726,7 @@ function renderSidebar(mode,{panel=$('#sidebar'),embedded=false,documentReader=r
   const content=$('.sidebar-content',panel);content.hidden=embedded&&mode==='outline';
   if(content.hidden){content.replaceChildren();return;}
   if(mode==='search'){
-    content.innerHTML=`<div class="search-field"><input id="${id('document-search')}" aria-label="문서 검색어" placeholder="문서 안에서 찾기" autocomplete="off"></div><div class="search-navigation"><span id="${id('search-count')}">검색어를 입력하세요.</span><button id="${id('search-prev')}" class="icon-button" aria-label="이전 검색 결과">${icon('back')}</button><button id="${id('search-next')}" class="icon-button" aria-label="다음 검색 결과">${icon('forward')}</button></div><div id="${id('search-results')}"></div>`;
+    content.innerHTML=`<div class="search-field"><input id="${id('document-search')}" aria-label="불러온 부분 검색어" placeholder="불러온 부분에서 찾기" autocomplete="off"></div><div class="search-navigation"><span id="${id('search-count')}">검색어를 입력하세요.</span><button id="${id('search-prev')}" class="icon-button" aria-label="이전 검색 결과">${icon('back')}</button><button id="${id('search-next')}" class="icon-button" aria-label="다음 검색 결과">${icon('forward')}</button></div><div id="${id('search-results')}"></div>`;
     const input=q('document-search');input.value=r.sidebarSearchQuery??r.searchQuery??'';
     const run=()=>{if(panel.sidebarMode!=='search'||reader()!==r||!input.isConnected)return;const results=r.search(input.value);q('search-count').textContent=results.length?`${results.length}${results.length===3000?'+':''}개 결과`:'검색 결과가 없습니다.';q('search-results').innerHTML=results.slice(0,150).map((result,index)=>`<button class="search-result" data-search-index="${index}">${esc(result.quote)}</button>`).join('');$$('[data-search-index]',panel).forEach(button=>button.onclick=()=>{r.searchPosition=Number(button.dataset.searchIndex)-1;r.nextSearch(1);});};
     input.oninput=()=>{r.sidebarSearchQuery=input.value;clearTimeout(panel.sidebarSearchTimer);panel.sidebarSearchTimer=setTimeout(run,120);};input.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();r.nextSearch(e.shiftKey?-1:1);}};

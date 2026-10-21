@@ -33,13 +33,13 @@ function sidebar() {
 test('sidebar switches between outline, search and annotations without changing document data',()=>{
   const a=sidebar(),before=structuredClone(a.r.metadata);a.open('outline');
   assert.equal(a.doc.querySelector('#sidebar').hidden,false);
-  assert.deepEqual([...a.doc.querySelectorAll('[data-sidebar-view]')].map(button=>button.textContent),['목차·북마크','문서 검색','주석 목록']);
+  assert.deepEqual([...a.doc.querySelectorAll('[data-sidebar-view]')].map(button=>button.textContent),['목차·북마크','검색','주석']);
   a.doc.querySelector('[data-heading]').onclick();assert.deepEqual(a.calls.headings,['heading-1']);
   const button=a.doc.querySelector('[data-sidebar-view=search]');a.choose('search');
-  const input=a.doc.querySelector('#document-search');input.value='기억';input.oninput();a.flush();
+  const input=a.doc.querySelector('#document-search');assert.equal(input.getAttribute('placeholder'),'불러온 부분에서 찾기');assert.equal(input.getAttribute('aria-label'),'불러온 부분 검색어');assert.equal(a.doc.querySelector('#sidebar-title').textContent,'검색');input.value='기억';input.oninput();a.flush();
   assert.equal(a.doc.querySelector('#search-count').textContent,'1개 결과');
   a.doc.querySelector('[data-search-index]').onclick();assert.deepEqual(a.calls.next,[1]);
-  a.choose('annotations');a.doc.querySelector('[data-annotation]').onclick();assert.deepEqual(a.calls.annotations,['a1']);
+  a.choose('annotations');assert.equal(a.doc.querySelector('#sidebar-title').textContent,'주석');a.doc.querySelector('[data-annotation]').onclick();assert.deepEqual(a.calls.annotations,['a1']);
   assert.equal(a.doc.querySelector('[data-sidebar-view=annotations]').getAttribute('aria-pressed'),'true');
   assert.equal(a.doc.querySelectorAll('[data-sidebar-view][aria-pressed=true]').length,1);
   a.choose('outline');a.doc.querySelector('[data-bookmark]').onclick();
@@ -82,11 +82,11 @@ test('the visible source TOC gets inline choices without moving its tree, listen
   Object.setPrototypeOf(a.r,Reader.prototype);a.r.doc=doc;a.r.tocResize={sidebar:toc};
   a.r.callbacks={onSidebarView:(mode,panel,documentReader)=>a.context.renderSidebar(mode,{panel,embedded:true,documentReader})};
   a.r.setupDocumentSidebar();const panel=a.r.documentSidebarUI;
-  assert.strictEqual(toc.firstElementChild,panel);assert.deepEqual([...panel.querySelectorAll('[data-sidebar-view]')].map(button=>button.textContent),['목차','문서 검색','주석 목록']);
+  assert.strictEqual(toc.firstElementChild,panel);assert.deepEqual([...panel.querySelectorAll('[data-sidebar-view]')].map(button=>button.textContent),['목차','검색','주석']);
   toc.scrollTop=37;a.r.tocStrip=true;a.r.tocExpandedWidth=260;let expanded=0,synced=0;
   a.r.applyTocWidth=width=>{expanded=width;a.r.tocStrip=false;};a.r.syncAfterTocResize=()=>synced++;
   panel.querySelector('[data-sidebar-view=search]').onclick();assert.equal(expanded,260);assert.equal(synced,1);assert.equal(toc.scrollTop,0);
-  assert.equal(toc.getAttribute('data-htmlmemo-sidebar-view'),'search');const input=panel.querySelector('input');input.value='원래';input.oninput();a.flush();
+  assert.equal(toc.getAttribute('data-htmlmemo-sidebar-view'),'search');const input=panel.querySelector('input');assert.equal(input.getAttribute('placeholder'),'불러온 부분에서 찾기');assert.equal(input.getAttribute('aria-label'),'불러온 부분 검색어');input.value='원래';input.oninput();a.flush();
   panel.querySelector('[data-sidebar-view=annotations]').onclick();assert.equal(panel.querySelector('[data-annotation] .annotation-main').textContent,'남겨 둔 메모');assert.equal(panel.querySelector('[data-annotation] .annotation-meta').textContent,'메모');
   panel.querySelector('[data-sidebar-view=outline]').onclick();assert.equal(toc.scrollTop,37);assert.equal(panel.querySelector('.sidebar-content').hidden,true);
   assert.strictEqual(toc.querySelector('details'),tree);tree.querySelector('summary').onclick();assert.equal(clicks,1);assert.equal(tree.hasAttribute('open'),true);
