@@ -1216,7 +1216,7 @@ ID: hist-20261014-024. tests/chrome.mjs가 macOS Codex/CodeMemo 제한 환경을
 
 | ID | change-kind | status |
 |---|---|---|
-| hist-20261021-014 | 사이드바 보기 선택 · 검색어 유지 · 북마크 목록 갱신 | 구현·단위 146개·CodeMemo 브라우저·빌드 완료 / Pages 게시 진행 |
+| hist-20261021-014 | 사이드바 보기 선택 · 검색어 유지 · 북마크 목록 갱신 | 구현·단위 146개·전체 CI Chrome·Pages 게시·공개 Chrome 검사 완료 |
 
 **목적과 확인:** 앱에는 목차·북마크, 문서 검색, 주석 목록의 기존 기능이 남아 있었지만 사이드바 내부에는 보기를 선택할 컨트롤이 없었습니다. 검색·주석을 추가 도구에서 다시 찾아 열어야 하는 상태를 고쳤습니다.
 
@@ -1227,3 +1227,7 @@ ID: hist-20261014-024. tests/chrome.mjs가 macOS Codex/CodeMemo 제한 환경을
 **검증:** `npm run check` 66개 JavaScript 파일·JSON, `npm test` 146개, `npm run build`, `git diff --check`, 게시 워크플로 YAML 검사를 통과했습니다. CodeMemo의 별도 임시 브라우저에서 1280×800·320×844 화면의 세 선택 버튼, 예제 문서의 검색 결과 9개, 검색→주석→검색 전환 뒤 결과 복원, 빈 주석 안내, 북마크 추가와 즉시 표시를 확인했습니다. 두 요청 모두 HTTP 200·브라우저 오류 0개이며 화면도 확인했습니다. 단위 회귀 검사에서 목차·주석·북마크 이동, 보기만 바꿀 때 메타데이터 보존과 무저장, 검색 입력 직후 전환·닫기·다른 문서로 이동하는 경우를 확인했습니다.
 
 **게시 상태와 검증 경로:** 로컬 소스와 `dist`를 준비했습니다. macOS 에이전트 안에서 데스크톱 Chrome을 직접 실행하지 않았습니다. 기존 Actions의 전체 `npm run test:browser`에 실제 문서 검색·주석 이동 및 삭제·북마크 추가 및 삭제·본문 보존·1280/390/320px 선택 버튼 검사를 추가했습니다. Pages 게시 후에는 같은 커밋의 공개 `app.js`가 일치할 때까지 확인한 뒤 공개 URL에서 이 Chrome 검사를 실행하고 PC·모바일 스크린샷을 Actions 결과물로 보관하도록 기존 게시 워크플로에 연결했습니다. 실제 게시·온라인 검사 결과는 완료 후 이 항목에 보충합니다.
+
+**게시·온라인 확인 (2026-10-21 22:47:47 +09:00):** 커밋 `9fdecd676f57bb925724d6cc5338b03178967ca3`의 [GitHub Actions 39610593095](https://github.com/seionwon/HTMLMemo/actions/runs/39610593095)가 단위·문법·전체 실제 Chrome·빌드·Pages 게시와 게시 후 검증까지 모두 성공했습니다. 공개 주소 `https://seionwon.github.io/HTMLMemo/`에서 1280·390·320px의 세 보기 버튼 클릭, 저장된 주석으로 이동, 검색 결과 이동과 검색어 복원, 입력 직후 보기 전환 시 지연 검색 취소, 보기만 바꿀 때 본문·주석·북마크 보존, 북마크 추가·삭제와 주석 삭제·자동 저장을 확인했습니다. 기존 문서 iframe이 유지되고 브라우저 예외도 없었습니다.
+
+공개 `index.html`, `styles.css`, `src/app.js`, `src/version.js`, `sw.js`, `manifest.webmanifest`는 모두 HTTP 200이며 해당 CI의 Pages 아티팩트와 바이트·SHA-256이 일치했습니다. 공개 PC·모바일 캡처는 Actions의 `published-sidebar-screenshots`와 로컬 `test-results/sidebar-restoration-2026-10-21/published-screenshots/`에서 확인했습니다. CI Linux의 한국어 글꼴 부재로 해당 캡처의 일부 한글은 사각형으로 보이므로 문구는 실제 DOM 검사로, 한국어 렌더링은 CodeMemo 임시 브라우저의 PC·모바일 캡처로 확인했습니다. 이 글꼴 제한은 검사 환경의 캡처에 해당하며 사용자 기기의 글꼴 설정이나 앱의 글꼴을 변경하지 않았습니다.
