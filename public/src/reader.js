@@ -1312,8 +1312,12 @@ export class Reader {
     this.rememberPosition(); this.callbacks.onView?.();
   }
   rememberPosition() {
-    this.metadata.view = {scrollTop:this.scrollTop, scrollLeft:this.scrollLeft, zoom:this.zoom, autoFit:this.autoFit, ...(Number.isFinite(this.tocResizedWidth)?{tocWidth:this.tocResizedWidth}:{})};
+    const view = {scrollTop:this.scrollTop, scrollLeft:this.scrollLeft, zoom:this.zoom, autoFit:this.autoFit, ...(Number.isFinite(this.tocResizedWidth)?{tocWidth:this.tocResizedWidth}:{})};
+    const previous = this.metadata.view || {};
+    if (Object.keys(previous).length === Object.keys(view).length && Object.keys(view).every(key => view[key] === previous[key])) return false;
+    this.metadata.view = view;
     this.callbacks.onPosition?.();
+    return true;
   }
   setTool(tool) {
     this.tool = tool; this.doc.documentElement.toggleAttribute('data-htmlmemo-drawing', DRAW_TOOLS.includes(tool) || ['note','text'].includes(tool));

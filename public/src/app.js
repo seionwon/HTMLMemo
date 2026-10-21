@@ -2,7 +2,7 @@ import { $, $$, icon, escapeHTML as esc, uid, filename, normalizeURL, displayHos
 import { parseHTML, SCRIPT_CSP, serializeBookSource } from './document.js';
 import { SaveQueue } from './model.js';
 import { Reader } from './reader.js';
-import { listDocuments, getDocument, deleteDocument, getSetting, setSetting, saveDocumentHTML, listRevisionSummaries, getRevision, putDocumentRevision, writeExternalHTML } from './storage.js';
+import { listDocuments, getDocument, deleteDocument, getSetting, setSetting, saveDocumentHTML, listRevisionSummaries, getRevision, putDocumentRevision, putDocumentView, writeExternalHTML } from './storage.js';
 import { bridge, bridgeAvailable, discoverBridge } from './bridge.js';
 import { readLocalHTML, droppedHTMLFiles } from './local-files.js';
 import { normalizePreferences, loadPreferences, storePreferences, serializeSettings, readSettingsFile, PRESET_COLORS, PRESET_PALETTES, normalizeHexColor, hexToRgb, rgbToHex, hexToHsv, hsvToHex } from './preferences.js';
@@ -158,7 +158,7 @@ function renderTabs() {
     }
     el.className=`tab ${tab.id===activeId?'active':''} ${tab.type}`;el.title=tab.title;$('.tab-select',el).setAttribute('aria-current',tab.id===activeId?'page':'false');
     const title=$('.tab-title',el);if(title.textContent!==tab.title)title.textContent=tab.title;
-    $('.tab-dirty',el).hidden=!tab.opening && !tab.queue?.pending;
+    $('.tab-dirty',el).hidden=!tab.opening && !tab.queue?.editsPending;
     $('[data-close]',el).setAttribute('aria-label',tab.title+' 탭 닫기');
     nodes.delete(tab.id);
   }
@@ -207,6 +207,12 @@ async function openRecord(record, prepared = null, {deferReady = false} = {}) {
   const tab={id:uid(),type:'document',title:record.title,opening:true,record:{...record,nativeScroll:!!parsed.nativeScroll},host:null};tab.host=createHost(tab.id,'document');
   tab.queue=new SaveQueue(async()=>{
     await tab.reader.ready;
+    if (!tab.queue.editsPending) {
+      const saved = await putDocumentView(tab.record.id, tab.reader.metadata.view);
+      tab.record.metadata = saved.metadata;
+      records=records.filter(r=>r.id!==record.id).concat(saved);
+      return;
+    }
     const html=tab.record.html; const metadata=structuredClone(tab.reader.metadata);
     tab.record.html=html;tab.record.metadata=metadata;tab.record.title=metadata.title;tab.record.modified=Date.now();
     await saveDocumentHTML(tab.record, html, {revision:tab.restoredFrom?{restoredFrom:tab.restoredFrom}:undefined});
@@ -218,7 +224,7 @@ async function openRecord(record, prepared = null, {deferReady = false} = {}) {
   tabs.push(tab);activate(tab.id);
   tab.reader=new Reader(tab.host,parsed,{
     onChange:()=>{tab.queue.schedule();if(activeId===tab.id){renderToolbar();if(sidebarMode==='annotations')renderSidebar('annotations');}},
-    onPosition:()=>{tab.queue.schedule();},onView:()=>{if(activeId===tab.id){updateChrome();updateToolbarState();}},
+    onPosition:()=>{tab.queue.schedule({background:true});},onView:()=>{if(activeId===tab.id){updateChrome();updateToolbarState();}},
     onTextSelection:()=>{if(activeId===tab.id)showSelectionMenu(tab.reader);},
     onSelectionDismiss:()=>{if(popoverName==='selection')closePopover();},
     onLink:url=>safely(openBrowser)(url),onKey:handleKey,requestText:promptText,onError:showError,
@@ -239,15 +245,18 @@ async function openRecord(record, prepared = null, {deferReady = false} = {}) {
 }
 function saveStatus(tab) {
   const queue=tab.queue;if(!queue)return;
-  const label=queue.error?'주석 자동 저장 실패 · '+queue.error.message:queue.pending||tab.opening?'저장 중…':'주석이 앱에 자동 저장됨';
+  const label=queue.error?(queue.editsPending?'주석 자동 저장 실패 · ':'읽기 위치 저장 실패 · ')+queue.error.message:queue.editsPending||tab.opening?'저장 중…':'주석이 앱에 자동 저장됨';
   const status=$('#status-left');let state=$('.save-state',status);
   if(!state){status.replaceChildren();state=document.createElement('span');status.append(state);}
-  state.className=`save-state ${queue.error?'save-error':''}`;
-  state.innerHTML=`${icon(queue.error?'more':queue.pending?'reload':'check',13)} ${esc(label)}`;
+  const className=`save-state ${queue.error?'save-error':''}`;
+  if(state.textContent.trim()!==label || state.className!==className){
+    state.className=className;
+    state.innerHTML=`${icon(queue.error?'more':queue.editsPending||tab.opening?'reload':'check',13)} ${esc(label)}`;
+  }
   let retry=$('#retry-save');
   if(queue.error){
     if(!retry){retry=document.createElement('button');retry.id='retry-save';retry.className='text-button';status.append(retry);}
-    retry.textContent='저장 재시도';retry.onclick=safely(async()=>{tab.queue.schedule();await tab.queue.flush();});
+    retry.textContent='저장 재시도';retry.onclick=safely(()=>tab.queue.flush());
   }else retry?.remove();
   let bookNotice = $('[data-book-incomplete]', status);
   if (tab.reader?.bookIntegrity?.complete === false) {
@@ -362,7 +371,7 @@ async function exportDocument(tab) {
     try { handle=await window.showSaveFilePicker({suggestedName:tab.record.name.replace(/\.html?$/i,'-주석.html'),types:htmlTypes}); }
     catch(error){if(!['SecurityError','NotSupportedError'].includes(error.name))throw error;}
   }
-  await tab.reader.ready;await tab.queue.flush();
+  await tab.reader.ready;tab.reader.rememberPosition();await tab.queue.flush();
   const source = tab.reader.bookIntegrity?.complete ? await getDocument(tab.record.id) : null;
   const html=source ? await serializeBookSource(source.file || new Blob([source.html], {type:'text/html;charset=utf-8'}), tab.reader.metadata) : tab.reader.html();
   if(handle){const disk=await handle.getFile();await writeExternalHTML({fileHandle:handle,diskStamp:{modified:disk.lastModified,size:disk.size}},html);}
@@ -731,7 +740,7 @@ function documentMenu(record) {
 function handleKey(event) {
   const isField=/^(INPUT|TEXTAREA|SELECT)$/.test(event.target?.tagName)||event.target?.isContentEditable;
   if(event.key==='Escape') {if(reader()?.readAloud?.escape()){event.preventDefault();return;}reader()?.stopSpeech();if($('#dialog').open)return;if(!$('#tool-popover').hidden)closePopover();else if(!$('#sidebar').hidden)closeSidebar();else if(readerFocused)void leaveReaderFocus();else if(reader())reader().setTool('select');return;}
-  if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='s'){event.preventDefault();if(reader())safely(()=>active().queue.flush())();else safely(savePage)();return;}
+  if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='s'){event.preventDefault();if(reader())safely(()=>{const tab=active();tab.reader.rememberPosition();return tab.queue.flush();})();else safely(savePage)();return;}
   if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='l'){event.preventDefault();$('#address').focus();$('#address').select();return;}
   if(!reader()||isField||$('#dialog').open)return;
   if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='z'){event.preventDefault();event.shiftKey?reader().redo():reader().undo();return;}
@@ -794,8 +803,10 @@ function bindUI() {
   $('#open-example').onclick=safely(async()=>{let html=await bundledExample();if(html===null){const response=await fetch('./example.html');if(!response.ok)throw new Error('예제 문서를 불러오지 못했습니다.');html=await response.text();}await createDocument({html,title:'천천히 읽는다는 것',viewport:{width:960,height:800}},await folderFile('천천히 읽는다는 것'));});
   document.addEventListener('keydown',handleKey);document.addEventListener('pointerdown',event=>{if(!event.target.closest('#toolbar,#tool-popover')&&!$('#tool-popover').hidden)closePopover();});
   $('#dialog').addEventListener('click',event=>{if(event.target===$('#dialog'))$('#dialog').close();});
-  window.addEventListener('beforeunload',event=>{if(tabs.some(t=>t.queue?.pending||t.queue?.error)){event.preventDefault();event.returnValue='';}});
-  document.addEventListener('visibilitychange',()=>{if(document.hidden)for(const tab of tabs)if(tab.reader?.doc){tab.reader.rememberPosition();tab.queue.flush().catch(()=>{});}});
+  window.addEventListener('beforeunload',event=>{if(tabs.some(t=>t.opening||t.queue?.editsPending)){event.preventDefault();event.returnValue='';}});
+  const savePositions=()=>{for(const tab of tabs)if(tab.reader?.doc){tab.reader.rememberPosition();tab.queue.flush().catch(()=>{});}};
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)savePositions();});
+  window.addEventListener('pagehide',savePositions);
   window.addEventListener('online',network);window.addEventListener('offline',network);window.addEventListener('htmlmemo-chrome-ready',()=>{updateConnection();safely(receiveCaptures)();});window.addEventListener('htmlmemo-capture-ready',safely(receiveCaptures));
   window.addEventListener('resize',()=>{closePopover();applyToolbarPosition();});
   window.addEventListener('dragover',event=>{if([...event.dataTransfer.types].includes('Files'))event.preventDefault();});window.addEventListener('drop',safely(async event=>{if(![...(event.dataTransfer.types||[])].includes('Files'))return;event.preventDefault();for(const file of await droppedHTMLFiles(event.dataTransfer))await openLocalFile(file);}));

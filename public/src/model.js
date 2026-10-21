@@ -35,8 +35,15 @@ export class History {
 // A single writer per document. Edits arriving during a disk write are drained
 // before flush resolves; callers never overwrite a newer edit with an old one.
 export class SaveQueue {
-  constructor(write, report = () => {}) { this.write = write; this.report = report; this.revision = 0; this.saved = 0; this.error = null; this.running = null; this.timer = null; }
-  schedule() { this.revision++; this.error = null; this.report(this); clearTimeout(this.timer); this.timer = setTimeout(() => { this.flush().catch(() => {}); }, 300); }
+  constructor(write, report = () => {}) { this.write = write; this.report = report; this.revision = 0; this.editRevision = 0; this.saved = 0; this.error = null; this.running = null; this.timer = null; }
+  schedule({background = false} = {}) {
+    this.revision++;
+    if (!background) { this.editRevision = this.revision; this.error = null; this.report(this); }
+    // Reading position is saved quietly after a pause. It must never delay an edit.
+    if (background && this.editsPending) return;
+    clearTimeout(this.timer);
+    this.timer = setTimeout(() => { this.flush().catch(() => {}); }, background ? 2000 : 300);
+  }
   async flush() {
     clearTimeout(this.timer);
     if (this.running) { await this.running; if (this.saved < this.revision) return this.flush(); return; }
@@ -48,4 +55,5 @@ export class SaveQueue {
     try { await this.running; } finally { this.running = null; }
   }
   get pending() { return this.saved < this.revision; }
+  get editsPending() { return this.saved < this.editRevision; }
 }

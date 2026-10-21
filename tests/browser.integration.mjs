@@ -343,6 +343,72 @@ test('real Chrome: saved date, modified date and title sort in both directions a
   }finally{if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
 });
 
+test('real Chrome: scrolling saves quietly in batches, preserves annotation history and flushes the last position on close',{timeout:60000},async()=>{
+  await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-position-save-'));await cp(join(root,'public'),folder,{recursive:true});
+  const server=createServer(folder);let chrome;
+  try{
+    await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));chrome=await launchChrome();const page=chrome.page;
+    const url=process.env.HTMLMEMO_POSITION_TEST_URL||`http://127.0.0.1:${server.address().port}/`;
+    await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});await page.navigate(url);
+    await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
+    await page.evaluate(`(()=>{const html='<html><head><title>Quiet reading position</title><style>html,body{height:100vh;margin:0;overflow:hidden}main{height:100vh;overflow:auto}section{height:6000px}</style></head><body><main><p id="selection">Reading position changes are separate from annotation edits.</p><section>Long reading content</section></main></body></html>';const transfer=new DataTransfer();transfer.items.add(new File([html],'quiet-reading.html',{type:'text/html'}));const input=document.querySelector('#file-input');input.files=transfer.files;input.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+    await page.waitFor('document.querySelector("#status-left").textContent.includes("주석이 앱에 자동 저장됨")');
+    const frame='document.querySelector(".document-host:not([hidden]) iframe")';
+    const state=()=>page.evaluate(`(async()=>{const {listDocuments,getDocument,listRevisions}=await import('./src/storage.js');const record=await getDocument((await listDocuments())[0].id);return {view:record.metadata.view,modified:record.modified,annotations:record.metadata.annotations.length,html:record.html,revisions:(await listRevisions(record.id)).length};})()`);
+    await page.evaluate(`document.dispatchEvent(new KeyboardEvent('keydown',{key:'s',ctrlKey:true,bubbles:true,cancelable:true}));`);
+    await page.waitFor(`(async()=>{const {listDocuments}=await import('./src/storage.js');const record=(await listDocuments())[0];return Math.abs(record.metadata.view.zoom-parseFloat(${frame}.style.transform.slice(6)))<.00001;})()`);
+    const baseline=await state();
+    await page.evaluate(`(()=>{
+      window.positionWrites=[];window.saveLabels=[];window.failPositionSave=false;
+      const original=IDBObjectStore.prototype.put;IDBObjectStore.prototype.put=function(value,...args){
+        const viewOnly=this.name==='documents'&&this.transaction.objectStoreNames.length===1;
+        if(viewOnly&&window.failPositionSave)throw new DOMException('Position storage full','QuotaExceededError');
+        if(this.name==='documents')window.positionWrites.push({viewOnly,top:value.metadata.view.scrollTop});
+        return original.call(this,value,...args);
+      };
+      new MutationObserver(()=>window.saveLabels.push(document.querySelector('#status-left').textContent)).observe(document.querySelector('#status-left'),{subtree:true,childList:true,characterData:true});
+    })()`);
+    await page.evaluate(`(async()=>{const main=${frame}.contentDocument.querySelector('main');for(const top of [100,200,300,400,500]){main.scrollTop=top;await new Promise(resolve=>setTimeout(resolve,400));}})()`);
+    assert.deepEqual(await page.evaluate('window.positionWrites'),[]);
+    assert.equal(await page.evaluate('document.querySelector("#status-left").textContent.includes("저장 중")'),false);
+    assert.equal(await page.evaluate('!!document.querySelector(".tab-dirty:not([hidden])")'),false);
+    assert.equal(await page.evaluate(`(()=>{const event=new Event('beforeunload',{cancelable:true});window.dispatchEvent(event);return event.defaultPrevented;})()`),false);
+    await page.waitFor('window.positionWrites.length===1');
+    const scrolled=await state();assert.ok(Math.abs(scrolled.view.scrollTop-500*scrolled.view.zoom)<1);
+    assert.equal(scrolled.modified,baseline.modified);assert.equal(scrolled.revisions,baseline.revisions);assert.equal(scrolled.html,baseline.html);
+    assert.equal(await page.evaluate('window.positionWrites[0].viewOnly'),true);
+    assert.equal(await page.evaluate('window.saveLabels.some(label=>label.includes("저장 중"))'),false);
+    // Redundant scroll events must not write or change the saved indicator.
+    await page.evaluate(`(async()=>{${frame}.contentDocument.querySelector('main').dispatchEvent(new Event('scroll',{bubbles:true}));await new Promise(resolve=>setTimeout(resolve,2600));})()`);
+    assert.equal(await page.evaluate('window.positionWrites.length'),1);
+    // A quiet save still exposes real failures and can be retried without editing annotations.
+    await page.evaluate(`window.failPositionSave=true;${frame}.contentDocument.querySelector('main').scrollTop=700;`);
+    await page.waitFor('document.querySelector("#status-left").textContent.includes("읽기 위치 저장 실패")');
+    await page.evaluate('window.failPositionSave=false');await page.click('#retry-save');
+    await page.waitFor('!document.querySelector("#retry-save")');assert.equal((await state()).revisions,baseline.revisions);
+    // Annotation saves retain their short delay even when a position save is pending.
+    await page.evaluate(`(()=>{const doc=${frame}.contentDocument,range=doc.createRange();range.setStart(doc.querySelector('#selection').firstChild,0);range.setEnd(doc.querySelector('#selection').firstChild,7);doc.getSelection().removeAllRanges();doc.getSelection().addRange(range);doc.dispatchEvent(new Event('selectionchange'));})()`);
+    await page.click('[data-action="highlight"]');
+    assert.equal(await page.evaluate(`(()=>{const event=new Event('beforeunload',{cancelable:true});window.dispatchEvent(event);return event.defaultPrevented;})()`),true);
+    await page.evaluate(`${frame}.contentDocument.querySelector('main').scrollTop=900;`);
+    await page.waitFor(`(async()=>{const {listDocuments}=await import('./src/storage.js');return (await listDocuments())[0].metadata.annotations.length===1&&!document.querySelector('.tab-dirty:not([hidden])');})()`);
+    const edited=await state();assert.equal(edited.revisions,baseline.revisions+1);assert.equal(edited.html,baseline.html);
+    // Closing before the debounce expires captures the current position synchronously.
+    await page.evaluate(`${frame}.contentDocument.querySelector('main').scrollTop=1400;`);
+    await clickAppMenu(page,'.tab.document.active .tab-close');await page.waitFor('document.querySelectorAll(".tab.document").length===0');
+    const closed=await state();assert.ok(Math.abs(closed.view.scrollTop-1400*closed.view.zoom)<1);assert.equal(closed.revisions,edited.revisions);
+    await page.click('[data-open]');await page.waitFor(`${frame}?.contentDocument?.querySelector('main')?.scrollTop>=1399`);
+    // Leaving the app also bypasses the delay. The lifecycle event is simulated;
+    // persistence and the document's actual scrolling are exercised in Chrome.
+    await page.evaluate(`${frame}.contentDocument.querySelector('main').scrollTop=1700;window.dispatchEvent(new PageTransitionEvent('pagehide'));`);
+    await page.waitFor(`(async()=>{const {listDocuments}=await import('./src/storage.js');const record=(await listDocuments())[0];return Math.abs(record.metadata.view.scrollTop-1700*record.metadata.view.zoom)<1;})()`);
+    const final=await state();assert.equal(final.revisions,edited.revisions);assert.equal(final.modified,edited.modified);
+    await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/quiet-position-save-desktop.png'),await page.screenshot());
+    await page.send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await writeFile(join(root,'test-results/quiet-position-save-mobile.png'),await page.screenshot());
+    assert.deepEqual(chrome.errors,[]);
+  }finally{if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
+});
+
 test('real Chrome: folder setup explains subfolders and preserves connections through cancellation and retry',{timeout:45000},async()=>{
   await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-folder-setup-'));await cp(join(root,'public'),folder,{recursive:true});
   const server=createServer(folder);let chrome;

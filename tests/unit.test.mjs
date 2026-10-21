@@ -19,6 +19,28 @@ test('save queue exposes failures, remains pending and retries without data loss
   let failing=true;let writes=0;const queue=new SaveQueue(async()=>{writes++;if(failing)throw new Error('disk full');});queue.schedule();await assert.rejects(queue.flush(),/disk full/);assert.equal(queue.pending,true);assert.match(queue.error.message,/disk full/);failing=false;await queue.flush();assert.equal(queue.pending,false);assert.equal(queue.error,null);assert.equal(writes,2);
 });
 test('concurrent flushes serialize writes',async()=>{let running=0;let max=0;const queue=new SaveQueue(async()=>{running++;max=Math.max(max,running);await new Promise(r=>setTimeout(r,10));running--;});queue.schedule();await Promise.all([queue.flush(),queue.flush(),queue.flush()]);assert.equal(max,1);});
+test('reading position changes debounce quietly and flush immediately when requested',async t=>{
+  t.mock.timers.enable({apis:['setTimeout']});
+  const writes=[],reports=[];const queue=new SaveQueue(async revision=>writes.push(revision),q=>reports.push(q.editsPending));
+  queue.schedule({background:true});t.mock.timers.tick(1500);queue.schedule({background:true});
+  assert.equal(queue.pending,true);assert.equal(queue.editsPending,false);assert.deepEqual(reports,[]);
+  t.mock.timers.tick(1999);assert.deepEqual(writes,[]);
+  t.mock.timers.tick(1);await queue.running;assert.deepEqual(writes,[2]);assert.equal(queue.pending,false);
+  queue.schedule({background:true});await queue.flush();assert.deepEqual(writes,[2,3]);assert.equal(queue.pending,false);
+});
+test('scrolling never postpones an annotation save',async t=>{
+  t.mock.timers.enable({apis:['setTimeout']});const writes=[];
+  const queue=new SaveQueue(async revision=>writes.push(revision));
+  queue.schedule({background:true});t.mock.timers.tick(500);queue.schedule();t.mock.timers.tick(200);queue.schedule({background:true});
+  assert.equal(queue.editsPending,true);t.mock.timers.tick(99);assert.deepEqual(writes,[]);
+  t.mock.timers.tick(1);await queue.running;assert.deepEqual(writes,[3]);assert.equal(queue.editsPending,false);
+});
+test('scrolling preserves a failed annotation save until a successful retry',async()=>{
+  let failing=true;const queue=new SaveQueue(async()=>{if(failing)throw new Error('disk full');});
+  queue.schedule();await assert.rejects(queue.flush(),/disk full/);queue.schedule({background:true});
+  assert.match(queue.error.message,/disk full/);assert.equal(queue.editsPending,true);
+  failing=false;await queue.flush();assert.equal(queue.pending,false);assert.equal(queue.error,null);
+});
 test('annotation validation rejects damaged data instead of silently erasing it',()=>{
   const annotation={id:'x',type:'highlight',color:'#edcf67',width:3,opacity:.35,textAnchor:{start:0,end:5,quote:'hello'}};assert.equal(validateAnnotations([annotation]).length,1);
   for(const data of [[annotation,annotation],[{...annotation,color:'url(evil)'}],[{...annotation,width:NaN}],[{...annotation,textAnchor:{start:-1,end:2,quote:'bad'}}],[{...annotation,type:'script'}],[{...annotation,type:'pen',points:[{x:Infinity,y:1}]}]])assert.throws(()=>validateAnnotations(data));

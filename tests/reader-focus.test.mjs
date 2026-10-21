@@ -105,6 +105,15 @@ test('reader saves whether its zoom follows the available reader width',()=>{
  r.autoFit=false;r.rememberPosition();assert.equal(r.metadata.view.autoFit,false);
 });
 
+test('unchanged reading positions do not schedule another save',()=>{
+ const r=Object.create(Reader.prototype);let changes=0,top=120;
+ r.metadata={view:{}};r.zoom=1;r.autoFit=true;r.callbacks={onPosition:()=>changes++};
+ Object.defineProperties(r,{scrollTop:{get:()=>top},scrollLeft:{get:()=>0}});
+ assert.equal(r.rememberPosition(),true);assert.equal(r.rememberPosition(),false);assert.equal(changes,1);
+ top=150;assert.equal(r.rememberPosition(),true);r.tocResizedWidth=300;assert.equal(r.rememberPosition(),true);
+ assert.equal(r.rememberPosition(),false);assert.equal(changes,3);assert.equal(r.metadata.view.tocWidth,300);
+});
+
 
 test('rapid reentry waits for browser fullscreen exit to settle',async()=>{
  const a=app({native:true,exitDeferred:true});await a.context.toggleReaderFocus();
