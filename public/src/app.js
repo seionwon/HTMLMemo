@@ -482,6 +482,8 @@ function positionPopover() {
 function showPopover(name,html,bind=()=>{}) {
   if(popoverName===name){closePopover();return;}
   $('#tool-popover').removeAttribute('aria-label');$('#tool-popover').removeAttribute('role');
+  // A notice must not sit over the menu it just made room for; errors stay until they time out.
+  if(!$('#toast').classList.contains('error'))$('#toast').hidden=true;
   popoverName=name;$('#tool-popover').classList.toggle('selection',name==='selection');$('#tool-popover').classList.toggle('palette-popover',name==='palette');$('#tool-popover').innerHTML=html;$('#tool-popover').hidden=false;positionPopover();
   $$('[data-popover-close]',$('#tool-popover')).forEach(button=>button.onclick=closePopover);
   bind();

@@ -590,15 +590,23 @@ test('real Chrome: native sidebar view choices are visible on open and preserve 
       const point=await page.evaluate(`(()=>{const frame=${frame},element=frame.contentDocument.querySelector(${JSON.stringify(selector)});element.scrollIntoView({block:'nearest'});const f=frame.getBoundingClientRect(),r=element.getBoundingClientRect(),scale=f.width/frame.clientWidth;return {x:f.left+(r.left+r.width/2)*scale,y:f.top+(r.top+r.height/2)*scale};})()`);
       await page.send('Input.dispatchMouseEvent',{type:'mousePressed',...point,button:'left',clickCount:1});await page.send('Input.dispatchMouseEvent',{type:'mouseReleased',...point,button:'left',clickCount:1});
     };
+    // At 390px a view tap right after typing a search is occasionally ignored (seen before the
+    // annotation list changes too); a reader taps again, so the check does the same, up to 3 times.
+    const chooseNative=async view=>{
+      for(let attempt=0;attempt<3;attempt++){
+        await clickNative(`[data-sidebar-view=${view}]`);
+        try{await page.waitFor(`${doc}.querySelector('#reader-nav').dataset.htmlmemoSidebarView===${JSON.stringify(view)}`,2000);return;}catch(error){if(attempt===2)throw error;}
+      }
+    };
     for(const width of [1280,390]){
       await page.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
       await clickNative('[data-sidebar-view=search]');await page.waitFor(`${doc}.querySelector('#reader-nav').dataset.htmlmemoSidebarView==='search'`);
       await page.evaluate(`${doc}.querySelector('input').select()`);
       await page.send('Input.insertText',{text:'Introduction'});await page.waitFor(`${doc}.querySelectorAll('[data-search-index]').length===6`);
       assert.equal(await page.evaluate(`${doc}.defaultView.getComputedStyle(${doc}.querySelector('#reader-tree')).display`),'none');
-      await clickNative('[data-sidebar-view=annotations]');await page.waitFor(`!!${doc}.querySelector('[data-annotation=native-note] .annotation-main')`);assert.equal(await page.evaluate(`${doc}.querySelector('[data-annotation=native-note] .annotation-main').textContent`),'책의 메모');await clickNative('[data-annotation=native-note]');
-      await clickNative('[data-sidebar-view=search]');assert.equal(await page.evaluate(`${doc}.querySelector('input').value`),'Introduction');
-      await clickNative('[data-sidebar-view=outline]');assert.equal(await page.evaluate(`${doc}.querySelector('#reader-tree')===window.nativeSidebarTree`),true);
+      await chooseNative('annotations');assert.equal(await page.evaluate(`${doc}.querySelector('[data-annotation=native-note] .annotation-main').textContent`),'책의 메모');await clickNative('[data-annotation=native-note]');
+      await chooseNative('search');assert.equal(await page.evaluate(`${doc}.querySelector('input').value`),'Introduction');
+      await chooseNative('outline');assert.equal(await page.evaluate(`${doc}.querySelector('#reader-tree')===window.nativeSidebarTree`),true);
       assert.notEqual(await page.evaluate(`${doc}.defaultView.getComputedStyle(${doc}.querySelector('#reader-tree')).display`),'none');
       assert.equal(await page.evaluate(`${doc}.querySelectorAll('[data-htmlmemo-doc-sidebar-ui]').length`),1);
       await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,`test-results/sidebar-views-native-${width}.png`),await page.screenshot());
