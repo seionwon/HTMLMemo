@@ -741,7 +741,8 @@ test('real Chrome: annotations move to a new edition of a book, and annotations 
     await page.waitFor(`${frame}?.contentDocument?.querySelectorAll('[data-htmlmemo-mark]').length >= 2 && !document.querySelector('#toolbar').hidden && document.querySelector("#status-left").textContent.includes("자동 저장됨")`,20000);
     await page.evaluate('window.pick("edition-2.html")');
     await page.click('[data-action=more]');await page.click('[data-more=migrate]');
-    await page.waitFor('!!document.querySelector("#dialog[open] .migrate-summary")',30000);
+    try{await page.waitFor('!!document.querySelector("#dialog[open] .migrate-summary")',30000);}
+    catch(error){throw new Error(error.message+' — '+JSON.stringify(await page.evaluate('({toast:document.querySelector("#toast").textContent,dialog:document.querySelector("#dialog").open&&document.querySelector("#dialog").innerText,popover:!document.querySelector("#tool-popover").hidden})'))+' '+chrome.errors.join(' | '));}
     const summary=await page.evaluate('document.querySelector("#dialog").innerText');
     assert.match(summary,/주석 4개 가운데 3개/);assert.match(summary,/그대로 있는 자리: 1개/);assert.match(summary,/고쳐졌거나 옮겨진 자리: 2개/);assert.match(summary,/지워진 내용: 1개/);
     await page.evaluate('document.querySelector("#dialog details").open=true');
