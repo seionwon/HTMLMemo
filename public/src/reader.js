@@ -1657,6 +1657,36 @@ export class Reader {
     const element = this.doc.querySelector(`[data-htmlmemo-id="${id}"]`); if (element) this.jump(element);
     this.selectedId=id; this.callbacks.onView?.();
   }
+  // The annotation list shows more than the tool name: the text an annotation marks or was drawn on,
+  // and the heading it sits under. Headings are in document order, so the last one at or before the
+  // annotation is found by binary search. A drawing on empty space falls back to its drawn position.
+  annotationContexts() {
+    const headings = this.outline().map(item=>item.node), result = new Map();
+    const headingBefore = node => {
+      let lo = 0, hi = headings.length - 1, found = -1;
+      while (lo <= hi) {
+        const mid = (lo + hi) >> 1, h = headings[mid];
+        if (h === node || h.contains(node) || (h.compareDocumentPosition(node) & 4)) { found = mid; lo = mid + 1; } else hi = mid - 1;
+      }
+      return found;
+    };
+    let tops = null;
+    const headingAbove = element => {
+      const top = element.getBoundingClientRect?.().top;
+      if (!Number.isFinite(top)) return -1;
+      tops ||= headings.map(h=>{const r=h.getBoundingClientRect();return r.width||r.height?r.top:NaN;});
+      let found = -1; tops.forEach((value,index)=>{if(value <= top + 1)found = index;}); return found;
+    };
+    for (const annotation of this.metadata.annotations) {
+      const node = annotation.textAnchor ? this.doc.querySelector(`[data-htmlmemo-mark][data-htmlmemo-id="${annotation.id}"]`)
+        : this.resolveDrawingTarget(annotation);
+      let index = node?.isConnected && node !== this.doc.body ? headingBefore(node) : -1;
+      if (index < 0 && !annotation.textAnchor) { const drawn = this.doc.querySelector(`[data-htmlmemo-id="${annotation.id}"]`); if (drawn) index = headingAbove(drawn); }
+      result.set(annotation.id, {quote:annotation.textAnchor?.quote || annotation.anchorTarget?.quote || (node?.isConnected ? this.drawingTargetQuote(node) : ''),
+        heading:index >= 0 ? headings[index].textContent.replace(/\s+/g, ' ').trim() : ''});
+    }
+    return result;
+  }
   search(query, move = true) {
     this.searchQuery = query;
     for (const mark of [...this.doc.querySelectorAll('[data-htmlmemo-search]')].reverse()) mark.replaceWith(...mark.childNodes);

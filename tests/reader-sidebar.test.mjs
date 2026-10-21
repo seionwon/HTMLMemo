@@ -57,6 +57,23 @@ test('sidebar cancels pending searches on view changes, close and document switc
   a.setReader({});a.flush();assert.equal(a.calls.search.includes('이전 문서'),false);
 });
 
+test('annotation list names what each annotation marks, the heading above it and when it was made',()=>{
+  installDOM();const a=sidebar();
+  const doc=documentFor('<html><head></head><body><main><h1>첫 장</h1><p>머리말입니다.</p><h2>설치하기</h2><p data-htmlmemo-anchor="n7">에이전트를 설치하는 문단입니다.</p><p>강조할 <mark data-htmlmemo-mark data-htmlmemo-id="h1">핵심 문장</mark>이 있습니다.</p></main></body></html>');
+  Object.setPrototypeOf(a.r,Reader.prototype);delete a.r.outline;a.r.doc=doc;
+  const created=new Date(2026,9,21,23,40).getTime();
+  a.r.metadata.annotations=[{id:'p1',type:'pen',color:'#334155',anchor:'n7',anchorTarget:null,points:[{x:0,y:0}],created},
+    {id:'h1',type:'highlight',color:'#edcf67',textAnchor:{quote:'핵심 문장',start:0,end:5},created},
+    {id:'n1',type:'note',color:'#334155',text:'다시 읽기',textAnchor:{quote:'핵심 문장',start:0,end:5}}];
+  a.open('annotations');
+  const rows=[...a.doc.querySelectorAll('[data-annotation]')].map(row=>[...row.querySelectorAll('.annotation-text>span')].map(span=>span.textContent));
+  const stamp=new Date(created).toLocaleString('ko-KR',{month:'long',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false});
+  assert.deepEqual(rows,[
+    ['에이전트를 설치하는 문단입니다.',`펜 그림 · 설치하기 · ${stamp}`],
+    ['핵심 문장',`형광펜 · 설치하기 · ${stamp}`],
+    ['다시 읽기','“핵심 문장”','메모']]);
+});
+
 test('the visible source TOC gets inline choices without moving its tree, listeners or text anchors',()=>{
   installDOM();const a=sidebar();
   const doc=documentFor('<html><head></head><body><nav id="reader-nav"><h2>목차</h2><details open><summary>첫 권</summary><a href="#chapter">본문으로</a></details></nav><main><h1 id="chapter">첫 장</h1><p>원래 본문입니다.</p></main></body></html>');
@@ -69,7 +86,7 @@ test('the visible source TOC gets inline choices without moving its tree, listen
   a.r.applyTocWidth=width=>{expanded=width;a.r.tocStrip=false;};a.r.syncAfterTocResize=()=>synced++;
   panel.querySelector('[data-sidebar-view=search]').onclick();assert.equal(expanded,260);assert.equal(synced,1);assert.equal(toc.scrollTop,0);
   assert.equal(toc.getAttribute('data-htmlmemo-sidebar-view'),'search');const input=panel.querySelector('input');input.value='원래';input.oninput();a.flush();
-  panel.querySelector('[data-sidebar-view=annotations]').onclick();assert.equal(panel.querySelector('[data-annotation]').textContent,'남겨 둔 메모');
+  panel.querySelector('[data-sidebar-view=annotations]').onclick();assert.equal(panel.querySelector('[data-annotation] .annotation-main').textContent,'남겨 둔 메모');assert.equal(panel.querySelector('[data-annotation] .annotation-meta').textContent,'메모');
   panel.querySelector('[data-sidebar-view=outline]').onclick();assert.equal(toc.scrollTop,37);assert.equal(panel.querySelector('.sidebar-content').hidden,true);
   assert.strictEqual(toc.querySelector('details'),tree);tree.querySelector('summary').onclick();assert.equal(clicks,1);assert.equal(tree.hasAttribute('open'),true);
   assert.equal(textIndex(doc).text,text);a.r.setupDocumentSidebar();assert.equal(toc.querySelectorAll('[data-htmlmemo-doc-sidebar-ui]').length,1);

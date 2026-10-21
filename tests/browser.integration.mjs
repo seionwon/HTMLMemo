@@ -595,7 +595,7 @@ test('real Chrome: native sidebar view choices are visible on open and preserve 
       await page.evaluate(`${doc}.querySelector('input').select()`);
       await page.send('Input.insertText',{text:'Introduction'});await page.waitFor(`${doc}.querySelectorAll('[data-search-index]').length===6`);
       assert.equal(await page.evaluate(`${doc}.defaultView.getComputedStyle(${doc}.querySelector('#reader-tree')).display`),'none');
-      await clickNative('[data-sidebar-view=annotations]');assert.equal(await page.evaluate(`${doc}.querySelector('[data-annotation=native-note]').textContent`),'책의 메모');await clickNative('[data-annotation=native-note]');
+      await clickNative('[data-sidebar-view=annotations]');assert.equal(await page.evaluate(`${doc}.querySelector('[data-annotation=native-note] .annotation-main').textContent`),'책의 메모');await clickNative('[data-annotation=native-note]');
       await clickNative('[data-sidebar-view=search]');assert.equal(await page.evaluate(`${doc}.querySelector('input').value`),'Introduction');
       await clickNative('[data-sidebar-view=outline]');assert.equal(await page.evaluate(`${doc}.querySelector('#reader-tree')===window.nativeSidebarTree`),true);
       assert.notEqual(await page.evaluate(`${doc}.defaultView.getComputedStyle(${doc}.querySelector('#reader-tree')).display`),'none');
@@ -637,7 +637,7 @@ test('real Chrome: sidebar view choices preserve search drafts, navigate saved n
       await page.click('[data-sidebar-view=search]');
       await page.evaluate(`(()=>{const input=document.querySelector('#document-search');input.value='검색어';input.dispatchEvent(new Event('input'));})()`);
       await page.waitFor('document.querySelectorAll("[data-search-index]").length===2');await page.click('[data-search-index="1"]');
-      await page.click('[data-sidebar-view=annotations]');assert.equal(await page.evaluate('document.querySelector("[data-annotation=sidebar-note]").textContent'),'보관한 메모');await page.click('[data-annotation=sidebar-note]');
+      await page.click('[data-sidebar-view=annotations]');assert.equal(await page.evaluate('document.querySelector("[data-annotation=sidebar-note] .annotation-main").textContent'),'보관한 메모');await page.click('[data-annotation=sidebar-note]');
       await page.click('[data-sidebar-view=search]');assert.equal(await page.evaluate('document.querySelector("#document-search").value'),'검색어');
       await page.evaluate(`(()=>{const input=document.querySelector('#document-search');input.value='빠른 전환';input.dispatchEvent(new Event('input'));document.querySelector('[data-sidebar-view=outline]').click();})()`);
       await page.evaluate('new Promise(resolve=>setTimeout(resolve,160))');

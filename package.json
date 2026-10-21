@@ -1,6 +1,6 @@
 {
   "name": "htmlmemo",
-  "version": "1.2.11",
+  "version": "1.2.12",
   "private": true,
   "type": "module",
   "description": "웹 페이지를 한 파일로 보관하고 주석을 자동 저장하는 PWA",
