@@ -683,7 +683,7 @@ function toolAction(action) {
   if(action==='connect')return safely(()=>exportDocument(active()))();
   if(action==='history')return safely(()=>annotationHistory(active()))();
   if(action==='info')return documentInfo(active());
-  if(action==='bookmark')return safely(async()=>{const title=await promptText('text','읽던 위치');if(title){r.addBookmark(title);toast('북마크를 저장했습니다.');}})();
+  if(action==='bookmark')return safely(async()=>{const title=await promptText('text','읽던 위치');if(title){r.addBookmark(title);if(reader()===r&&sidebarMode==='outline')renderSidebar('outline');toast('북마크를 저장했습니다.');}})();
   if(action==='clear')return safely(async()=>{if(await confirmDialog('주석을 모두 지울까요?',`${r.metadata.annotations.length}개의 주석을 지웁니다. 실행 취소로 복원할 수 있어요.`,'모두 지우기'))r.commit([]);})();
 }
 function bindToolbarDrag() {
@@ -694,18 +694,25 @@ function bindToolbarDrag() {
     const end=()=>{grip.removeEventListener('pointermove',move);grip.removeEventListener('pointerup',end);grip.removeEventListener('pointercancel',end);const rect=bar.getBoundingClientRect();safely(()=>changePreferences({toolbarPosition:{x:Math.max(0,Math.min(1,(rect.left-8)/Math.max(1,innerWidth-rect.width-16))),y:Math.max(0,Math.min(1,(rect.top-8)/Math.max(1,innerHeight-rect.height-42)))}}))();};grip.addEventListener('pointermove',move);grip.addEventListener('pointerup',end);grip.addEventListener('pointercancel',end);
   };
 }
-function closeSidebar() {sidebarMode='';$('#sidebar').hidden=true;reader()?.search('');}
+function closeSidebar() {clearTimeout(renderSidebar.searchTimer);sidebarMode='';$('#sidebar').hidden=true;const r=reader();if(r){r.sidebarSearchQuery='';r.search('');}}
 function renderSidebar(mode) {
-  const r=reader();if(!r)return;sidebarMode=mode;closePopover();const panel=$('#sidebar');panel.hidden=false;
+  const r=reader();if(!r)return;clearTimeout(renderSidebar.searchTimer);sidebarMode=mode;closePopover();const panel=$('#sidebar');panel.hidden=false;
   const title={search:'문서 검색',outline:'목차 · 북마크',annotations:'주석 목록'}[mode];
-  panel.innerHTML=`<div class="sidebar-heading"><h2>${title}</h2><button class="icon-button" id="close-sidebar" aria-label="패널 닫기">${icon('close')}</button></div><div class="sidebar-content"></div>`;$('#close-sidebar').onclick=closeSidebar;
+  if(!$('.sidebar-views',panel)){
+    const views=[['outline','list','목차·북마크'],['search','search','문서 검색'],['annotations','note','주석 목록']];
+    panel.innerHTML=`<div class="sidebar-heading"><h2 id="sidebar-title"></h2><button class="icon-button" id="close-sidebar" aria-label="패널 닫기">${icon('close')}</button></div><div class="sidebar-views" role="group" aria-label="사이드바 보기">${views.map(([id,name,label])=>`<button type="button" data-sidebar-view="${id}" aria-pressed="false" aria-controls="sidebar-content">${icon(name,14)}<span>${label}</span></button>`).join('')}</div><div id="sidebar-content" class="sidebar-content" role="region" aria-labelledby="sidebar-title"></div>`;
+    $('#close-sidebar').onclick=closeSidebar;
+    $$('[data-sidebar-view]',panel).forEach(button=>button.onclick=()=>renderSidebar(button.dataset.sidebarView));
+  }
+  $('#sidebar-title').textContent=title;panel.setAttribute('aria-labelledby','sidebar-title');
+  $$('[data-sidebar-view]',panel).forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.sidebarView===mode)));
   const content=$('.sidebar-content',panel);
   if(mode==='search'){
     content.innerHTML='<div class="search-field"><input id="document-search" aria-label="문서 검색어" placeholder="문서 안에서 찾기" autocomplete="off"></div><div class="search-navigation"><span id="search-count">검색어를 입력하세요.</span><button id="search-prev" class="icon-button" aria-label="이전 검색 결과">'+icon('back')+'</button><button id="search-next" class="icon-button" aria-label="다음 검색 결과">'+icon('forward')+'</button></div><div id="search-results"></div>';
-    $('#document-search').value=r.searchQuery||'';let searchTimer;
-    const run=()=>{const query=$('#document-search').value;const results=r.search(query);$('#search-count').textContent=results.length?`${results.length}${results.length===3000?'+':''}개 결과`:'검색 결과가 없습니다.';$('#search-results').innerHTML=results.slice(0,150).map((result,index)=>`<button class="search-result" data-search-index="${index}">${esc(result.quote)}</button>`).join('');$$('[data-search-index]').forEach(button=>button.onclick=()=>{r.searchPosition=Number(button.dataset.searchIndex)-1;r.nextSearch(1);});};
-    $('#document-search').oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(run,120);};$('#document-search').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();r.nextSearch(e.shiftKey?-1:1);}};
-    $('#search-prev').onclick=()=>r.nextSearch(-1);$('#search-next').onclick=()=>r.nextSearch(1);$('#document-search').focus();if(r.searchQuery)run();
+    const input=$('#document-search',panel);input.value=r.sidebarSearchQuery??r.searchQuery??'';
+    const run=()=>{if(sidebarMode!=='search'||reader()!==r||!input.isConnected)return;const results=r.search(input.value);$('#search-count',panel).textContent=results.length?`${results.length}${results.length===3000?'+':''}개 결과`:'검색 결과가 없습니다.';$('#search-results',panel).innerHTML=results.slice(0,150).map((result,index)=>`<button class="search-result" data-search-index="${index}">${esc(result.quote)}</button>`).join('');$$('[data-search-index]',panel).forEach(button=>button.onclick=()=>{r.searchPosition=Number(button.dataset.searchIndex)-1;r.nextSearch(1);});};
+    input.oninput=()=>{r.sidebarSearchQuery=input.value;clearTimeout(renderSidebar.searchTimer);renderSidebar.searchTimer=setTimeout(run,120);};input.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();r.nextSearch(e.shiftKey?-1:1);}};
+    $('#search-prev').onclick=()=>r.nextSearch(-1);$('#search-next').onclick=()=>r.nextSearch(1);input.focus();if(input.value)run();
   }else if(mode==='outline'){
     const outline=r.outline();content.innerHTML=`<p class="panel-label">목차</p>${outline.length?outline.map((item,index)=>`<button class="outline-item" style="padding-left:${12+(item.level-1)*12}px" data-heading="${index}">${esc(item.title)}</button>`).join(''):'<p class="panel-empty">이 문서에 제목 목차가 없습니다.</p>'}<p class="panel-label">북마크</p>${r.metadata.bookmarks.map(mark=>`<div class="bookmark-row"><button class="outline-item" data-bookmark="${esc(mark.id)}">${icon('bookmark',14)} ${esc(mark.title)}</button><button class="icon-button" data-delete-bookmark="${esc(mark.id)}" aria-label="북마크 삭제">${icon('close',13)}</button></div>`).join('')}<button id="add-bookmark" class="text-button">+ 현재 위치 저장</button>`;
     $$('[data-heading]').forEach(button=>button.onclick=()=>r.jump(outline[Number(button.dataset.heading)].node));
