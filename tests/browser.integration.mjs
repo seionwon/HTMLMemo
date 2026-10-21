@@ -9,6 +9,7 @@ import { root, prepareAssets } from '../scripts/assets.mjs';
 import { createServer } from '../scripts/server.mjs';
 import { launchChrome, clickAppMenu } from './chrome.mjs';
 import { FORMAT_VERSION } from '../public/src/model.js';
+import { deflateRawSync } from 'node:zlib';
 const appVersion=JSON.parse(await readFile(new URL('../package.json',import.meta.url),'utf8')).version;
 test('real Chrome: standalone book export keeps lazy chapters and released assets; incomplete copies stay recoverable', {timeout:60000}, async () => {
   await prepareAssets();
@@ -595,7 +596,7 @@ test('real Chrome: native sidebar view choices are visible on open and preserve 
       await page.evaluate(`${doc}.querySelector('input').select()`);
       await page.send('Input.insertText',{text:'Introduction'});await page.waitFor(`${doc}.querySelectorAll('[data-search-index]').length===6`);
       assert.equal(await page.evaluate(`${doc}.defaultView.getComputedStyle(${doc}.querySelector('#reader-tree')).display`),'none');
-      await clickNative('[data-sidebar-view=annotations]');assert.equal(await page.evaluate(`${doc}.querySelector('[data-annotation=native-note] .annotation-main').textContent`),'책의 메모');await clickNative('[data-annotation=native-note]');
+      await clickNative('[data-sidebar-view=annotations]');await page.waitFor(`!!${doc}.querySelector('[data-annotation=native-note] .annotation-main')`);assert.equal(await page.evaluate(`${doc}.querySelector('[data-annotation=native-note] .annotation-main').textContent`),'책의 메모');await clickNative('[data-annotation=native-note]');
       await clickNative('[data-sidebar-view=search]');assert.equal(await page.evaluate(`${doc}.querySelector('input').value`),'Introduction');
       await clickNative('[data-sidebar-view=outline]');assert.equal(await page.evaluate(`${doc}.querySelector('#reader-tree')===window.nativeSidebarTree`),true);
       assert.notEqual(await page.evaluate(`${doc}.defaultView.getComputedStyle(${doc}.querySelector('#reader-tree')).display`),'none');
@@ -685,6 +686,81 @@ test('real Chrome: folder setup explains subfolders and preserves connections th
     assert.equal(await page.evaluate(`(async()=>{const {getSetting}=await import('./src/storage.js');return (await getSetting('folder')).name;})()`),'HTMLMemo');
     await page.evaluate(`window.showDirectoryPicker=async()=> (await navigator.storage.getDirectory()).getDirectoryHandle('New HTMLMemo',{create:true});`);await page.click('#select-storage-folder');await page.waitFor('document.querySelector("#dialog[open] h2")?.textContent==="HTMLMemo 설정"');
     assert.equal(await page.evaluate(`(async()=>{const {getSetting}=await import('./src/storage.js');return (await getSetting('folder')).name;})()`),'New HTMLMemo');
+    assert.deepEqual(chrome.errors,[]);
+  }finally{if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
+});
+
+// Two editions of a packed book (memosuite-book-html-v1) with a minimal runtime: one section per hash.
+function editionHTML(title, sections, annotations = null) {
+  const crcTable = Array.from({length:256},(_,i)=>{for(let b=0;b<8;b++)i=i&1?0xedb88320^(i>>>1):i>>>1;return i>>>0;});
+  const crc = bytes => {let c=0xffffffff;for(const b of bytes)c=crcTable[(c^b)&255]^(c>>>8);return (c^0xffffffff)>>>0;};
+  const data = Buffer.from(JSON.stringify(sections.map(s => s.markdown))), packed = deflateRawSync(data), name = Buffer.from('sections.json');
+  const local = Buffer.alloc(30), central = Buffer.alloc(46), end = Buffer.alloc(22);
+  local.writeUInt32LE(0x04034b50,0);local.writeUInt16LE(8,8);local.writeUInt32LE(crc(data),14);local.writeUInt32LE(packed.length,18);local.writeUInt32LE(data.length,22);local.writeUInt16LE(name.length,26);
+  central.writeUInt32LE(0x02014b50,0);central.writeUInt16LE(8,10);central.writeUInt32LE(crc(data),16);central.writeUInt32LE(packed.length,20);central.writeUInt32LE(data.length,24);central.writeUInt16LE(name.length,28);
+  end.writeUInt32LE(0x06054b50,0);end.writeUInt16LE(1,8);end.writeUInt16LE(1,10);end.writeUInt32LE(46+name.length,12);end.writeUInt32LE(30+name.length+packed.length,16);
+  const payload = Buffer.concat([local,name,packed,central,name,end]).toString('base64');
+  const manifest = {format:'memosuite-book-html-v1',title,volumes:[{book:'guide',label:title,sections:sections.map(({key,id,title:t},index)=>({key,id,title:t,volume:0,index}))}]};
+  const bodies = Object.fromEntries(sections.map(s => [s.key, s.html]));
+  const metadata = annotations && {version:FORMAT_VERSION,title,viewport:{width:1100,height:800},view:{zoom:1,autoFit:false,scrollTop:0,scrollLeft:0},annotations};
+  const runtime = 'const m=JSON.parse(document.getElementById("book-manifest").textContent),bodies=JSON.parse(document.getElementById("test-bodies").textContent),keys=m.volumes.flatMap(v=>v.sections.map(s=>s.key)),content=document.getElementById("reader-content");'
+    + 'function show(){const wanted=decodeURIComponent(location.hash.slice(1)),key=keys.includes(wanted)?wanted:keys[0];content.innerHTML=bodies[key];content.dataset.section=key;document.documentElement.dataset.readerReady="true";}addEventListener("hashchange",show);show();';
+  return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>${title}</title>${metadata ? `<script id="htmlmemo-data" type="application/json">${JSON.stringify(metadata)}</script>` : ''}<style>p{margin:16px 0;line-height:1.7}</style></head><body>`
+    + `<nav id="reader-nav"><div id="reader-tree">${sections.map(s => `<a href="#${encodeURIComponent(s.key)}">${s.title}</a>`).join(' ')}</div></nav><main id="reader-main"><div id="reader-section-label"></div><div id="reader-status"></div><article id="reader-content"></article></main>`
+    + `<script id="book-manifest" type="application/json">${JSON.stringify(manifest)}</script><script type="application/octet-stream" id="book-volume-0">${payload}</script>`
+    + `<script id="test-bodies" type="application/json">${JSON.stringify(bodies)}</script><script>${runtime}</script></body></html>`;
+}
+
+test('real Chrome: annotations move to a new edition of a book, and annotations on deleted text are dropped',{timeout:90000},async()=>{
+  await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-edition-'));await cp(join(root,'public'),folder,{recursive:true});
+  const server=createServer(folder);let chrome;
+  const install='에이전트를 설치하고 터미널에서 처음 실행해 봅니다.',removed='이 문단은 다음 판에서 통째로 지워집니다.',result='명령을 실행한 뒤에는 결과를 꼭 확인합니다.';
+  const oldEdition=editionHTML('편집되는 책',[
+    {key:'v0:setup',id:'setup',title:'설치',markdown:`# 설치\n${install}\n\n${removed}`,html:`<h1>설치</h1><p>${install}</p><p>${removed}</p>`},
+    {key:'v0:run',id:'run',title:'실행',markdown:`# 실행\n${result}`,html:`<h1>실행</h1><p>${result}</p>`}],[
+    {id:'install-mark',type:'highlight',color:'#edcf67',width:3,opacity:.35,created:Date.now(),textAnchor:{start:0,end:install.length,quote:install,prefix:'',suffix:'',section:'v0:setup'}},
+    {id:'removed-mark',type:'underline',color:'#334155',width:3,opacity:1,created:Date.now(),textAnchor:{start:0,end:removed.length,quote:removed,prefix:'',suffix:'',section:'v0:setup'}},
+    {id:'install-pen',type:'pen',color:'#d94f4f',width:3,opacity:1,created:Date.now(),anchor:'body',anchorTarget:{tag:'p',id:'',rootId:'reader-content',path:[1],quote:install,section:'v0:setup'},points:[{x:.05,y:.2},{x:.6,y:.8}]},
+    {id:'result-mark',type:'highlight',color:'#9fd3a8',width:3,opacity:.35,created:Date.now(),textAnchor:{start:0,end:result.length,quote:result,prefix:'',suffix:'',section:'v0:run'}}]);
+  // New edition: a new first section, the install sentence reworded, the doomed paragraph removed,
+  // and the run section replaced by a 「check」 section that carries the result sentence.
+  const install2='에이전트를 먼저 설치하고 터미널에서 처음 실행해 봅니다.';
+  const newEdition=editionHTML('편집되는 책',[
+    {key:'v0:intro',id:'intro',title:'들어가며',markdown:'# 들어가며\n새로 쓴 장입니다.',html:'<h1>들어가며</h1><p>새로 쓴 장입니다.</p>'},
+    {key:'v0:setup',id:'setup',title:'설치',markdown:`# 설치\n${install2}`,html:`<h1>설치</h1><p>${install2}</p>`},
+    {key:'v0:check',id:'check',title:'확인',markdown:`# 확인\n${result}`,html:`<h1>확인</h1><p>${result}</p>`}]);
+  try{
+    await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});
+    chrome=await launchChrome();const page=chrome.page;
+    await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
+    await page.navigate('http://127.0.0.1:'+server.address().port+'/');await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
+    await page.evaluate(`(async()=>{const root=await navigator.storage.getDirectory();for(const [name,html] of Object.entries(${JSON.stringify({'edition-1.html':oldEdition,'edition-2.html':newEdition})})){const handle=await root.getFileHandle(name,{create:true});const writer=await handle.createWritable();await writer.write(html);await writer.close();}
+      window.pick=name=>{window.showOpenFilePicker=async()=>[await root.getFileHandle(name)];};})()`);
+    const frame='document.querySelector(".document-host:not([hidden]) iframe")';
+    await page.evaluate('window.pick("edition-1.html")');await page.click('#import-button');
+    await page.waitFor(`${frame}?.contentDocument?.querySelectorAll('[data-htmlmemo-mark]').length >= 2 && !document.querySelector('#toolbar').hidden && document.querySelector("#status-left").textContent.includes("자동 저장됨")`,20000);
+    await page.evaluate('window.pick("edition-2.html")');
+    await page.click('[data-action=more]');await page.click('[data-more=migrate]');
+    await page.waitFor('!!document.querySelector("#dialog[open] .migrate-summary")',30000);
+    const summary=await page.evaluate('document.querySelector("#dialog").innerText');
+    assert.match(summary,/주석 4개 가운데 3개/);assert.match(summary,/그대로 있는 자리: 1개/);assert.match(summary,/고쳐졌거나 옮겨진 자리: 2개/);assert.match(summary,/지워진 내용: 1개/);
+    await page.evaluate('document.querySelector("#dialog details").open=true');
+    assert.match(await page.evaluate('document.querySelector("#dialog details").innerText'),/밑줄 이 문단은 다음 판에서 통째로 지워집니다\. — 설치/);
+    await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/migrate-report.png'),await page.screenshot());
+    await page.click('#dialog button[value=confirm]');
+    await page.waitFor(`document.querySelectorAll(".tab.document").length===2 && ${frame}?.contentDocument?.querySelector('#reader-content')?.dataset.section==='v0:intro' && document.querySelector("#status-left").textContent.includes("자동 저장됨")`,30000);
+    const records=await page.evaluate(`(async()=>{const {listDocuments,getDocument}=await import('./src/storage.js');const list=await listDocuments();return Promise.all(list.map(async r=>({id:r.id,annotations:(await getDocument(r.id)).metadata.annotations})));})()`);
+    assert.equal(records.length,2,'the old edition stays in the library');
+    const moved=records.find(r=>r.annotations.some(a=>a.textAnchor?.section==='v0:check')).annotations;
+    assert.deepEqual(moved.map(a=>a.id).sort(),['install-mark','install-pen','result-mark']);
+    assert.equal(moved.find(a=>a.id==='install-mark').textAnchor.quote,install2);
+    assert.equal(records.find(r=>r!==records.find(x=>x.annotations===moved)).annotations.length,4,'the old document keeps every annotation');
+    // The new edition shows each annotation in its own section.
+    await page.evaluate(`${frame}.contentWindow.location.hash='#'+encodeURIComponent('v0:setup')`);
+    await page.waitFor(`${frame}.contentDocument.querySelector('[data-htmlmemo-mark]')?.textContent===${JSON.stringify(install2)} && !!${frame}.contentDocument.querySelector('#htmlmemo-annotation-layer [data-htmlmemo-id="install-pen"]')`,15000);
+    await page.evaluate(`${frame}.contentWindow.location.hash='#'+encodeURIComponent('v0:check')`);
+    await page.waitFor(`${frame}.contentDocument.querySelector('[data-htmlmemo-mark]')?.textContent===${JSON.stringify(result)} && !${frame}.contentDocument.querySelector('#htmlmemo-annotation-layer [data-htmlmemo-id="install-pen"]')`,15000);
+    await writeFile(join(root,'test-results/migrate-new-edition.png'),await page.screenshot());
     assert.deepEqual(chrome.errors,[]);
   }finally{if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
 });

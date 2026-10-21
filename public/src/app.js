@@ -1,6 +1,7 @@
 import { $, $$, icon, escapeHTML as esc, uid, filename, normalizeURL, displayHost, formatDate, formatBytes, download } from './utils.js';
 import { parseHTML, SCRIPT_CSP, serializeBookSource } from './document.js';
-import { SaveQueue } from './model.js';
+import { SaveQueue, ANNOTATION_LABELS } from './model.js';
+import { openEditionProbe, migrateAnnotations } from './migrate.js';
 import { Reader } from './reader.js';
 import { listDocuments, getDocument, deleteDocument, getSetting, setSetting, saveDocumentHTML, listRevisionSummaries, getRevision, putDocumentRevision, putDocumentView, writeExternalHTML } from './storage.js';
 import { bridge, bridgeAvailable, discoverBridge } from './bridge.js';
@@ -674,7 +675,7 @@ function toolAction(action) {
     $('#zoom-out').onclick=()=>r.setZoom(r.zoom/1.2);$('#zoom-in').onclick=()=>r.setZoom(r.zoom*1.2);$('#zoom-value').onchange=e=>r.setZoom(Number(e.target.value)/100);$('#zoom-fit').onclick=()=>{r.setZoom(1,true);closePopover();};$('#zoom-reset').onclick=()=>{r.setZoom(1);closePopover();};
   });return;}
   if(action==='more') {
-    const items=[['search','search','문서 검색'],['outline','list','목차 · 북마크'],['annotations','note','주석 목록'],['rect','rect','사각형'],['ellipse','ellipse','타원'],['arrow','arrow','화살표'],['area','area','영역 형광펜'],['area-underline','underline','영역 밑줄'],['strike','strike','취소선'],['text','text','텍스트'],['undo','undo','실행 취소'],['redo','redo','다시 실행'],['bookmark','bookmark','현재 위치 북마크'],['history','undo','주석 저장 이력'],['connect','save','HTML 내보내기'],['info','file','문서 정보'],['clear','trash','주석 모두 지우기']];
+    const items=[['search','search','문서 검색'],['outline','list','목차 · 북마크'],['annotations','note','주석 목록'],['rect','rect','사각형'],['ellipse','ellipse','타원'],['arrow','arrow','화살표'],['area','area','영역 형광펜'],['area-underline','underline','영역 밑줄'],['strike','strike','취소선'],['text','text','텍스트'],['undo','undo','실행 취소'],['redo','redo','다시 실행'],['bookmark','bookmark','현재 위치 북마크'],['history','undo','주석 저장 이력'],['migrate','file','새 판으로 주석 옮기기'],['connect','save','HTML 내보내기'],['info','file','문서 정보'],['clear','trash','주석 모두 지우기']];
     showPopover('more',`<div class="popover-heading"><h3>문서 도구</h3><button class="icon-button popover-close" data-popover-close aria-label="문서 도구 닫기" title="닫기">${icon('close',16)}</button></div><div class="more-grid">${items.map(([id,name,label])=>`<button class="menu-button" data-more="${id}">${icon(name,16)}<span>${label}</span></button>`).join('')}</div>`,()=>{
       $('[data-popover-close]',$('#tool-popover')).onclick=closePopover;
       $$('[data-more]',$('#tool-popover')).forEach(button=>button.onclick=safely(()=>{const id=button.dataset.more;closePopover();return toolAction(id);}));
@@ -683,6 +684,7 @@ function toolAction(action) {
   if(['search','outline','annotations'].includes(action)){closePopover();if(action!=='outline'&&r.documentSidebarUI)r.showDocumentSidebarView(action);else renderSidebar(action);return;}
   if(action==='connect')return safely(()=>exportDocument(active()))();
   if(action==='history')return safely(()=>annotationHistory(active()))();
+  if(action==='migrate')return safely(()=>migrateEdition(active()))();
   if(action==='info')return documentInfo(active());
   if(action==='bookmark')return safely(async()=>{const title=await promptText('text','읽던 위치');if(title){r.addBookmark(title);if(reader()===r&&sidebarMode==='outline')renderSidebar('outline');toast('북마크를 저장했습니다.');}})();
   if(action==='clear')return safely(async()=>{if(await confirmDialog('주석을 모두 지울까요?',`${r.metadata.annotations.length}개의 주석을 지웁니다. 실행 취소로 복원할 수 있어요.`,'모두 지우기'))r.commit([]);})();
@@ -734,11 +736,10 @@ function renderSidebar(mode,{panel=$('#sidebar'),embedded=false,documentReader=r
     $$('[data-delete-bookmark]',panel).forEach(button=>button.onclick=()=>{r.metadata.bookmarks=r.metadata.bookmarks.filter(m=>m.id!==button.dataset.deleteBookmark);active().queue.schedule();renderSidebar('outline');});q('add-bookmark').onclick=()=>toolAction('bookmark');
   }else{
     const contexts=r.annotationContexts?.()||new Map();
-    const kinds={pen:'펜 그림',highlight:'형광펜',underline:'밑줄',strike:'취소선',note:'메모',text:'텍스트',rect:'사각형',ellipse:'타원',arrow:'화살표',area:'영역 강조','area-underline':'영역 밑줄'};
     const when=value=>Number.isFinite(value)?new Date(value).toLocaleString('ko-KR',{month:'long',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false}):'';
     // Type alone ("펜 그림") says nothing about where an annotation is. Show the text it marks or was
     // drawn on, then the kind · the heading above it · when it was made.
-    content.innerHTML=r.metadata.annotations.length?r.metadata.annotations.map(a=>{const c=contexts.get(a.id)||{quote:a.textAnchor?.quote||a.anchorTarget?.quote||'',heading:''};const main=a.text||c.quote;const meta=[kinds[a.type]||'주석',c.heading,when(a.created)].filter(Boolean).join(' · ');return `<div class="annotation-row"><button class="annotation-item" data-annotation="${esc(a.id)}" title="${esc([main,meta].filter(Boolean).join('\n'))}"><span class="annotation-type" style="color:${a.color}">${icon(a.type==='pen'?'pen':a.type==='note'?'note':a.type==='highlight'?'highlight':a.type==='underline'?'underline':'shapes',16)}</span><span class="annotation-text">${main?`<span class="annotation-main">${esc(main)}</span>`:''}${a.text&&c.quote?`<span class="annotation-context">“${esc(c.quote)}”</span>`:''}<span class="annotation-meta">${esc(meta)}</span></span></button><button class="icon-button" data-delete-annotation="${esc(a.id)}" aria-label="주석 삭제">${icon('trash',14)}</button></div>`;}).join(''):'<p class="panel-empty">아직 주석이 없어요.<br>툴바에서 도구를 골라 생각을 남겨보세요.</p>';
+    content.innerHTML=r.metadata.annotations.length?r.metadata.annotations.map(a=>{const c=contexts.get(a.id)||{quote:a.textAnchor?.quote||a.anchorTarget?.quote||'',heading:''};const main=a.text||c.quote;const meta=[ANNOTATION_LABELS[a.type]||'주석',c.heading,when(a.created)].filter(Boolean).join(' · ');return `<div class="annotation-row"><button class="annotation-item" data-annotation="${esc(a.id)}" title="${esc([main,meta].filter(Boolean).join('\n'))}"><span class="annotation-type" style="color:${a.color}">${icon(a.type==='pen'?'pen':a.type==='note'?'note':a.type==='highlight'?'highlight':a.type==='underline'?'underline':'shapes',16)}</span><span class="annotation-text">${main?`<span class="annotation-main">${esc(main)}</span>`:''}${a.text&&c.quote?`<span class="annotation-context">“${esc(c.quote)}”</span>`:''}<span class="annotation-meta">${esc(meta)}</span></span></button><button class="icon-button" data-delete-annotation="${esc(a.id)}" aria-label="주석 삭제">${icon('trash',14)}</button></div>`;}).join(''):'<p class="panel-empty">아직 주석이 없어요.<br>툴바에서 도구를 골라 생각을 남겨보세요.</p>';
     $$('[data-annotation]',panel).forEach(button=>button.onclick=()=>r.jumpAnnotation(button.dataset.annotation));$$('[data-delete-annotation]',panel).forEach(button=>button.onclick=()=>r.remove(button.dataset.deleteAnnotation));
   }
 }
@@ -789,10 +790,54 @@ function documentInfo(tab) {
   const m=tab.reader.metadata;
   modal(`<div class="dialog-heading"><h2>문서 정보</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><dl class="document-info"><dt>제목</dt><dd>${esc(m.title)}</dd><dt>파일</dt><dd>${esc(tab.record.name)}</dd><dt>원본</dt><dd>${m.source?`<a href="${esc(m.source)}" target="_blank" rel="noopener noreferrer">${esc(m.source)}</a>`:'로컬 HTML 파일'}</dd><dt>저장 위치</dt><dd>앱 보관함 (원본 파일은 변경하지 않음)</dd><dt>주석</dt><dd>${m.annotations.length}개</dd></dl>${m.warnings.length?`<details class="capture-warnings"><summary>보관하지 못한 리소스 ${m.warnings.length}개</summary><ul>${m.warnings.map(w=>`<li>${esc(w)}</li>`).join('')}</ul></details>`:''}<p class="dialog-description small">본문은 보관한 상태로 유지하고 주석과 북마크를 별도로 자동 저장합니다. HTML 내보내기로 현재 주석을 포함한 사본을 만들 수 있어요.</p>`);
 }
+function pickHTMLFile() {
+  if(openPicker())return window.showOpenFilePicker({types:htmlTypes}).then(([handle])=>handle,error=>{if(['SecurityError','NotSupportedError'].includes(error.name))return inputFile();throw error;});
+  return inputFile();
+  function inputFile(){return new Promise(resolve=>{const input=document.createElement('input');input.type='file';input.accept='.html,.htm,text/html';input.onchange=()=>resolve(input.files[0]||null);input.oncancel=()=>resolve(null);input.click();});}
+}
+// 「새 판으로 주석 옮기기」: the book was edited and exported again. Find every annotation of this
+// document in the new file and open the new file with them. This document stays as it is.
+async function migrateEdition(tab) {
+  if(!tab?.reader)return;
+  await tab.reader.ready;await tab.queue.flush();
+  const annotations=tab.reader.metadata.annotations;
+  if(!annotations.length){toast('옮길 주석이 없습니다.');return;}
+  let input;
+  try{input=await pickHTMLFile();}catch(error){if(error?.name==='AbortError')return;throw error;}
+  if(!input)return;
+  const local=await readLocalHTML(input,{native:true,allowScripts:true});
+  modal(`<div class="dialog-heading"><h2>새 판으로 주석 옮기기</h2></div><p class="dialog-description" id="migrate-status" role="status">새 판을 여는 중…</p>`);
+  const status=()=>$('#migrate-status');
+  let result,probe;
+  try{
+    probe=await openEditionProbe(local.snapshot);
+    result=await migrateAnnotations({annotations,oldDoc:tab.reader.doc,probe,onProgress:(done,total,phase)=>{if(status())status().textContent=`${phase==='search'?'다른 장에서 찾는 중':'새 판에서 자리를 찾는 중'}… ${done}/${total}장`;}});
+  }catch(error){$('#dialog').close();throw error;}
+  finally{probe?.dispose();}
+  const {report}=result,lost=[...report.deleted,...report.unplaceable,...report.unchecked];
+  const where=a=>{const key=a.textAnchor?.section||a.anchorTarget?.section;return key?result.oldSections.get(key)?.title||'':'';};
+  const row=a=>`<li><strong>${esc(ANNOTATION_LABELS[a.type]||'주석')}</strong> ${esc((a.text||a.textAnchor?.quote||a.anchorTarget?.quote||'').slice(0,80))}${where(a)?` <span class="migrate-where">— ${esc(where(a))}</span>`:''}</li>`;
+  modal(`<form method="dialog"><div class="dialog-heading"><h2>새 판으로 주석 옮기기</h2><button type="button" class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div>
+    <p class="dialog-description">주석 ${annotations.length}개 가운데 <strong>${result.annotations.length}개</strong>를 새 판에서 찾았습니다.</p>
+    <ul class="migrate-summary"><li>그대로 있는 자리: ${report.same}개</li><li>문장이 고쳐졌거나 옮겨진 자리: ${report.changed}개</li><li>새 판에서 지워진 내용: ${report.deleted.length}개 — 옮기지 않습니다</li>${report.unplaceable.length?`<li>위치 정보가 없는 예전 메모: ${report.unplaceable.length}개 — 옮기지 않습니다</li>`:''}${report.unchecked.length?`<li>새 판의 장을 열지 못해 확인하지 못한 주석: ${report.unchecked.length}개 — 옮기지 않습니다 (${esc(report.failedSections.slice(0,3).join(' '))})</li>`:''}</ul>
+    ${lost.length?`<details class="migrate-lost"><summary>옮기지 않는 주석 ${lost.length}개 보기</summary><ul>${lost.slice(0,200).map(row).join('')}</ul></details>`:''}
+    <p class="dialog-description small">새 판은 새 문서로 열리고, 지금 문서와 그 주석은 서재에 그대로 남습니다.</p>
+    <div class="dialog-actions"><button class="secondary-button" value="cancel">취소</button><button class="primary-button" value="confirm"${result.annotations.length?'':' disabled'}>새 판 열기</button></div></form>`,dialog=>{
+    const done=safely(async()=>{dialog.removeEventListener('close',done);if(dialog.returnValue!=='confirm')return;
+      const next=await createDocument(local.snapshot,local.handle,local.name,local);await next.reader.ready;
+      const ids=new Set(next.reader.metadata.annotations.map(a=>a.id));
+      next.reader.commit([...next.reader.metadata.annotations,...result.annotations.map(a=>ids.has(a.id)?{...a,id:uid()}:a)]);
+      await next.queue.flush();
+      toast(`새 판에 주석 ${result.annotations.length}개를 옮겼습니다.${lost.length?` 지워진 내용의 주석 ${lost.length}개는 옮기지 않았습니다.`:''}`);
+    });
+    dialog.addEventListener('close',done);
+  });
+}
 function documentMenu(record) {
-  modal(`<div class="dialog-heading"><h2>${esc(record.title)}</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><div class="document-actions"><button class="menu-button" id="menu-open">${icon('file')} 열기</button><button class="menu-button" id="menu-export">${icon('download')} HTML 내보내기</button><button class="menu-button" id="menu-history">${icon('undo')} 주석 저장 이력</button><button class="menu-button danger" id="menu-remove">${icon('trash')} 서재에서 삭제</button></div>`,()=>{
+  modal(`<div class="dialog-heading"><h2>${esc(record.title)}</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><div class="document-actions"><button class="menu-button" id="menu-open">${icon('file')} 열기</button><button class="menu-button" id="menu-export">${icon('download')} HTML 내보내기</button><button class="menu-button" id="menu-history">${icon('undo')} 주석 저장 이력</button><button class="menu-button" id="menu-migrate">${icon('file')} 새 판으로 주석 옮기기</button><button class="menu-button danger" id="menu-remove">${icon('trash')} 서재에서 삭제</button></div>`,()=>{
     $('#menu-open').onclick=safely(async()=>{$('#dialog').close();await openRecord(record);});$('#menu-export').onclick=safely(async()=>{$('#dialog').close();const tab=await openRecord(record);await exportDocument(tab);});
     $('#menu-history').onclick=safely(async()=>{$('#dialog').close();await annotationHistory(await openRecord(record));});
+    $('#menu-migrate').onclick=safely(async()=>{$('#dialog').close();await migrateEdition(await openRecord(record));});
     $('#menu-remove').onclick=safely(async()=>{if(!await confirmDialog('서재에서 삭제할까요?','앱 보관함에서만 삭제합니다. 연결된 외부 HTML 파일은 남습니다.','삭제'))return;const tab=tabs.find(t=>t.record?.id===record.id);if(tab)await closeTab(tab.id);await deleteDocument(record.id);await refreshLibrary();});
   });
 }

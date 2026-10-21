@@ -1,6 +1,7 @@
 export const FORMAT_VERSION = 1;
 export const TEXT_TOOLS = ['highlight', 'underline', 'strike'];
 export const DRAW_TOOLS = ['pen', 'rect', 'ellipse', 'arrow', 'area', 'area-underline'];
+export const ANNOTATION_LABELS = {pen:'펜 그림',highlight:'형광펜',underline:'밑줄',strike:'취소선',note:'메모',text:'텍스트',rect:'사각형',ellipse:'타원',arrow:'화살표',area:'영역 강조','area-underline':'영역 밑줄'};
 export function validateAnnotations(value) {
   if (!Array.isArray(value)) throw new Error('주석 데이터 형식이 올바르지 않습니다.');
   if (value.length > 20000) throw new Error('한 문서의 주석 수가 너무 많습니다.');
@@ -26,6 +27,7 @@ export function validateAnnotations(value) {
           !Array.isArray(target.path) || target.path.length > 64 || target.path.some(index=>!Number.isSafeInteger(index) || index < 0 || index > 1000000)) throw new Error('주석의 본문 기준 위치가 손상되었습니다.');
       }
     }
+    if (!TEXT_TOOLS.includes(item.type) && item.textAnchor != null && (typeof item.textAnchor?.quote !== 'string' || item.textAnchor.quote.length > 200000)) throw new Error('메모의 대상 문장이 손상되었습니다.');
     if (item.text != null && (typeof item.text !== 'string' || item.text.length > 10000)) throw new Error('메모가 너무 길거나 올바르지 않습니다.');
     return structuredClone(item);
   });

@@ -263,6 +263,28 @@ export function selectionAnchor(doc, range) {
   if (start === undefined || end <= start) return null;
   return {start, end, quote: index.text.slice(start, end), prefix: index.text.slice(Math.max(0, start - 40), start), suffix: index.text.slice(end, end + 40)};
 }
+// The section a packed book (memosuite-book-html-v1) is showing, or '' for ordinary pages.
+export const currentSection = doc => doc?.getElementById?.('reader-content')?.dataset?.section || '';
+// Drawings are stored relative to an element. Its text identifies it again after reloads and
+// in later editions of the same book.
+export function drawingTargetQuote(doc, element) {
+  if (element === doc.body || element === doc.documentElement) return '';
+  const walker = doc.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+  let text = '', count = 0;
+  while (count++ < 1000 && text.length < 320 && walker.nextNode()) {
+    if (!walker.currentNode.parentElement?.closest('script,style,svg,template,[data-htmlmemo-ui]')) text += walker.currentNode.textContent.slice(0, 320 - text.length);
+  }
+  return text.replace(/\s+/g, ' ').trim().slice(0, 160);
+}
+export function describeDrawingTarget(doc, element) {
+  const root = element.parentElement?.closest('[id]') || doc.body;
+  const path = [];let node = element;
+  while (node !== root && node?.parentElement && path.length < 64) {
+    path.unshift([...node.parentElement.children].indexOf(node));node = node.parentElement;
+  }
+  return {tag:element.localName,id:element.id || '',rootId:root.id || '',path:node === root ? path : [],
+    quote:drawingTargetQuote(doc, element),section:element.closest('#reader-content')?.dataset.section || ''};
+}
 export function resolveTextAnchor(index, anchor) {
   if (index.text.slice(anchor.start, anchor.end) === anchor.quote) return {start: anchor.start, end: anchor.end};
   let found = index.text.indexOf(anchor.quote);

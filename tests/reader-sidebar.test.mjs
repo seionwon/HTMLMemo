@@ -5,6 +5,7 @@ import {readFile} from 'node:fs/promises';
 import {DOMParser} from 'linkedom';
 import {$, $$, icon, escapeHTML} from '../public/src/utils.js';
 import {Reader} from '../public/src/reader.js';
+import {ANNOTATION_LABELS} from '../public/src/model.js';
 import {documentFor,installDOM} from './dom.mjs';
 import {textIndex,serializeHTML,parseHTML} from '../public/src/document.js';
 
@@ -18,7 +19,7 @@ function sidebar() {
     outline:()=>[{node:'heading-1',level:1,title:'첫 번째 절'}],jump:node=>calls.headings.push(node),jumpAnnotation:id=>calls.annotations.push(id),
     search(query){this.searchQuery=query;calls.search.push(query);return query?[{quote:'찾은 문장: '+query}]:[];},nextSearch:direction=>calls.next.push(direction)};
   let current=r;
-  const context=vm.createContext({document:doc,$:(selector,root=doc)=>$(selector,root),$$:(selector,root=doc)=>$$(selector,root),icon,esc:escapeHTML,
+  const context=vm.createContext({ANNOTATION_LABELS,document:doc,$:(selector,root=doc)=>$(selector,root),$$:(selector,root=doc)=>$$(selector,root),icon,esc:escapeHTML,
     reader:()=>current,active:()=>({queue:{schedule(){calls.saved++;}}}),closePopover(){},toolAction(){},
     getComputedStyle:()=>({getPropertyValue:()=>''}),
     setTimeout(fn){const id=++timerId;timers.set(id,fn);return id;},clearTimeout(id){timers.delete(id);}});

@@ -1,7 +1,7 @@
 import { createReadAloud } from './read-aloud.js';
 import { clamp, uid } from './utils.js';
 import { History, TEXT_TOOLS, DRAW_TOOLS } from './model.js';
-import { LAYER_ID, prepareLoadedHTML, cleanAnnotations, textIndex, selectionAnchor, resolveTextAnchor, wrapOffsets, rangeFromOffsets, serializeHTML, inspectBookDocument } from './document.js';
+import { LAYER_ID, prepareLoadedHTML, cleanAnnotations, textIndex, selectionAnchor, resolveTextAnchor, wrapOffsets, rangeFromOffsets, serializeHTML, inspectBookDocument, drawingTargetQuote, describeDrawingTarget, currentSection } from './document.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const TOC_WIDTH_KEY = 'htmlmemo-doc-toc-width-v1', TOC_EXPANDED_WIDTH_KEY = 'htmlmemo-doc-toc-expanded-width-v1', TOC_MIN = 8, TOC_STRIP_SNAP = 48, TOC_MAX = 640, TOC_DEFAULT = 260;
@@ -1414,11 +1414,15 @@ export class Reader {
       const resolved = resolveTextAnchor(textIndex(this.doc), anchor); if (!resolved || !text?.trim()) return;
       const range = rangeFromOffsets(this.doc, resolved.start, resolved.end); if (!range) return;
       const rect = range.getBoundingClientRect(), element = range.startContainer.parentElement;
-      const position = this.elementAnchor(element), origin = this.layerOrigin();
-      this.commit([...this.metadata.annotations, this.annotation(type, {anchor:position.key, points:[{x:(rect.left - origin.left - position.x)/position.width,y:(rect.top - origin.top - position.y)/position.height}], text:text.trim()})]);
-    } else this.commit([...this.metadata.annotations, this.annotation(type, {textAnchor:anchor})]);
+      const position = this.elementAnchor(element, true), origin = this.layerOrigin();
+      // The quote and paragraph let 「새 판으로 주석 옮기기」 find this note in a later edition.
+      this.commit([...this.metadata.annotations, this.annotation(type, {anchor:position.key, anchorTarget:position.target, textAnchor:this.sectionAnchor(anchor), points:[{x:(rect.left - origin.left - position.x)/position.width,y:(rect.top - origin.top - position.y)/position.height}], text:text.trim()})]);
+    } else this.commit([...this.metadata.annotations, this.annotation(type, {textAnchor:this.sectionAnchor(anchor)})]);
     this.doc.getSelection()?.removeAllRanges(); this.selection = null;
   }
+  // A packed book shows one section at a time. Recording it keeps a common phrase from being
+  // marked in other sections, and tells a later edition where to look.
+  sectionAnchor(anchor) { const section = currentSection(this.doc); return section ? {...anchor, section} : anchor; }
   commit(annotations) {
     this.metadata.annotations = this.history.commit(annotations); this.render(); this.callbacks.onChange?.(); this.callbacks.onView?.();
   }
@@ -1448,24 +1452,8 @@ export class Reader {
       height:Math.max(1, r.height),
     };
   }
-  drawingTargetQuote(element) {
-    if (element === this.doc.body || element === this.doc.documentElement) return '';
-    const walker = this.doc.createTreeWalker(element, NodeFilter.SHOW_TEXT);
-    let text = '', count = 0;
-    while (count++ < 1000 && text.length < 320 && walker.nextNode()) {
-      if (!walker.currentNode.parentElement?.closest('script,style,svg,template,[data-htmlmemo-ui]')) text += walker.currentNode.textContent.slice(0, 320 - text.length);
-    }
-    return text.replace(/\s+/g, ' ').trim().slice(0, 160);
-  }
-  describeDrawingTarget(element) {
-    const root = element.parentElement?.closest('[id]') || this.doc.body;
-    const path = [];let node = element;
-    while (node !== root && node?.parentElement && path.length < 64) {
-      path.unshift([...node.parentElement.children].indexOf(node));node = node.parentElement;
-    }
-    return {tag:element.localName,id:element.id || '',rootId:root.id || '',path:node === root ? path : [],
-      quote:this.drawingTargetQuote(element),section:element.closest('#reader-content')?.dataset.section || ''};
-  }
+  drawingTargetQuote(element) { return drawingTargetQuote(this.doc, element); }
+  describeDrawingTarget(element) { return describeDrawingTarget(this.doc, element); }
   resolveDrawingTarget(annotation) {
     const direct = this.doc.querySelector(`[data-htmlmemo-anchor="${annotation.anchor}"]`);
     const target = annotation.anchorTarget;
@@ -1566,7 +1554,9 @@ export class Reader {
     style.textContent = '[data-htmlmemo-mark]{border-radius:2px;box-decoration-break:clone;-webkit-box-decoration-break:clone}'; this.doc.head.append(style);
     const textAnnotations=this.metadata.annotations.filter(a=>TEXT_TOOLS.includes(a.type));
     const index=textAnnotations.length?textIndex(this.doc):null;
+    const section = currentSection(this.doc);
     for (const annotation of textAnnotations) {
+      if (annotation.textAnchor.section && annotation.textAnchor.section !== section) continue;
       const resolved = resolveTextAnchor(index, annotation.textAnchor); if (!resolved) continue;
       const style = annotation.type === 'highlight' ? `background:${annotation.color}${Math.round(annotation.opacity * 255).toString(16).padStart(2,'0')};color:inherit` : `text-decoration-line:${annotation.type === 'underline' ? 'underline' : 'line-through'};text-decoration-color:${annotation.color};text-decoration-thickness:${annotation.width}px;text-underline-offset:3px`;
       wrapOffsets(this.doc, resolved.start, resolved.end, {'data-htmlmemo-mark':'','data-htmlmemo-id':annotation.id}, style,index);
@@ -1678,10 +1668,11 @@ export class Reader {
       let found = -1; tops.forEach((value,index)=>{if(value <= top + 1)found = index;}); return found;
     };
     for (const annotation of this.metadata.annotations) {
-      const node = annotation.textAnchor ? this.doc.querySelector(`[data-htmlmemo-mark][data-htmlmemo-id="${annotation.id}"]`)
+      const marked = TEXT_TOOLS.includes(annotation.type);
+      const node = marked ? this.doc.querySelector(`[data-htmlmemo-mark][data-htmlmemo-id="${annotation.id}"]`)
         : this.resolveDrawingTarget(annotation);
       let index = node?.isConnected && node !== this.doc.body ? headingBefore(node) : -1;
-      if (index < 0 && !annotation.textAnchor) { const drawn = this.doc.querySelector(`[data-htmlmemo-id="${annotation.id}"]`); if (drawn) index = headingAbove(drawn); }
+      if (index < 0 && !marked) { const drawn = this.doc.querySelector(`[data-htmlmemo-id="${annotation.id}"]`); if (drawn) index = headingAbove(drawn); }
       result.set(annotation.id, {quote:annotation.textAnchor?.quote || annotation.anchorTarget?.quote || (node?.isConnected ? this.drawingTargetQuote(node) : ''),
         heading:index >= 0 ? headings[index].textContent.replace(/\s+/g, ' ').trim() : ''});
     }
