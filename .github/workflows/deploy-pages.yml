@@ -54,29 +54,35 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
-      - name: Wait for the published app and verify the sidebar in Chrome
+      - name: Wait for the published app and verify sidebar and pen scaling in Chrome
         env:
           HTMLMEMO_SIDEBAR_TEST_URL: https://seionwon.github.io/HTMLMemo/
         run: |
           node --input-type=module <<'NODE'
           import {readFile} from 'node:fs/promises';
-          const expected=await readFile('public/src/app.js','utf8');
-          const url=new URL('src/app.js',process.env.HTMLMEMO_SIDEBAR_TEST_URL);
-          url.searchParams.set('verify',process.env.GITHUB_SHA);
+          const files=['src/app.js','src/reader.js','src/model.js'];
+          const expected=await Promise.all(files.map(file=>readFile('public/'+file,'utf8')));
           let matched=false;
           for(let attempt=0;attempt<30;attempt++){
-            const response=await fetch(url,{cache:'no-store'});
-            if(response.ok&&await response.text()===expected){matched=true;break;}
+            const matches=await Promise.all(files.map(async(file,i)=>{
+              const url=new URL(file,process.env.HTMLMEMO_SIDEBAR_TEST_URL);
+              url.searchParams.set('verify',process.env.GITHUB_SHA);
+              const response=await fetch(url,{cache:'no-store'});
+              return response.ok&&await response.text()===expected[i];
+            }));
+            if(matches.every(Boolean)){matched=true;break;}
             await new Promise(resolve=>setTimeout(resolve,2000));
           }
-          if(!matched)throw new Error('Published app.js does not match the deployed commit.');
-          console.log('Published app.js matches this commit.');
+          if(!matched)throw new Error('Published reader files do not match the deployed commit.');
+          console.log('Published app, reader and model match this commit.');
           NODE
-          node --test --test-name-pattern='sidebar view choices' tests/browser.integration.mjs
+          node --test --test-name-pattern='sidebar view choices|font-scaled pen' tests/browser.integration.mjs
       - name: Keep published desktop and mobile verification screenshots
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: published-sidebar-screenshots
-          path: test-results/sidebar-views-*.png
+          path: |
+            test-results/sidebar-views-*.png
+            test-results/font-scaled-pen-*.png
           if-no-files-found: ignore

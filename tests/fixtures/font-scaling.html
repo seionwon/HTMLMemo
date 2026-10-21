@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>펜과 글자 크기 검증</title>
+  <style>
+    :root { --read-size:18px; }
+    * { box-sizing:border-box; }
+    html,body { margin:0;height:100%;overflow:hidden; }
+    body { display:flex;flex-direction:column;background:#fff;color:#1e293b; }
+    .reader-head { flex:none;display:flex;gap:12px;align-items:center;height:36px;padding:4px 12px;background:#e2e8f0; }
+    main { flex:1;min-height:0;overflow:auto;padding:24px; }
+    #reader-content { font:var(--read-size)/1.5 system-ui,sans-serif; }
+    p { margin:0 0 24px; }
+    #fixed { width:600px;height:130px;background:#f1f5f9; }
+    #flow { width:480px;background:#f8fafc; }
+    .spacer { height:1200px; }
+  </style>
+</head>
+<body>
+  <header class="reader-head">
+    <span class="reader-title">펜과 글자 크기 검증</span>
+    <button id="reader-smaller" title="글자 작게">A−</button>
+    <button id="reader-larger" title="글자 크게">A+</button>
+    <span id="font-state"></span>
+  </header>
+  <main><article id="reader-content">
+    <p id="fixed">고정된 문단의 글자 크기와 펜 선이 함께 변합니다.</p>
+    <p id="flow">줄바꿈이 있는 문단입니다. 글자를 크게 하면 줄 수와 문단 높이는 달라지지만, 펜으로 그린 모양의 가로와 세로는 같은 비율로 변해야 합니다. 글자 크기를 되돌리면 선의 크기와 굵기도 처음 값으로 돌아와야 합니다.</p>
+    <div class="spacer"></div>
+  </article></main>
+  <script>
+    let fontSize=Number(localStorage.getItem('htmlmemo-font-scaling-fixture-size'))===36?36:18;
+    function preferences(){
+      document.documentElement.style.setProperty('--read-size',fontSize+'px');
+      localStorage.setItem('htmlmemo-font-scaling-fixture-size',String(fontSize));
+      document.getElementById('font-state').textContent=fontSize+'px';
+    }
+    document.getElementById('reader-smaller').onclick=()=>{fontSize=18;preferences();};
+    document.getElementById('reader-larger').onclick=()=>{fontSize=36;preferences();};
+    preferences();
+  </script>
+</body>
+</html>

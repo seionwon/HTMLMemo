@@ -73,7 +73,7 @@ test('moving annotations follows sections by id, searches moved text, and drops 
   let index=textIndex(oldBook.doc);
   const highlight={id:'h1',type:'highlight',color:'#edcf67',width:3,opacity:.35,textAnchor:{...anchorIn(index.text,'에이전트를 설치합니다.'),section:'v0:a'}};
   const doomed={id:'h2',type:'underline',color:'#334155',width:3,opacity:1,textAnchor:{...anchorIn(index.text,'곧 지워질 문단입니다. 이 문장은 사라집니다.'),section:'v0:a'}};
-  const pen={id:'p1',type:'pen',color:'#d94f4f',width:3,opacity:1,anchor:'n3',anchorTarget:describeDrawingTarget(oldBook.doc,oldBook.doc.querySelector('p')),points:[{x:.1,y:.2},{x:.5,y:.6}]};
+  const pen={id:'p1',type:'pen',color:'#d94f4f',width:3,opacity:1,anchor:'n3',anchorTarget:describeDrawingTarget(oldBook.doc,oldBook.doc.querySelector('p')),points:[{x:.1,y:.2},{x:.5,y:.6}],penBasis:{width:600,height:80,fontSize:18}};
   await oldBook.show('v0:b');index=textIndex(oldBook.doc);
   // Made before HTMLMemo recorded sections: found by searching the new edition's text.
   const legacy={id:'h3',type:'highlight',color:'#edcf67',width:3,opacity:.35,textAnchor:anchorIn(index.text,'결과를 확인합니다.')};
@@ -92,6 +92,7 @@ test('moving annotations follows sections by id, searches moved text, and drops 
   const [movedHighlight,movedPen,movedLegacy]=annotations;
   assert.equal(movedHighlight.textAnchor.quote,'에이전트를 먼저 설치합니다.');assert.equal(movedHighlight.textAnchor.section,'v1:a');
   assert.equal(movedPen.anchorTarget.section,'v1:a');assert.match(movedPen.anchorTarget.quote,/^에이전트를 먼저 설치합니다/);assert.deepEqual(movedPen.points,pen.points);
+  assert.deepEqual(movedPen.penBasis,pen.penBasis);
   assert.equal(movedLegacy.textAnchor.quote,'결과를 확인합니다.');assert.equal(movedLegacy.textAnchor.section,'v1:c');
   // Only the sections that hold annotations were rendered, never the whole book.
   assert.deepEqual(newBook.shown,['v1:a','v1:c']);assert.ok(progress.length>=2);

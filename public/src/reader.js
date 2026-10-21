@@ -316,6 +316,23 @@ export class Reader {
       this.scheduleDynamicRefresh();
     }
   }
+  startFontObserver() {
+    if (this.fontObserver) return;
+    const win = this.doc.defaultView;
+    if (!win?.MutationObserver || !win.requestAnimationFrame) return;
+    // A source reader can change a root CSS variable while its fixed-size
+    // body/scroller never resizes. Coalesce those changes without rescanning text.
+    this.fontObserver = new win.MutationObserver(records => {
+      if (this.disposed || this.preparing || this.tocDrag || this.fontFrame || !this.metadata.annotations.some(a => a.type === 'pen')) return;
+      if (!records.some(record => !record.target.closest?.('#'+LAYER_ID+',#htmlmemo-editor-style,#htmlmemo-annotation-style,[data-htmlmemo-ui],[data-htmlmemo-mark],[data-htmlmemo-search]'))) return;
+      this.fontFrame = win.requestAnimationFrame(() => {
+        this.fontFrame = null;
+        if (this.disposed || this.host?.hidden || this.tocDrag) return;
+        this.measure(); this.renderDrawingLayer();
+      });
+    });
+    this.fontObserver.observe(this.doc.documentElement, {subtree:true,attributes:true,attributeFilter:['style','class']});
+  }
   bind({deferDynamicObserver = false} = {}) {
     let editorStyle = this.doc.getElementById('htmlmemo-editor-style');
     if (!editorStyle) {
@@ -330,6 +347,7 @@ export class Reader {
       return;
     }
     this.bound = true;
+    this.startFontObserver();
     this.doc.addEventListener('wheel', event => this.forwardWheel(event), {capture:true,passive:false});
     this.doc.addEventListener('pointerdown', event => { if(this.startTocResize(event))return; if(this.startMiddleScroll(event))return;this.stopMiddleScroll();this.callbacks.onSelectionDismiss?.(); this.pointerDown(event); }, true);
     this.doc.addEventListener('mousedown', event => { if(this.startTocResize(event))return; }, true);
@@ -1494,7 +1512,13 @@ export class Reader {
     }
     if (scrollHost && !scrollHost.contains(element)) element = scrollHost;
     const box = this.anchorBox(element, origin);
-    return {key:element.dataset?.htmlmemoAnchor || 'body', ...box, ...(describe ? {target:this.describeDrawingTarget(element)} : {})};
+    return {key:element.dataset?.htmlmemoAnchor || 'body', ...box, ...(describe ? {target:this.describeDrawingTarget(element),fontSize:this.drawingFontSize(element)} : {})};
+  }
+  drawingFontSize(element) {
+    const content = this.doc.getElementById('reader-content');
+    const target = content && element !== content && element.contains?.(content) ? content : element;
+    const size = Number.parseFloat(this.doc.defaultView?.getComputedStyle?.(target)?.fontSize);
+    return Number.isFinite(size) && size >= .1 && size <= 1000 ? size : null;
   }
   pointerDown(event) {
     if (event.button !== 0) return;
@@ -1531,7 +1555,8 @@ export class Reader {
         const text = await this.callbacks.requestText?.(g.type);
         if (text?.trim()) this.commit([...this.metadata.annotations, this.annotation(g.type, {anchor:g.anchor.key, anchorTarget:g.anchor.target, points:[points[0]], text:text.trim()})]);
       } else if (g.points.length > 1) {
-        const next = this.annotation(g.type, {anchor:g.anchor.key, anchorTarget:g.anchor.target, points});
+        const penBasis = g.type === 'pen' && g.anchor.fontSize ? {width:g.anchor.width,height:g.anchor.height,fontSize:g.anchor.fontSize} : null;
+        const next = this.annotation(g.type, {anchor:g.anchor.key, anchorTarget:g.anchor.target, points, ...(penBasis ? {penBasis} : {})});
         if (g.type === 'pen' && this.penTTL > 0) {
           const temporary = this.drawAnnotation(next);
           if (temporary) { temporary.dataset.htmlmemoPreview = ''; this.layer.append(temporary);setTimeout(() => temporary.remove(), this.penTTL * 1000); }
@@ -1569,21 +1594,37 @@ export class Reader {
     if (this.searchQuery) this.search(this.searchQuery, false);
     this.observeDynamicDocument();
   }
-  absolutePoints(annotation) {
-    if (!annotation.anchor) return annotation.points;
+  drawingGeometry(annotation) {
+    if (!annotation.anchor) return {points:annotation.points,scale:1};
     const origin = this.layerOrigin();
     const scrollHost = origin.scrollHost;
     const element = this.resolveDrawingTarget(annotation);
     // A delayed/absent paragraph is not the whole page. Keep its saved data,
     // and draw only once that actual target exists and has a rendered box.
-    if (!element || element.getClientRects?.().length === 0) return [];
-    if (scrollHost && !scrollHost.contains(element) && element !== this.doc.body && element !== this.doc.documentElement && !element.contains(scrollHost)) return [];
+    if (!element || element.getClientRects?.().length === 0) return {points:[],scale:1};
+    if (scrollHost && !scrollHost.contains(element) && element !== this.doc.body && element !== this.doc.documentElement && !element.contains(scrollHost)) return {points:[],scale:1};
     const box = this.anchorBox(element, origin);
-    return annotation.points.map(p => ({x:box.x + p.x * box.width, y:box.y + p.y * box.height}));
+    if (annotation.type === 'pen') {
+      const fontSize = this.drawingFontSize(element);
+      let basis = annotation.penBasis;
+      if (!basis && fontSize) {
+        // Old files have no drawing-time font size. Preserve their first visible
+        // appearance as the baseline; never guess it from the whole page.
+        this.legacyPenBases ||= new Map();
+        basis = this.legacyPenBases.get(annotation.id);
+        if (!basis) { basis = {width:box.width,height:box.height,fontSize}; this.legacyPenBases.set(annotation.id,basis); }
+      }
+      if (basis && fontSize) {
+        const scale = fontSize / basis.fontSize;
+        return {points:annotation.points.map(p => ({x:box.x+p.x*basis.width*scale,y:box.y+p.y*basis.height*scale})),scale,basis};
+      }
+    }
+    return {points:annotation.points.map(p => ({x:box.x + p.x * box.width, y:box.y + p.y * box.height})),scale:1};
   }
-  drawAnnotation(annotation, preview = false) {
-    const p = preview ? annotation.points : this.absolutePoints(annotation); if (!p?.length) return null;
-    const attrs = {stroke:annotation.color, 'stroke-width':annotation.width, fill:'none', opacity:annotation.opacity, 'stroke-linecap':'round', 'stroke-linejoin':'round', 'data-htmlmemo-id':annotation.id, style:'pointer-events:visiblePainted;cursor:pointer'};
+  absolutePoints(annotation) { return this.drawingGeometry(annotation).points; }
+  drawAnnotation(annotation, preview = false, geometry = null) {
+    const {points:p,scale} = preview ? {points:annotation.points,scale:1} : geometry || this.drawingGeometry(annotation); if (!p?.length) return null;
+    const attrs = {stroke:annotation.color, 'stroke-width':annotation.width * (annotation.type === 'pen' ? scale : 1), fill:'none', opacity:annotation.opacity, 'stroke-linecap':'round', 'stroke-linejoin':'round', 'data-htmlmemo-id':annotation.id, style:'pointer-events:visiblePainted;cursor:pointer'};
     const first = p[0]; const last = p.at(-1);
     if (annotation.type === 'pen') return svg(this.doc, 'path', {...attrs, d:p.map((point,i) => `${i ? 'L':'M'}${point.x.toFixed(2)},${point.y.toFixed(2)}`).join(' ')});
     if (['rect','area'].includes(annotation.type)) return svg(this.doc, 'rect', {...attrs, x:Math.min(first.x,last.x), y:Math.min(first.y,last.y), width:Math.abs(first.x-last.x), height:Math.abs(first.y-last.y), ...(annotation.type === 'area' ? {fill:annotation.color, stroke:'none'} : {})});
@@ -1611,8 +1652,15 @@ export class Reader {
     const hostParent=scrollHost||this.doc.body;
     let layer=this.doc.getElementById(LAYER_ID);
     const drawings=this.metadata.annotations.filter(a=>!TEXT_TOOLS.includes(a.type));
+    const geometry=drawings.map(a=>this.drawingGeometry(a));
+    let upgraded=false;
+    drawings.forEach((a,i)=>{
+      // Persist a legacy baseline only after a font change, so simply opening
+      // an old file does not mark it edited. Reload/export then retain the scale.
+      if(a.type==='pen' && !a.penBasis && geometry[i].basis && Math.abs(geometry[i].scale-1)>1e-6){a.penBasis={...geometry[i].basis};upgraded=true;}
+    });
     const contentKey=JSON.stringify(drawings);
-    const layoutKey=JSON.stringify(drawings.map(a=>a.anchor?this.absolutePoints(a):null));
+    const layoutKey=JSON.stringify(geometry.map(({points,scale})=>({points,scale})));
     if(!layer){
       layer=svg(this.doc,'svg',{id:LAYER_ID,'aria-label':'HTMLMemo 주석',style:'position:absolute;top:0;left:0;z-index:2147483000;pointer-events:none;overflow:visible;'});
       layer.dataset.htmlmemoUi='';hostParent.append(layer);
@@ -1627,7 +1675,7 @@ export class Reader {
     if(layer.getAttribute('width')!==String(width))layer.setAttribute('width',String(width));
     if(layer.getAttribute('height')!==String(height))layer.setAttribute('height',String(height));
     if(contentKey!==this.drawingContentKey || layoutKey!==this.drawingLayoutKey){
-      layer.replaceChildren(...drawings.map(a=>this.drawAnnotation(a)).filter(Boolean));
+      layer.replaceChildren(...drawings.map((a,i)=>this.drawAnnotation(a,false,geometry[i])).filter(Boolean));
       this.drawingContentKey=contentKey;this.drawingLayoutKey=layoutKey;
     }
     if(scrollHost){
@@ -1640,6 +1688,7 @@ export class Reader {
       if(Math.abs(left-(Number.parseFloat(layer.style.left)||0))>.5)layer.style.left=left+'px';
       if(Math.abs(top-(Number.parseFloat(layer.style.top)||0))>.5)layer.style.top=top+'px';
     }
+    if(upgraded)this.callbacks?.onChange?.();
   }
   html() { return serializeHTML(this.doc, this.metadata); }
   async back() { const p = this.linkHistory.pop(); if (!p) return false; this.scrollTop=p.top; this.scrollLeft=p.left; this.callbacks.onView?.(); return true; }
@@ -1725,5 +1774,5 @@ export class Reader {
     this.readAloud?.toggle();
   }
   stopSpeech() { this.readAloud?.close(); this.host?.ownerDocument?.defaultView?.speechSynthesis?.cancel(); }
-  dispose() { this.stopMiddleScroll();this.readAloud?.dispose();this.readAloud=null;this.stopSpeech(); this.disposed=true;this.cancelOpeningWait?.(); clearTimeout(this.positionTimer);clearTimeout(this.dynamicTimer);clearTimeout(this.documentSidebarUI?.sidebarSearchTimer);this.dynamicObserver?.disconnect(); this.resizeObserver?.disconnect(); this.hostObserver?.disconnect(); this.frame.srcdoc=''; if(this.documentURL){URL.revokeObjectURL(this.documentURL);this.documentURL=null;} this.host.remove(); }
+  dispose() { this.stopMiddleScroll();this.readAloud?.dispose();this.readAloud=null;this.stopSpeech(); this.disposed=true;this.cancelOpeningWait?.(); clearTimeout(this.positionTimer);clearTimeout(this.dynamicTimer);clearTimeout(this.documentSidebarUI?.sidebarSearchTimer);this.dynamicObserver?.disconnect();this.fontObserver?.disconnect();if(this.fontFrame)this.doc.defaultView?.cancelAnimationFrame(this.fontFrame); this.resizeObserver?.disconnect(); this.hostObserver?.disconnect(); this.frame.srcdoc=''; if(this.documentURL){URL.revokeObjectURL(this.documentURL);this.documentURL=null;} this.host.remove(); }
 }

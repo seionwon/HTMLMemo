@@ -58,6 +58,66 @@ test('drawing targets recover renumbered paragraphs by content and stay within t
   doc.getElementById('reader-content').dataset.section='v1:first';assert.equal(r.resolveDrawingTarget(stroke),null);
   doc.getElementById('reader-content').dataset.section='v0:first';p.remove();assert.equal(r.resolveDrawingTarget(stroke),null);
 });
+test('pen geometry scales uniformly with text, not the reflowed paragraph box or app zoom',()=>{
+  const doc=documentFor('<html><head></head><body><p data-htmlmemo-anchor="n0">A reflowing paragraph.</p></body></html>');
+  const r=Object.create(Reader.prototype);r.doc=doc;r.naturalWidth=960;r.metadata={annotations:[]};
+  let fontSize=18,height=120;r.drawingFontSize=()=>fontSize;
+  doc.querySelector('p').getBoundingClientRect=()=>({left:40,top:60,width:400,height});
+  const pen={id:'scaled-pen',type:'pen',anchor:'n0',penBasis:{width:400,height:120,fontSize:18},points:[{x:.2,y:.1},{x:.8,y:.9}],color:'#ef4444',width:3,opacity:1};
+  assert.deepEqual(r.absolutePoints(pen),[{x:120,y:72},{x:360,y:168}]);
+  fontSize=36;height=480;r.zoom=2;
+  assert.deepEqual(r.absolutePoints(pen),[{x:200,y:84},{x:680,y:276}]);
+  assert.equal(r.drawAnnotation(pen).getAttribute('stroke-width'),'6');
+  assert.equal(r.drawAnnotation(pen,true).getAttribute('stroke-width'),'3','live preview is already in document coordinates');
+  const shape={...pen,type:'rect'};delete shape.penBasis;
+  assert.deepEqual(r.absolutePoints(shape),[{x:120,y:108},{x:360,y:492}]);
+  assert.equal(r.drawAnnotation(shape).getAttribute('stroke-width'),'3','other drawing tools retain their existing behavior');
+  fontSize=9;height=60;
+  assert.deepEqual(r.absolutePoints(pen),[{x:80,y:66},{x:200,y:114}]);
+  assert.equal(r.drawAnnotation(pen).getAttribute('stroke-width'),'1.5');
+  fontSize=18;height=120;
+  assert.deepEqual(r.absolutePoints(pen),[{x:120,y:72},{x:360,y:168}],'no cumulative drift after enlargement and reduction');
+  doc.querySelector('p').remove();assert.deepEqual(r.absolutePoints(pen),[]);
+});
+test('legacy pens keep their first visible appearance and persist the baseline only after a font change',()=>{
+  const doc=documentFor('<html><head></head><body><p data-htmlmemo-anchor="n0">Legacy paragraph.</p></body></html>');
+  const r=Object.create(Reader.prototype);r.doc=doc;r.naturalWidth=960;r.naturalHeight=800;
+  let fontSize=18,height=120,changes=0;r.drawingFontSize=()=>fontSize;r.callbacks={onChange:()=>changes++};
+  doc.querySelector('p').getBoundingClientRect=()=>({left:40,top:60,width:400,height});
+  const pen={id:'legacy-pen',type:'pen',anchor:'n0',points:[{x:.2,y:.1},{x:.8,y:.9}],color:'#ef4444',width:3,opacity:1};
+  r.metadata={version:1,annotations:[structuredClone(pen)]};r.renderDrawingLayer();
+  assert.deepEqual(r.metadata.annotations,[pen]);assert.equal(changes,0);
+  assert.equal(r.layer.firstElementChild.getAttribute('d'),'M120.00,72.00 L360.00,168.00');
+  fontSize=36;height=480;r.renderDrawingLayer();
+  assert.deepEqual(r.metadata.annotations[0].penBasis,{width:400,height:120,fontSize:18});assert.equal(changes,1);
+  assert.equal(r.layer.firstElementChild.getAttribute('d'),'M200.00,84.00 L680.00,276.00');
+  r.renderDrawingLayer();assert.equal(changes,1,'redrawing does not repeatedly autosave');
+  const saved=parseHTML(serializeHTML(doc,r.metadata));
+  assert.deepEqual(saved.metadata.annotations[0].points,pen.points);
+  const reopened=Object.create(Reader.prototype);reopened.doc=doc;reopened.drawingFontSize=()=>fontSize;
+  assert.deepEqual(reopened.absolutePoints(saved.metadata.annotations[0]),r.absolutePoints(r.metadata.annotations[0]));
+  fontSize=18;height=120;r.renderDrawingLayer();
+  assert.equal(r.layer.firstElementChild.getAttribute('d'),'M120.00,72.00 L360.00,168.00');
+});
+test('a newly drawn pen saves its drawing-time dimensions and font size',async()=>{
+  const r=Object.create(Reader.prototype);r.width=3;r.color='#ef4444';r.opacity=1;r.penTTL=0;r.metadata={annotations:[]};
+  r.gesture={pointerId:1,type:'pen',anchor:{key:'n0',x:40,y:60,width:400,height:120,fontSize:18,target:{tag:'p'}},points:[{x:120,y:72},{x:360,y:168}]};
+  r.commit=annotations=>{r.metadata.annotations=annotations;};
+  await r.pointerUp({pointerId:1,preventDefault(){}});
+  assert.deepEqual(r.metadata.annotations[0].penBasis,{width:400,height:120,fontSize:18});
+  assert.deepEqual(r.metadata.annotations[0].points,[{x:.2,y:.1},{x:.8,y:.9}]);
+});
+test('font style changes in fixed-size readers coalesce and ignore the annotation overlay',()=>{
+  const r=Object.create(Reader.prototype),doc=documentFor('<html><body><p>Text</p><svg id="htmlmemo-annotation-layer"><path/></svg></body></html>');
+  let observe,callback,frame,renders=0,measures=0;
+  r.doc={documentElement:doc.documentElement,defaultView:{MutationObserver:class{constructor(fn){callback=fn;}observe(...args){observe=args;}},requestAnimationFrame:fn=>{frame=fn;return 1;}}};
+  r.metadata={annotations:[{type:'pen'}]};r.measure=()=>measures++;r.renderDrawingLayer=()=>renders++;
+  r.startFontObserver();assert.deepEqual(observe[1],{subtree:true,attributes:true,attributeFilter:['style','class']});
+  callback([{target:doc.querySelector('path')}]);assert.equal(frame,undefined);
+  callback([{target:doc.documentElement}]);callback([{target:doc.body}]);
+  assert.equal(r.fontFrame,1);frame();assert.equal(r.fontFrame,null);assert.equal(renders,1);assert.equal(measures,1);
+  r.disposed=true;callback([{target:doc.documentElement}]);assert.equal(r.fontFrame,null);
+});
 test('JSON metadata cannot close its script element',()=>{
   const parsed=parseHTML('<html><head></head><body><p>body</p></body></html>');parsed.metadata.annotations=[{id:'n-1',type:'note',color:'#edcf67',width:3,opacity:1,points:[{x:1,y:1}],text:'</script><img src=x onerror=steal()>'}];const html=serializeHTML(documentFor(parsed.html),parsed.metadata);assert.ok(html.includes('\\u003c/script>'));const reopened=parseHTML(html);assert.equal(reopened.metadata.annotations[0].text,'</script><img src=x onerror=steal()>');assert.equal(documentFor(html).querySelectorAll('img').length,0);
 });

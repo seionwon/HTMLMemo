@@ -566,6 +566,79 @@ test('real Chrome: scrolling saves quietly in batches, preserves annotation hist
   }finally{if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
 });
 
+test('real Chrome: font-scaled pen geometry, thickness, legacy baselines, reopen and export',{timeout:90000},async()=>{
+  await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-pen-font-'));await cp(join(root,'public'),folder,{recursive:true});
+  const server=createServer(folder);let chrome;
+  try{
+    await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));chrome=await launchChrome();const page=chrome.page;
+    const url=process.env.HTMLMEMO_SIDEBAR_TEST_URL||`http://127.0.0.1:${server.address().port}/`;
+    const source=await readFile(join(root,'tests/fixtures/font-scaling.html'),'utf8');
+    await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});await page.navigate(url);
+    await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
+    await page.evaluate(`(async()=>{
+      const {putDocumentRevision}=await import('./src/storage.js'),{parseHTML,describeDrawingTarget}=await import('./src/document.js');
+      const parsed=parseHTML(${JSON.stringify(source)},{viewport:{width:1000,height:800}},{allowScripts:true});
+      const d=new DOMParser().parseFromString(parsed.html,'text/html'),p=d.querySelector('#fixed');
+      parsed.metadata.annotations=[{id:'legacy-font-pen',type:'pen',anchor:p.dataset.htmlmemoAnchor,anchorTarget:describeDrawingTarget(d,p),points:[{x:.08,y:.15},{x:.35,y:.55}],color:'#d94f4f',width:3,opacity:1}];
+      await putDocumentRevision({id:'font-pen-document',title:'펜과 글자 크기 검증',name:'pen-font.html',created:Date.now(),modified:Date.now(),html:parsed.html,metadata:parsed.metadata});
+    })()`);
+    await page.navigate(url);await page.waitFor('!!document.querySelector("[data-open=font-pen-document]")');await page.click('[data-open=font-pen-document]');
+    const frame='document.querySelector(".document-host:not([hidden]) iframe")',doc=frame+'.contentDocument';
+    await page.waitFor(`${doc}?.querySelector('[data-htmlmemo-id="legacy-font-pen"]') && ${frame}.style.visibility==='visible'`);
+    const saved=()=>page.evaluate(`(async()=>{const {getDocument}=await import('./src/storage.js');return (await getDocument('font-pen-document')).metadata.annotations;})()`);
+    assert.equal((await saved())[0].penBasis,undefined,'opening a legacy document does not edit its annotations');
+    const clickNative=async selector=>{
+      const point=await page.evaluate(`(()=>{const f=${frame},r=f.contentDocument.querySelector(${JSON.stringify(selector)}).getBoundingClientRect(),b=f.getBoundingClientRect();return {x:b.left+(r.left+r.width/2)*b.width/f.clientWidth,y:b.top+(r.top+r.height/2)*b.height/f.clientHeight};})()`);
+      await page.send('Input.dispatchMouseEvent',{type:'mousePressed',...point,button:'left',clickCount:1});await page.send('Input.dispatchMouseEvent',{type:'mouseReleased',...point,button:'left',clickCount:1});
+    };
+    const draw=async(offset=0)=>{
+      await page.click('#toolbar [data-action=pen]');
+      const points=await page.evaluate(`(()=>{const f=${frame},r=f.contentDocument.querySelector('#flow').getBoundingClientRect(),b=f.getBoundingClientRect();return [[32,20],[55,38],[90,24],[130,50]].map(([x,y])=>({x:b.left+(r.left+x+${offset})*b.width/f.clientWidth,y:b.top+(r.top+y)*b.height/f.clientHeight}));})()`);
+      await page.send('Input.dispatchMouseEvent',{type:'mousePressed',...points[0],button:'left',buttons:1,clickCount:1});
+      for(const point of points.slice(1))await page.send('Input.dispatchMouseEvent',{type:'mouseMoved',...point,button:'left',buttons:1});
+      await page.send('Input.dispatchMouseEvent',{type:'mouseReleased',...points.at(-1),button:'left',buttons:0,clickCount:1});
+      await page.waitFor('document.querySelector("#status-left").textContent.includes("자동 저장됨")');
+      return (await saved()).at(-1);
+    };
+    const snapshot=async(id,target)=>page.evaluate(`(()=>{const d=${doc},p=d.querySelector('[data-htmlmemo-id="'+${JSON.stringify(id)}+'"]'),r=p.getBoundingClientRect(),t=d.querySelector(${JSON.stringify(target)}).getBoundingClientRect();return {dx:r.left-t.left,dy:r.top-t.top,width:r.width,height:r.height,stroke:Number(p.getAttribute('stroke-width'))};})()`);
+    const scaled=(actual,baseline,ratio)=>{for(const key of Object.keys(baseline))assert.ok(Math.abs(actual[key]-baseline[key]*ratio)<.15,`${key}: ${actual[key]} vs ${baseline[key]} × ${ratio}`);};
+    const pen18=await draw();assert.equal(pen18.type,'pen');assert.equal(pen18.penBasis.fontSize,18);
+    const smallLegacy=await snapshot('legacy-font-pen','#fixed'),smallPen=await snapshot(pen18.id,'#flow');
+    const sizes=await page.evaluate(`(()=>{const d=${doc};return [d.body.clientHeight,d.querySelector('main').clientHeight,d.querySelector('#flow').clientHeight];})()`);
+    await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/font-scaled-pen-18.png'),await page.screenshot());
+    await clickNative('#reader-larger');await page.waitFor(`${doc}.querySelector('[data-htmlmemo-id="legacy-font-pen"]').getAttribute('stroke-width')==='6'`);
+    scaled(await snapshot('legacy-font-pen','#fixed'),smallLegacy,2);scaled(await snapshot(pen18.id,'#flow'),smallPen,2);
+    const largeSizes=await page.evaluate(`(()=>{const d=${doc};return [d.body.clientHeight,d.querySelector('main').clientHeight,d.querySelector('#flow').clientHeight];})()`);
+    assert.deepEqual(largeSizes.slice(0,2),sizes.slice(0,2),'fixed-size body and scroller did not notify ResizeObserver');assert.ok(largeSizes[2]>sizes[2]*2,'text reflow differs from uniform pen scaling');
+    const pen36=await draw(180);assert.equal(pen36.penBasis.fontSize,36);const largePen=await snapshot(pen36.id,'#flow');
+    await writeFile(join(root,'test-results/font-scaled-pen-36.png'),await page.screenshot());
+    await clickNative('#reader-smaller');await page.waitFor(`${doc}.querySelector('[data-htmlmemo-id="legacy-font-pen"]').getAttribute('stroke-width')==='3'`);
+    scaled(await snapshot('legacy-font-pen','#fixed'),smallLegacy,1);scaled(await snapshot(pen18.id,'#flow'),smallPen,1);scaled(await snapshot(pen36.id,'#flow'),largePen,.5);
+    await page.click('#toolbar [data-action=undo]');await page.waitFor(`${doc}.querySelectorAll('#htmlmemo-annotation-layer [data-htmlmemo-id]').length===2`);
+    await page.click('#toolbar [data-action=redo]');await page.waitFor(`${doc}.querySelectorAll('#htmlmemo-annotation-layer [data-htmlmemo-id]').length===3`);
+    scaled(await snapshot(pen36.id,'#flow'),largePen,.5);
+    await clickNative('#reader-larger');await page.waitFor(`${doc}.querySelector('[data-htmlmemo-id="legacy-font-pen"]').getAttribute('stroke-width')==='6'`);
+    await page.waitFor('document.querySelectorAll(".tab-dirty:not([hidden])").length===0');
+    const before=await saved();assert.equal(before[0].penBasis.fontSize,18);assert.deepEqual(before[1].points,pen18.points);
+    await page.navigate(url);await page.waitFor('!!document.querySelector("[data-open=font-pen-document]")');await page.click('[data-open=font-pen-document]');
+    await page.waitFor(`${frame}?.style.visibility==='visible' && ${doc}?.querySelector('[data-htmlmemo-id="legacy-font-pen"]')?.getAttribute('stroke-width')==='6'`);
+    scaled(await snapshot('legacy-font-pen','#fixed'),smallLegacy,2);scaled(await snapshot(pen18.id,'#flow'),smallPen,2);scaled(await snapshot(pen36.id,'#flow'),largePen,1);
+    assert.deepEqual(await saved(),before);
+    await page.evaluate(`window.showSaveFilePicker=async()=>{const root=await navigator.storage.getDirectory();return root.getFileHandle('font-scaled-pen.html',{create:true});};`);
+    await page.click('#save-page');
+    await page.waitFor(`(async()=>{try{const root=await navigator.storage.getDirectory();return (await (await root.getFileHandle('font-scaled-pen.html')).getFile()).size>0;}catch{return false;}})()`);
+    const exported=await page.evaluate(`(async()=>{const root=await navigator.storage.getDirectory(),html=await (await (await root.getFileHandle('font-scaled-pen.html')).getFile()).text();return JSON.parse(new DOMParser().parseFromString(html,'text/html').getElementById('htmlmemo-data').textContent).annotations;})()`);
+    assert.deepEqual(exported,before);
+    await page.evaluate(`window.showOpenFilePicker=async()=>{const root=await navigator.storage.getDirectory();return [await root.getFileHandle('font-scaled-pen.html')];};`);
+    await clickAppMenu(page,'#import-button');
+    await page.waitFor(`document.querySelectorAll('.tab.document').length===2 && ${frame}?.style.visibility==='visible' && ${doc}?.querySelector('[data-htmlmemo-id="legacy-font-pen"]')?.getAttribute('stroke-width')==='6'`);
+    scaled(await snapshot(pen18.id,'#flow'),smallPen,2);scaled(await snapshot(pen36.id,'#flow'),largePen,1);
+    await page.send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
+    await page.waitFor(`${frame}.getBoundingClientRect().width<400`);scaled(await snapshot(pen18.id,'#flow'),smallPen,2);
+    await writeFile(join(root,'test-results/font-scaled-pen-mobile.png'),await page.screenshot());assert.deepEqual(chrome.errors,[]);
+  }finally{if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
+});
+
 test('real Chrome: native sidebar view choices are visible on open and preserve the original book tree and export',{timeout:60000},async()=>{
   await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-native-sidebar-'));await cp(join(root,'public'),folder,{recursive:true});
   const server=createServer(folder);let chrome;

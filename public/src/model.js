@@ -19,6 +19,12 @@ export function validateAnnotations(value) {
     } else {
       if (!Array.isArray(item.points) || !item.points.length || item.points.length > 100000 || item.points.some(p => !p || !Number.isFinite(p.x) || !Number.isFinite(p.y) || Math.abs(p.x) > 1e8 || Math.abs(p.y) > 1e8)) throw new Error('주석 좌표가 올바르지 않습니다.');
       if (item.anchor && !/^(body|n\d+|js\d+)$/.test(item.anchor)) throw new Error('주석의 문서 위치가 손상되었습니다.');
+      if (item.penBasis != null) {
+        const basis = item.penBasis;
+        if (item.type !== 'pen' || !item.anchor || typeof basis !== 'object' ||
+          ['width','height'].some(key=>!Number.isFinite(basis[key]) || basis[key] < 1 || basis[key] > 1e8) ||
+          !Number.isFinite(basis.fontSize) || basis.fontSize < .1 || basis.fontSize > 1000) throw new Error('펜 그림의 글자 크기 기준이 손상되었습니다.');
+      }
       if (item.anchorTarget != null) {
         const target = item.anchorTarget;
         if (!target || typeof target !== 'object' || !/^[a-z][a-z0-9-]{0,63}$/.test(target.tag) ||

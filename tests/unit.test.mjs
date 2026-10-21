@@ -52,3 +52,12 @@ test('drawing target context is optional, survives validation, and rejects unusa
   assert.deepEqual(validateAnnotations([{...stroke,anchorTarget:target}])[0].anchorTarget,target);
   for(const broken of [{...target,path:[-1]},{...target,path:[1.5]},{...target,path:Array(65).fill(0)},{...target,tag:'p,script'},{...target,quote:'x'.repeat(161)},{...target,rootId:null}])assert.throws(()=>validateAnnotations([{...stroke,anchorTarget:broken}]),/기준 위치/);
 });
+test('pen font baselines are optional and reject corrupt scale data before opening',()=>{
+  const pen={id:'pen',type:'pen',anchor:'n0',points:[{x:.1,y:.2}],color:'#edcf67',width:3,opacity:1};
+  const basis={width:400,height:120,fontSize:18};
+  assert.deepEqual(validateAnnotations([pen]),[pen]);
+  assert.deepEqual(validateAnnotations([{...pen,penBasis:basis}])[0].penBasis,basis);
+  for(const broken of [false,[],{...basis,width:0},{...basis,height:-1},{...basis,width:Infinity},{...basis,height:1e9},{...basis,fontSize:0},{...basis,fontSize:NaN},{...basis,fontSize:1001},{...basis,fontSize:'18'}])assert.throws(()=>validateAnnotations([{...pen,penBasis:broken}]),/글자 크기 기준/);
+  assert.throws(()=>validateAnnotations([{...pen,anchor:undefined,penBasis:basis}]),/글자 크기 기준/);
+  assert.throws(()=>validateAnnotations([{...pen,type:'rect',penBasis:basis}]),/글자 크기 기준/);
+});
