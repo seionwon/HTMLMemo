@@ -1384,7 +1384,7 @@ ID: hist-20261014-024. tests/chrome.mjs가 macOS Codex/CodeMemo 제한 환경을
 
 | ID | change-kind | status |
 |---|---|---|
-| hist-20261022-005 | 중복 제목 표시 수정 · 실제 책 마크업 대응 | 구현·단위 160개·제한된 실제 브라우저 확인 완료, 전체 CI Chrome·Pages 게시 대기 |
+| hist-20261022-005 | 중복 제목 표시 수정 · 실제 책 마크업 대응 | 구현·단위 160개·전체 CI Chrome 25개·Pages 게시·공개 Chrome 검사 완료 |
 
 **원인·변경:** 앞선 `hist-20261022-003`은 제목 태그(`h1`~`h6`, heading 역할)의 **목차**만 화면에서 제거해, 실제 책의 `.nav-head > strong`으로 된 **목차**가 남았습니다. 이번에는 이 구조도 정확히 처리합니다. 문서를 열면 왼쪽 **목차 / 검색 / 주석** 탭 아래의 별도 **목차** 제목은 표시되지 않고 **책 전체 검색**으로 이어집니다. 새 옵션이나 조작은 필요하지 않습니다.
 
@@ -1393,3 +1393,7 @@ ID: hist-20261014-024. tests/chrome.mjs가 macOS Codex/CodeMemo 제한 환경을
 **검증:** `npm run check` 69개 JavaScript·JSON, `npm test` 160개, `npm run build`, `git diff --check`를 통과했습니다. 새 단위 검사는 실제 책의 굵은 글씨 제목만 대상으로 지정하고 세 탭·책 전체 검색·원래 닫기 버튼과 처리기·목록/본문의 같은 이름·텍스트 인덱스·원본 내보내기를 보존하는지 확인합니다. CodeMemo 별도 임시 브라우저에서 같은 구조의 문서를 앱으로 열어 제목 제거와 세 탭·검색창·책 목록 보존을 화면으로 확인했습니다(HTTP 200, 브라우저 예외 0개, `test-results/toc-title-strong-2026-10-22/request.json.png`). macOS 에이전트 안에서 Chrome은 직접 실행하지 않았습니다.
 
 **게시 상태:** 로컬 구현·검증까지 완료했습니다. 기존 전체 Chrome 및 공개 주소 검사도 단순 제목 태그 대신 실제 책의 `.nav-head > strong`과 닫기 버튼을 사용하는 구조로 바꿨습니다. 제목의 계산된 표시와 높이 0, PC·모바일 보기 전환, 원본 내보내기와 좁은 문서의 목차 닫기를 확인하도록 보완했습니다. 전체 Chrome·Pages 게시·공개 파일과 화면 결과는 완료 후 같은 항목에 보충합니다. 사용자 개인 책이나 검증 전용 화면은 배포하지 않습니다.
+
+**게시·온라인 확인 (2026-10-22 03:23:01 +09:00):** 커밋 `79019bec96a173a68e620e3cc4403d71f84d7caf`의 [GitHub Actions 39651668126](https://github.com/seionwon/HTMLMemo/actions/runs/39651668126)가 단위 160개·문법·전체 실제 Chrome 25개·빌드·Pages 게시·공개 주소 Chrome 검사를 모두 성공했습니다. `https://seionwon.github.io/HTMLMemo/`의 검증 책에서 굵은 글씨로 된 둘째 줄 **목차**가 `display:none`·높이 0인지 확인했습니다. 위의 세 탭·책 전체 검색·3권 목록은 그대로이고 검색·주석에서 돌아온 뒤에도 제목은 나타나지 않습니다. 720px 문서의 실제 메뉴 열기·원래 닫기 버튼·메뉴로 닫기가 모두 작동하고, 내보내기는 원본 제목·닫기 버튼·3권 본문을 유지합니다. 같은 공개 검사에서 기존 검색·주석과 펜 배율 검사도 통과했으며 브라우저 예외는 0개입니다.
+
+공개 `index.html`, `styles.css`, `src/app.js`, `src/reader.js`, `src/document.js`, `src/version.js`, `sw.js`, `manifest.webmanifest`는 HTTP 200이고 해당 CI Pages 아티팩트와 바이트·SHA-256이 일치했습니다. PC·390px 앱 화면·좁은 문서의 열린 목차 캡처를 `test-results/toc-title-strong-2026-10-22/published-screenshots/`에 보관하고 확인했습니다. CI의 일부 한글 글꼴 부재는 기존과 같으며, 한글 표시와 제목 제거는 CodeMemo 임시 브라우저 화면으로도 확인했습니다. 임시 검증 화면을 제거하고 개발 서버를 종료했으며 검증용 파일과 개인 책은 배포하지 않았습니다.
