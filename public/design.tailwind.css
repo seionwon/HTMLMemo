@@ -207,3 +207,37 @@ body[data-codememo-design]{margin:0;font-family:var(--app-font);background:var(-
 .revision-list .menu-button{width:100%;text-align:left;white-space:normal;border-bottom:1px solid var(--line);padding:12px}
 .revision-list small{color:var(--muted)}
 .revision-preview p{padding:6px 0;border-bottom:1px solid var(--line)}
+
+/* Library view switch: cards stay the default; list mode keeps one document on each compact row. */
+.library-view-switch{display:flex;align-items:center;padding:2px;border:1px solid var(--line);border-radius:6px;background:var(--surface)}
+.library-view-button{display:inline-flex;align-items:center;justify-content:center;gap:5px;height:25px;padding:0 7px;border-radius:4px;color:var(--muted);font-size:10px;line-height:1;white-space:nowrap}
+.library-view-button:hover{color:var(--text);background:var(--bg)}
+.library-view-button.active{color:var(--green);background:var(--green-light)}
+.library-view-button svg{width:14px;height:14px}
+.list-details{display:none}
+.document-grid[data-view=list]{display:flex;flex-direction:column;gap:7px}
+.document-grid[data-view=list] .document-card{border-radius:7px;overflow:hidden}
+.document-grid[data-view=list] .document-card:hover{transform:none}
+.document-grid[data-view=list] .card-preview,.document-grid[data-view=list] .card-details{display:none}
+.document-grid[data-view=list] .list-details{display:grid;grid-template-columns:20px minmax(150px,1fr) minmax(100px,150px) 82px 65px 68px 100px;align-items:center;gap:12px;width:100%;height:50px;padding:0 42px 0 14px;color:var(--muted);font-size:10px;white-space:nowrap}
+.document-grid[data-view=list] .list-file-icon{display:flex;color:var(--green)}
+.document-grid[data-view=list] .list-title{min-width:0;overflow:hidden;color:var(--text);font-size:12px;font-weight:600;text-overflow:ellipsis}
+.document-grid[data-view=list] .list-host{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.document-grid[data-view=list] .list-date{text-align:right}
+.document-grid[data-view=list] .list-annotations,.document-grid[data-view=list] .list-progress{display:flex;align-items:center;justify-content:flex-end;gap:5px}
+.document-grid[data-view=list] .list-progress{color:var(--green)}
+.document-grid[data-view=list] .list-size{text-align:right}
+.document-grid[data-view=list] .card-menu{top:50%;right:8px;transform:translateY(-50%)}
+@media(max-width:900px){
+ .library-controls{flex-wrap:wrap;justify-content:flex-end}
+ .document-grid[data-view=list] .list-details{grid-template-columns:20px minmax(120px,1fr) 82px 65px 100px}
+ .document-grid[data-view=list] .list-host,.document-grid[data-view=list] .list-size{display:none}
+}
+@media(max-width:600px){
+ .library-view-button span{display:none}
+ .library-view-button{width:27px;padding:0}
+ .document-grid[data-view=list] .list-details{grid-template-columns:18px minmax(90px,1fr) 72px 55px;gap:8px;height:46px;padding-left:11px}
+ .document-grid[data-view=list] .list-annotations{display:none}
+ .document-grid[data-view=list] .list-progress{font-size:0}
+ .document-grid[data-view=list] .list-progress svg{width:14px;height:14px}
+}

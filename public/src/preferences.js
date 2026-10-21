@@ -28,7 +28,7 @@ export const PRESET_PALETTES = Object.freeze([
   Object.freeze({id:'preset-19',name:'미니멀 잉크',colors:Object.freeze(['#111827','#374151','#dc2626','#2563eb','#16a34a','#d97706','#7c3aed','#0891b2'])}),
   Object.freeze({id:'preset-20',name:'레인보우 컬렉션',colors:Object.freeze(['#ef4444','#f97316','#f59e0b','#eab308','#84cc16','#22c55e','#06b6d4','#3b82f6','#6366f1','#a855f7'])}),
 ]);
-export const DEFAULT_PREFERENCES = Object.freeze({theme:'light',librarySort:'modified',annotation:Object.freeze({color:'#edcf67',width:3,opacity:.35,penTTL:0}),toolbarPosition:null});
+export const DEFAULT_PREFERENCES = Object.freeze({theme:'light',librarySort:'modified',libraryView:'card',annotation:Object.freeze({color:'#edcf67',width:3,opacity:.35,penTTL:0}),toolbarPosition:null});
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 export function normalizeHexColor(value) {
   if (typeof value !== 'string') return null;
@@ -78,8 +78,8 @@ export function hexToHsv(hex) { return rgbToHsv(hexToRgb(hex)); }
 export function hsvToHex(hsv) { return rgbToHex(hsvToRgb(hsv)); }
 export function normalizePreferences(value = {}) {
   if (!object(value)) throw new Error('설정 내용이 올바르지 않습니다.');
-  const theme=value.theme??DEFAULT_PREFERENCES.theme, librarySort=value.librarySort??DEFAULT_PREFERENCES.librarySort;
-  if(!['light','dark','system'].includes(theme)||!['modified','created','title'].includes(librarySort))throw new Error('테마 또는 정렬 설정이 올바르지 않습니다.');
+  const theme=value.theme??DEFAULT_PREFERENCES.theme, librarySort=value.librarySort??DEFAULT_PREFERENCES.librarySort, libraryView=value.libraryView??DEFAULT_PREFERENCES.libraryView;
+  if(!['light','dark','system'].includes(theme)||!['modified','created','title'].includes(librarySort)||!['card','list'].includes(libraryView))throw new Error('테마 또는 서재 보기 설정이 올바르지 않습니다.');
   if(value.annotation!==undefined&&!object(value.annotation))throw new Error('주석 도구 설정이 올바르지 않습니다.');
   const input=value.annotation||{}, defaults=DEFAULT_PREFERENCES.annotation;
   const annotation={color:typeof input.color==='string'?input.color.toLowerCase():defaults.color,width:input.width??defaults.width,opacity:input.opacity??defaults.opacity,penTTL:input.penTTL??defaults.penTTL};
@@ -101,7 +101,7 @@ export function normalizePreferences(value = {}) {
   }
   let toolbarPosition=null;
   if(value.toolbarPosition!==null&&value.toolbarPosition!==undefined){const p=value.toolbarPosition;if(!object(p)||![p.x,p.y].every(n=>Number.isFinite(n)&&n>=0&&n<=1))throw new Error('툴바 위치 설정이 올바르지 않습니다.');toolbarPosition={x:p.x,y:p.y};}
-  return {theme,librarySort,annotation,toolbarPosition};
+  return {theme,librarySort,libraryView,annotation,toolbarPosition};
 }
 export function loadPreferences(storage) {
   const saved=storage.getItem(PREFERENCES_KEY);

@@ -51,6 +51,7 @@ const paths = {
   external: '<path d="M14 3h7v7M21 3l-11 11M10 3H3v18h18v-7"/>',
   check: '<path d="m4 12 5 5L20 6"/>', trash: '<path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/>',
   list: '<path d="M8 5h13M8 12h13M8 19h13M3 5h1M3 12h1M3 19h1"/>',
+  grid: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
   zoom: '<circle cx="10" cy="10" r="7"/><path d="M10 6v8M6 10h8M15 15l7 7"/>',
   minus: '<path d="M5 12h14"/>', moon: '<path d="M20 14A9 9 0 0 1 10 3a9 9 0 1 0 10 11z"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 1v2M12 21v2M1 12h2M21 12h2M4 4l2 2M18 18l2 2M20 4l-2 2M6 18l-2 2"/>',
