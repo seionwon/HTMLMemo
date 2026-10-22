@@ -117,8 +117,10 @@ body[data-codememo-design]{margin:0;font-family:var(--app-font);background:var(-
 .about-version{font-size:13px;margin:18px 0}
 .sidebar{top:var(--chrome-height,25px)}
 .sidebar-heading,.sidebar-views{flex-shrink:0}
-.sidebar-views{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:3px;padding:6px 8px;border-bottom:1px solid var(--line)}
-.sidebar-views button{display:flex;align-items:center;justify-content:center;gap:4px;min-width:0;padding:7px 3px;border-radius:5px;color:var(--muted);font-size:10px;white-space:nowrap}
+.sidebar-views{display:flex;flex-wrap:nowrap;gap:3px;padding:6px 8px;border-bottom:1px solid var(--line);overflow-x:auto}
+.sidebar-views button{display:flex;flex:1 0 auto;align-items:center;justify-content:center;gap:4px;min-width:28px;padding:7px 5px;border-radius:5px;color:var(--muted);font-size:10px;white-space:nowrap}
+.sidebar-views #close-sidebar{flex:0 0 28px}
+.sidebar-nav-count{font-variant-numeric:tabular-nums;font-size:10px}
 .sidebar-views button:hover{background:var(--surface-muted);color:var(--text)}
 .sidebar-views button[aria-pressed=true]{background:var(--green-light);color:var(--green);font-weight:600}
 .sidebar-views button:focus-visible{outline-offset:-2px}
@@ -135,24 +137,22 @@ body[data-codememo-design]{margin:0;font-family:var(--app-font);background:var(-
 [data-htmlmemo-doc-sidebar-ui]{display:block;position:relative;isolation:isolate;flex:0 0 auto;min-width:0;max-width:100%;background:var(--surface);color:var(--text);font:12px/1.6 var(--app-font);text-align:left}
 [data-htmlmemo-native-sidebar][data-htmlmemo-sidebar-view=outline]>[data-htmlmemo-doc-sidebar-ui]{position:sticky;top:0;z-index:2}
 [data-htmlmemo-native-sidebar] [data-htmlmemo-redundant-toc-title]{display:none!important}
+[data-htmlmemo-native-sidebar] [data-htmlmemo-book-search-slot]{display:none!important}
 [data-htmlmemo-doc-sidebar-ui] *{box-sizing:border-box}
 [data-htmlmemo-doc-sidebar-ui] [hidden]{display:none!important}
 [data-htmlmemo-doc-sidebar-ui] button{display:flex;align-items:center;margin:0;border:0;border-radius:5px;padding:6px;background:transparent;color:inherit;font:inherit;cursor:pointer;text-align:left}
 [data-htmlmemo-doc-sidebar-ui] button:hover{background:var(--surface-muted)}
 [data-htmlmemo-doc-sidebar-ui] button:focus-visible{outline:2px solid var(--green);outline-offset:-2px}
 [data-htmlmemo-doc-sidebar-ui] svg{flex-shrink:0;width:14px;height:14px}
-[data-htmlmemo-doc-sidebar-ui] .sidebar-views{display:grid;grid-template-columns:.75fr 1fr 1fr;gap:3px;padding:6px 2px;border-bottom:1px solid var(--line)}
-[data-htmlmemo-doc-sidebar-ui] .sidebar-views button{justify-content:center;gap:3px;min-width:0;padding:6px 2px;font-size:11px;white-space:nowrap}
+[data-htmlmemo-doc-sidebar-ui] .sidebar-views{display:flex;flex-wrap:nowrap;gap:3px;padding:6px 2px;border-bottom:1px solid var(--line);overflow-x:auto}
+[data-htmlmemo-doc-sidebar-ui] .sidebar-views button{flex:1 0 auto;justify-content:center;gap:3px;min-width:28px;padding:6px 4px;font-size:11px;white-space:nowrap}
+[data-htmlmemo-doc-sidebar-ui] .sidebar-nav-count{font-size:10px;font-variant-numeric:tabular-nums}
 [data-htmlmemo-doc-sidebar-ui] .sidebar-views button[aria-pressed=true]{background:var(--green-light);color:var(--green);font-weight:600}
 [data-htmlmemo-doc-sidebar-ui] .sidebar-content{padding:10px 2px;overflow-wrap:anywhere}
-[data-htmlmemo-doc-sidebar-ui] .sidebar-bookmarks{margin:0;min-width:0}
-[data-htmlmemo-doc-sidebar-ui] .sidebar-bookmarks>summary{display:flex;align-items:center;gap:6px;list-style:none;cursor:pointer;padding:2px 4px;color:var(--muted);font-size:11px}
-[data-htmlmemo-doc-sidebar-ui] .sidebar-bookmarks>summary:focus-visible{outline:2px solid var(--green);outline-offset:-2px}
-[data-htmlmemo-doc-sidebar-ui] .sidebar-bookmarks>summary::before{content:'▸';width:10px;flex-shrink:0}
-[data-htmlmemo-doc-sidebar-ui] .sidebar-bookmarks[open]>summary::before{transform:rotate(90deg)}
-[data-htmlmemo-doc-sidebar-ui] .sidebar-bookmarks>summary::-webkit-details-marker{display:none}
-[data-htmlmemo-doc-sidebar-ui] .bookmark-count{margin-left:auto;font-variant-numeric:tabular-nums}
-[data-htmlmemo-doc-sidebar-ui] .sidebar-bookmark-list{max-height:180px;overflow:auto;padding-top:6px}
+[data-htmlmemo-doc-sidebar-ui] .sidebar-content:empty{padding:0}
+[data-htmlmemo-doc-sidebar-ui] .sidebar-book-search{margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+[data-htmlmemo-doc-sidebar-ui] .sidebar-book-search input{width:100%;min-width:0;box-sizing:border-box;border:1px solid var(--line);border-radius:5px;background:var(--bg);color:var(--text);padding:8px;font:inherit}
+[data-htmlmemo-doc-sidebar-ui] .sidebar-bookmark-list{min-width:0}
 [data-htmlmemo-doc-sidebar-ui] .bookmark-row{display:flex;align-items:center;min-width:0}
 [data-htmlmemo-doc-sidebar-ui] .outline-item{flex:1;min-width:0;gap:6px;overflow-wrap:anywhere}
 [data-htmlmemo-doc-sidebar-ui] [data-delete-bookmark]{flex-shrink:0}
@@ -178,7 +178,7 @@ body[data-codememo-design]{margin:0;font-family:var(--app-font);background:var(-
 .annotation-group-title,[data-htmlmemo-doc-sidebar-ui] .annotation-group-title{flex:1;min-width:0}
 .annotation-group-count,[data-htmlmemo-doc-sidebar-ui] .annotation-group-count{flex-shrink:0;color:var(--muted);background:var(--surface-muted);border-radius:10px;padding:0 6px;font-size:10px;font-weight:500;font-variant-numeric:tabular-nums}
 .annotation-group-body,[data-htmlmemo-doc-sidebar-ui] .annotation-group-body{margin-left:6px;padding-left:8px;border-left:1px solid var(--line);min-width:0}
-[data-htmlmemo-native-sidebar][data-htmlmemo-sidebar-view=search]>:not([data-htmlmemo-doc-sidebar-ui]):not([data-htmlmemo-toc-resizer]):not([data-htmlmemo-toc-resizer-bound]),[data-htmlmemo-native-sidebar][data-htmlmemo-sidebar-view=annotations]>:not([data-htmlmemo-doc-sidebar-ui]):not([data-htmlmemo-toc-resizer]):not([data-htmlmemo-toc-resizer-bound]){display:none!important}
+[data-htmlmemo-native-sidebar][data-htmlmemo-sidebar-view]:not([data-htmlmemo-sidebar-view=outline])>:not([data-htmlmemo-doc-sidebar-ui]):not([data-htmlmemo-toc-resizer]):not([data-htmlmemo-toc-resizer-bound]){display:none!important}
 @media(max-width:480px){
  .addressbar>.menu-toggle{padding:0 5px}
 }

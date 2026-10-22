@@ -268,13 +268,14 @@ async function openRecord(record, prepared = null, {deferReady = false} = {}) {
   },()=>{if(activeId===tab.id)saveStatus(tab);renderTabs();});
   tabs.push(tab);activate(tab.id);
   tab.reader=new Reader(tab.host,parsed,{
-    onChange:()=>{tab.queue.schedule();if(activeId===tab.id){renderToolbar();if(sidebarMode==='annotations')renderSidebar('annotations');tab.reader?.refreshDocumentSidebar();}},
+    onChange:()=>{tab.queue.schedule();if(activeId===tab.id){renderToolbar();if(['annotations','bookmarks'].includes(sidebarMode))renderSidebar(sidebarMode);else updateSidebarCounts($('#sidebar'),tab.reader);tab.reader?.refreshDocumentSidebar();}},
     onPosition:()=>{tab.queue.schedule({background:true});},onView:()=>{if(activeId===tab.id){updateChrome();updateToolbarState();}},
     onTextSelection:()=>{if(activeId===tab.id)showSelectionMenu(tab.reader);},
     onSelectionDismiss:()=>{if(popoverName==='selection'||popoverName.startsWith('tool-mode-'))closePopover();},
     onLink:url=>safely(openBrowser)(url),onKey:handleKey,requestText:promptText,onError:showError,onNotice:message=>toast(message),
     onDocumentFocus:()=>{if(activeId===tab.id)void toggleReaderFocus();},
     onSidebarView:(mode,panel,documentReader)=>renderSidebar(mode,{panel,embedded:true,documentReader}),
+    onSidebarCounts:(panel,documentReader)=>updateSidebarCounts(panel,documentReader),
     onSelect:id=>{if(activeId===tab.id)annotationDialog(tab,id);},
   });
   Object.assign(tab.reader,preferences.annotation);
@@ -829,12 +830,12 @@ function toolAction(action) {
     });return;
   }
   if(action==='sidebar'){closePopover();if(r.documentSidebarUI?.isConnected)r.showDocumentSidebarView('outline');else renderSidebar(sidebarMode||'outline');return;}
-  if(['search','outline','annotations'].includes(action)){closePopover();if(r.documentSidebarUI?.isConnected)r.showDocumentSidebarView(action);else renderSidebar(action);return;}
+  if(['search','outline','annotations','bookmarks'].includes(action)){closePopover();if(r.documentSidebarUI?.isConnected)r.showDocumentSidebarView(action);else renderSidebar(action);return;}
   if(action==='connect')return safely(()=>exportDocument(active()))();
   if(action==='history')return safely(()=>annotationHistory(active()))();
   if(action==='migrate')return safely(()=>migrateEdition(active()))();
   if(action==='info')return documentInfo(active());
-  if(action==='bookmark')return safely(async()=>{const title=await promptText('text','읽던 위치');if(title){r.addBookmark(title);if(reader()===r){if(r.documentSidebarUI?.isConnected&&r.documentSidebarMode==='outline')r.showDocumentSidebarView('outline');else if(sidebarMode==='outline')renderSidebar('outline');}toast('북마크를 저장했습니다.');}})();
+  if(action==='bookmark')return safely(async()=>{const title=await promptText('text','읽던 위치');if(title){r.addBookmark(title);if(reader()===r){if(r.documentSidebarUI?.isConnected&&r.documentSidebarMode==='bookmarks')r.showDocumentSidebarView('bookmarks');else if(sidebarMode==='bookmarks')renderSidebar('bookmarks');}toast('북마크를 저장했습니다.');}})();
   if(action==='clear')return safely(async()=>{if(await confirmDialog('주석을 모두 지울까요?',`${r.metadata.annotations.length}개의 주석을 지웁니다. 실행 취소로 복원할 수 있어요.`,'모두 지우기'))r.commit([]);})();
 }
 function bindToolbarDrag() {
@@ -846,6 +847,14 @@ function bindToolbarDrag() {
   };
 }
 function closeSidebar() {const panel=$('#sidebar'),wasOpen=!panel.hidden;clearTimeout(panel.sidebarSearchTimer);panel.sidebarMode='';sidebarMode='';panel.hidden=true;const r=reader();if(wasOpen&&r&&r.documentSidebarMode!=='search'){r.sidebarSearchQuery='';r.search('');}}
+function updateSidebarCounts(panel,r) {
+  if(!panel||!r||panel.annotationReader!==r)return;
+  for(const view of ['annotations','bookmarks']){
+    const button=$(`[data-sidebar-view="${view}"]`,panel),count=$(`[data-sidebar-count="${view}"]`,panel),label=view==='annotations'?'주석':'북마크';
+    const total=r.metadata[view].length;if(count)count.textContent=String(total);
+    if(button){button.title=`${label} · 전체 ${total}개`;button.setAttribute('aria-label',button.title);}
+  }
+}
 function styleNativeSidebar(panel) {
   const doc=panel.ownerDocument;
   if(!doc.getElementById('htmlmemo-doc-sidebar-style')){
@@ -861,19 +870,19 @@ function renderSidebar(mode,{panel=$('#sidebar'),embedded=false,documentReader=r
   const r=documentReader;if(!r)return;
   r.annotationTreeOpen ||= new Map();
   if(panel.annotationReader===r)$$('[data-annotation-group]',panel).forEach(group=>r.annotationTreeOpen.set(group.dataset.annotationGroup,!!(group.open||group.hasAttribute('open'))));
-  const bookmarks=$('.sidebar-bookmarks',panel);if(panel.annotationReader===r&&bookmarks)r.sidebarBookmarksOpen=!!(bookmarks.open||bookmarks.hasAttribute('open'));
   panel.annotationReader=r;
   clearTimeout(panel.sidebarSearchTimer);panel.sidebarMode=mode;if(!embedded){sidebarMode=mode;closePopover();}else styleNativeSidebar(panel);panel.hidden=false;
   const id=name=>(embedded?'htmlmemo-native-':'')+name,q=name=>$('#'+id(name),panel);
-  const title={search:'검색',outline:'목차 · 북마크',annotations:'주석'}[mode];
+  const title={search:'검색',outline:'목차',annotations:'주석',bookmarks:'북마크'}[mode];
   if(!$('.sidebar-views',panel)){
-    const views=[['outline','list',embedded?'목차':'목차·북마크'],['search','search','검색'],['annotations','note','주석']];
-    panel.innerHTML=`${embedded?`<h2 id="${id('sidebar-title')}" hidden></h2>`:`<div class="sidebar-heading"><h2 id="sidebar-title"></h2><button class="icon-button" id="close-sidebar" aria-label="패널 닫기">${icon('close')}</button></div>`}<div class="sidebar-views" role="group" aria-label="사이드바 보기">${views.map(([view,name,label])=>`<button type="button" data-sidebar-view="${view}" aria-pressed="false" aria-controls="${id('sidebar-content')}">${icon(name,14)}<span>${label}</span></button>`).join('')}</div><div id="${id('sidebar-content')}" class="sidebar-content" role="region" aria-labelledby="${id('sidebar-title')}"></div>`;
+    const views=[['outline','list','목차'],['search','search','검색'],['annotations','note','주석'],['bookmarks','bookmark','북마크']];
+    panel.innerHTML=`<h2 id="${id('sidebar-title')}" hidden></h2><div class="sidebar-views" role="group" aria-label="사이드바 보기">${views.map(([view,name,label])=>`<button type="button" data-sidebar-view="${view}" title="${label}" aria-label="${label}" aria-pressed="false" aria-controls="${id('sidebar-content')}">${icon(name,14)}${['annotations','bookmarks'].includes(view)?`<span class="sidebar-nav-count" data-sidebar-count="${view}" aria-hidden="true"></span>`:''}</button>`).join('')}${embedded?'':`<button type="button" class="icon-button" id="close-sidebar" title="패널 닫기" aria-label="패널 닫기">${icon('close',14)}</button>`}</div><div id="${id('sidebar-content')}" class="sidebar-content" role="region" aria-labelledby="${id('sidebar-title')}"></div>`;
     if(!embedded)q('close-sidebar').onclick=closeSidebar;
     $$('[data-sidebar-view]',panel).forEach(button=>button.onclick=()=>embedded?r.showDocumentSidebarView(button.dataset.sidebarView):renderSidebar(button.dataset.sidebarView));
   }
   q('sidebar-title').textContent=embedded&&mode==='outline'?'목차':title;panel.setAttribute('aria-labelledby',id('sidebar-title'));
   $$('[data-sidebar-view]',panel).forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.sidebarView===mode)));
+  updateSidebarCounts(panel,r);
   const content=$('.sidebar-content',panel);content.hidden=false;
   if(mode==='search'){
     content.innerHTML=`<div class="search-field"><input id="${id('document-search')}" aria-label="불러온 부분 검색어" placeholder="불러온 부분에서 찾기" autocomplete="off"></div><div class="search-navigation"><span id="${id('search-count')}">검색어를 입력하세요.</span><button id="${id('search-prev')}" class="icon-button" aria-label="이전 검색 결과">${icon('back')}</button><button id="${id('search-next')}" class="icon-button" aria-label="다음 검색 결과">${icon('forward')}</button></div><div id="${id('search-results')}"></div>`;
@@ -883,14 +892,14 @@ function renderSidebar(mode,{panel=$('#sidebar'),embedded=false,documentReader=r
     q('search-prev').onclick=()=>r.nextSearch(-1);q('search-next').onclick=()=>r.nextSearch(1);input.focus();if(input.value)run();
   }else if(mode==='outline'){
     const outline=embedded?[]:r.outline();
-    const marks=`${r.metadata.bookmarks.map(mark=>`<div class="bookmark-row"><button class="outline-item" data-bookmark="${esc(mark.id)}">${icon('bookmark',14)} ${esc(mark.title)}</button><button class="icon-button" data-delete-bookmark="${esc(mark.id)}" aria-label="북마크 삭제">${icon('close',13)}</button></div>`).join('')}<button id="${id('add-bookmark')}" class="text-button">+ 현재 위치 저장</button>`;
     // Native books keep their original TOC nodes below this editor-owned panel.
-    // Put HTMLMemo bookmarks here too, so the tools menu no longer duplicates them.
-    content.innerHTML=embedded?`<details class="sidebar-bookmarks"${r.sidebarBookmarksOpen?' open':''}><summary>${icon('bookmark',14)}<span>북마크</span><span class="bookmark-count">${r.metadata.bookmarks.length}</span></summary><div class="sidebar-bookmark-list">${marks}</div></details>`:`<p class="panel-label">목차</p>${outline.length?outline.map((item,index)=>`<button class="outline-item" style="padding-left:${12+(item.level-1)*12}px" data-heading="${index}">${esc(item.title)}</button>`).join(''):'<p class="panel-empty">이 문서에 제목 목차가 없습니다.</p>'}<p class="panel-label">북마크</p>${marks}`;
-    const group=$('.sidebar-bookmarks',panel);if(group)group.ontoggle=()=>{r.sidebarBookmarksOpen=!!(group.open||group.hasAttribute('open'));};
+    content.innerHTML=embedded?'':outline.length?outline.map((item,index)=>`<button class="outline-item" style="padding-left:${12+(item.level-1)*12}px" data-heading="${index}">${esc(item.title)}</button>`).join(''):'<p class="panel-empty">이 문서에 제목 목차가 없습니다.</p>';
     $$('[data-heading]',panel).forEach(button=>button.onclick=()=>r.jump(outline[Number(button.dataset.heading)].node));
+  }else if(mode==='bookmarks'){
+    const marks=`${r.metadata.bookmarks.map(mark=>`<div class="bookmark-row"><button class="outline-item" data-bookmark="${esc(mark.id)}">${icon('bookmark',14)} ${esc(mark.title)}</button><button class="icon-button" data-delete-bookmark="${esc(mark.id)}" aria-label="북마크 삭제">${icon('close',13)}</button></div>`).join('')}<button id="${id('add-bookmark')}" class="text-button">+ 현재 위치 저장</button>`;
+    content.innerHTML=`${r.metadata.bookmarks.length?'':'<p class="panel-empty">저장한 북마크가 없습니다.</p>'}<div class="sidebar-bookmark-list">${marks}</div>`;
     $$('[data-bookmark]',panel).forEach(button=>button.onclick=()=>{const mark=r.metadata.bookmarks.find(m=>m.id===button.dataset.bookmark);r.scrollTop=mark.top*r.zoom;r.scrollLeft=mark.left*r.zoom;});
-    $$('[data-delete-bookmark]',panel).forEach(button=>button.onclick=()=>{r.metadata.bookmarks=r.metadata.bookmarks.filter(m=>m.id!==button.dataset.deleteBookmark);active().queue.schedule();if(embedded)r.showDocumentSidebarView('outline');else renderSidebar('outline');});q('add-bookmark').onclick=()=>toolAction('bookmark');
+    $$('[data-delete-bookmark]',panel).forEach(button=>button.onclick=()=>{r.metadata.bookmarks=r.metadata.bookmarks.filter(m=>m.id!==button.dataset.deleteBookmark);active().queue.schedule();if(embedded)r.showDocumentSidebarView('bookmarks');else renderSidebar('bookmarks');});q('add-bookmark').onclick=()=>toolAction('bookmark');
   }else{
     const contexts=r.annotationContexts?.()||new Map();
     const when=value=>Number.isFinite(value)?new Date(value).toLocaleString('ko-KR',{month:'long',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false}):'';

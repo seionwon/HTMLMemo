@@ -79,6 +79,13 @@ function clearReaderSidebarArtifacts(root) {
   root.querySelector?.('#htmlmemo-sidebar-style')?.remove();
   root.querySelector?.('#htmlmemo-toc-resize-style')?.remove();
   root.querySelector?.('#htmlmemo-doc-sidebar-style')?.remove();
+  // Restore relocated native search controls before removing the editor panel.
+  for(const part of root.querySelectorAll?.('[data-htmlmemo-book-search-part]')||[]){
+    const key=part.getAttribute('data-htmlmemo-book-search-part'),slot=[...root.querySelectorAll('[data-htmlmemo-book-search-slot]')].find(node=>node.getAttribute('data-htmlmemo-book-search-slot')===key);
+    if(slot)slot.replaceWith(part);else part.closest('[data-htmlmemo-native-sidebar]')?.append(part);
+    part.removeAttribute('data-htmlmemo-book-search-part');
+  }
+  for(const slot of root.querySelectorAll?.('[data-htmlmemo-book-search-slot]')||[])slot.remove();
   for(const panel of root.querySelectorAll?.('[data-htmlmemo-doc-sidebar-ui]')||[])panel.remove();
   for(const title of root.querySelectorAll?.('[data-htmlmemo-redundant-toc-title]')||[])title.removeAttribute('data-htmlmemo-redundant-toc-title');
   for(const sidebar of root.querySelectorAll?.('[data-htmlmemo-native-sidebar],[data-htmlmemo-sidebar-view]')||[]){sidebar.removeAttribute('data-htmlmemo-native-sidebar');sidebar.removeAttribute('data-htmlmemo-sidebar-view');}
@@ -235,9 +242,9 @@ export function serializeHTML(doc, metadata) {
   clone.querySelector('head').append(metadataElement(doc, metadata));
   return '<!doctype html>\n' + clone.outerHTML;
 }
-export function textIndex(doc) {
+export function textIndex(doc,root=doc.body) {
   const nodes = []; let text = '';
-  const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, {
+  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
       if (!node.textContent || node.parentElement?.closest('script,style,noscript,svg,textarea,template,[data-htmlmemo-ui]')) return NodeFilter.FILTER_REJECT;
       return NodeFilter.FILTER_ACCEPT;

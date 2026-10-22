@@ -823,18 +823,23 @@ export class Reader {
     if(this.preparing||this.disposed||!sidebar?.isConnected||!this.callbacks?.onSidebarView)return;
     if(this.documentSidebarUI?.isConnected&&sidebar.contains(this.documentSidebarUI))return;
     const panel=this.doc.createElement('section');panel.setAttribute('data-htmlmemo-ui','');panel.setAttribute('data-htmlmemo-doc-sidebar-ui','');
-    // Keep every source TOC node and listener in place. Only editor-owned UI is added.
+    // Keep the source TOC in place; the native search is parked separately below.
     // Exported books use .nav-head > strong, not necessarily a heading tag.
     // Do not mistake a chapter named "목차" or an editor tab for this label.
     const title=[...sidebar.querySelectorAll('h1,h2,h3,h4,h5,h6,[role="heading"],.nav-head > strong')].find(node=>node.textContent.trim()==='목차'&&!node.closest('[data-htmlmemo-ui],#reader-tree,details,summary,a,button'));
     title?.setAttribute('data-htmlmemo-redundant-toc-title','');
     sidebar.setAttribute('data-htmlmemo-native-sidebar','');sidebar.prepend(panel);this.documentSidebarUI=panel;
-    panel.addEventListener('click',event=>event.stopPropagation());
+    panel.addEventListener('click',event=>{if(!event.target.closest('[data-htmlmemo-book-search]'))event.stopPropagation();});
+    this.setupDocumentBookSearch();
     this.showDocumentSidebarView(this.documentSidebarMode||'outline');
   }
   showDocumentSidebarView(mode) {
-    if(!['outline','search','annotations'].includes(mode)||!this.documentSidebarUI?.isConnected)return;
+    if(!['outline','search','annotations','bookmarks'].includes(mode)||!this.documentSidebarUI?.isConnected)return;
     const sidebar=this.tocResize.sidebar,previous=this.documentSidebarMode||'outline';
+    this.setupDocumentBookSearch();
+    const search=this.documentBookSearchHost;
+    // Park the live source controls outside the region about to be re-rendered.
+    if(search){search.hidden=true;this.documentSidebarUI.append(search);}
     if(mode!=='outline'&&this.tocStrip){
       this.applyTocWidth(Math.max(TOC_STRIP_SNAP,this.tocExpandedWidth||this.tocDefaultWidth||TOC_DEFAULT),{persist:true,snapStrip:true});
       this.syncAfterTocResize();
@@ -842,11 +847,35 @@ export class Reader {
     if(previous==='outline'&&mode!=='outline')this.documentTocScrollTop=sidebar.scrollTop;
     this.documentSidebarMode=mode;sidebar.setAttribute('data-htmlmemo-sidebar-view',mode);
     this.callbacks.onSidebarView(mode,this.documentSidebarUI,this);
+    if(search){if(mode==='search'){this.documentSidebarUI.querySelector('.sidebar-content').prepend(search);search.hidden=false;}else this.documentSidebarUI.append(search);}
     if(mode==='outline'&&Number.isFinite(this.documentTocScrollTop))sidebar.scrollTop=this.documentTocScrollTop;
     else if(mode!==previous)sidebar.scrollTop=0;
   }
   refreshDocumentSidebar() {
-    if(this.documentSidebarMode==='annotations')this.showDocumentSidebarView('annotations');
+    this.callbacks.onSidebarCounts?.(this.documentSidebarUI,this);
+    if(['annotations','bookmarks'].includes(this.documentSidebarMode))this.showDocumentSidebarView(this.documentSidebarMode);
+  }
+  setupDocumentBookSearch() {
+    const sidebar=this.tocResize?.sidebar;if(this.documentBookSearchHost||!sidebar)return;
+    const input=[...sidebar.querySelectorAll('input')].find(node=>!node.closest('[data-htmlmemo-ui]')&&/책\s*전체\s*검색/.test((node.getAttribute('placeholder')||'')+' '+(node.getAttribute('aria-label')||'')));
+    if(!input)return;
+    let unit=input;
+    for(let parent=input.parentElement;parent&&parent!==sidebar;parent=parent.parentElement){
+      const search=parent.matches('form,label,[role="search"]')||/search|find/i.test((parent.id||'')+' '+(parent.className||''));
+      if(parent.querySelector('#reader-tree,[data-htmlmemo-doc-sidebar-ui]')||(!search&&parent.querySelector('details,summary,h1,h2,h3,.nav-head')))break;
+      if(search)unit=parent;
+    }
+    const parts=[unit];
+    for(let sibling=unit.nextElementSibling;sibling&&/search|find/i.test((sibling.id||'')+' '+(sibling.className||''))&&!sibling.matches('#reader-tree')&&!sibling.querySelector('#reader-tree');sibling=sibling.nextElementSibling)parts.push(sibling);
+    const host=this.doc.createElement('div');host.setAttribute('data-htmlmemo-book-search','');host.className='sidebar-book-search';host.setAttribute('role','group');host.setAttribute('aria-label','책 전체 검색');host.hidden=true;
+    parts.forEach((node,index)=>{
+      const key=String(index),slot=this.doc.createElement('span');slot.setAttribute('data-htmlmemo-book-search-slot',key);slot.hidden=true;
+      // Source UI text used to contribute to body offsets. Keep its original
+      // text (not scripts/styles) in the hidden slot so existing anchors do not shift.
+      slot.textContent=textIndex(this.doc,node).text;
+      node.before(slot);node.setAttribute('data-htmlmemo-book-search-part',key);host.append(node);
+    });
+    this.documentBookSearchHost=host;
   }
   applyTocWidth(value, {persist = false, snapStrip = true} = {}) {
     const info = this.tocResize?.sidebar?.isConnected ? this.tocResize : this.ensureDocumentTocResize();
@@ -1997,7 +2026,8 @@ export class Reader {
     this.doc.body.normalize(); this.searchResults = []; this.searchPosition = -1;
     if (!query.trim()) return [];
     const index = textIndex(this.doc); const haystack=index.text.toLocaleLowerCase(); const needle=query.toLocaleLowerCase(); let found=haystack.indexOf(needle);
-    while (found !== -1 && this.searchResults.length < 3000) { this.searchResults.push({start:found,end:found+query.length,quote:index.text.slice(Math.max(0,found-35),found+query.length+45)}); found=haystack.indexOf(needle,found+Math.max(needle.length,1)); }
+    const sourceSearchText=index.nodes.filter(item=>item.node.parentElement?.closest('[data-htmlmemo-book-search-slot]'));
+    while (found !== -1 && this.searchResults.length < 3000) { if(!sourceSearchText.some(item=>found<item.end&&found+query.length>item.start))this.searchResults.push({start:found,end:found+query.length,quote:index.text.slice(Math.max(0,found-35),found+query.length+45)}); found=haystack.indexOf(needle,found+Math.max(needle.length,1)); }
     // Only the active hit is marked, keeping long documents responsive.
     if (move && this.searchResults.length) this.nextSearch(1); return this.searchResults;
   }

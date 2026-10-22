@@ -30,10 +30,12 @@ function sidebar() {
     flush(){for(const [id,fn] of [...timers]){timers.delete(id);fn();}},setReader:reader=>current=reader};
 }
 
-test('sidebar switches between outline, search and annotations without changing document data',()=>{
+test('sidebar switches four icon-only views with tooltip labels and total counts without changing document data',()=>{
   const a=sidebar(),before=structuredClone(a.r.metadata);a.open('outline');
   assert.equal(a.doc.querySelector('#sidebar').hidden,false);
-  assert.deepEqual([...a.doc.querySelectorAll('[data-sidebar-view]')].map(button=>button.textContent),['목차·북마크','검색','주석']);
+  assert.deepEqual([...a.doc.querySelectorAll('[data-sidebar-view]')].map(button=>button.textContent),['','','1','1']);
+  assert.deepEqual([...a.doc.querySelectorAll('[data-sidebar-view]')].map(button=>button.getAttribute('aria-label')),['목차','검색','주석 · 전체 1개','북마크 · 전체 1개']);
+  assert.equal(a.doc.querySelectorAll('.sidebar-bookmarks,.sidebar-heading').length,0);
   a.doc.querySelector('[data-heading]').onclick();assert.deepEqual(a.calls.headings,['heading-1']);
   const button=a.doc.querySelector('[data-sidebar-view=search]');a.choose('search');
   const input=a.doc.querySelector('#document-search');assert.equal(input.getAttribute('placeholder'),'불러온 부분에서 찾기');assert.equal(input.getAttribute('aria-label'),'불러온 부분 검색어');assert.equal(a.doc.querySelector('#sidebar-title').textContent,'검색');input.value='기억';input.oninput();a.flush();
@@ -42,7 +44,7 @@ test('sidebar switches between outline, search and annotations without changing 
   a.choose('annotations');assert.equal(a.doc.querySelector('#sidebar-title').textContent,'주석');a.doc.querySelector('[data-annotation]').onclick();assert.deepEqual(a.calls.annotations,['a1']);
   assert.equal(a.doc.querySelector('[data-sidebar-view=annotations]').getAttribute('aria-pressed'),'true');
   assert.equal(a.doc.querySelectorAll('[data-sidebar-view][aria-pressed=true]').length,1);
-  a.choose('outline');a.doc.querySelector('[data-bookmark]').onclick();
+  a.choose('bookmarks');a.doc.querySelector('[data-bookmark]').onclick();
   assert.equal(a.r.scrollTop,480);assert.equal(a.r.scrollLeft,24);
   assert.deepEqual(a.r.metadata,before);assert.equal(a.calls.saved,0);
   assert.strictEqual(a.doc.querySelector('[data-sidebar-view=search]'),button);
@@ -56,6 +58,41 @@ test('sidebar cancels pending searches on view changes, close and document switc
   assert.equal(a.doc.querySelector('#sidebar').hidden,true);assert.equal(a.timers.size,0);assert.equal(a.r.searchQuery,'');
   a.open('search');input=a.doc.querySelector('#document-search');input.value='이전 문서';input.oninput();
   a.setReader({});a.flush();assert.equal(a.calls.search.includes('이전 문서'),false);
+});
+
+test('icon totals include all annotations and bookmarks, update in place and show zero',()=>{
+  const a=sidebar();a.open('search');const input=a.doc.querySelector('#document-search'),button=a.doc.querySelector('[data-sidebar-view=annotations]');
+  a.r.metadata.annotations.push({id:'unloaded',type:'note',anchorTarget:{section:'not-loaded'}});a.r.metadata.bookmarks=[];
+  a.context.updateSidebarCounts(a.doc.querySelector('#sidebar'),a.r);
+  assert.equal(button.textContent,'2');assert.equal(button.getAttribute('title'),'주석 · 전체 2개');
+  assert.equal(a.doc.querySelector('[data-sidebar-view=bookmarks]').textContent,'0');assert.strictEqual(a.doc.querySelector('#document-search'),input);
+  assert.equal(button.firstElementChild.localName,'svg');assert.equal(button.lastElementChild.getAttribute('data-sidebar-count'),'annotations');
+  a.r.metadata.annotations=[];a.context.updateSidebarCounts(a.doc.querySelector('#sidebar'),a.r);assert.equal(button.textContent,'0');
+});
+
+test('native whole-book search keeps its nodes, listeners and query above loaded-part search across all views and export',()=>{
+  installDOM();const a=sidebar(),doc=documentFor('<html><head></head><body><nav id="reader-nav"><h2>목차</h2><form id="whole-book-search"><input id="whole-query" placeholder="책 전체 검색"><button id="whole-clear" type="button">지우기</button><div id="whole-results"></div></form><div id="reader-tree"><details><summary>원래 목차</summary></details></div></nav><main><h1>본문</h1><p>검색할 내용</p></main></body></html>');
+  const nav=doc.querySelector('nav'),form=doc.querySelector('form'),query=doc.querySelector('#whole-query'),clear=doc.querySelector('#whole-clear'),tree=doc.querySelector('#reader-tree'),text=textIndex(doc).text;
+  let searched=0,cleared=0;query.addEventListener('input',()=>searched++);nav.addEventListener('click',event=>{if(event.target===clear)cleared++;});
+  Object.setPrototypeOf(a.r,Reader.prototype);a.r.doc=doc;a.r.tocResize={sidebar:nav};
+  a.r.callbacks={onSidebarView:(mode,panel,documentReader)=>a.context.renderSidebar(mode,{panel,embedded:true,documentReader}),onSidebarCounts:(panel,r)=>a.context.updateSidebarCounts(panel,r)};
+  a.r.setupDocumentSidebar();const host=a.r.documentBookSearchHost;assert.equal(host.hidden,true);assert.equal(host.isConnected,true);
+  a.r.showDocumentSidebarView('search');assert.strictEqual(a.r.documentSidebarUI.querySelector('.sidebar-content').firstElementChild,host);assert.strictEqual(host.querySelector('form'),form);assert.equal(host.hidden,false);
+  assert.ok(host.nextElementSibling.contains(doc.querySelector('#htmlmemo-native-document-search')));
+  query.value='아직 열지 않은 장';query.dispatchEvent(new doc.defaultView.Event('input',{bubbles:true}));clear.dispatchEvent(new doc.defaultView.Event('click',{bubbles:true}));assert.equal(searched,1);assert.equal(cleared,1);
+  for(const view of ['bookmarks','annotations','outline']){a.r.showDocumentSidebarView(view);assert.equal(host.hidden,true);assert.equal(host.isConnected,true);assert.strictEqual(nav.querySelector('#reader-tree'),tree);}
+  a.r.showDocumentSidebarView('search');assert.strictEqual(doc.querySelector('#whole-query'),query);assert.equal(query.value,'아직 열지 않은 장');assert.equal(host.hidden,false);
+  a.r.metadata.annotations=[];a.r.refreshDocumentSidebar();assert.equal(a.r.documentSidebarUI.querySelector('[data-sidebar-count=annotations]').textContent,'0');assert.strictEqual(doc.querySelector('#whole-query'),query);assert.equal(query.value,'아직 열지 않은 장');assert.equal(textIndex(doc).text,text);
+  assert.deepEqual(Reader.prototype.search.call(a.r,'지우기',false),[],'hidden source-offset placeholders are not loaded-part search results');
+  const exported=documentFor(serializeHTML(doc,a.r.metadata));assert.equal(exported.querySelector('nav>form').id,'whole-book-search');assert.equal(exported.querySelector('form').nextElementSibling.id,'reader-tree');assert.equal(exported.querySelector('[data-htmlmemo-book-search-part],[data-htmlmemo-book-search-slot],[data-htmlmemo-doc-sidebar-ui]'),null);
+});
+
+test('adjacent native search results return to their source slots when opening an editor-marked HTML',()=>{
+  installDOM();const a=sidebar(),doc=documentFor('<html><head></head><body><nav><input id="q" placeholder="책 전체 검색"><div id="book-search-results">결과</div><div id="reader-tree">목차</div></nav><main><h1>본문</h1></main></body></html>');
+  Object.setPrototypeOf(a.r,Reader.prototype);a.r.doc=doc;a.r.tocResize={sidebar:doc.querySelector('nav')};a.r.callbacks={onSidebarView:(mode,panel,documentReader)=>a.context.renderSidebar(mode,{panel,embedded:true,documentReader})};a.r.setupDocumentSidebar();a.r.showDocumentSidebarView('search');
+  assert.equal(a.r.documentBookSearchHost.querySelectorAll('[data-htmlmemo-book-search-part]').length,2);
+  const parsed=documentFor(parseHTML('<!doctype html>'+doc.documentElement.outerHTML).html);
+  assert.deepEqual([...parsed.querySelector('nav').children].map(node=>node.id),['q','book-search-results','reader-tree']);assert.equal(parsed.querySelector('[data-htmlmemo-book-search-slot],[data-htmlmemo-book-search-part],[data-htmlmemo-doc-sidebar-ui]'),null);
 });
 
 test('annotation list names what each annotation marks, the heading above it and when it was made',()=>{
@@ -205,30 +242,30 @@ test('the visible source TOC gets inline choices without moving its tree, listen
   Object.setPrototypeOf(a.r,Reader.prototype);a.r.doc=doc;a.r.tocResize={sidebar:toc};
   a.r.callbacks={onSidebarView:(mode,panel,documentReader)=>a.context.renderSidebar(mode,{panel,embedded:true,documentReader})};
   a.r.setupDocumentSidebar();const panel=a.r.documentSidebarUI;
-  assert.strictEqual(toc.firstElementChild,panel);assert.deepEqual([...panel.querySelectorAll('[data-sidebar-view]')].map(button=>button.textContent),['목차','검색','주석']);
+  assert.strictEqual(toc.firstElementChild,panel);assert.deepEqual([...panel.querySelectorAll('[data-sidebar-view]')].map(button=>button.textContent),['','','1','1']);
   assert.equal(toc.querySelector('h2:not([hidden])').hasAttribute('data-htmlmemo-redundant-toc-title'),true);assert.equal(doc.querySelectorAll('[data-htmlmemo-redundant-toc-title]').length,1);
   assert.equal(doc.querySelector('main h2').hasAttribute('data-htmlmemo-redundant-toc-title'),false);assert.equal(toc.querySelector('input').getAttribute('placeholder'),'책 전체 검색');
   toc.scrollTop=37;a.r.tocStrip=true;a.r.tocExpandedWidth=260;let expanded=0,synced=0;
   a.r.applyTocWidth=width=>{expanded=width;a.r.tocStrip=false;};a.r.syncAfterTocResize=()=>synced++;
   panel.querySelector('[data-sidebar-view=search]').onclick();assert.equal(expanded,260);assert.equal(synced,1);assert.equal(toc.scrollTop,0);
-  assert.equal(toc.getAttribute('data-htmlmemo-sidebar-view'),'search');const input=panel.querySelector('input');assert.equal(input.getAttribute('placeholder'),'불러온 부분에서 찾기');assert.equal(input.getAttribute('aria-label'),'불러온 부분 검색어');input.value='원래';input.oninput();a.flush();
+  assert.equal(toc.getAttribute('data-htmlmemo-sidebar-view'),'search');const input=panel.querySelector('#htmlmemo-native-document-search');assert.equal(input.getAttribute('placeholder'),'불러온 부분에서 찾기');assert.equal(input.getAttribute('aria-label'),'불러온 부분 검색어');input.value='원래';input.oninput();a.flush();
   panel.querySelector('[data-sidebar-view=annotations]').onclick();assert.equal(panel.querySelector('[data-annotation] .annotation-main').textContent,'남겨 둔 메모');assert.equal(panel.querySelector('[data-annotation] .annotation-meta').textContent,'메모');
   panel.querySelector('[data-sidebar-view=outline]').onclick();assert.equal(toc.scrollTop,37);assert.equal(panel.querySelector('.sidebar-content').hidden,false);
-  assert.equal(panel.querySelectorAll('.sidebar-bookmarks').length,1);assert.ok(panel.querySelector('#htmlmemo-native-add-bookmark'));assert.equal(panel.querySelector('[data-heading]'),null,'the source TOC is not duplicated');
+  assert.equal(panel.querySelectorAll('.sidebar-bookmarks').length,0);assert.equal(panel.querySelector('#htmlmemo-native-add-bookmark'),null);assert.equal(panel.querySelector('[data-heading]'),null,'the source TOC is not duplicated');
   assert.strictEqual(tree.parentElement,toc);tree.querySelector('summary').onclick();assert.equal(clicks,1);assert.equal(tree.hasAttribute('open'),true);
   assert.equal(textIndex(doc).text,text);a.r.setupDocumentSidebar();assert.equal(toc.querySelectorAll('[data-htmlmemo-doc-sidebar-ui]').length,1);
 });
-test('native bookmarks stay in the outline sidebar, keep disclosure and edit without opening a second panel',()=>{
+test('native bookmark icon opens its own view and keeps navigation and editing in the same panel',()=>{
   installDOM();const a=sidebar(),doc=documentFor('<html><head></head><body><nav><div id="source-tree">원래 목차</div></nav><main><h1>제목</h1><p>본문</p></main></body></html>');
   Object.setPrototypeOf(a.r,Reader.prototype);a.r.doc=doc;a.r.viewport={scrollTop:0,scrollLeft:0};a.r.tocResize={sidebar:doc.querySelector('nav')};
   a.r.callbacks={onSidebarView:(mode,panel,documentReader)=>a.context.renderSidebar(mode,{panel,embedded:true,documentReader})};
   const actions=[];a.context.toolAction=action=>actions.push(action);a.r.setupDocumentSidebar();
-  let group=a.r.documentSidebarUI.querySelector('.sidebar-bookmarks');assert.equal(group.hasAttribute('open'),false);
-  group.open=true;group.ontoggle();a.r.documentSidebarUI.querySelector('[data-bookmark=b1]').onclick();assert.equal(a.r.scrollTop,480);assert.equal(a.r.scrollLeft,24);
+  assert.equal(a.r.documentSidebarUI.querySelector('.sidebar-bookmarks'),null);
+  a.r.showDocumentSidebarView('bookmarks');a.r.documentSidebarUI.querySelector('[data-bookmark=b1]').onclick();assert.equal(a.r.scrollTop,480);assert.equal(a.r.scrollLeft,24);
   a.r.documentSidebarUI.querySelector('#htmlmemo-native-add-bookmark').onclick();assert.deepEqual(actions,['bookmark']);
-  a.r.showDocumentSidebarView('search');a.r.showDocumentSidebarView('outline');group=a.r.documentSidebarUI.querySelector('.sidebar-bookmarks');assert.equal(group.hasAttribute('open'),true);
+  a.r.showDocumentSidebarView('search');a.r.showDocumentSidebarView('bookmarks');assert.equal(a.r.documentSidebarUI.querySelectorAll('[data-bookmark]').length,1);
   a.r.documentSidebarUI.querySelector('[data-delete-bookmark=b1]').onclick();assert.equal(a.r.metadata.bookmarks.length,0);assert.equal(a.calls.saved,1);
-  assert.equal(a.r.documentSidebarUI.querySelector('.bookmark-count').textContent,'0');assert.equal(a.doc.querySelector('#sidebar').hidden,true);assert.ok(doc.querySelector('#source-tree'));
+  assert.equal(a.r.documentSidebarUI.querySelector('[data-sidebar-count=bookmarks]').textContent,'0');assert.equal(a.doc.querySelector('#sidebar').hidden,true);assert.ok(doc.querySelector('#source-tree'));
   assert.ok(a.r.documentSidebarUI.querySelector('#htmlmemo-native-add-bookmark'));assert.equal(a.r.documentSidebarUI.querySelector('[data-bookmark]'),null);
 });
 
@@ -241,7 +278,7 @@ test('the source book strong title is hidden without removing its drawer close b
   a.r.setupDocumentSidebar();
   assert.strictEqual(doc.querySelector('[data-htmlmemo-redundant-toc-title]'),title);assert.equal(doc.querySelectorAll('[data-htmlmemo-redundant-toc-title]').length,1);
   assert.equal(tree.querySelector('[data-htmlmemo-redundant-toc-title]'),null);assert.equal(doc.querySelector('main [data-htmlmemo-redundant-toc-title]'),null);
-  assert.deepEqual([...a.r.documentSidebarUI.querySelectorAll('[data-sidebar-view]')].map(button=>button.textContent),['목차','검색','주석']);
+  assert.deepEqual([...a.r.documentSidebarUI.querySelectorAll('[data-sidebar-view]')].map(button=>button.textContent),['','','1','1']);
   assert.equal(toc.querySelector('input').getAttribute('placeholder'),'책 전체 검색');assert.strictEqual(toc.querySelector('#reader-close'),close);close.onclick();assert.equal(closed,1);assert.equal(textIndex(doc).text,before);
   const exported=documentFor(serializeHTML(doc,a.r.metadata));
   assert.equal(exported.querySelector('#reader-nav>.nav-head>strong').textContent,'목차');assert.ok(exported.querySelector('#reader-close'));assert.equal(exported.querySelector('[data-htmlmemo-redundant-toc-title]'),null);
