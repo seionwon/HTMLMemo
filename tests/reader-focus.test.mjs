@@ -170,7 +170,7 @@ test('palette title dragging captures one pointer, clamps its position and exclu
  const a=app(),pop=a.doc.querySelector('#tool-popover');pop.hidden=false;pop.classList.add('palette-popover');
  pop.innerHTML='<div data-palette-drag tabindex="0"><h3>펜과 색상</h3><button>닫기</button></div><input type="range">';
  Object.defineProperties(pop,{offsetWidth:{value:320},offsetHeight:{value:600}});
- pop.style.left='100px';pop.style.top='80px';pop.getBoundingClientRect=()=>({left:parseFloat(pop.style.left),top:parseFloat(pop.style.top)});
+ let height=600;pop.style.left='100px';pop.style.top='80px';pop.getBoundingClientRect=()=>({left:parseFloat(pop.style.left),top:parseFloat(pop.style.top),width:320,height});
  a.doc.querySelector('#toolbar').getBoundingClientRect=()=>({left:500,width:400,top:740,bottom:760});
  let captured=null,prevented=0;pop.setPointerCapture=id=>{captured=id;};pop.hasPointerCapture=id=>captured===id;pop.releasePointerCapture=id=>{assert.equal(captured,id);captured=null;};
  Object.assign(a.context,{innerWidth:1280,innerHeight:800});
@@ -193,6 +193,7 @@ test('palette title dragging captures one pointer, clamps its position and exclu
  pointer('pointerdown',title);pointer('pointercancel',pop);assert.equal(captured,null);
  pointer('pointerdown',title);pop.cancelPaletteDrag();assert.equal(captured,null);assert.equal(pop.classList.contains('palette-dragging'),false);
  a.context.innerWidth=640;a.context.innerHeight=720;a.context.positionPopover();assert.equal(pop.style.left,'310px');assert.equal(pop.style.top,'112px');
+ height=600.1875;a.context.positionPopover();assert.equal(pop.style.top,'111.8125px','fractional rendered height is not rounded through offsetHeight');
 });
 
 test('opening a local document does not create the app outline sidebar',()=>{

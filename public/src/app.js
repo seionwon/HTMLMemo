@@ -586,8 +586,9 @@ function positionPopover() {
   const above=bar.top-pop.offsetHeight-10;pop.style.top=(above>8?above:Math.min(innerHeight-pop.offsetHeight-8,bar.bottom+10))+'px';
 }
 function placePalettePopover(pop,position) {
-  const x=Math.max(10,Math.min(Math.max(10,innerWidth-pop.offsetWidth-10),position.x));
-  const y=Math.max(8,Math.min(Math.max(8,innerHeight-pop.offsetHeight-8),position.y));
+  const {width,height}=pop.getBoundingClientRect();
+  const x=Math.max(10,Math.min(Math.max(10,innerWidth-width-10),position.x));
+  const y=Math.max(8,Math.min(Math.max(8,innerHeight-height-8),position.y));
   pop.palettePosition={x,y};pop.style.left=x+'px';pop.style.top=y+'px';
 }
 function bindPaletteDrag(pop) {
