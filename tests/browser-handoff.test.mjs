@@ -14,7 +14,7 @@ const tabsCode=source.slice(source.indexOf('function renderTabs('),source.indexO
 function app(){
  const doc=new DOMParser().parseFromString('<html><body><div id="tabs"></div><button id="library-tab"></button><button id="execution-tab"></button><div id="workspaces"></div></body></html>','text/html');
  const saved=[],help=[],notices=[],pastes=[],opened=[];let direct=0,captures=0;
- const window={open(){const target={closed:false,opener:window,document:{createElement:n=>doc.createElement(n),head:doc.createElement('head')},location:{href:'about:blank',replace(url){this.href=url;}},focus(){this.focused=(this.focused||0)+1;}};opened.push(target);return target;}};
+ const window={open(){const target={closed:false,opener:window,document:{createElement:n=>{const node=doc.createElement(n);node.click=()=>target.location.href=node.href;return node;},body:doc.createElement('body')},location:{href:'about:blank'},focus(){this.focused=(this.focused||0)+1;}};opened.push(target);return target;}};
  const context=vm.createContext({document:doc,window,URL,location:new URL('https://app.example/'),BrowserTabs,isWebSearch,$:(s,r=doc)=>$(s,r),$$:(s,r=doc)=>$$(s,r),icon,esc:escapeHTML,normalizeURL,displayHost,uid,
   requestAnimationFrame(){},updateChrome(){},importFiles:async()=>{},safely:fn=>async(...args)=>fn(...args),toast:message=>notices.push(message),reader:()=>context.active()?.reader,
   active:()=>context.tabs.find(t=>t.id===context.activeId),activate(id){context.activeId=id;for(const t of context.tabs)t.host.hidden=t.id!==id;context.renderTabs();},

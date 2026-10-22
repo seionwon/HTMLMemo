@@ -28,8 +28,8 @@ export class BrowserTabs {
       // and retain only the limited WindowProxy allowed by the browser.
       target=this.browser.open('about:blank','_blank');if(!target)return 'blocked';
       target.opener=null;
-      const meta=target.document.createElement('meta');meta.name='referrer';meta.content='no-referrer';target.document.head.append(meta);
-      navigating=true;target.location.replace(url);this.entries.set(id,{window:target,url});
+      const link=target.document.createElement('a');link.href=url;link.target='_self';link.rel='noreferrer';link.referrerPolicy='no-referrer';target.document.body.append(link);
+      navigating=true;link.click();this.entries.set(id,{window:target,url});
       try{target.focus();}catch{/* A successful open does not guarantee browser focus. */}return 'opened';
     }catch{if(!navigating)try{target?.close();}catch{/* Only the new empty tab is ours to close. */}return 'blocked';}
   }

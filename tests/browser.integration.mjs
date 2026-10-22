@@ -120,7 +120,7 @@ test('real Chrome: Chrome companion search has no iframe, preserves the reader a
     await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
     await page.navigate(url);await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');await page.click('#open-example');await page.waitFor('!document.querySelector("#toolbar").hidden&&document.querySelector("#status-left").textContent.includes("자동 저장됨")');
     const id=await page.evaluate('document.querySelector(".tab.document.active").dataset.tab');
-    await page.evaluate('document.querySelector("#address").focus();document.querySelector("#address").value="크롬 연결 검증";');await page.click('#address-open');
+    await page.evaluate('document.dispatchEvent(new KeyboardEvent("keydown",{key:"l",ctrlKey:true,bubbles:true}));document.querySelector("#address").value="크롬 연결 검증";');await page.click('#address-open');
     await page.send('Page.bringToFront');await page.waitFor('document.querySelectorAll(".tab.browser").length===1');
     assert.equal(await page.evaluate('document.querySelector(".tab.document.active").dataset.tab'),id);
     assert.equal(await page.evaluate('document.querySelectorAll(".browser-frame").length'),0);
