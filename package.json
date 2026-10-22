@@ -18,7 +18,7 @@
     "build": "node scripts/build.mjs",
     "check": "node scripts/check.mjs",
     "test": "node --test --test-concurrency=1 tests/*.test.mjs",
-    "test:browser": "node --test tests/browser.integration.mjs"
+    "test:browser": "node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/browser-results.xml tests/browser.integration.mjs"
   },
   "devDependencies": {
     "linkedom": "0.18.12",
