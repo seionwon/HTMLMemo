@@ -879,6 +879,7 @@ test('real Chrome: native sidebar view choices are visible on open and preserve 
       assert.equal(await page.evaluate('document.querySelector("#sidebar").hidden'),true);
     }
     const clickNative=async selector=>{
+      await page.evaluate('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
       const point=await page.evaluate(`(()=>{const frame=${frame},element=frame.contentDocument.querySelector(${JSON.stringify(selector)});element.scrollIntoView({block:'nearest'});const f=frame.getBoundingClientRect(),r=element.getBoundingClientRect(),scale=f.width/frame.clientWidth;return {x:f.left+(r.left+r.width/2)*scale,y:f.top+(r.top+r.height/2)*scale};})()`);
       await page.send('Input.dispatchMouseEvent',{type:'mousePressed',...point,button:'left',clickCount:1});await page.send('Input.dispatchMouseEvent',{type:'mouseReleased',...point,button:'left',clickCount:1});
     };
@@ -892,7 +893,7 @@ test('real Chrome: native sidebar view choices are visible on open and preserve 
     };
     for(const width of [1280,390]){
       await page.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
-      await clickNative('[data-sidebar-view=search]');await page.waitFor(`${doc}.querySelector('#reader-nav').dataset.htmlmemoSidebarView==='search'`);
+      await chooseNative('search');
       assert.equal(await page.evaluate(`${doc}.querySelector('input').placeholder`),'불러온 부분에서 찾기');
       await page.evaluate(`${doc}.querySelector('input').select()`);
       await page.send('Input.insertText',{text:'Introduction'});await page.waitFor(`${doc}.querySelectorAll('[data-search-index]').length===6`);
