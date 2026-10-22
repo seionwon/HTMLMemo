@@ -1451,7 +1451,7 @@ CodeMemo 별도 임시 브라우저에서 검증용 책으로 1280px·390px의 *
 
 | ID | change-kind | status |
 |---|---|---|
-| hist-20261022-008 | Chrome 연결·웹 탭 전환 개선 · 확장 기능 1.2.0 | 구현·단위 180개·로컬 UI 검증 완료 · Pages 게시 검증 대기 |
+| hist-20261022-008 | Chrome 연결·웹 탭 전환 개선 · 확장 기능 1.2.0 | 구현·단위 180개·CI/공개 Chrome UI·Pages·확장 ZIP 확인 완료 |
 
 **목적·사용법:** HTMLMemo에서 Chrome 페이지를 열고 오가는 과정을 줄였습니다. 연결된 **웹 탭을 한 번 누르면 해당 Chrome 탭으로 바로 전환**하며, 안내 화면의 전환 버튼을 다시 누를 필요가 없습니다. 주소창이나 문서 링크에서 이미 연결된 같은 주소를 열면 기존 웹 탭을 재사용합니다. 첫 열기가 진행되는 동안의 중복 클릭도 하나의 요청으로 합칩니다. 일반 HTML 문서 탭은 기존처럼 HTMLMemo 안에서 열립니다. 기존 선택 디자인·색상·아이콘과 문서·주석 저장 방식은 유지합니다.
 
@@ -1468,3 +1468,9 @@ CodeMemo 별도 임시 브라우저에서 검증용 책으로 1280px·390px의 *
 CodeMemo 별도 임시 브라우저의 1280px·390px 실제 앱 UI에서 모의 확장 연결로 웹 탭 전환, 두 페이지를 연 뒤 같은 주소를 다시 열어도 앱/연결 탭이 두 개로 유지됨, 복귀 시 제목·주소 갱신, 닫힘 표시와 클릭 재열기를 확인했습니다(두 요청 HTTP 200, 브라우저 예외 0개). 모바일 재열기 뒤에도 앱 탭은 두 개이며 필요한 새 Chrome 열기 요청만 하나 증가했습니다. 캡처는 `test-results/chrome-handoff-2026-10-22/request.json.png`, `mobile.json.png`에 보관하고 확인했습니다. 이 검사는 실제 설치된 확장 프로그램이나 macOS 창 초점을 조작한 검사가 아닙니다. Chrome API 호출 계약은 확장 기능 단위 검사로 확인했으며, 사용자의 실제 확장 프로그램 설치·OS 창 전환 실사용 검증은 수행하지 않았습니다. macOS 에이전트 안에서 Chrome을 직접 실행하지 않았습니다.
 
 **게시 상태:** 로컬 구현·검증을 완료했습니다. 같은 실제 앱 UI·모의 확장 전송 검사를 CI 전체 Chrome 및 공개 주소 검사에 추가하고 PC·모바일 캡처를 보관하도록 했습니다. CI에서는 중복 열기, 갱신 시 초점 유지, 닫힌 탭의 탐색·저장 비활성화와 재열기, 로컬 문서로의 복귀도 확인합니다. 전체 Chrome·Pages 게시·공개 파일 및 확장 ZIP 확인 결과는 같은 항목에 보충합니다. 임시 검증 화면을 제거하고 개발 서버를 종료했으며 개인 문서·브라우저 프로필·검증용 전송 코드는 배포하지 않습니다.
+
+**게시·온라인 확인 (2026-10-22 15:41:00 +09:00):** 커밋 `589be2d19f0f6cd47aa11e0e8122e7b9c8189bd4`의 [GitHub Actions 39734933700](https://github.com/seionwon/HTMLMemo/actions/runs/39734933700)가 단위·문법·전체 실제 Chrome UI·빌드·Pages 게시·공개 주소 Chrome 검사를 모두 성공했습니다. `https://seionwon.github.io/HTMLMemo/`에서 모의 확장 전송과 실제 마우스 클릭으로 연결 웹 탭의 직접 전환, 같은 URL과 연속 제출의 중복 방지, 복귀 시 제목·주소 갱신 뒤 앱 화면 유지, 닫힌 탭의 저장·탐색 비활성화와 클릭 재열기, 로컬 문서 탭으로 돌아와도 Chrome 전환 요청이 추가되지 않음을 확인했습니다. 기존 목차·주석 트리·검색·펜 배율 검사도 통과했습니다. 이 결과는 앱 UI와 연결 요청의 검증이며 설치된 실제 확장 프로그램·OS 창 전환 실사용 검증으로 기록하지 않습니다.
+
+공개 앱 파일 9개(`index.html`, `styles.css`, `src/app.js`, `src/reader.js`, `src/document.js`, `src/model.js`, `src/version.js`, `sw.js`, `manifest.webmanifest`)와 `distribution.json`, `downloads/HTMLMemo-chrome.zip`까지 11개가 HTTP 200이며 CI Pages 아티팩트와 바이트·SHA-256이 일치했습니다. 공개 연결 ZIP의 34개 파일 CRC와 확장 manifest **1.2.0**, `background.js`·`popup.js`·`popup.html`·`bridge.js`·번들 앱 코드를 현재 소스와 대조했습니다. 추가 권한은 없으며 검증용 코드·첨부 파일은 없습니다. 사용자는 새 ZIP으로 설치된 확장 폴더를 교체·다시 로드해야 확장 기능 변경을 사용합니다.
+
+공개 PC·390px 화면은 `test-results/chrome-handoff-2026-10-22/published-screenshots/chrome-handoff-desktop.png`, `chrome-handoff-mobile.png`에 보관하고 확인했습니다. CI의 일부 한글 글꼴 부재는 기존과 같으며 문구는 DOM 검사로, 한글 표시는 CodeMemo 임시 브라우저 화면으로 함께 확인했습니다. 임시 개발 서버·검증 화면은 종료·제거했고 사용자의 브라우저 프로필·설치된 확장 기능·문서 데이터에는 접근하거나 변경하지 않았습니다.
