@@ -578,13 +578,47 @@ function updateToolbarState() {
   const zoom=$('.zoom-button');if(zoom)zoom.textContent=Math.round(r.zoom*100)+'%';
   const palette=$('[data-action="palette"]',$('#toolbar'));if(palette)palette.style.setProperty('--tool-color',r.color);
 }
-function closePopover() {popoverName='';$('#tool-popover').hidden=true;$('#tool-popover').onkeydown=null;$$('.tool-has-modes',$('#toolbar')).forEach(button=>button.setAttribute('aria-expanded','false'));}
+function closePopover() {popoverName='';$('#tool-popover').cancelPaletteDrag?.();$('#tool-popover').hidden=true;$('#tool-popover').onkeydown=null;$$('.tool-has-modes',$('#toolbar')).forEach(button=>button.setAttribute('aria-expanded','false'));}
 function positionPopover() {
-  const pop=$('#tool-popover');const bar=$('#toolbar').getBoundingClientRect();pop.style.left=Math.max(10,Math.min(innerWidth-pop.offsetWidth-10,bar.left+bar.width-pop.offsetWidth))+'px';
+  const pop=$('#tool-popover');
+  if(pop.classList.contains('palette-popover')&&pop.palettePosition){placePalettePopover(pop,pop.palettePosition);return;}
+  const bar=$('#toolbar').getBoundingClientRect();pop.style.left=Math.max(10,Math.min(innerWidth-pop.offsetWidth-10,bar.left+bar.width-pop.offsetWidth))+'px';
   const above=bar.top-pop.offsetHeight-10;pop.style.top=(above>8?above:Math.min(innerHeight-pop.offsetHeight-8,bar.bottom+10))+'px';
+}
+function placePalettePopover(pop,position) {
+  const x=Math.max(10,Math.min(Math.max(10,innerWidth-pop.offsetWidth-10),position.x));
+  const y=Math.max(8,Math.min(Math.max(8,innerHeight-pop.offsetHeight-8),position.y));
+  pop.palettePosition={x,y};pop.style.left=x+'px';pop.style.top=y+'px';
+}
+function bindPaletteDrag(pop) {
+  if(pop.paletteDragBound)return;pop.paletteDragBound=true;
+  let drag=null;
+  const finish=event=>{
+    if(!drag||(event&&event.pointerId!==drag.id))return;
+    const id=drag.id;drag=null;pop.classList.remove('palette-dragging');
+    try{if(pop.hasPointerCapture?.(id))pop.releasePointerCapture(id);}catch{/* The browser may already have released capture. */}
+  };
+  pop.cancelPaletteDrag=()=>finish();
+  pop.addEventListener('pointerdown',event=>{
+    if(drag||pop.hidden||!pop.classList.contains('palette-popover')||!event.target.closest('[data-palette-drag]')||event.target.closest('button,input,select,textarea,a')||event.button!==0||event.isPrimary===false)return;
+    event.preventDefault();const rect=pop.getBoundingClientRect();drag={id:event.pointerId,x:event.clientX,y:event.clientY,left:rect.left,top:rect.top};
+    pop.classList.add('palette-dragging');try{pop.setPointerCapture(event.pointerId);}catch{/* Keep pointer handling within the panel if capture is unavailable. */}
+  });
+  pop.addEventListener('pointermove',event=>{
+    if(!drag||event.pointerId!==drag.id)return;
+    placePalettePopover(pop,{x:drag.left+event.clientX-drag.x,y:drag.top+event.clientY-drag.y});
+  });
+  for(const type of ['pointerup','pointercancel','lostpointercapture'])pop.addEventListener(type,finish);
+  pop.addEventListener('keydown',event=>{
+    if(!event.target.matches('[data-palette-drag]')||!pop.classList.contains('palette-popover')||event.ctrlKey||event.metaKey||event.altKey)return;
+    const direction={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[event.key];if(!direction)return;
+    event.preventDefault();event.stopPropagation();const rect=pop.getBoundingClientRect(),step=event.shiftKey?40:10;
+    placePalettePopover(pop,{x:rect.left+direction[0]*step,y:rect.top+direction[1]*step});
+  });
 }
 function showPopover(name,html,bind=()=>{}) {
   if(popoverName===name){closePopover();return;}
+  $('#tool-popover').cancelPaletteDrag?.();
   $('#tool-popover').onkeydown=null;$$('.tool-has-modes',$('#toolbar')).forEach(button=>button.setAttribute('aria-expanded','false'));
   $('#tool-popover').removeAttribute('aria-label');$('#tool-popover').removeAttribute('role');
   // A notice must not sit over the menu it just made room for; errors stay until they time out.
@@ -603,6 +637,7 @@ function getActivePalette() {
 }
 function renderPalettePopoverContent(r) {
   const pop = $('#tool-popover');
+  pop.cancelPaletteDrag?.();
   const activePalette = getActivePalette();
   const customPalettes = preferences.annotation.customPalettes || [];
   const isCustomPalette = customPalettes.some(p => p.id === activePalette.id);
@@ -610,12 +645,12 @@ function renderPalettePopoverContent(r) {
   const currentColor = (r.color || '#edcf67').toLowerCase();
   let pickerHsv = hexToHsv(currentColor);
   const rgb = hexToRgb(currentColor);
-  pop.innerHTML = `<div class="popover-heading"><h3>펜과 색상</h3><button type="button" class="icon-button popover-close" data-popover-close aria-label="펜과 색상 닫기" title="닫기">${icon('close',16)}</button></div>`
+  pop.innerHTML = `<div class="popover-heading" data-palette-drag tabindex="0" role="group" aria-label="펜과 색상 창 이동" title="드래그하여 이동 · 방향키로 이동 (Shift: 크게)"><h3>펜과 색상</h3><button type="button" class="icon-button popover-close" data-popover-close aria-label="펜과 색상 닫기" title="닫기">${icon('close',16)}</button></div>`
     + `<label class="range-label">굵기 <output id="width-output">${r.width}px</output><input id="pen-width" type="range" min="1" max="18" value="${r.width}"></label><label class="range-label">형광펜 투명도 <output id="opacity-output">${Math.round(r.opacity*100)}%</output><input id="pen-opacity" type="range" min="10" max="90" value="${Math.round(r.opacity*100)}"></label><label class="select-label">펜 표시 시간 <select id="pen-ttl"><option value="0">영구 저장</option><option value="3">3초</option><option value="10">10초</option><option value="30">30초</option></select></label><p class="popover-hint">시간을 정한 펜은 잠깐 표시되고 저장되지 않아요.</p>`
     + `<div class="palette-section"><div class="palette-bar"><span class="palette-label">팔레트 프리셋</span><div class="palette-actions"><select id="palette-preset" aria-label="팔레트 프리셋"><optgroup label="프리셋 팔레트 (20개)">${PRESET_PALETTES.map((p, idx) => `<option value="${esc(p.id)}" ${p.id === activePalette.id ? 'selected' : ''}>${idx + 1}. ${esc(p.name)} (${p.colors.length})</option>`).join('')}</optgroup>${customPalettes.length ? `<optgroup label="사용자 팔레트 (${customPalettes.length}개)">${customPalettes.map(p => `<option value="${esc(p.id)}" ${p.id === activePalette.id ? 'selected' : ''}>★ ${esc(p.name)} (${p.colors.length})</option>`).join('')}</optgroup>` : ''}</select>${isCustomPalette ? `<button type="button" id="delete-custom-palette" class="palette-mini-btn danger" title="선택한 사용자 팔레트 삭제" aria-label="사용자 팔레트 삭제">삭제</button>` : ''}</div></div><div id="preset-swatches" class="swatches preset-swatches">${activePalette.colors.map(c => `<button type="button" data-color="${c}" style="--swatch:${c}" title="${c}" aria-label="색상 ${c}" class="swatch ${currentColor === c ? 'chosen' : ''}"></button>`).join('')}</div></div>`
     + `<div class="palette-section"><div class="palette-bar"><span class="palette-label">사용자 색상 (${customColors.length})</span><div class="palette-actions"><button type="button" id="add-custom-color" class="palette-mini-btn" title="현재 색상을 사용자 색상에 추가">+ 색상 추가</button><button type="button" id="remove-custom-color" class="palette-mini-btn" ${customColors.includes(currentColor) ? '' : 'disabled'} title="선택한 사용자 색상 삭제">− 삭제</button></div></div><div id="custom-swatches" class="swatches custom-swatches">${customColors.length ? customColors.map(c => `<button type="button" data-color="${c}" data-custom-swatch="${c}" style="--swatch:${c}" title="사용자 색상 ${c}" aria-label="사용자 색상 ${c}" class="swatch custom-swatch ${currentColor === c ? 'chosen' : ''}"></button>`).join('') : '<span class="palette-empty">색상을 고른 뒤 「+ 색상 추가」를 눌러 저장하세요.</span>'}</div><div class="custom-palette-creator"><input id="custom-palette-name" type="text" maxlength="40" placeholder="새 팔레트 이름 (예: 내 필기 세트)" aria-label="새 팔레트 이름"><button type="button" id="save-custom-palette" class="palette-mini-btn primary">+ 팔레트 저장</button></div></div>`
     + `<div class="palette-section color-picker-section"><div class="palette-bar"><span class="palette-label">컬러 피커</span><span class="color-preview-badge"><i id="color-preview-chip" style="background:${currentColor}"></i><code id="color-preview-text">${currentColor.toUpperCase()}</code></span></div><div id="color-picker-sv" class="color-picker-sv" style="--picker-hue:${pickerHsv.h}" role="slider" tabindex="0" aria-label="채도 및 명도 선택"><span id="color-picker-sv-thumb" class="color-picker-sv-thumb" style="left:${pickerHsv.s}%;top:${100 - pickerHsv.v}%"></span></div><div class="color-picker-hue-row"><input id="color-picker-hue" class="color-picker-hue" type="range" min="0" max="360" value="${pickerHsv.h}" aria-label="색상 (Hue)"><input type="color" id="custom-color" value="${currentColor}" title="시스템 색상 선택기" aria-label="사용자 색상"></div><div class="color-picker-inputs"><label class="color-input-field hex-field"><span>HEX</span><input id="color-hex" type="text" maxlength="7" value="${currentColor.toUpperCase()}" aria-label="HEX 색상 코드"></label><label class="color-input-field"><span>R</span><input id="color-r" type="number" min="0" max="255" value="${rgb.r}" aria-label="R (빨강)"></label><label class="color-input-field"><span>G</span><input id="color-g" type="number" min="0" max="255" value="${rgb.g}" aria-label="G (초록)"></label><label class="color-input-field"><span>B</span><input id="color-b" type="number" min="0" max="255" value="${rgb.b}" aria-label="B (파랑)"></label></div></div>`;
-  positionPopover();
+  positionPopover();bindPaletteDrag(pop);
   $$('[data-popover-close]', pop).forEach(button => button.onclick = closePopover);
   const applyColor = (rawColor, {fromHsv = false, keepHexInput = false} = {}) => {
     const norm = normalizeHexColor(rawColor);

@@ -15,7 +15,7 @@ const appVersion=JSON.parse(await readFile(new URL('../package.json',import.meta
 async function revealAnnotation(page,doc,id){
   await page.evaluate(`(()=>{let node=${doc}.querySelector('[data-annotation="'+${JSON.stringify(id)}+'"]');if(!node)throw Error('Missing annotation');for(node=node.parentElement;node;node=node.parentElement)if(node.matches('details[data-annotation-group]'))node.open=true;})()`);
 }
-test('real Chrome: palette controls stay above palettes and retain their settings after color changes and reload',{timeout:60000},async()=>{
+test('real Chrome: palette controls stay above palettes and retain their settings and title-drag position',{timeout:60000},async()=>{
   await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-palette-order-'));await cp(join(root,'public'),folder,{recursive:true});
   const server=createServer(folder);let chrome;
   try{
@@ -53,7 +53,33 @@ test('real Chrome: palette controls stay above palettes and retain their setting
     await page.navigate(url);await page.waitFor('document.querySelector("[data-open]")');await page.click('[data-open]');
     await page.waitFor('!document.querySelector("#toolbar").hidden');await page.click('[data-action=palette]');
     assert.deepEqual(await layout(),expected);assert.deepEqual(await values(),['7','55','10','7px','55%']);
-    assert.equal(await page.evaluate(`document.querySelector('#palette-preset').value`),'preset-2');assert.deepEqual(chrome.errors,[]);
+    assert.equal(await page.evaluate(`document.querySelector('#palette-preset').value`),'preset-2');
+    await page.click('[data-popover-close]');await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:800,deviceScaleFactor:1,mobile:false});await page.click('[data-action=palette]');
+    const panel=()=>page.evaluate(`(()=>{const p=document.querySelector('#tool-popover').getBoundingClientRect(),h=document.querySelector('[data-palette-drag]').getBoundingClientRect();return {x:p.left,y:p.top,width:p.width,height:p.height,handle:{x:h.left+24,y:h.top+h.height/2}};})()`);
+    const mouseDrag=async end=>{
+      const start=(await panel()).handle;
+      await page.send('Input.dispatchMouseEvent',{type:'mousePressed',...start,button:'left',buttons:1,clickCount:1});
+      for(let n=1;n<=5;n++)await page.send('Input.dispatchMouseEvent',{type:'mouseMoved',x:start.x+(end.x-start.x)*n/5,y:start.y+(end.y-start.y)*n/5,button:'left',buttons:1});
+      await page.send('Input.dispatchMouseEvent',{type:'mouseReleased',...end,button:'left',buttons:0,clickCount:1});
+      assert.equal(await page.evaluate('document.querySelector("#tool-popover").classList.contains("palette-dragging")'),false);
+    };
+    await mouseDrag({x:0,y:0});let p=await panel();assert.equal(p.x,10);assert.equal(p.y,8);
+    await mouseDrag({x:1279,y:799});p=await panel();assert.equal(p.x,1280-p.width-10);assert.equal(p.y,800-p.height-8);
+    await mouseDrag({x:300+p.handle.x-p.x,y:40+p.handle.y-p.y});p=await panel();assert.equal(p.x,300);assert.equal(p.y,40);
+    await page.evaluate(`(()=>{const n=document.querySelector('#palette-preset');n.value='preset-3';n.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+    p=await panel();assert.equal(p.x,300);assert.equal(p.y,40);assert.deepEqual(await values(),['7','55','10','7px','55%']);
+    await page.click('[data-popover-close]');await page.click('[data-action=palette]');p=await panel();assert.equal(p.x,300);assert.equal(p.y,40);
+    await page.evaluate('document.querySelector("[data-palette-drag]").focus()');
+    await page.send('Input.dispatchKeyEvent',{type:'keyDown',key:'ArrowRight',code:'ArrowRight',windowsVirtualKeyCode:39,modifiers:8});await page.send('Input.dispatchKeyEvent',{type:'keyUp',key:'ArrowRight',code:'ArrowRight',windowsVirtualKeyCode:39});
+    p=await panel();assert.equal(p.x,340);assert.equal(p.y,40);
+    await writeFile(join(root,'test-results/palette-drag-desktop.png'),await page.screenshot());
+    await page.click('[data-popover-close]');await page.send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await page.send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:1});await page.click('[data-action=palette]');
+    p=await panel();assert.ok(p.x>=10&&p.x+p.width<=380&&p.y>=8&&p.y+p.height<=836);
+    const touch=async(type,point)=>page.send('Input.dispatchTouchEvent',{type,touchPoints:point?[{...point,id:1,radiusX:1,radiusY:1,force:1}]:[]});
+    await touch('touchStart',p.handle);await touch('touchMove',{x:0,y:0});await touch('touchEnd');p=await panel();assert.equal(p.x,10);assert.equal(p.y,8);
+    await touch('touchStart',p.handle);await touch('touchCancel');assert.equal(await page.evaluate('document.querySelector("#tool-popover").classList.contains("palette-dragging")'),false);
+    assert.deepEqual(await values(),['7','55','10','7px','55%']);await writeFile(join(root,'test-results/palette-drag-mobile.png'),await page.screenshot());
+    await page.click('[data-popover-close]');assert.equal(await page.evaluate('document.querySelector("#tool-popover").hidden'),true);assert.deepEqual(chrome.errors,[]);
   }finally{if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
 });
 test('real Chrome: toolbar mode groups remove semantic duplicates and keep area, underline and text annotations usable',{timeout:90000},async()=>{

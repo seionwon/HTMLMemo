@@ -186,6 +186,8 @@ body[data-codememo-design]{margin:0;font-family:var(--app-font);background:var(-
 /* Full-set palette (20 presets + user custom colors/palettes) and interactive Color Picker. */
 #tool-popover.palette-popover{width:320px;max-width:calc(100vw - 20px);padding:12px 14px}
 #tool-popover.palette-popover .popover-heading{margin-bottom:8px}
+#tool-popover.palette-popover [data-palette-drag]{cursor:grab;touch-action:none;user-select:none}
+#tool-popover.palette-popover.palette-dragging [data-palette-drag]{cursor:grabbing}
 .palette-section{border-top:1px solid var(--line);padding-top:8px;margin-top:8px}
 .palette-section:first-of-type{border-top:0;padding-top:0;margin-top:4px}
 .palette-bar{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:6px}

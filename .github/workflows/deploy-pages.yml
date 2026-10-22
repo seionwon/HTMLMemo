@@ -96,6 +96,7 @@ jobs:
           path: |
             test-results/published-browser-results.xml
             test-results/palette-controls-*.png
+            test-results/palette-drag-*.png
             test-results/toolbar-modes-*.png
             test-results/sidebar-views-*.png
             test-results/font-scaled-pen-*.png

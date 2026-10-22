@@ -166,6 +166,35 @@ test('pen width, highlighter opacity and pen lifetime precede every palette in t
  for(const id of controls.slice(0,3))assert.equal(palette.split(id).length-1,1,'moved controls must not be duplicated');
 });
 
+test('palette title dragging captures one pointer, clamps its position and excludes controls and other popovers',()=>{
+ const a=app(),pop=a.doc.querySelector('#tool-popover');pop.hidden=false;pop.classList.add('palette-popover');
+ pop.innerHTML='<div data-palette-drag tabindex="0"><h3>펜과 색상</h3><button>닫기</button></div><input type="range">';
+ Object.defineProperties(pop,{offsetWidth:{value:320},offsetHeight:{value:600}});
+ pop.style.left='100px';pop.style.top='80px';pop.getBoundingClientRect=()=>({left:parseFloat(pop.style.left),top:parseFloat(pop.style.top)});
+ a.doc.querySelector('#toolbar').getBoundingClientRect=()=>({left:500,width:400,top:740,bottom:760});
+ let captured=null,prevented=0;pop.setPointerCapture=id=>{captured=id;};pop.hasPointerCapture=id=>captured===id;pop.releasePointerCapture=id=>{assert.equal(captured,id);captured=null;};
+ Object.assign(a.context,{innerWidth:1280,innerHeight:800});
+ vm.runInContext(appSource.slice(appSource.indexOf('function positionPopover('),appSource.indexOf('function showPopover('))+'bindPaletteDrag(document.querySelector("#tool-popover"));',a.context);
+ const pointer=(type,target,extra={})=>{const event=new a.doc.defaultView.Event(type,{bubbles:true});Object.assign(event,{pointerId:1,button:0,isPrimary:true,clientX:120,clientY:100,...extra});event.preventDefault=()=>prevented++;target.dispatchEvent(event);};
+ const title=pop.querySelector('h3'),header=pop.querySelector('[data-palette-drag]');
+ for(const target of pop.querySelectorAll('button,input'))pointer('pointerdown',target);
+ pointer('pointerdown',title,{button:2});pointer('pointerdown',title,{isPrimary:false});assert.equal(captured,null);assert.equal(prevented,0);
+ pointer('pointerdown',title);assert.equal(captured,1);assert.equal(pop.classList.contains('palette-dragging'),true);
+ pointer('pointerdown',title,{pointerId:2});pointer('pointermove',pop,{pointerId:2,clientX:700});assert.equal(pop.style.left,'100px');assert.equal(captured,1);
+ pointer('pointermove',pop,{clientX:220,clientY:140});assert.equal(pop.style.left,'200px');assert.equal(pop.style.top,'120px');
+ pointer('pointermove',pop,{clientX:-1000,clientY:-1000});assert.equal(pop.style.left,'10px');assert.equal(pop.style.top,'8px');
+ pointer('pointermove',pop,{clientX:3000,clientY:3000});assert.equal(pop.style.left,'950px');assert.equal(pop.style.top,'192px');
+ pointer('pointerup',pop);assert.equal(captured,null);assert.equal(pop.classList.contains('palette-dragging'),false);
+ pointer('pointermove',pop,{clientX:0,clientY:0});assert.equal(pop.style.left,'950px');
+ const position=JSON.stringify(pop.palettePosition);pop.classList.remove('palette-popover');a.context.positionPopover();assert.notEqual(pop.style.left,'950px');assert.equal(JSON.stringify(pop.palettePosition),position);
+ pointer('pointerdown',title);assert.equal(captured,null,'other tool windows cannot be dragged');
+ pop.classList.add('palette-popover');a.context.positionPopover();assert.equal(pop.style.left,'950px');
+ const key=new a.doc.defaultView.Event('keydown',{bubbles:true});Object.assign(key,{key:'ArrowLeft',shiftKey:true});header.dispatchEvent(key);assert.equal(pop.style.left,'910px');
+ pointer('pointerdown',title);pointer('pointercancel',pop);assert.equal(captured,null);
+ pointer('pointerdown',title);pop.cancelPaletteDrag();assert.equal(captured,null);assert.equal(pop.classList.contains('palette-dragging'),false);
+ a.context.innerWidth=640;a.context.innerHeight=720;a.context.positionPopover();assert.equal(pop.style.left,'310px');assert.equal(pop.style.top,'112px');
+});
+
 test('opening a local document does not create the app outline sidebar',()=>{
  const openRecord=appSource.slice(appSource.indexOf('async function openRecord('),appSource.indexOf('function saveStatus('));
  assert.doesNotMatch(openRecord,/await tab\.reader\.ready;[\s\S]*renderSidebar\('outline'\);[\s\S]*updateChrome\(\)/);
