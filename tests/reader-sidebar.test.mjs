@@ -70,6 +70,16 @@ test('icon totals include all annotations and bookmarks, update in place and sho
   a.r.metadata.annotations=[];a.context.updateSidebarCounts(a.doc.querySelector('#sidebar'),a.r);assert.equal(button.textContent,'0');
 });
 
+test('native search fields share loaded-part metrics and equal top/between spacing without a separator',async()=>{
+  const css=await readFile(new URL('../public/design.tailwind.css',import.meta.url),'utf8');
+  const shared=css.match(/\[data-htmlmemo-doc-sidebar-ui\] \.sidebar-book-search input,\[data-htmlmemo-doc-sidebar-ui\] \.search-field input\{([^}]+)\}/)?.[1];
+  assert.ok(shared,'both search inputs must use one rule');
+  for(const declaration of ['display:block!important','width:100%!important','height:auto!important','margin:0!important','padding:8px!important','font:400 12px/1.6 var(--app-font)!important'])assert.ok(shared.includes(declaration),declaration);
+  assert.match(css,/\.sidebar-content\{--sidebar-search-gap:10px;padding:var\(--sidebar-search-gap\) 2px;/);
+  assert.match(css,/\.sidebar-book-search\{display:flow-root;margin:0 0 var\(--sidebar-search-gap\);padding:0;border:0\}/);
+  assert.match(css,/\.sidebar-book-search>\[data-htmlmemo-book-search-part\]:not\(input\)\{margin:0!important;padding:0!important;border:0!important\}/);
+});
+
 test('native whole-book search keeps its nodes, listeners and query above loaded-part search across all views and export',()=>{
   installDOM();const a=sidebar(),doc=documentFor('<html><head></head><body><nav id="reader-nav"><h2>목차</h2><form id="whole-book-search"><input id="whole-query" placeholder="책 전체 검색"><button id="whole-clear" type="button">지우기</button><div id="whole-results"></div></form><div id="reader-tree"><details><summary>원래 목차</summary></details></div></nav><main><h1>본문</h1><p>검색할 내용</p></main></body></html>');
   const nav=doc.querySelector('nav'),form=doc.querySelector('form'),query=doc.querySelector('#whole-query'),clear=doc.querySelector('#whole-clear'),tree=doc.querySelector('#reader-tree'),text=textIndex(doc).text;

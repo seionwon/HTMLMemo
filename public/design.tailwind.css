@@ -148,15 +148,16 @@ body[data-codememo-design]{margin:0;font-family:var(--app-font);background:var(-
 [data-htmlmemo-doc-sidebar-ui] .sidebar-views button{flex:1 0 auto;justify-content:center;gap:3px;min-width:28px;padding:6px 4px;font-size:11px;white-space:nowrap}
 [data-htmlmemo-doc-sidebar-ui] .sidebar-nav-count{font-size:10px;font-variant-numeric:tabular-nums}
 [data-htmlmemo-doc-sidebar-ui] .sidebar-views button[aria-pressed=true]{background:var(--green-light);color:var(--green);font-weight:600}
-[data-htmlmemo-doc-sidebar-ui] .sidebar-content{padding:10px 2px;overflow-wrap:anywhere}
+[data-htmlmemo-doc-sidebar-ui] .sidebar-content{--sidebar-search-gap:10px;padding:var(--sidebar-search-gap) 2px;overflow-wrap:anywhere}
 [data-htmlmemo-doc-sidebar-ui] .sidebar-content:empty{padding:0}
-[data-htmlmemo-doc-sidebar-ui] .sidebar-book-search{margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--line)}
-[data-htmlmemo-doc-sidebar-ui] .sidebar-book-search input{width:100%;min-width:0;box-sizing:border-box;border:1px solid var(--line);border-radius:5px;background:var(--bg);color:var(--text);padding:8px;font:inherit}
+[data-htmlmemo-doc-sidebar-ui] .sidebar-book-search{display:flow-root;margin:0 0 var(--sidebar-search-gap);padding:0;border:0}
+[data-htmlmemo-doc-sidebar-ui] .sidebar-book-search>[data-htmlmemo-book-search-part]:not(input){margin:0!important;padding:0!important;border:0!important}
 [data-htmlmemo-doc-sidebar-ui] .sidebar-bookmark-list{min-width:0}
 [data-htmlmemo-doc-sidebar-ui] .bookmark-row{display:flex;align-items:center;min-width:0}
 [data-htmlmemo-doc-sidebar-ui] .outline-item{flex:1;min-width:0;gap:6px;overflow-wrap:anywhere}
 [data-htmlmemo-doc-sidebar-ui] [data-delete-bookmark]{flex-shrink:0}
-[data-htmlmemo-doc-sidebar-ui] .search-field input{width:100%;min-width:0;border:1px solid var(--line);border-radius:5px;background:var(--bg);color:var(--text);padding:8px;font:inherit}
+/* Source books may use ID/inline rules; both fields keep the loaded-part field's metrics. */
+[data-htmlmemo-doc-sidebar-ui] .sidebar-book-search input,[data-htmlmemo-doc-sidebar-ui] .search-field input{display:block!important;box-sizing:border-box!important;width:100%!important;min-width:0!important;max-width:100%!important;height:auto!important;min-height:0!important;max-height:none!important;margin:0!important;border:1px solid var(--line)!important;border-radius:5px!important;background:var(--bg)!important;color:var(--text)!important;padding:8px!important;font:400 12px/1.6 var(--app-font)!important;letter-spacing:normal!important}
 [data-htmlmemo-doc-sidebar-ui] .search-navigation{display:flex;align-items:center;gap:3px;margin:8px 0;color:var(--muted);font-size:11px}
 [data-htmlmemo-doc-sidebar-ui] .search-navigation span{margin-right:auto}
 [data-htmlmemo-doc-sidebar-ui] .search-result{display:block;width:100%;padding:8px 2px;border-bottom:1px solid var(--line);font-size:11px;line-height:1.8}
