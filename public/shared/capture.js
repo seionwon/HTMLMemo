@@ -1,4 +1,4 @@
-/* HTMLMemo's self-contained page capture. Shared by the PWA and Chrome bridge. */
+/* HTMLMemo's self-contained, browser-permitted page capture. */
 (() => {
   'use strict';
   const RESOURCE_LIMIT = 25 * 1024 * 1024;
@@ -19,7 +19,7 @@
     const warnings = [];
     const cache = new Map();
     let totalBytes = 0;
-    const source = doc.location?.href || options.url || doc.baseURI;
+    const source = options.url || doc.location?.href || doc.baseURI;
     const fetchResource = options.fetchResource || (async url => {
       const response = await fetch(url, {credentials: 'include', signal: AbortSignal.timeout(15000)});
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -101,8 +101,8 @@
           const src = original.currentSrc || original.src || original.getAttribute('data-src');
           if (src) {
             let data = '';
-            // Loaded cross-origin images can be tainted; the extension fetcher
-            // handles them without a canvas conversion.
+            // Use a permitted fetch instead of converting potentially tainted
+            // cross-origin images through a canvas.
             try { data = await resource(src, doc.baseURI, '이미지'); } catch { /* resource reports failures */ }
             if (data) copy.setAttribute('src', data); else { copy.removeAttribute('src'); copy.alt = original.alt || '저장하지 못한 이미지'; }
           }

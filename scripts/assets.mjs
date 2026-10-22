@@ -4,7 +4,7 @@ import { deflateSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { crc32 } from '../public/src/zip.js';
 import { standaloneHTML } from '../public/src/bundler.js';
-import { APP_FILES, EXTENSION_FILES, chromeZIP } from '../public/src/distribution.js';
+import {APP_FILES} from '../public/src/distribution.js';
 
 export const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 export { crc32 };
@@ -24,19 +24,15 @@ function createIcon(size){
   return Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),pngChunk('IHDR',header),pngChunk('IDAT',deflateSync(data)),pngChunk('IEND',Buffer.alloc(0))]);
 }
 export async function packageAssets(){
-  const app={},extension={};
+  const app={};
   for(const name of APP_FILES){const bytes=await readFile(join(root,'public',name));app[name]=name.endsWith('.png')?{base64:bytes.toString('base64')}:{text:bytes.toString('utf8')};}
-  for(const name of EXTENSION_FILES)extension[name]={text:await readFile(join(root,'extension',name),'utf8')};
-  return {app,extension};
+  return {app};
 }
 export async function prepareAssets(){
   const {version}=JSON.parse(await readFile(join(root,'package.json'),'utf8'));
   await writeFile(join(root,'public/src/version.js'),'// Generated from package.json by scripts/assets.mjs.\nexport const APP_VERSION = '+JSON.stringify(version)+';\n');
   await mkdir(join(root,'public/icons'),{recursive:true});await mkdir(join(root,'public/downloads'),{recursive:true});
   await writeFile(join(root,'public/icons/icon-192.png'),createIcon(192));await writeFile(join(root,'public/icons/icon-512.png'),createIcon(512));
-  await writeFile(join(root,'extension/capture.js'),await readFile(join(root,'public/shared/capture.js')));
   const assets=await packageAssets();await writeFile(join(root,'public/distribution.json'),JSON.stringify(assets));await writeFile(join(root,'public/HTMLMemo.html'),standaloneHTML(assets));
-  for(const name of APP_FILES){const data=await readFile(join(root,'public',name));const target=join(root,'extension/app',name);await mkdir(resolve(target,'..'),{recursive:true});await writeFile(target,data);}
-  for(const name of ['htmlmemo-chrome.zip','HTMLMemo-local.zip','HTMLMemo-pages.zip','HTMLMemo-install.html'])await rm(join(root,'public/downloads',name),{force:true});
-  await writeFile(join(root,'public/downloads/HTMLMemo-chrome.zip'),chromeZIP(assets));
+  for(const name of ['HTMLMemo-chrome.zip','htmlmemo-chrome.zip','HTMLMemo-local.zip','HTMLMemo-pages.zip','HTMLMemo-install.html'])await rm(join(root,'public/downloads',name),{force:true});
 }

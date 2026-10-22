@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#334155">
   <meta name="description" content="웹 페이지를 HTML 한 파일로 저장하고, 읽고, 주석을 남기는 나만의 웹 서재.">
-  <meta name="htmlmemo-app" content="htmlmemo-app-v1">
   <title>HTMLMemo · 나만의 웹 서재</title>
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" href="./icons/icon.svg" type="image/svg+xml">
@@ -33,12 +32,13 @@
       <div id="app-menu" class="app-menu" role="menu" aria-label="앱 메뉴" hidden>
         <div class="app-menu-group" role="group" aria-label="탐색">
           <button id="new-tab" class="menu-button" role="menuitem"></button>
+          <button id="paste-button" class="menu-button" role="menuitem"></button>
           <button id="execution-tab" class="menu-button" role="menuitem"></button>
         </div>
         <div class="app-menu-group" role="group" aria-label="앱 관리">
           <button id="install-button" class="menu-button" role="menuitem" aria-label="앱 설치">앱 설치</button>
           <button id="menu-folder" class="menu-button" role="menuitem"></button>
-          <button id="connection-button" class="menu-button connection" role="menuitem" aria-label="Chrome 연결 설정"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c-5 5-5 13 0 18M12 3c5 5 5 13 0 18"/></svg><span>Chrome 연결</span><i></i></button>
+          <button id="web-help-button" class="menu-button" role="menuitem"></button>
           <button id="settings-button" class="menu-button" role="menuitem" aria-label="설정"></button>
         </div>
         <div class="app-menu-group" role="group" aria-label="앱 정보">
@@ -61,10 +61,10 @@
         </div>
       </section>
       <section id="execution" class="execution-page" hidden>
-        <div class="execution-inner"><p class="eyebrow">ONE APP · LOCAL DATA</p><h1>한 주소로 열고,<br>앱으로 설치하세요.</h1><p class="execution-description">맥·윈도우·안드로이드·아이폰 모두 Chrome에서 시작하세요.<br>문서·주석·설정은 모두 이 기기에만 저장됩니다.</p>
-          <div class="execution-cards"><article><span class="execution-step">01</span><h2>이 기기에 설치하기</h2><p>같은 <strong>앱 설치</strong> 버튼을 사용하세요. 아이폰에서는 Chrome의 공유 메뉴를 사용하는 순서를 안내합니다.</p><button id="execution-install" class="primary-button">앱 설치</button><p id="install-status" class="delivery-status" role="status">설치 후 앱 아이콘으로 열고 HTML 파일을 가져오세요.</p><button id="execution-import" class="text-button">HTML 파일 가져오기 →</button><button id="execution-settings" class="text-button">설정 파일 저장 · 불러오기 →</button></article>
-          <article><span class="execution-step">02</span><h2>앱 주소 공유하기</h2><p>아래 주소를 보내주세요. 받은 분은 Chrome에서 주소를 열고 <strong>앱 설치</strong>를 누르면 됩니다.</p><input id="share-url" class="app-share-url" type="url" readonly value="https://seionwon.github.io/HTMLMemo/" aria-label="공유할 HTMLMemo 주소"><div class="share-actions"><button id="share-app" class="primary-button">URL 복사</button><a id="shared-app-link" class="text-button" href="https://seionwon.github.io/HTMLMemo/" target="_blank" rel="noopener">앱 주소 열기 ↗</a></div><p id="share-status" class="delivery-status" role="status">처음 설치할 때는 인터넷 연결이 필요합니다.</p></article></div>
-          <div class="execution-connect"><div><h2>컴퓨터에서 웹 페이지도 저장하려면</h2><p>Chrome 연결 기능을 추가하면 실제 Chrome 탭을 한 HTML 파일로 저장할 수 있습니다. 모바일에서는 로컬 HTML 읽기와 주석을 사용할 수 있습니다.</p></div><button id="execution-chrome" class="secondary-button">Chrome 연결 안내</button></div>
+        <div class="execution-inner"><p class="eyebrow">ONE URL · LOCAL DATA</p><h1>URL 하나로,<br>설치 없이 바로.</h1><p class="execution-description">브라우저에서 이 주소를 열면 준비가 끝납니다.<br>문서·주석·설정은 모두 이 기기에만 저장됩니다.</p>
+          <div class="execution-cards"><article><span class="execution-step">01</span><h2>바로 읽고 메모하기</h2><p>HTML 파일을 가져오거나 글을 붙여넣어 시작하세요. 홈 화면의 앱 아이콘이 필요할 때만 <strong>앱 설치</strong>를 선택하면 됩니다.</p><button id="execution-install" class="primary-button">앱 설치</button><p id="install-status" class="delivery-status" role="status">앱 설치는 선택 사항입니다.</p><button id="execution-import" class="text-button">HTML 파일 가져오기 →</button><button id="execution-settings" class="text-button">설정 파일 저장 · 불러오기 →</button></article>
+          <article><span class="execution-step">02</span><h2>앱 주소 공유하기</h2><p>아래 주소 하나만 보내주세요. 받은 분도 추가 설치나 설정 없이 바로 사용할 수 있습니다.</p><input id="share-url" class="app-share-url" type="url" readonly value="https://seionwon.github.io/HTMLMemo/" aria-label="공유할 HTMLMemo 주소"><div class="share-actions"><button id="share-app" class="primary-button">URL 복사</button><a id="shared-app-link" class="text-button" href="https://seionwon.github.io/HTMLMemo/" target="_blank" rel="noopener">앱 주소 열기 ↗</a></div><p id="share-status" class="delivery-status" role="status">처음 열 때는 인터넷 연결이 필요합니다.</p></article></div>
+          <div class="execution-connect"><div><h2>웹페이지가 열리지 않나요?</h2><p>사이트의 앱 안 표시·읽기 제한이 있을 수 있습니다. 추가 설치 없이 HTML 가져오기나 텍스트 붙여넣기로 이어갈 수 있습니다.</p></div><button id="execution-web" class="secondary-button">웹페이지 가져오기 안내</button></div>
           <p class="execution-privacy">공유하는 주소에 내 문서·주석·설정은 포함되지 않습니다. 받은 분의 데이터도 각자의 기기에 저장됩니다.</p>
         </div>
       </section>

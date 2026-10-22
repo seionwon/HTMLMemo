@@ -7,7 +7,7 @@ import { promisify } from 'node:util';
 import { prepareAssets, packageAssets } from '../scripts/assets.mjs';
 import { compileDesign } from '../scripts/design.mjs';
 import { standaloneHTML, bundleModules, assetBytes } from '../public/src/bundler.js';
-import { pwaEntries, chromeZIP, APP_FILES, EXTENSION_FILES } from '../public/src/distribution.js';
+import {pwaEntries,APP_FILES} from '../public/src/distribution.js';
 import { PUBLIC_APP_URL } from '../public/src/install.js';
 import { crc32, zipFiles } from '../public/src/zip.js';
 import { serializeSettings, PREFERENCES_KEY } from '../public/src/preferences.js';
@@ -24,31 +24,32 @@ test('private documents, settings, handles and arbitrary files never enter the p
   const files=webFiles(extra);assert.ok(!files.has('private.html'));
   assert.ok(![...files.values()].some(bytes=>new TextDecoder().decode(bytes).includes('PRIVATE-')));
 });
-test('the Chrome ZIP writer retains Unicode filenames and refuses parent traversal',()=>{const files=unzip(zipFiles([{name:'앱/설정.json',data:'한글 $$'}]));assert.equal(text(files,'앱/설정.json'),'한글 $$');assert.throws(()=>zipFiles([{name:'../secret',data:'x'}]));});
+test('the ZIP utility retains Unicode filenames and refuses parent traversal',()=>{const files=unzip(zipFiles([{name:'앱/설정.json',data:'한글 $$'}]));assert.equal(text(files,'앱/설정.json'),'한글 $$');assert.throws(()=>zipFiles([{name:'../secret',data:'x'}]));});
 test('the PWA is published at the app root with every offline resource and no installer files',()=>{
-  const files=webFiles(assets);assert.equal(files.size,APP_FILES.length+3);assert.ok(files.has('.nojekyll'));assert.ok(files.has('index.html'));
+  const files=webFiles(assets);assert.equal(files.size,APP_FILES.length+2);assert.ok(files.has('.nojekyll'));assert.ok(files.has('index.html'));
   assert.ok(![...files.keys()].some(name=>/^(docs|pages)\//.test(name)||/HTMLMemo-(pages\.zip|install\.html|local\.zip)|HTMLMemo\.html/.test(name)));
   const manifest=JSON.parse(text(files,'manifest.webmanifest'));assert.equal(manifest.start_url,'./');assert.equal(manifest.scope,'./');
   const shell=JSON.parse(text(files,'sw.js').match(/const SHELL = (\[[^;]+\]);/)[1].replaceAll("'",'"'));
   for(const path of shell)assert.ok(files.has(path==='./'?'index.html':path.slice(2)),path);
   const copy=JSON.parse(text(files,'distribution.json'));assert.equal(copy.app['sw.js'].text,text(files,'sw.js'));
 });
-test('PWA cache versions cover app and extension changes while the same build stays stable',()=>{
+test('PWA cache versions cover app changes while retired extension input is ignored',()=>{
   const first=webFiles(assets),again=webFiles(JSON.parse(text(first,'distribution.json')));
   assert.equal(text(first,'sw.js'),text(again,'sw.js'));
   for(const changed of [
     {...assets,app:{...assets.app,'styles.css':{text:assets.app['styles.css'].text+'\nbody{color:red}'}}},
-    {...assets,extension:{...assets.extension,'background.js':{text:assets.extension['background.js'].text+'\n// New extension build'}}}
+    {...assets,app:{...assets.app,'src/web.js':{text:assets.app['src/web.js'].text+'\n// Changed direct reading'}}}
   ])assert.notEqual(text(first,'sw.js').match(/const CACHE = '[^']+'/)[0],text(webFiles(changed),'sw.js').match(/const CACHE = '[^']+'/)[0]);
 });
-test('the optional Chrome connection has the extension folder expected by its setup instructions',()=>{
-  const files=unzip(chromeZIP(assets));assert.equal(files.size,APP_FILES.length+EXTENSION_FILES.length);
-  assert.ok(files.has('extension/manifest.json'));assert.ok(files.has('extension/app/index.html'));
-  const manifest=JSON.parse(text(files,'extension/manifest.json'));assert.ok(manifest.content_scripts[0].matches.includes('https://seionwon.github.io/HTMLMemo/*'));assert.ok(!manifest.content_scripts[0].matches.some(pattern=>pattern.includes('sweon.github.io')));
+test('Pages publishes no extension transport, package, active marker or legacy extension data',()=>{
+  const files=webFiles({...assets,extension:{'background.js':{text:'DO-NOT-PUBLISH-EXTENSION'}}});
+  assert.equal(files.has('src/bridge.js'),false);assert.equal(files.has('downloads/HTMLMemo-chrome.zip'),false);assert.equal(JSON.parse(text(files,'distribution.json')).extension,undefined);
+  assert.doesNotMatch(text(files,'index.html'),/htmlmemo-app-v1|connection-button|execution-chrome/);assert.doesNotMatch(text(files,'src/app.js'),/chrome\.runtime|bridgeAvailable|discoverBridge|htmlmemo-extension/);
+  assert.ok(![...files.values()].some(bytes=>new TextDecoder().decode(bytes).includes('DO-NOT-PUBLISH-EXTENSION')));
 });
-test('asset preparation leaves the optional Chrome download available on disk',async()=>{
-  const bytes=new Uint8Array(await readFile(new URL('../public/downloads/HTMLMemo-chrome.zip',import.meta.url)));
-  const files=unzip(bytes);assert.ok(files.has('extension/manifest.json'));assert.ok(files.has('extension/app/src/install.js'));
+test('asset preparation removes the retired extension download without requiring extension sources',async()=>{
+  await writeFile(new URL('../public/downloads/HTMLMemo-chrome.zip',import.meta.url),'retired');await prepareAssets();
+  await assert.rejects(access(new URL('../public/downloads/HTMLMemo-chrome.zip',import.meta.url)),{code:'ENOENT'});assert.equal(assets.extension,undefined);
 });
 test('a real build removes retired distribution artifacts and writes the Pages web root only',async()=>{
   await mkdir(new URL('../dist/pages/docs/',import.meta.url),{recursive:true});await mkdir(new URL('../dist/downloads/',import.meta.url),{recursive:true});
@@ -60,8 +61,7 @@ test('a real build removes retired distribution artifacts and writes the Pages w
   const copy=JSON.parse(await readFile(new URL('../dist/distribution.json',import.meta.url),'utf8'));assert.equal(copy.app['sw.js'].text,script);
   for(const name of ['dist/downloads/HTMLMemo-pages.zip','dist/downloads/HTMLMemo-install.html','dist/pages','dist/HTMLMemo.html','public/downloads/HTMLMemo-pages.zip','public/downloads/HTMLMemo-install.html'])
     await assert.rejects(access(new URL('../'+name,import.meta.url)),{code:'ENOENT'});
-  const extension=unzip(new Uint8Array(await readFile(new URL('../dist/downloads/HTMLMemo-chrome.zip',import.meta.url))));
-  assert.ok(extension.has('extension/manifest.json'));
+  await assert.rejects(access(new URL('../dist/downloads/HTMLMemo-chrome.zip',import.meta.url)),{code:'ENOENT'});
   for(const name of APP_FILES)if(name!=='sw.js')assert.deepEqual(new Uint8Array(await readFile(new URL('../dist/'+name,import.meta.url))),assetBytes(assets.app[name]));
 });
 
@@ -126,7 +126,7 @@ test('the single header menu preserves library, web opening, HTML import, app de
   assert.ok(doc.querySelector('#tabs').closest('.addressbar'));
   assert.equal(doc.querySelector('#tabs').closest('#app-menu'),null);
   assert.equal(doc.querySelector('#open-tabs-menu'),null);
-  for(const id of ['#execution-tab','#new-tab','#install-button','#connection-button','#settings-button','#about-button'])assert.ok(doc.querySelector(id).closest('#app-menu'));
+  for(const id of ['#execution-tab','#new-tab','#install-button','#web-help-button','#paste-button','#settings-button','#about-button'])assert.ok(doc.querySelector(id).closest('#app-menu'));
   assert.equal(doc.querySelector('#import-button').previousElementSibling.id,'library-tab');
   assert.equal(doc.querySelector('#library-tab').textContent,'');assert.equal(doc.querySelector('#library-tab').title,'내 서재');
   for(const id of ['#library-tab','#execution-tab','#new-tab','#import-button'])assert.ok(doc.querySelector(id).closest('header'));
@@ -159,7 +159,7 @@ test('the dropdown opens without a modal and supports keyboard navigation, Escap
   const key=value=>{const event=new doc.defaultView.Event('keydown',{bubbles:true,cancelable:true});event.key=value;doc.activeElement.dispatchEvent(event);};
   assert.equal(menu.hidden,true);trigger.onclick();
   assert.equal(menu.hidden,false);assert.equal(trigger.getAttribute('aria-expanded'),'true');assert.ok(!doc.querySelector('#dialog').open);
-  assert.equal(doc.activeElement.id,'new-tab');key('ArrowDown');assert.equal(doc.activeElement.id,'execution-tab');
+  assert.equal(doc.activeElement.id,'new-tab');key('ArrowDown');assert.equal(doc.activeElement.id,'paste-button');key('ArrowDown');assert.equal(doc.activeElement.id,'execution-tab');
   key('End');assert.equal(doc.activeElement.id,'about-button');key('Home');assert.equal(doc.activeElement.id,'new-tab');
   key('Escape');assert.equal(menu.hidden,true);assert.equal(trigger.getAttribute('aria-expanded'),'false');assert.equal(doc.activeElement,trigger);
   trigger.onclick();doc.body.dispatchEvent(new doc.defaultView.Event('pointerdown',{bubbles:true}));assert.equal(menu.hidden,true);

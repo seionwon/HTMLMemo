@@ -1,6 +1,7 @@
 // Requires permission to bind localhost and launch a dedicated Chrome process.
 // These are real browser checks, separate from the DOM/unit test suite.
 import test from 'node:test';
+import {createServer as createHTTPServer} from 'node:http';
 import assert from 'node:assert/strict';
 import { mkdtemp, cp, rm, writeFile, mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -65,53 +66,90 @@ test('real Chrome: standalone book export keeps lazy chapters and released asset
     if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});
   }
 });
-test('real Chrome: Chrome handoff switches linked tabs in one click and refreshes safely on return (simulated extension transport)',{timeout:60000},async()=>{
-  await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-chrome-handoff-'));await cp(join(root,'public'),folder,{recursive:true});
+test('real Chrome: Pages-only URL use, safe text import, app tabs and optional installation',{timeout:60000},async()=>{
+  await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-pages-only-'));await cp(join(root,'public'),folder,{recursive:true});
   const server=createServer(folder);let chrome;
   try{
     await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));chrome=await launchChrome();const page=chrome.page;
-    const url=process.env.HTMLMEMO_SIDEBAR_TEST_URL||`http://127.0.0.1:${server.address().port}/`;
+    const url=process.env.HTMLMEMO_SIDEBAR_TEST_URL||`http://127.0.0.1:${server.address().port}/`,storageURL=new URL('src/storage.js',url).href,exampleURL=new URL('example.html',url).href;
     await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
-    // Exercise the real app UI and its message bridge, not an installed extension
-    // or desktop focus. Privileged Chrome window calls have separate unit tests.
-    await page.send('Page.addScriptToEvaluateOnNewDocument',{source:`(()=>{if(window!==top)return;window.handoffCalls=[];window.handoffRemote={};window.handoffSerial=0;
-      addEventListener('message',event=>{const m=event.data;if(event.source!==window||m?.channel!=='htmlmemo-app')return;handoffCalls.push({action:m.action,tabId:m.tabId,url:m.url});let result;
-        if(m.action==='ping')result={version:'1.2.0'};
-        else if(m.action==='openBrowser'){const tab={id:++handoffSerial,url:m.url,title:'연결한 웹페이지 '+handoffSerial};handoffRemote[tab.id]=tab;result={...tab};}
-        else if(m.action==='listTabs')result=Object.values(handoffRemote).map(t=>({...t}));
-        else if(m.action==='takeCaptures')result=[];
-        else if(m.action==='navigateTab'){handoffRemote[m.tabId].url=m.url;result=true;}
-        else result=true;
-        postMessage({channel:'htmlmemo-extension',id:m.id,result},location.origin);
-      });})()`});
     await page.navigate(url);await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
-    await page.waitFor('document.querySelector("#connection-button").classList.contains("connected")');
-    const open=async address=>{await page.click('#library-tab');await page.evaluate(`document.querySelector('#address').value=${JSON.stringify(address)};document.querySelector('#address-form').requestSubmit();`);};
-    await open('https://alpha.example/');await page.waitFor('handoffSerial===1&&!!document.querySelector(".chrome-page-card")');
-    await open('https://beta.example/');await page.waitFor('handoffSerial===2');
-    const first=await page.evaluate('document.querySelector(".tab.browser").dataset.tab'),selector=`[data-tab="${first}"] .tab-select`;
-    await page.click(selector);await page.waitFor('handoffCalls.some(c=>c.action==="focusTab"&&c.tabId===1)');
-    assert.equal(await page.evaluate('document.querySelectorAll(".tab.browser").length'),2);
-    await open('https://alpha.example/');await page.waitFor('handoffCalls.filter(c=>c.action==="focusTab").length===2');assert.equal(await page.evaluate('handoffSerial'),2);
-    await page.click('#library-tab');await page.evaluate(`document.querySelector('#address').value='https://gamma.example/';document.querySelector('#address-form').requestSubmit();document.querySelector('#address-form').requestSubmit();`);
-    await page.waitFor('handoffSerial===3&&document.querySelectorAll(".tab.browser").length===3');
-    await page.click('#library-tab');const focused=await page.evaluate('handoffCalls.filter(c=>c.action==="focusTab").length');
-    await page.evaluate(`handoffRemote[1].url='https://alpha.example/next';handoffRemote[1].title='Chrome에서 바뀐 제목';dispatchEvent(new Event('focus'));`);
-    await page.waitFor(`document.querySelector('[data-tab="${first}"] .tab-title').textContent==='Chrome에서 바뀐 제목'`);
-    assert.equal(await page.evaluate('document.querySelector("#library").hidden'),false);assert.equal(await page.evaluate('handoffCalls.filter(c=>c.action==="focusTab").length'),focused);
-    await page.click(selector);await page.waitFor('document.querySelector(".browser-host:not([hidden]) .chrome-page-card small").textContent==="https://alpha.example/next"');
-    await page.evaluate(`delete handoffRemote[1];dispatchEvent(new Event('focus'));`);await page.waitFor('document.querySelector(".browser-host:not([hidden]) [data-save-chrome]").disabled');
-    assert.equal(await page.evaluate(`['#back','#forward','#reload','#save-page'].every(id=>document.querySelector(id).disabled)`),true);
-    assert.match(await page.evaluate('document.querySelector(".browser-host:not([hidden]) [data-focus-chrome]").textContent'),/다시 열기/);
-    await page.click(selector);await page.waitFor('handoffSerial===4&&!document.querySelector(".browser-host:not([hidden]) [data-save-chrome]").disabled');
-    assert.equal(await page.evaluate('handoffRemote[4].url'),'https://alpha.example/next');assert.equal(await page.evaluate('document.querySelectorAll(".tab.browser").length'),3);
-    await page.click('#library-tab');await page.click('#open-example');await page.waitFor('!!document.querySelector(".tab.document")&&!document.querySelector("#toolbar").hidden');
-    await page.click(selector);await page.waitFor('handoffCalls.some(c=>c.action==="focusTab"&&c.tabId===4)');
-    const beforeLocal=await page.evaluate('handoffCalls.filter(c=>c.action==="focusTab").length');await page.click('.tab.document .tab-select');
-    await page.evaluate(`dispatchEvent(new Event('focus'));`);await page.waitFor('!document.querySelector("#toolbar").hidden');assert.equal(await page.evaluate('handoffCalls.filter(c=>c.action==="focusTab").length'),beforeLocal);
-    await page.click(selector);await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/chrome-handoff-desktop.png'),await page.screenshot());
-    await page.send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await writeFile(join(root,'test-results/chrome-handoff-mobile.png'),await page.screenshot());assert.deepEqual(chrome.errors,[]);
+    assert.equal(await page.evaluate('!!document.querySelector(\'meta[name="htmlmemo-app"],#connection-button,#execution-chrome\')'),false);
+    await clickAppMenu(page,'#execution-tab');
+    assert.match(await page.evaluate('document.querySelector("#execution").textContent'),/URL 하나로,\s*설치 없이 바로/);
+    assert.match(await page.evaluate('document.querySelector("#execution").textContent'),/선택/);
+    await page.click('#execution-web');await page.waitFor('document.querySelector("#dialog").open&&!!document.querySelector("#web-help-paste")');
+    assert.match(await page.evaluate('document.querySelector("#dialog").textContent'),/추가 프로그램이나 서버 연결은 필요하지 않습니다/);
+    assert.equal(await page.evaluate('!!document.querySelector(\'#dialog a[href*=".zip"],#dialog a[href^="chrome:"]\')'),false);
+    await page.click('#dialog [data-dialog-close]');await page.click('#library-tab');
+    const open=async()=>page.evaluate(`document.querySelector('#address').value=${JSON.stringify(exampleURL)};document.querySelector('#address-form').requestSubmit();`);
+    await open();await page.waitFor('!!document.querySelector(".browser-frame")?.contentDocument?.body');
+    await page.click('#library-tab');await open();assert.equal(await page.evaluate('document.querySelectorAll(".tab.browser").length'),1);
+    assert.deepEqual(await page.evaluate('(()=>{const a=document.querySelector(".browser-host:not([hidden]) [data-open-external]");return {url:a.href,target:a.target,rel:a.rel};})()'),{url:exampleURL,target:'_blank',rel:'noopener noreferrer'});
+    // Obsolete extension messages must not import a page or alter navigation.
+    await page.evaluate('postMessage({channel:"htmlmemo-extension-ready"},"*");postMessage({channel:"htmlmemo-extension-capture",capture:{title:"Unrequested page",html:"<p>ignored</p>"}},"*");window.pickerCalls=0;window.showSaveFilePicker=async()=>{pickerCalls++;throw Error("No picker is needed for library import");};');
+    await page.click('.browser-host:not([hidden]) [data-web-help]');await page.click('#web-help-paste');
+    const text='기억할 문장과 함께 읽습니다.\n둘째 줄을 유지합니다.\n\n<script>window.pastedExecuted=true</script>';
+    await page.evaluate(`document.querySelector('#paste-title').value='URL만으로 보관한 글';document.querySelector('#paste-text').value=${JSON.stringify(text)};`);
+    await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/pages-only-desktop.png'),await page.screenshot());
+    await page.send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
+    await writeFile(join(root,'test-results/pages-only-mobile.png'),await page.screenshot());
+    assert.equal(await page.evaluate('(()=>{const d=document.querySelector("#dialog").getBoundingClientRect();return d.left>=0&&d.right<=innerWidth&&d.height<=innerHeight;})()'),true);
+    await page.click('#paste-save');await page.waitFor('!document.querySelector("#dialog").open&&!document.querySelector("#toolbar").hidden&&document.querySelector("#status-left").textContent.includes("자동 저장됨")');
+    const frame='document.querySelector(".document-host:not([hidden]) iframe")';
+    assert.equal(await page.evaluate(`${frame}.contentWindow.pastedExecuted`),undefined);
+    assert.match(await page.evaluate(`${frame}.contentDocument.body.textContent`),/<script>window.pastedExecuted=true<\/script>/);
+    assert.equal(await page.evaluate('window.pickerCalls'),0);
+    const saved=await page.evaluate(`(async()=>{const s=await import(${JSON.stringify(storageURL)}),r=await s.listDocuments(),d=await s.getDocument(r[0].id);return {count:r.length,title:d.title,source:d.source,paragraphs:new DOMParser().parseFromString(d.html,'text/html').querySelectorAll('article>p').length};})()`);
+    assert.deepEqual(saved,{count:1,title:'URL만으로 보관한 글',source:exampleURL,paragraphs:3});
+    await page.evaluate(`(()=>{const d=${frame}.contentDocument,r=d.createRange();r.selectNodeContents(d.querySelector('article>p'));const s=d.getSelection();s.removeAllRanges();s.addRange(r);d.dispatchEvent(new Event('selectionchange'));})()`);
+    await page.click('#toolbar [data-action=highlight]');
+    await page.waitFor(`${frame}.contentDocument.querySelector('[data-htmlmemo-mark]')&&document.querySelector('#status-left').textContent.includes('자동 저장됨')`);
+    await page.click('.tab.document.active .tab-close');await page.click('#library-tab');await page.click('[data-open]');
+    await page.waitFor(`${frame}.contentDocument.querySelector('[data-htmlmemo-mark]')&&!document.querySelector('#toolbar').hidden`);
+    assert.equal(await page.evaluate('document.querySelectorAll(".tab.browser").length'),1);
+    assert.equal(await page.evaluate('window.pickerCalls'),0);assert.deepEqual(chrome.errors,[]);
   }finally{if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
+});
+
+test('real Chrome: cross-origin CORS capture and blocked-site fallback use only the app',{timeout:60000},async()=>{
+  await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-cors-'));await cp(join(root,'public'),folder,{recursive:true});
+  const server=createServer(folder),requests=[];
+  const site=createHTTPServer((request,response)=>{
+    requests.push({path:request.url,mode:request.headers['sec-fetch-mode'],cookie:request.headers.cookie,authorization:request.headers.authorization});
+    response.setHeader('X-Frame-Options','DENY');
+    if(request.url!=='/blocked.html')response.setHeader('Access-Control-Allow-Origin','*');
+    if(request.url==='/assets/style.css'){response.setHeader('Content-Type','text/css');response.end('p{color:rgb(12,34,56)}');}
+    else if(request.url==='/assets/picture.svg'){response.setHeader('Content-Type','image/svg+xml');response.end('<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"><path d="M0 0h2v2H0z"/></svg>');}
+    else{response.setHeader('Content-Type','text/html; charset=utf-8');response.end('<!doctype html><title>CORS 허용 글</title><base href="/assets/"><link rel="stylesheet" href="style.css"><p id="cors-text" onclick="window.unwanted=true">서버나 확장 없이 가져온 본문입니다.</p><img src="picture.svg"><script>window.unwanted=true</script>');}
+  });let chrome;
+  try{
+    await Promise.all([server,site].map(s=>new Promise((resolve,reject)=>{s.once('error',reject);s.listen(0,'127.0.0.1',resolve);})));
+    const url=`http://127.0.0.1:${server.address().port}/`,origin=`http://127.0.0.1:${site.address().port}`,storageURL=new URL('src/storage.js',url).href;
+    chrome=await launchChrome();const page=chrome.page;
+    await page.navigate(url);await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
+    await page.evaluate('document.cookie="htmlmemo_cors_test=not_sent;path=/";window.pickerCalls=0;window.showSaveFilePicker=async()=>{pickerCalls++;throw Error("Library saving must not open a picker");};');
+    const open=async address=>{await page.click('#library-tab');await page.evaluate(`document.querySelector('#address').value=${JSON.stringify(address)};document.querySelector('#address-form').requestSubmit();`);await page.waitFor('!!document.querySelector(".browser-host:not([hidden]) [data-capture]")');};
+    await open(origin+'/allowed.html');await page.click('#save-page');await page.waitFor('!document.querySelector("#toolbar").hidden&&document.querySelector("#status-left").textContent.includes("자동 저장됨")');
+    const frame='document.querySelector(".document-host:not([hidden]) iframe")';
+    assert.equal(await page.evaluate(`${frame}.contentWindow.unwanted`),undefined);
+    assert.equal(await page.evaluate(`${frame}.contentDocument.querySelector('#cors-text').hasAttribute('onclick')`),false);
+    assert.match(await page.evaluate(`${frame}.contentDocument.querySelector('img').src`),/^data:image\/svg\+xml;base64,/);
+    assert.equal(await page.evaluate(`getComputedStyle(${frame}.contentDocument.querySelector('#cors-text')).color`),'rgb(12, 34, 56)');
+    const rows=await page.evaluate(`(async()=>{const s=await import(${JSON.stringify(storageURL)});return (await s.listDocuments()).map(r=>({source:r.source,warnings:r.metadata.warnings}));})()`);
+    assert.deepEqual(rows,[{source:origin+'/allowed.html',warnings:[]}]);
+    const direct=requests.filter(r=>r.mode==='cors');
+    assert.ok(['/allowed.html','/assets/style.css','/assets/picture.svg'].every(path=>direct.some(r=>r.path===path)));
+    assert.ok(direct.every(r=>!r.cookie&&!r.authorization));assert.equal(await page.evaluate('window.pickerCalls'),0);
+    await open(origin+'/blocked.html');await page.click('#save-page');await page.waitFor('document.querySelector("#dialog").open&&!!document.querySelector("#web-help-paste")');
+    assert.match(await page.evaluate('document.querySelector("#dialog").textContent'),/직접 가져오지 못했습니다/);
+    assert.equal(await page.evaluate('document.querySelectorAll(".tab.document").length'),1);
+    assert.equal(await page.evaluate('document.querySelector("#dialog a[target=_blank]").href'),origin+'/blocked.html');
+    await page.click('#web-help-paste');await page.evaluate('document.querySelector("#paste-title").value="제한된 사이트의 글";document.querySelector("#paste-text").value="필요한 글만 복사해서 읽습니다."');await page.click('#paste-save');
+    await page.waitFor(`!document.querySelector('#dialog').open&&${frame}.contentDocument.title==='제한된 사이트의 글'&&document.querySelector('#status-left').textContent.includes('자동 저장됨')`);
+    assert.equal(await page.evaluate(`${frame}.contentDocument.querySelector('a').href`),origin+'/blocked.html');
+    assert.equal(await page.evaluate('window.pickerCalls'),0);assert.deepEqual(chrome.errors,[]);
+  }finally{if(chrome)await chrome.close();await Promise.all([server,site].map(s=>new Promise(resolve=>s.close(resolve))));await rm(folder,{recursive:true,force:true});}
 });
 
 test('real Chrome: browsing, capture, local annotation, file writes, reopen and offline',{timeout:90000},async t=>{
@@ -156,7 +194,7 @@ test('real Chrome: browsing, capture, local annotation, file writes, reopen and 
       // IndexedDB structured-clone contracts as an external picked file.
       await page.evaluate(`window.showSaveFilePicker=async()=>{const root=await navigator.storage.getDirectory();return root.getFileHandle('picked-document.html',{create:true});};`);
       await page.click('#save-page');await page.waitFor('!document.querySelector("#toolbar").hidden && document.querySelector("#status-left").textContent.includes("자동 저장됨")');
-      const html=await page.evaluate(`(async()=>{const root=await navigator.storage.getDirectory();return (await (await root.getFileHandle('picked-document.html')).getFile()).text();})()`);assert.match(html,/data:image\/svg\+xml;base64/);assert.match(html,/htmlmemo-data/);assert.ok(!html.includes('fixtureLoaded'));
+      const saved=await page.evaluate(`(async()=>{const s=await import('./src/storage.js'),records=await s.listDocuments(),record=await s.getDocument(records[0].id);return {count:records.length,html:record.html,annotations:record.metadata.annotations.length};})()`);assert.equal(saved.count,1);assert.equal(saved.annotations,0);assert.match(saved.html,/data:image\/svg\+xml;base64/);assert.ok(!saved.html.includes('fixtureLoaded'));
     });
     await t.test('local annotation saves internally and exports on request',async()=>{
       await page.evaluate(`(()=>{const doc=document.querySelector('.document-host:not([hidden]) iframe').contentDocument;const text=doc.querySelector('#selection').firstChild;const range=doc.createRange();range.setStart(text,0);range.setEnd(text,15);doc.getSelection().removeAllRanges();doc.getSelection().addRange(range);doc.dispatchEvent(new Event('selectionchange'));})()`);await page.click('[data-action="highlight"]');
