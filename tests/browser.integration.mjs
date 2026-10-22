@@ -36,7 +36,12 @@ test('real Chrome: toolbar mode groups remove semantic duplicates and keep area,
     await mkdir(join(root,'test-results'),{recursive:true});
     for(const width of [1280,390,320]){
       await page.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
-      await page.send('Emulation.setEmulatedMedia',{features:[{name:'prefers-color-scheme',value:width<600?'dark':'light'}]});
+      // The app defaults to an explicit light theme, so a media override alone
+      // would silently leave every screenshot light. Exercise the real setting.
+      const theme=width<600?'dark':'light';
+      await clickAppMenu(page,'#settings-button');await page.waitFor('document.querySelector("#dialog").open&&document.querySelector("#appearance")');
+      await page.evaluate(`(()=>{const appearance=document.querySelector('#appearance');appearance.value=${JSON.stringify(theme)};appearance.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+      await page.click('#dialog [data-dialog-close]');assert.equal(await page.evaluate('document.documentElement.dataset.theme'),theme);
       for(const [group,variant] of [['highlight','area'],['underline','area-underline'],['note','text']])await choose(group,variant);
       await page.click('[data-action=highlight]');await page.click('[data-action=highlight]');
       await page.waitFor('document.querySelectorAll("[data-tool-mode]").length===2');
