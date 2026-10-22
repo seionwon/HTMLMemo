@@ -15,6 +15,47 @@ const appVersion=JSON.parse(await readFile(new URL('../package.json',import.meta
 async function revealAnnotation(page,doc,id){
   await page.evaluate(`(()=>{let node=${doc}.querySelector('[data-annotation="'+${JSON.stringify(id)}+'"]');if(!node)throw Error('Missing annotation');for(node=node.parentElement;node;node=node.parentElement)if(node.matches('details[data-annotation-group]'))node.open=true;})()`);
 }
+test('real Chrome: palette controls stay above palettes and retain their settings after color changes and reload',{timeout:60000},async()=>{
+  await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-palette-order-'));await cp(join(root,'public'),folder,{recursive:true});
+  const server=createServer(folder);let chrome;
+  try{
+    await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));chrome=await launchChrome();const page=chrome.page;
+    const url=process.env.HTMLMEMO_SIDEBAR_TEST_URL||`http://127.0.0.1:${server.address().port}/`;
+    await page.navigate(url);await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
+    await page.click('#open-example');await page.waitFor('!document.querySelector("#toolbar").hidden&&document.querySelector("#status-left").textContent.includes("자동 저장됨")');
+    const layout=()=>page.evaluate(`(()=>{
+      const pop=document.querySelector('#tool-popover'),ids=['pen-width','pen-opacity','pen-ttl','palette-preset'],nodes=ids.map(id=>pop.querySelector('#'+id));
+      const bounds=pop.getBoundingClientRect(),tops=nodes.map(node=>node.closest('label,.palette-section').getBoundingClientRect().top);
+      return {order:[...pop.querySelectorAll('#pen-width,#pen-opacity,#pen-ttl,#palette-preset')].map(node=>node.id),unique:ids.every(id=>pop.querySelectorAll('#'+id).length===1),above:tops.every((top,i)=>i===0||top>tops[i-1]),visible:nodes.slice(0,3).every(node=>{const b=node.getBoundingClientRect();return b.top>=bounds.top&&b.bottom<=bounds.bottom&&b.left>=0&&b.right<=innerWidth;}),contained:bounds.left>=0&&bounds.right<=innerWidth&&bounds.top>=0&&bounds.bottom<=innerHeight};
+    })()`);
+    const expected={order:['pen-width','pen-opacity','pen-ttl','palette-preset'],unique:true,above:true,visible:true,contained:true};
+    const values=()=>page.evaluate(`['#pen-width','#pen-opacity','#pen-ttl','#width-output','#opacity-output'].map(id=>{const n=document.querySelector(id);return n.value||n.textContent;})`);
+    await mkdir(join(root,'test-results'),{recursive:true});
+    for(const width of [1280,390,320]){
+      await page.send('Emulation.setDeviceMetricsOverride',{width,height:800,deviceScaleFactor:1,mobile:width<600});
+      if(width===390){
+        await clickAppMenu(page,'#settings-button');await page.waitFor('document.querySelector("#appearance")');
+        await page.evaluate(`(()=>{const n=document.querySelector('#appearance');n.value='dark';n.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+        await page.click('#dialog [data-dialog-close]');assert.equal(await page.evaluate('document.documentElement.dataset.theme'),'dark');
+      }
+      await page.click('[data-action=palette]');await page.waitFor('!document.querySelector("#tool-popover").hidden&&document.querySelector("#pen-width")');
+      assert.deepEqual(await layout(),expected);
+      await writeFile(join(root,`test-results/palette-controls-${width}.png`),await page.screenshot());
+      if(width===1280){
+        await page.evaluate(`(()=>{for(const [id,value,event] of [['pen-width','7','input'],['pen-opacity','55','input'],['pen-ttl','10','change']]){const n=document.getElementById(id);n.value=value;n.dispatchEvent(new Event(event,{bubbles:true}));}})()`);
+        assert.deepEqual(await values(),['7','55','10','7px','55%']);
+        await page.evaluate(`(()=>{const n=document.querySelector('#palette-preset');n.value='preset-2';n.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+        assert.deepEqual(await layout(),expected);assert.deepEqual(await values(),['7','55','10','7px','55%']);
+        await page.click('#add-custom-color');assert.deepEqual(await layout(),expected);assert.deepEqual(await values(),['7','55','10','7px','55%']);
+      }else assert.deepEqual(await values(),['7','55','10','7px','55%']);
+      await page.click('[data-popover-close]');
+    }
+    await page.navigate(url);await page.waitFor('document.querySelector("[data-open]")');await page.click('[data-open]');
+    await page.waitFor('!document.querySelector("#toolbar").hidden');await page.click('[data-action=palette]');
+    assert.deepEqual(await layout(),expected);assert.deepEqual(await values(),['7','55','10','7px','55%']);
+    assert.equal(await page.evaluate(`document.querySelector('#palette-preset').value`),'preset-2');assert.deepEqual(chrome.errors,[]);
+  }finally{if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
+});
 test('real Chrome: toolbar mode groups remove semantic duplicates and keep area, underline and text annotations usable',{timeout:90000},async()=>{
   await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-tool-modes-'));await cp(join(root,'public'),folder,{recursive:true});
   const server=createServer(folder);let chrome;

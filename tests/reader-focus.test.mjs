@@ -157,6 +157,15 @@ test('document tools and palette window provide an explicit close button and ful
  assert.match(appSource,/\$\('\[data-popover-close\]'\s*,\$\('#tool-popover'\)\)\.onclick=closePopover/);
 });
 
+test('pen width, highlighter opacity and pen lifetime precede every palette in the pen and color panel',()=>{
+ const palette=appSource.slice(appSource.indexOf('function renderPalettePopoverContent('),appSource.indexOf('  positionPopover();',appSource.indexOf('function renderPalettePopoverContent(')));
+ const controls=['id="pen-width"','id="pen-opacity"','id="pen-ttl"','시간을 정한 펜은','id="palette-preset"','id="custom-swatches"','id="color-picker-sv"'];
+ const positions=controls.map(id=>palette.indexOf(id));
+ assert.ok(positions.every(position=>position>=0));
+ assert.deepEqual(positions,[...positions].sort((a,b)=>a-b));
+ for(const id of controls.slice(0,3))assert.equal(palette.split(id).length-1,1,'moved controls must not be duplicated');
+});
+
 test('opening a local document does not create the app outline sidebar',()=>{
  const openRecord=appSource.slice(appSource.indexOf('async function openRecord('),appSource.indexOf('function saveStatus('));
  assert.doesNotMatch(openRecord,/await tab\.reader\.ready;[\s\S]*renderSidebar\('outline'\);[\s\S]*updateChrome\(\)/);
