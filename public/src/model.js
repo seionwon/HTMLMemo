@@ -24,6 +24,14 @@ export function validateAnnotations(value) {
         if (item.type !== 'pen' || !item.anchor || typeof basis !== 'object' ||
           ['width','height'].some(key=>!Number.isFinite(basis[key]) || basis[key] < 1 || basis[key] > 1e8) ||
           !Number.isFinite(basis.fontSize) || basis.fontSize < .1 || basis.fontSize > 1000) throw new Error('펜 그림의 글자 크기 기준이 손상되었습니다.');
+        if(basis.textAnchor != null){
+          const a=basis.textAnchor;
+          if(!a || typeof a!=='object' || !Number.isSafeInteger(a.start) || !Number.isSafeInteger(a.end) || a.start<0 || a.end<=a.start || a.end>1e8 ||
+            typeof a.quote!=='string' || !a.quote.length || a.quote.length>16 || a.end-a.start!==a.quote.length ||
+            ['prefix','suffix'].some(key=>typeof a[key]!=='string' || a[key].length>40) ||
+            ['x','y'].some(key=>!Number.isFinite(a[key]) || Math.abs(a[key])>1e8) ||
+            !Number.isFinite(a.fontSize) || a.fontSize<.1 || a.fontSize>1000) throw new Error('펜 그림의 글자 기준 위치가 손상되었습니다.');
+        }
       }
       if (item.anchorTarget != null) {
         const target = item.anchorTarget;

@@ -1518,10 +1518,73 @@ export class Reader {
     return {key:element.dataset?.htmlmemoAnchor || 'body', ...box, ...(describe ? {target:this.describeDrawingTarget(element),fontSize:this.drawingFontSize(element)} : {})};
   }
   drawingFontSize(element) {
+    if(!element)return null;
     const content = this.doc.getElementById('reader-content');
     const target = content && element !== content && element.contains?.(content) ? content : element;
     const size = Number.parseFloat(this.doc.defaultView?.getComputedStyle?.(target)?.fontSize);
     return Number.isFinite(size) && size >= .1 && size <= 1000 ? size : null;
+  }
+  penTextIndex(element) {
+    // Index only the stroke's paragraph, never the whole (possibly packed) book.
+    if (!element || element === this.doc.body || element === this.doc.documentElement || !this.doc.createRange?.().getClientRects) return null;
+    const nodes = []; let text = '', count = 0;
+    const walker = this.doc.createTreeWalker(element, NodeFilter.SHOW_TEXT, {acceptNode:node =>
+      node.parentElement?.closest('script,style,noscript,svg,textarea,template,[data-htmlmemo-ui]') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT});
+    while (walker.nextNode()) {
+      const node = walker.currentNode;
+      if (++count > 2000 || text.length + node.textContent.length > 64000) return null;
+      nodes.push({node,start:text.length,end:text.length+node.textContent.length}); text += node.textContent;
+    }
+    return text.trim() ? {nodes,text} : null;
+  }
+  penTextRect(index, start, end, origin) {
+    const range = rangeFromOffsets(this.doc,start,end,index), rect = range?.getBoundingClientRect?.();
+    if (!rect || !rect.width || !rect.height) return null;
+    const node = index.nodes.find(n=>n.end>start)?.node;
+    const fontSize = this.drawingFontSize(node?.parentElement);
+    return fontSize ? {x:rect.left+rect.width/2-origin.left,y:rect.top+rect.height/2-origin.top,fontSize} : null;
+  }
+  resolvePenTextAnchor(index, anchor) {
+    // A single repeated letter is not enough to identify a changed paragraph.
+    // Verify its surrounding text, including at the original numeric offset.
+    const matches = start => index.text.slice(start,start+anchor.quote.length)===anchor.quote &&
+      index.text.slice(Math.max(0,start-anchor.prefix.length),start)===anchor.prefix &&
+      index.text.slice(start+anchor.quote.length,start+anchor.quote.length+anchor.suffix.length)===anchor.suffix;
+    if(matches(anchor.start))return {start:anchor.start,end:anchor.end};
+    let hit=null;
+    for(let at=index.text.indexOf(anchor.quote);at!==-1;at=index.text.indexOf(anchor.quote,at+1)){
+      if(!matches(at))continue;
+      if(hit)return null;
+      hit={start:at,end:at+anchor.quote.length};
+    }
+    return hit;
+  }
+  capturePenTextAnchor(element, points, box, origin, scale = 1, index = this.penTextIndex(element)) {
+    if (!index || !points.length) return null;
+    let left=Infinity,right=-Infinity,top=Infinity,bottom=-Infinity;
+    for (const p of points) { left=Math.min(left,p.x);right=Math.max(right,p.x);top=Math.min(top,p.y);bottom=Math.max(bottom,p.y); }
+    const x=(left+right)/2+origin.left,y=(top+bottom)/2+origin.top;
+    const distance = (start,end) => {
+      const rects = rangeFromOffsets(this.doc,start,end,index)?.getClientRects?.() || [];
+      let best=Infinity;
+      for (const r of rects) if(r.width && r.height) best=Math.min(best,Math.max(r.left-x,0,x-r.right)**2+Math.max(r.top-y,0,y-r.bottom)**2);
+      return best;
+    };
+    // Range fragments find the nearest character even off-screen, with RTL,
+    // nested highlights or wrapped lines. No caret hit-testing/scroll is needed.
+    let start=0,end=index.text.length;
+    while(end-start>8){const mid=(start+end)>>>1;if(distance(start,mid)<=distance(mid,end))end=mid;else start=mid;}
+    let hit=null,best=Infinity;
+    for(let at=Math.max(0,start-1);at<Math.min(index.text.length,end+1);at++){
+      if(/\s|[\uDC00-\uDFFF]/u.test(index.text[at]))continue;
+      const finish=at+(index.text.codePointAt(at)>0xffff?2:1),d=distance(at,finish);
+      if(d<best){best=d;hit={start:at,end:finish};}
+    }
+    if(!hit)return null;
+    const rect=this.penTextRect(index,hit.start,hit.end,origin);
+    if(!rect || best>(rect.fontSize*3)**2 || rect.fontSize/scale<.1 || rect.fontSize/scale>1000)return null; // Blank-space diagrams keep their box anchor.
+    return {...hit,quote:index.text.slice(hit.start,hit.end),prefix:index.text.slice(Math.max(0,hit.start-40),hit.start),suffix:index.text.slice(hit.end,hit.end+40),
+      x:(rect.x-box.x)/scale,y:(rect.y-box.y)/scale,fontSize:rect.fontSize/scale};
   }
   pointerDown(event) {
     if (event.button !== 0) return;
@@ -1560,6 +1623,11 @@ export class Reader {
       } else if (g.points.length > 1) {
         const penBasis = g.type === 'pen' && g.anchor.fontSize ? {width:g.anchor.width,height:g.anchor.height,fontSize:g.anchor.fontSize} : null;
         const next = this.annotation(g.type, {anchor:g.anchor.key, anchorTarget:g.anchor.target, points, ...(penBasis ? {penBasis} : {})});
+        if(penBasis && this.doc){
+          const origin=this.layerOrigin(),element=this.resolveDrawingTarget(next);
+          const textAnchor=this.capturePenTextAnchor(element,g.points,g.anchor,origin);
+          if(textAnchor)penBasis.textAnchor=textAnchor;
+        }
         if (g.type === 'pen' && this.penTTL > 0) {
           const temporary = this.drawAnnotation(next);
           if (temporary) { temporary.dataset.htmlmemoPreview = ''; this.layer.append(temporary);setTimeout(() => temporary.remove(), this.penTTL * 1000); }
@@ -1597,7 +1665,7 @@ export class Reader {
     if (this.searchQuery) this.search(this.searchQuery, false);
     this.observeDynamicDocument();
   }
-  drawingGeometry(annotation) {
+  drawingGeometry(annotation, textIndexes = null) {
     if (!this.annotationInSection(annotation)) return {points:[],scale:1};
     if (!annotation.anchor) return {points:annotation.points,scale:1};
     const origin = this.layerOrigin();
@@ -1619,8 +1687,38 @@ export class Reader {
         if (!basis) { basis = {width:box.width,height:box.height,fontSize}; this.legacyPenBases.set(annotation.id,basis); }
       }
       if (basis && fontSize) {
-        const scale = fontSize / basis.fontSize;
-        return {points:annotation.points.map(p => ({x:box.x+p.x*basis.width*scale,y:box.y+p.y*basis.height*scale})),scale,basis};
+        let scale = fontSize / basis.fontSize, dx=0, dy=0, textChanged=false;
+        let index;
+        const getIndex=()=>{
+          if(index===undefined){
+            if(textIndexes && !textIndexes.has(element))textIndexes.set(element,this.penTextIndex(element));
+            index=textIndexes ? textIndexes.get(element) : this.penTextIndex(element);
+          }
+          return index;
+        };
+        if(!basis.textAnchor){
+          // Older files do not contain a glyph reference. Pin their first visible
+          // appearance without moving it or dirtying the document on open.
+          this.legacyPenTextBases ||= new Map();
+          let cached=this.legacyPenTextBases.get(annotation.id);
+          if(!cached){
+            const initialPoints=annotation.points.map(p=>({x:box.x+p.x*basis.width*scale,y:box.y+p.y*basis.height*scale}));
+            const textAnchor=this.capturePenTextAnchor(element,initialPoints,box,origin,scale,getIndex());
+            cached={basis:textAnchor?{...basis,textAnchor}:basis,scale};this.legacyPenTextBases.set(annotation.id,cached);
+          }
+          basis=cached.basis;
+          textChanged=Math.abs(scale-cached.scale)>1e-6;
+        }
+        if(basis.textAnchor){
+          const textIndex=getIndex(),hit=textIndex && this.resolvePenTextAnchor(textIndex,basis.textAnchor);
+          const rect=hit && this.penTextRect(textIndex,hit.start,hit.end,origin);
+          if(rect){
+            scale=rect.fontSize/basis.textAnchor.fontSize;
+            dx=rect.x-box.x-basis.textAnchor.x*scale;dy=rect.y-box.y-basis.textAnchor.y*scale;
+            textChanged ||= Math.abs(dx)>.01 || Math.abs(dy)>.01;
+          }
+        }
+        return {points:annotation.points.map(p => ({x:box.x+p.x*basis.width*scale+dx,y:box.y+p.y*basis.height*scale+dy})),scale,basis,textChanged};
       }
     }
     return {points:annotation.points.map(p => ({x:box.x + p.x * box.width, y:box.y + p.y * box.height})),scale:1};
@@ -1656,12 +1754,12 @@ export class Reader {
     const hostParent=scrollHost||this.doc.body;
     let layer=this.doc.getElementById(LAYER_ID);
     const drawings=this.metadata.annotations.filter(a=>!TEXT_TOOLS.includes(a.type));
-    const geometry=drawings.map(a=>this.drawingGeometry(a));
+    const textIndexes=new WeakMap(),geometry=drawings.map(a=>this.drawingGeometry(a,textIndexes));
     let upgraded=false;
     drawings.forEach((a,i)=>{
       // Persist a legacy baseline only after a font change, so simply opening
       // an old file does not mark it edited. Reload/export then retain the scale.
-      if(a.type==='pen' && !a.penBasis && geometry[i].basis && Math.abs(geometry[i].scale-1)>1e-6){a.penBasis={...geometry[i].basis};upgraded=true;}
+      if(a.type==='pen' && geometry[i].basis && ((!a.penBasis && Math.abs(geometry[i].scale-1)>1e-6) || (!a.penBasis?.textAnchor && geometry[i].basis.textAnchor && geometry[i].textChanged))){a.penBasis={...geometry[i].basis};upgraded=true;}
     });
     const contentKey=JSON.stringify(drawings);
     const layoutKey=JSON.stringify(geometry.map(({points,scale})=>({points,scale})));

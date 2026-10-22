@@ -107,6 +107,46 @@ test('a newly drawn pen saves its drawing-time dimensions and font size',async()
   assert.deepEqual(r.metadata.annotations[0].penBasis,{width:400,height:120,fontSize:18});
   assert.deepEqual(r.metadata.annotations[0].points,[{x:.2,y:.1},{x:.8,y:.9}]);
 });
+test('pen glyph pins follow padding, fixed line height, text wrapping and nested marks without distorting the stroke',async()=>{
+  const doc=documentFor('<html><head></head><body><p data-htmlmemo-anchor="n0">First <b>target phrase</b> end.</p></body></html>'),p=doc.querySelector('p');
+  let fontSize=18,width=200;
+  const r=Object.create(Reader.prototype);Object.assign(r,{doc,width:3,color:'#ef4444',opacity:1,penTTL:0,metadata:{annotations:[]}});
+  r.drawingFontSize=()=>fontSize;r.layerOrigin=()=>({left:0,top:0});
+  p.getBoundingClientRect=()=>({left:40,top:60,width,height:160});
+  const glyph=at=>{
+    const columns=Math.floor((width-34)/(fontSize/2)),line=Math.floor(at/columns),column=at%columns;
+    return {left:57+column*fontSize/2,top:73+line*42,width:fontSize/2,height:fontSize,right:57+(column+1)*fontSize/2,bottom:73+line*42+fontSize};
+  };
+  const offset=(node,at)=>{const walker=doc.createTreeWalker(p,NodeFilter.SHOW_TEXT);let total=0;while(walker.nextNode()){if(walker.currentNode===node)return total+at;total+=walker.currentNode.textContent.length;}return total;};
+  doc.createRange=()=>({setStart(node,at){this.start=offset(node,at);},setEnd(node,at){this.end=offset(node,at);},getClientRects(){return Array.from({length:this.end-this.start},(_,i)=>glyph(this.start+i));},getBoundingClientRect(){const rects=this.getClientRects(),left=Math.min(...rects.map(r=>r.left)),top=Math.min(...rects.map(r=>r.top)),right=Math.max(...rects.map(r=>r.right)),bottom=Math.max(...rects.map(r=>r.bottom));return {left,top,right,bottom,width:right-left,height:bottom-top};}});
+  const center=()=>{const g=glyph(14);return {x:g.left+g.width/2,y:g.top+g.height/2};},first=center();
+  const deltas=[{x:-7,y:-8},{x:8,y:-8},{x:8,y:8},{x:-7,y:8}],points=deltas.map(d=>({x:first.x+d.x,y:first.y+d.y}));
+  r.gesture={pointerId:1,type:'pen',anchor:{key:'n0',x:40,y:60,width,height:160,fontSize:18},points};r.commit=annotations=>{r.metadata.annotations=annotations;};
+  await r.pointerUp({pointerId:1,preventDefault(){}});
+  const pen=r.metadata.annotations[0];assert.equal(pen.penBasis.textAnchor.start,14);
+  const aligned=()=>{const c=center(),geometry=r.drawingGeometry(pen);for(let i=0;i<points.length;i++){assert.ok(Math.abs(geometry.points[i].x-c.x-deltas[i].x*fontSize/18)<1e-8);assert.ok(Math.abs(geometry.points[i].y-c.y-deltas[i].y*fontSize/18)<1e-8);}assert.equal(geometry.scale,fontSize/18);};
+  aligned();for(const size of [36,27,18,36,18]){fontSize=size;aligned();}
+  width=140;aligned();p.innerHTML='First <b><span data-htmlmemo-mark>target</span> phrase</b> end.';aligned();
+  const saved=parseHTML(serializeHTML(doc,{version:1,annotations:[pen]}));assert.deepEqual(saved.metadata.annotations[0].penBasis,pen.penBasis);
+  r.metadata.annotations=saved.metadata.annotations;aligned();
+  const index=r.penTextIndex(p),pin=pen.penBasis.textAnchor;
+  assert.equal(r.resolvePenTextAnchor({...index,text:index.text.replace('First','Other')},pin),null,'an unrelated repeated character is not a valid pin');
+});
+test('old font-scaled pens acquire a glyph reference without a first-open jump or silent edit',()=>{
+  const doc=documentFor('<html><body><p data-htmlmemo-anchor="n0">Saved paragraph</p></body></html>'),p=doc.querySelector('p');
+  const r=Object.create(Reader.prototype);r.doc=doc;r.naturalWidth=960;r.layerOrigin=()=>({left:0,top:0});
+  let fontSize=18,glyph={x:100,y:80,fontSize:18},changes=0;r.drawingFontSize=()=>fontSize;
+  p.getBoundingClientRect=()=>({left:40,top:60,width:400,height:120});
+  const pin={start:0,end:1,quote:'S',prefix:'',suffix:'aved paragraph',x:60,y:20,fontSize:18};
+  r.penTextIndex=()=>({text:'Saved paragraph',nodes:[]});r.capturePenTextAnchor=()=>({...pin});r.penTextRect=()=>glyph;
+  const pen={id:'old-scaled',type:'pen',anchor:'n0',penBasis:{width:400,height:120,fontSize:18},points:[{x:.2,y:.1},{x:.8,y:.9}],color:'#ef4444',width:3,opacity:1};
+  r.metadata={annotations:[structuredClone(pen)]};r.callbacks={onChange:()=>changes++};r.renderDrawingLayer();
+  assert.deepEqual(r.metadata.annotations,[pen]);assert.equal(changes,0);assert.deepEqual(r.absolutePoints(pen),[{x:120,y:72},{x:360,y:168}]);
+  fontSize=36;glyph={x:170,y:130,fontSize:36};r.renderDrawingLayer();
+  assert.equal(changes,1);assert.deepEqual(r.metadata.annotations[0].penBasis.textAnchor,pin);
+  assert.deepEqual(r.absolutePoints(r.metadata.annotations[0]),[{x:210,y:114},{x:690,y:306}]);
+  r.renderDrawingLayer();assert.equal(changes,1);
+});
 test('font style changes in fixed-size readers coalesce and ignore the annotation overlay',()=>{
   const r=Object.create(Reader.prototype),doc=documentFor('<html><body><p>Text</p><svg id="htmlmemo-annotation-layer"><path/></svg></body></html>');
   let observe,callback,frame,renders=0,measures=0;

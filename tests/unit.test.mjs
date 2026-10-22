@@ -61,3 +61,11 @@ test('pen font baselines are optional and reject corrupt scale data before openi
   assert.throws(()=>validateAnnotations([{...pen,anchor:undefined,penBasis:basis}]),/글자 크기 기준/);
   assert.throws(()=>validateAnnotations([{...pen,type:'rect',penBasis:basis}]),/글자 크기 기준/);
 });
+test('pen glyph pins survive validation and reject damaged text positions',()=>{
+  const textAnchor={start:5,end:6,quote:'글',prefix:'앞 문장 ',suffix:' 뒷 문장',x:90,y:23,fontSize:18};
+  const pen={id:'pen',type:'pen',anchor:'n0',points:[{x:.1,y:.2}],color:'#edcf67',width:3,opacity:1,penBasis:{width:400,height:120,fontSize:18,textAnchor}};
+  assert.deepEqual(validateAnnotations([pen]),[pen]);
+  for(const broken of [false,{}, {...textAnchor,start:-1},{...textAnchor,end:5},{...textAnchor,end:8},{...textAnchor,quote:''},{...textAnchor,prefix:'x'.repeat(41)},{...textAnchor,suffix:null},{...textAnchor,x:NaN},{...textAnchor,y:Infinity},{...textAnchor,fontSize:0}]){
+    assert.throws(()=>validateAnnotations([{...pen,penBasis:{...pen.penBasis,textAnchor:broken}}]),/글자 기준 위치/);
+  }
+});
