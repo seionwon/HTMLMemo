@@ -135,12 +135,15 @@ test('pen glyph pins follow padding, fixed line height, text wrapping and nested
 test('old font-scaled pens acquire a glyph reference without a first-open jump or silent edit',()=>{
   const doc=documentFor('<html><body><p data-htmlmemo-anchor="n0">Saved paragraph</p></body></html>'),p=doc.querySelector('p');
   const r=Object.create(Reader.prototype);r.doc=doc;r.naturalWidth=960;r.layerOrigin=()=>({left:0,top:0});
-  let fontSize=18,glyph={x:100,y:80,fontSize:18},changes=0;r.drawingFontSize=()=>fontSize;
+  let fontSize=36,glyph={x:170,y:130,fontSize:36},changes=0,captures=0;r.drawingFontSize=()=>fontSize;
   p.getBoundingClientRect=()=>({left:40,top:60,width:400,height:120});
   const pin={start:0,end:1,quote:'S',prefix:'',suffix:'aved paragraph',x:60,y:20,fontSize:18};
-  r.penTextIndex=()=>({text:'Saved paragraph',nodes:[]});r.capturePenTextAnchor=()=>({...pin});r.penTextRect=()=>glyph;
+  r.penTextIndex=()=>({text:'Saved paragraph',nodes:[]});r.capturePenTextAnchor=()=>{captures++;return {...pin};};r.penTextRect=()=>glyph;
   const pen={id:'old-scaled',type:'pen',anchor:'n0',penBasis:{width:400,height:120,fontSize:18},points:[{x:.2,y:.1},{x:.8,y:.9}],color:'#ef4444',width:3,opacity:1};
   r.metadata={annotations:[structuredClone(pen)]};r.callbacks={onChange:()=>changes++};r.renderDrawingLayer();
+  assert.equal(captures,0,'do not guess the original glyph from an already enlarged old stroke');
+  assert.deepEqual(r.metadata.annotations,[pen]);assert.equal(changes,0);assert.deepEqual(r.absolutePoints(pen),[{x:200,y:84},{x:680,y:276}]);
+  fontSize=18;glyph={x:100,y:80,fontSize:18};r.renderDrawingLayer();assert.equal(captures,1);
   assert.deepEqual(r.metadata.annotations,[pen]);assert.equal(changes,0);assert.deepEqual(r.absolutePoints(pen),[{x:120,y:72},{x:360,y:168}]);
   fontSize=36;glyph={x:170,y:130,fontSize:36};r.renderDrawingLayer();
   assert.equal(changes,1);assert.deepEqual(r.metadata.annotations[0].penBasis.textAnchor,pin);

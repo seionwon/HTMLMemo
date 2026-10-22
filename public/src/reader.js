@@ -1701,13 +1701,15 @@ export class Reader {
           // appearance without moving it or dirtying the document on open.
           this.legacyPenTextBases ||= new Map();
           let cached=this.legacyPenTextBases.get(annotation.id);
-          if(!cached){
+          // A known old baseline must be measured at its drawing-time size.
+          // Guessing a glyph from an already enlarged/reflowed stroke would
+          // make it jump to the wrong word when the original size is restored.
+          if(!cached && Math.abs(scale-1)<1e-6){
             const initialPoints=annotation.points.map(p=>({x:box.x+p.x*basis.width*scale,y:box.y+p.y*basis.height*scale}));
             const textAnchor=this.capturePenTextAnchor(element,initialPoints,box,origin,scale,getIndex());
             cached={basis:textAnchor?{...basis,textAnchor}:basis,scale};this.legacyPenTextBases.set(annotation.id,cached);
           }
-          basis=cached.basis;
-          textChanged=Math.abs(scale-cached.scale)>1e-6;
+          if(cached){basis=cached.basis;textChanged=Math.abs(scale-cached.scale)>1e-6;}
         }
         if(basis.textAnchor){
           const textIndex=getIndex(),hit=textIndex && this.resolvePenTextAnchor(textIndex,basis.textAnchor);
