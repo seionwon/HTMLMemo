@@ -117,6 +117,29 @@ test('toolbar groups keep area and text variants in one tool with repeat-click, 
  assert.equal(clear.getAttribute('role'),'menuitem');assert.equal(clear.hasAttribute('aria-checked'),false);assert.equal(clear.disabled,false);
  a.r.metadata.annotations=[];a.context.closePopover();button('eraser').onclick();assert.equal(pop.querySelector('[data-tool-mode=clear]').disabled,true);
 });
+test('selected text takes priority over repeat-click mode selection for both text annotation tools',()=>{
+ const a=app(),chosen=[];Object.assign(a.r,{tool:'select',zoom:1,color:'#edcf67',history:{canUndo:false,canRedo:false}});
+ a.r.setTool=tool=>{a.r.tool=tool;chosen.push({tool,quote:a.r.selection?.quote});a.r.selection=null;};
+ Object.assign(a.context,{icon,$$:(selector,root=a.doc)=>[...root.querySelectorAll(selector)],safely:fn=>fn,bindToolbarDrag(){},
+   showPopover(name,html,bind){const pop=a.doc.querySelector('#tool-popover');pop.innerHTML=html;pop.hidden=false;a.context.popoverName=name;bind();}});
+ const controls=appSource.slice(appSource.indexOf('function toolbarButton('),appSource.indexOf('function positionPopover('));
+ const actions=appSource.slice(appSource.indexOf('function toolAction('),appSource.indexOf('function bindToolbarDrag('));
+ vm.runInContext('var popoverName="",sidebarMode="";'+controls+actions+'renderToolbar();',a.context);
+ const pop=a.doc.querySelector('#tool-popover');
+ for(const [group,variant] of [['highlight','area'],['underline','area-underline']]){
+   const button=a.doc.querySelector(`#toolbar [data-action=${group}]`);
+   for(const current of ['select',group,group,variant]){
+     a.context.toolAction(current);a.r.selection={quote:'New selected text'};
+     button.onclick();assert.deepEqual(chosen.at(-1),{tool:group,quote:'New selected text'});
+     assert.equal(pop.hidden,true,'repeated selections apply annotations without opening options');
+   }
+   button.onclick();assert.equal(pop.hidden,false,'without a new selection, repeat click opens the options');
+   a.context.closePopover();a.r.selection={quote:'Still selected'};const before=chosen.length;
+   button.onkeydown({key:'ArrowDown',preventDefault(){},stopPropagation(){}});
+   assert.equal(pop.hidden,false);assert.equal(chosen.length,before,'keyboard options never apply a pending selection');
+   a.context.closePopover();a.r.selection=null;
+ }
+});
 test('saved history, document transfer and freehand area underline have distinct icons from basic toolbar actions',()=>{
  assert.notEqual(icon('history'),icon('undo'));assert.notEqual(icon('file-transfer'),icon('file'));assert.notEqual(icon('area-underline'),icon('underline'));
  assert.match(appSource,/\['history','history','주석 저장 이력'\]/);assert.match(appSource,/\['info','info','문서 정보'\]/);

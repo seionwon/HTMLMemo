@@ -545,7 +545,13 @@ function renderToolbar() {
   $$('[data-action]',$('#toolbar')).forEach(button=>{
     const action=button.dataset.action,modes=annotationToolModes(action);
     button.onpointerdown=e=>{if(e.pointerType==='mouse')e.preventDefault();};
-    button.onclick=()=>modes&&annotationToolFamily(r.tool)===action?showAnnotationToolModes(action):toolAction(modes?(r.toolChoices?.[action]||action):action);
+    button.onclick=()=>{
+      // A fresh text selection must still be annotated on every click, even when
+      // this tool (or its area variant) was already selected. Options remain on ↓.
+      if(['highlight','underline'].includes(action)&&r.selection?.quote?.trim()){toolAction(action);return;}
+      if(modes&&annotationToolFamily(r.tool)===action)showAnnotationToolModes(action);
+      else toolAction(modes?(r.toolChoices?.[action]||action):action);
+    };
     if(modes){
       button.classList.add('tool-has-modes');button.setAttribute('aria-haspopup','menu');button.setAttribute('aria-expanded','false');
       button.onkeydown=event=>{if(event.key==='ArrowDown'){event.preventDefault();event.stopPropagation();showAnnotationToolModes(action,true);}};
