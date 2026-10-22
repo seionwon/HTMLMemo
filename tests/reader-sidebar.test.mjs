@@ -108,6 +108,53 @@ test('ordinary HTML annotation tree keeps nested headings in document order and 
   assert.equal(JSON.stringify(tree).includes('빈 절'),false);assert.equal(JSON.stringify(tree).includes('주석 없는 장'),false);
 });
 
+function partialBook(){
+  const manifest={format:'memosuite-book-html-v1',volumes:[{label:'입문',sections:[
+    {key:'v0:opening',id:'opening',title:'1부 시작',category:'1부 · 준비'},
+    {key:'v0:one',id:'one',title:'(1.1) 첫 장',category:'1부 · 준비 › 첫걸음'},
+    {key:'v0:two',id:'two',title:'(1.2) 다음 장',category:'1부 · 준비 › 첫걸음'},
+    {key:'v0:part2',id:'part2',title:'2부 시작',category:'2부 · 진행'}]},
+    {label:'실전',sections:[{key:'v1:opening',id:'opening',title:'실전 시작',category:'1부 · 활용'}]}]};
+  const doc=documentFor(`<html><head><script id="book-manifest" type="application/json">${JSON.stringify(manifest)}</script></head><body data-htmlmemo-anchor="body"><article id="reader-content" data-section="v0:opening"><h1>1부 시작</h1><p>첫머리 공통 문장입니다.</p></article></body></html>`);
+  const r=Object.create(Reader.prototype);r.doc=doc;r.initialBookSection='v0:opening';r.metadata={annotations:[]};return {r,doc,manifest};
+}
+test('legacy opening annotations use the introductory first-part branch and stay there after navigation',()=>{
+  const {r,doc}=partialBook();
+  const old={id:'old',type:'note',text:'예전 메모',points:[{x:20,y:40}],color:'#334155',width:3,opacity:1};
+  const exact={id:'exact',type:'note',anchorTarget:{section:'v0:two'}};
+  r.metadata.annotations=[old,exact];const before=structuredClone(r.metadata);
+  const location=r.annotationLocation(old);assert.deepEqual(location.path.map(p=>p.title),['입문','1부 · 준비','1부 앞부분']);assert.equal(location.startSection,'v0:opening');assert.equal(location.approximate,true);
+  assert.equal(r.annotationLocation(exact).section,'v0:two');assert.equal(r.annotationInSection(old),true);
+  doc.getElementById('reader-content').dataset.section='v0:one';
+  assert.equal(r.annotationInSection(old),false);assert.deepEqual(r.drawingGeometry(old).points,[]);assert.strictEqual(r.annotationLocation(old),location);
+  const tree=r.annotationTree(new Map());assert.equal(tree[0].children[0].children[0].title,'1부 앞부분');assert.equal(tree[0].count,2);assert.deepEqual(r.metadata,before);
+});
+test('partial book locations retain the deepest known volume/part and prefer recoverable exact IDs and headings',()=>{
+  const {r}=partialBook();
+  const partial=r.annotationLocation({id:'partial',anchorTarget:{section:'v1:removed'}});
+  assert.deepEqual(partial.path.map(p=>p.title),['실전','1부 · 활용','세부 위치 미확인']);assert.equal(partial.startSection,'v1:opening');
+  const volume=r.annotationLocation({id:'volume',textAnchor:{section:'v0:removed'}});assert.deepEqual(volume.path.map(p=>p.title),['입문','세부 위치 미확인']);
+  assert.equal(r.annotationLocation({id:'id',textAnchor:{section:'two'}}).section,'v0:two');
+  assert.equal(r.annotationLocation({id:'fragment',textAnchor:{section:'v0:two/heading'}}).section,'v0:two');
+  assert.equal(r.annotationLocation({id:'heading',anchorTarget:{tag:'h1',quote:'(1.2) 다음 장'}}).section,'v0:two');
+  assert.equal(r.annotationLocation({id:'ambiguous',textAnchor:{section:'opening'}}),null,'the same ID in two books is not guessed');
+  assert.equal(r.annotationLocation({id:'conflict',anchorTarget:{tag:'h1',quote:'(9.9) 다른 곳'}}),null,'a conflicting numbered heading is not assigned to the opening');
+});
+test('the introduction opening fallback is not a global rename for other books or an initially different chapter',()=>{
+  const {r,doc,manifest}=partialBook();r.initialBookSection='v0:one';assert.equal(r.annotationLocation({id:'different'}),null);
+  manifest.volumes[0].label='다른 책';doc.getElementById('book-manifest').textContent=JSON.stringify(manifest);r.initialBookSection='v0:opening';assert.equal(r.annotationLocation({id:'other'}),null);
+  manifest.volumes[0].label='입문';manifest.volumes[0].sections[1].title='번호 없는 장';doc.getElementById('book-manifest').textContent=JSON.stringify(manifest);assert.equal(r.annotationLocation({id:'no-interval'}),null);
+});
+test('opening text marks are not repeated on later chapters, and approximate jumps report their precision without changing metadata',async()=>{
+  const {r,doc}=partialBook(),quote='첫머리 공통 문장입니다.';
+  r.metadata.annotations=[{id:'old-mark',type:'highlight',color:'#edcf67',width:3,opacity:.35,textAnchor:{start:0,end:quote.length,quote}}];
+  r.renderDrawingLayer=()=>{};r.observeDynamicDocument=()=>{};r.render();assert.ok(doc.querySelector('[data-htmlmemo-id="old-mark"]'));
+  doc.getElementById('reader-content').dataset.section='v0:one';r.render();assert.equal(doc.querySelector('[data-htmlmemo-id="old-mark"]'),null);
+  doc.getElementById('reader-content').dataset.section='v0:opening';const before=structuredClone(r.metadata),notices=[],errors=[];let jumped;
+  r.callbacks={onNotice:message=>notices.push(message),onError:error=>errors.push(error.message)};r.jump=element=>jumped=element;
+  assert.equal(await r.jumpAnnotation('old-mark'),true);assert.equal(jumped.localName,'h1');assert.match(notices[0],/1부 앞부분/);assert.match(notices[0],/확정/);assert.deepEqual(errors,[]);assert.deepEqual(r.metadata,before);
+});
+
 test('annotation disclosure state survives view changes and deletion without saving UI state or showing empty groups',()=>{
   const a=sidebar(),before=structuredClone(a.r.metadata);
   a.r.metadata.annotations.push({id:'a2',type:'note',text:'다른 장 메모',color:'#334155'});

@@ -72,6 +72,7 @@ export class Reader {
           this.zoom = clamp(this.autoFit ? this.fitZoom() : (this.metadata.view.zoom || this.fitZoom()), .2, 8); this.applyZoom();
           if (this.doc.fonts?.status === 'loading') await this.doc.fonts.ready;
           if (this.disposed) { resolve(this); return; }
+          this.initialBookSection=currentSection(this.doc);
           this.preparing = false; this.measure(); this.render();
           await new Promise(done => requestAnimationFrame(done));
           if (this.disposed) { resolve(this); return; }
@@ -1481,8 +1482,8 @@ export class Reader {
   resolveDrawingTarget(annotation) {
     const direct = this.doc.querySelector(`[data-htmlmemo-anchor="${annotation.anchor}"]`);
     const target = annotation.anchorTarget;
+    if (!this.annotationInSection(annotation)) return null;
     if (!target) return direct;
-    if (target.section && this.doc.getElementById('reader-content')?.dataset.section !== target.section) return null;
     const root = target.rootId ? this.doc.getElementById(target.rootId) : this.doc.body;
     if (!root) return null;
     const matches = node => node?.isConnected && node.localName === target.tag &&
@@ -1587,7 +1588,7 @@ export class Reader {
     const index=textAnnotations.length?textIndex(this.doc):null;
     const section = currentSection(this.doc);
     for (const annotation of textAnnotations) {
-      if (annotation.textAnchor.section && annotation.textAnchor.section !== section) continue;
+      if (!this.annotationInSection(annotation,section)) continue;
       const resolved = resolveTextAnchor(index, annotation.textAnchor); if (!resolved) continue;
       const style = annotation.type === 'highlight' ? `background:${annotation.color}${Math.round(annotation.opacity * 255).toString(16).padStart(2,'0')};color:inherit` : `text-decoration-line:${annotation.type === 'underline' ? 'underline' : 'line-through'};text-decoration-color:${annotation.color};text-decoration-thickness:${annotation.width}px;text-underline-offset:3px`;
       wrapOffsets(this.doc, resolved.start, resolved.end, {'data-htmlmemo-mark':'','data-htmlmemo-id':annotation.id}, style,index);
@@ -1597,6 +1598,7 @@ export class Reader {
     this.observeDynamicDocument();
   }
   drawingGeometry(annotation) {
+    if (!this.annotationInSection(annotation)) return {points:[],scale:1};
     if (!annotation.anchor) return {points:annotation.points,scale:1};
     const origin = this.layerOrigin();
     const scrollHost = origin.scrollHost;
@@ -1701,7 +1703,8 @@ export class Reader {
     this.cancelAnnotationJump?.();
     const generation=this.annotationJumpGeneration=(this.annotationJumpGeneration||0)+1;
     const annotation=this.metadata.annotations.find(a=>a.id===id);if(!annotation)return false;
-    const section=annotation.textAnchor?.section||annotation.anchorTarget?.section;
+    const location=this.annotationLocation(annotation);
+    const section=location?.section||location?.startSection||annotation.textAnchor?.section||annotation.anchorTarget?.section;
     try{
       if(section&&currentSection(this.doc)!==section){
         if(!this.annotationBookPaths().has(section))throw new Error('이 주석의 장을 현재 책 목차에서 찾지 못했습니다. 주석은 보관됩니다.');
@@ -1722,6 +1725,13 @@ export class Reader {
         this.render();this.measure();
       }
       const element=this.doc.querySelector(`[data-htmlmemo-id="${id}"]`);
+      if(location?.approximate){
+        const content=this.doc.getElementById('reader-content');
+        const target=element||content?.querySelector('h1,h2,h3')||content;
+        if(target)this.jump(target);
+        this.selectedId=id;this.callbacks.onView?.();
+        this.callbacks.onNotice?.(`${location.label}으로 이동했습니다. 정확한 주석 위치는 남아 있는 정보만으로 확정하기 어렵습니다.`);return true;
+      }
       if(!element)throw new Error('이 주석의 원문 위치를 찾지 못했습니다. 주석은 보관됩니다.');
       this.jump(element);this.selectedId=id;this.callbacks.onView?.();return true;
     }catch(error){if(!this.disposed&&generation===this.annotationJumpGeneration)this.callbacks.onError?.(error);return false;}
@@ -1731,7 +1741,7 @@ export class Reader {
   annotationBookPaths() {
     const data=this.doc.getElementById('book-manifest'),source=data?.textContent||'';
     if(this.annotationCatalogSource===source)return this.annotationCatalog;
-    const paths=new Map();let manifest;
+    const paths=new Map(),sections=new Map();let manifest;
     try{manifest=JSON.parse(source);}catch{/* Ordinary HTML has no book manifest. */}
     if(manifest?.format==='memosuite-book-html-v1'&&Array.isArray(manifest.volumes)){
       let order=0;const categories=new Map();
@@ -1748,17 +1758,86 @@ export class Reader {
           }
           path.push({id:JSON.stringify(['section',section.key]),title:section.title||section.key,order:order++,kind:'section'});
           paths.set(section.key,path);
+          sections.set(section.key,section);
         }
       });
     }
-    this.annotationCatalogSource=source;this.annotationCatalog=paths;return paths;
+    this.annotationCatalogSource=source;this.annotationCatalog=paths;this.annotationSections=sections;this.annotationLocations=new WeakMap();
+    this.annotationOpening=null;
+    // The reported legacy annotations precede 1.1 in the introductory volume.
+    // Use the actual first-part branch and the TOC interval before 1.1, not a
+    // global rename of every unresolved annotation in every book.
+    const entries=[...paths.entries()],intro=entries.find(([,path])=>/입문|\bintro(?:duction|ductory)?\b/i.test(path[0].title));
+    if(intro){
+      const volume=entries.filter(([,path])=>path[0].id===intro[1][0].id);
+      const firstChapter=volume.findIndex(([,path])=>/^\s*[\[(（]?\s*(?:제\s*)?1\s*[.．]\s*1(?=\D|$)/.test(path.at(-1).title));
+      if(firstChapter>0){
+        const chapterPath=volume[firstChapter][1],isFirstPart=part=>/(?:^|\s|[\[(（])(?:제\s*)?0*1\s*부(?:\D|$)|\bpart\s*0*1\b/i.test(part.title);
+        let parent=chapterPath.slice(0,-1),part=parent.findIndex(isFirstPart);
+        if(part>=0)parent=parent.slice(0,part+1);
+        else{
+          const openingPath=volume[0][1].slice(0,-1);part=openingPath.findIndex(isFirstPart);
+          parent=part>=0?openingPath.slice(0,part+1):[chapterPath[0],{id:JSON.stringify(['part',chapterPath[0].id,1]),title:'1부',order:-1,kind:'category'}];
+        }
+        const allowedSections=volume.slice(0,firstChapter).map(([key])=>key);
+        this.annotationOpening={path:[...parent,{id:JSON.stringify(['opening',parent.at(-1).id]),title:'1부 앞부분',order:-1,kind:'opening'}],allowedSections,startSection:allowedSections[0],label:'1부 앞부분',approximate:true};
+      }
+    }
+    return paths;
+  }
+  annotationLocation(annotation) {
+    const paths=this.annotationBookPaths();
+    if(!paths.size)return null;
+    this.annotationLocations ||= new WeakMap();
+    const cached=this.annotationLocations.get(annotation);if(cached)return cached;
+    const saved=annotation.textAnchor?.section||annotation.anchorTarget?.section;
+    const exact=section=>({path:paths.get(section),section});
+    let location=paths.has(saved)?exact(saved):null;
+    if(!location&&typeof saved==='string'){
+      // Older exports can keep a document ID or a section/heading fragment.
+      const keys=[...paths.keys()],prefix=keys.filter(key=>saved.startsWith(key+'/')||saved.startsWith(key+'#')).sort((a,b)=>b.length-a.length);
+      const ids=keys.filter(key=>this.annotationSections?.get(key)?.id===saved);
+      if(prefix.length)location=exact(prefix[0]);else if(ids.length===1)location=exact(ids[0]);
+    }
+    if(!location){
+      let candidates=[...paths.entries()];const volume=typeof saved==='string'?/^v(\d+):/.exec(saved):null;
+      if(volume)candidates=candidates.filter(([,path])=>path[0].order===Number(volume[1]));
+      const target=annotation.anchorTarget;
+      if(target&&/^h[1-6]$/.test(target.tag)&&target.quote){
+        const normalize=value=>String(value).replace(/\s+/g,' ').trim();
+        const quote=normalize(target.quote),matching=candidates.filter(([,path])=>path.some(part=>normalize(part.title)===quote));
+        if(matching.length===1&&normalize(matching[0][1].at(-1).title)===quote)location=exact(matching[0][0]);
+        else if(matching.length)candidates=matching;
+        else if(!volume)candidates=[];
+      }else if(!volume)candidates=[];
+      if(!location&&candidates.length){
+        let common=candidates[0][1].filter(part=>part.kind!=='section');
+        for(const [,path] of candidates)common=common.filter((part,index)=>path[index]?.id===part.id);
+        if(common.length){
+          const parent=common.at(-1),label=`${parent.title} 내 세부 위치 미확인`;
+          location={path:[...common,{id:JSON.stringify(['partial',parent.id]),title:'세부 위치 미확인',order:Number.MAX_SAFE_INTEGER,kind:'other'}],startSection:candidates[0][0],label,approximate:true};
+        }
+      }
+    }
+    // Keep the user-confirmed opening assignment stable after chapter changes.
+    // A saved chapter, matching title, or conflicting numbered heading wins.
+    const target=annotation.anchorTarget,numberedHeading=target&&/^h[1-6]$/.test(target.tag)&&/^\s*[\[(（]?\s*(?:제\s*)?\d+\s*(?:부|[.．]\s*\d+)/.test(target.quote);
+    if(!location&&!saved&&!numberedHeading&&this.annotationOpening&&this.annotationOpening.allowedSections.includes(this.initialBookSection))location=this.annotationOpening;
+    if(location)this.annotationLocations.set(annotation,location);
+    return location;
+  }
+  annotationInSection(annotation,section=currentSection(this.doc)) {
+    const location=this.annotationLocation(annotation);
+    if(location?.allowedSections)return location.allowedSections.includes(section);
+    const saved=location?.section||annotation.textAnchor?.section||annotation.anchorTarget?.section;
+    return !saved||saved===section;
   }
   annotationTree(contexts=this.annotationContexts()) {
     const paths=this.annotationBookPaths(),roots=[],nodes=new Map();
     const preamble=this.outline().some(item=>!this.isInsideTocOrTopbar(item.node))?'목차 밖 주석':'문서 전체';
     for(const annotation of this.metadata.annotations){
       const section=annotation.textAnchor?.section||annotation.anchorTarget?.section;
-      let path=section?paths.get(section):null;
+      let path=this.annotationLocation(annotation)?.path;
       if(!path?.length){
         path=paths.size||section?[{id:'unlocated',title:'목차 위치 미확인',order:Number.MAX_SAFE_INTEGER,kind:'other'}]
           :contexts.get(annotation.id)?.path;

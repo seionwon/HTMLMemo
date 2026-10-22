@@ -261,7 +261,7 @@ async function openRecord(record, prepared = null, {deferReady = false} = {}) {
     onPosition:()=>{tab.queue.schedule({background:true});},onView:()=>{if(activeId===tab.id){updateChrome();updateToolbarState();}},
     onTextSelection:()=>{if(activeId===tab.id)showSelectionMenu(tab.reader);},
     onSelectionDismiss:()=>{if(popoverName==='selection')closePopover();},
-    onLink:url=>safely(openBrowser)(url),onKey:handleKey,requestText:promptText,onError:showError,
+    onLink:url=>safely(openBrowser)(url),onKey:handleKey,requestText:promptText,onError:showError,onNotice:message=>toast(message),
     onDocumentFocus:()=>{if(activeId===tab.id)void toggleReaderFocus();},
     onSidebarView:(mode,panel,documentReader)=>renderSidebar(mode,{panel,embedded:true,documentReader}),
     onSelect:id=>{if(activeId===tab.id)annotationDialog(tab,id);},

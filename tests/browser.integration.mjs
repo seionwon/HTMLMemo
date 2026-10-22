@@ -707,6 +707,60 @@ test('real Chrome: annotation tree follows book TOC, prunes empty branches, reme
   }finally{if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
 });
 
+test('real Chrome: annotation tree keeps the confirmed opening and the deepest known partial location without rewriting notes',{timeout:90000},async()=>{
+  await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-partial-location-'));await cp(join(root,'public'),folder,{recursive:true});
+  const server=createServer(folder);let chrome;
+  try{
+    await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));chrome=await launchChrome();const page=chrome.page;
+    const url=process.env.HTMLMEMO_SIDEBAR_TEST_URL||`http://127.0.0.1:${server.address().port}/`,quote='첫머리 공통 문장입니다.';
+    const manifest={format:'memosuite-book-html-v1',title:'부분 위치 검증 책',volumes:[{label:'입문',sections:[
+      {key:'v0:opening',id:'opening',title:'1부 시작',category:'1부 · 준비'},
+      {key:'v0:one',id:'one',title:'(1.1) 첫 장',category:'1부 · 준비 › 첫걸음'},
+      {key:'v0:two',id:'two',title:'(1.2) 다음 장',category:'1부 · 준비 › 첫걸음'},
+      {key:'v0:part2',id:'part2',title:'2부 시작',category:'2부 · 진행'}]},
+      {label:'실전',sections:[{key:'v1:opening',id:'opening',title:'실전 시작',category:'1부 · 활용'}]}]};
+    const source=(await readFile(join(root,'tests/fixtures/annotation-tree.html'),'utf8'))
+      .replace(/(<script id="book-manifest"[^>]*>)[\s\S]*?(<\/script>)/,(_,open,close)=>open+JSON.stringify(manifest)+close)
+      .replace("p.textContent='대상 문장 '+section.key","p.textContent="+JSON.stringify(quote));
+    await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});await page.navigate(url);await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
+    await page.evaluate(`(async()=>{const {putDocumentRevision}=await import('./src/storage.js'),{parseHTML}=await import('./src/document.js');
+      const parsed=parseHTML(${JSON.stringify(source)},{viewport:{width:1100,height:800}},{allowScripts:true}),base={color:'#334155',width:3,opacity:1,created:Date.now()};
+      parsed.metadata.annotations=[{...base,id:'old-note',type:'note',text:'앞부분의 예전 메모',points:[{x:330,y:140}]},
+        {...base,id:'old-highlight',type:'highlight',color:'#edcf67',opacity:.35,textAnchor:{quote:${JSON.stringify(quote)},start:0,end:${quote.length}}},
+        {...base,id:'exact-note',type:'note',text:'정확한 다음 장 메모',anchor:'body',anchorTarget:{tag:'p',id:'p-v0:two',rootId:'reader-content',path:[],quote:${JSON.stringify(quote)},section:'v0:two'},points:[{x:.05,y:.1}]},
+        {...base,id:'partial-note',type:'note',text:'부까지만 확인되는 메모',anchor:'body',anchorTarget:{tag:'p',id:'missing-paragraph',rootId:'reader-content',path:[],quote:'현재 본문에는 없는 문장',section:'v1:removed'},points:[{x:.05,y:.1}]}];
+      await putDocumentRevision({id:'partial-location-document',title:'부분 위치 검증 책',name:'partial-location.html',created:Date.now(),modified:Date.now(),html:parsed.html,metadata:parsed.metadata});})()`);
+    await page.navigate(url);await page.waitFor('!!document.querySelector("[data-open=partial-location-document]")');await page.click('[data-open=partial-location-document]');
+    const frame='document.querySelector(".document-host:not([hidden]) iframe")',doc=frame+'.contentDocument',panel=doc+'.querySelector("[data-htmlmemo-doc-sidebar-ui]")';
+    await page.waitFor(`${panel}?.querySelector('[data-sidebar-view=annotations]')&&!${frame}.hasAttribute('aria-hidden')`);
+    const original=await page.evaluate(`(async()=>{const {getDocument}=await import('./src/storage.js');return (await getDocument('partial-location-document')).metadata.annotations;})()`);
+    const clickNative=async selector=>{
+      const point=await page.evaluate(`(()=>{const f=${frame},e=f.contentDocument.querySelector(${JSON.stringify(selector)});e.scrollIntoView({block:'nearest'});const r=e.getBoundingClientRect(),b=f.getBoundingClientRect(),z=b.width/f.clientWidth;return {x:b.left+(r.left+r.width/2)*z,y:b.top+(r.top+r.height/2)*z};})()`);
+      await page.send('Input.dispatchMouseEvent',{type:'mousePressed',...point,button:'left',clickCount:1});await page.send('Input.dispatchMouseEvent',{type:'mouseReleased',...point,button:'left',clickCount:1});
+    };
+    await clickNative('[data-sidebar-view=annotations]');
+    const ancestorTitles=id=>page.evaluate(`(()=>{const titles=[];let e=${panel}.querySelector('[data-annotation="'+${JSON.stringify(id)}+'"]');for(e=e.parentElement;e;e=e.parentElement)if(e.matches('details[data-annotation-group]'))titles.unshift(e.querySelector(':scope>summary>.annotation-group-title').textContent);return titles;})()`);
+    assert.deepEqual(await ancestorTitles('old-note'),['입문','1부 · 준비','1부 앞부분']);assert.deepEqual(await ancestorTitles('old-highlight'),['입문','1부 · 준비','1부 앞부분']);
+    assert.deepEqual(await ancestorTitles('exact-note'),['입문','1부 · 준비','첫걸음','(1.2) 다음 장']);assert.deepEqual(await ancestorTitles('partial-note'),['실전','1부 · 활용','세부 위치 미확인']);
+    assert.equal(await page.evaluate(`${panel}.textContent.includes('목차 위치 미확인')`),false);assert.deepEqual(await page.evaluate(`${frame}.contentWindow.renderedSections`),['v0:opening']);
+    await revealAnnotation(page,doc,'exact-note');await clickNative('[data-annotation=exact-note]');await page.waitFor(`${doc}.querySelector('#reader-content').dataset.section==='v0:two'&&${doc}.querySelector('[data-htmlmemo-id=exact-note]')`);
+    assert.equal(await page.evaluate(`!!${doc}.querySelector('[data-htmlmemo-id=old-highlight],[data-htmlmemo-id=old-note]')`),false,'repeated wording must not repeat the opening annotations in a later chapter');
+    assert.deepEqual(await ancestorTitles('old-note'),['입문','1부 · 준비','1부 앞부분']);
+    await revealAnnotation(page,doc,'old-note');await clickNative('[data-annotation=old-note]');
+    await page.waitFor(`${doc}.querySelector('#reader-content').dataset.section==='v0:opening'&&${doc}.querySelector('[data-htmlmemo-id=old-note]')&&${doc}.querySelector('[data-htmlmemo-id=old-highlight]')&&!document.querySelector('#toast').hidden&&document.querySelector('#toast').textContent.includes('1부 앞부분')`);
+    assert.equal(await page.evaluate('document.querySelector("#toast").classList.contains("error")'),false);
+    await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/annotation-tree-partial-desktop.png'),await page.screenshot());
+    await revealAnnotation(page,doc,'partial-note');await clickNative('[data-annotation=partial-note]');
+    await page.waitFor(`${doc}.querySelector('#reader-content').dataset.section==='v1:opening'&&!document.querySelector('#toast').hidden&&document.querySelector('#toast').textContent.includes('1부 · 활용 내')`);
+    assert.equal(await page.evaluate(`!!${doc}.querySelector('[data-htmlmemo-id=partial-note],[data-htmlmemo-id=old-note],[data-htmlmemo-id=old-highlight]')`),false);
+    await page.waitFor('document.querySelectorAll(".tab-dirty:not([hidden])").length===0');
+    assert.deepEqual(await page.evaluate(`(async()=>{const {getDocument}=await import('./src/storage.js');return (await getDocument('partial-location-document')).metadata.annotations;})()`),original);
+    await page.send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await writeFile(join(root,'test-results/annotation-tree-partial-mobile.png'),await page.screenshot());
+    await page.navigate(url);await page.waitFor('!!document.querySelector("[data-open=partial-location-document]")');await page.click('[data-open=partial-location-document]');await page.waitFor(`${panel}?.querySelector('[data-sidebar-view=annotations]')&&!${frame}.hasAttribute('aria-hidden')`);
+    await clickNative('[data-sidebar-view=annotations]');assert.deepEqual(await ancestorTitles('old-note'),['입문','1부 · 준비','1부 앞부분']);assert.deepEqual(chrome.errors,[]);
+  }finally{if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
+});
+
 test('real Chrome: native sidebar view choices are visible on open and preserve the original book tree and export',{timeout:60000},async()=>{
   await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-native-sidebar-'));await cp(join(root,'public'),folder,{recursive:true});
   const server=createServer(folder);let chrome;
