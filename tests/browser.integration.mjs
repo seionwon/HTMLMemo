@@ -25,7 +25,7 @@ test('real Chrome: standalone book export keeps lazy chapters and released asset
     chrome=await launchChrome();const page=chrome.page;
     await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
     await page.navigate('http://127.0.0.1:'+server.address().port+'/');
-    await page.waitFor('document.querySelector("#file-input")');
+    await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
     await page.send('DOM.enable');
     const {root:dom}=await page.send('DOM.getDocument');
     const {nodeId}=await page.send('DOM.querySelector',{nodeId:dom.nodeId,selector:'#file-input'});
