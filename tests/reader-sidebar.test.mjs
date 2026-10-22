@@ -213,9 +213,23 @@ test('the visible source TOC gets inline choices without moving its tree, listen
   panel.querySelector('[data-sidebar-view=search]').onclick();assert.equal(expanded,260);assert.equal(synced,1);assert.equal(toc.scrollTop,0);
   assert.equal(toc.getAttribute('data-htmlmemo-sidebar-view'),'search');const input=panel.querySelector('input');assert.equal(input.getAttribute('placeholder'),'불러온 부분에서 찾기');assert.equal(input.getAttribute('aria-label'),'불러온 부분 검색어');input.value='원래';input.oninput();a.flush();
   panel.querySelector('[data-sidebar-view=annotations]').onclick();assert.equal(panel.querySelector('[data-annotation] .annotation-main').textContent,'남겨 둔 메모');assert.equal(panel.querySelector('[data-annotation] .annotation-meta').textContent,'메모');
-  panel.querySelector('[data-sidebar-view=outline]').onclick();assert.equal(toc.scrollTop,37);assert.equal(panel.querySelector('.sidebar-content').hidden,true);
-  assert.strictEqual(toc.querySelector('details'),tree);tree.querySelector('summary').onclick();assert.equal(clicks,1);assert.equal(tree.hasAttribute('open'),true);
+  panel.querySelector('[data-sidebar-view=outline]').onclick();assert.equal(toc.scrollTop,37);assert.equal(panel.querySelector('.sidebar-content').hidden,false);
+  assert.equal(panel.querySelectorAll('.sidebar-bookmarks').length,1);assert.ok(panel.querySelector('#htmlmemo-native-add-bookmark'));assert.equal(panel.querySelector('[data-heading]'),null,'the source TOC is not duplicated');
+  assert.strictEqual(tree.parentElement,toc);tree.querySelector('summary').onclick();assert.equal(clicks,1);assert.equal(tree.hasAttribute('open'),true);
   assert.equal(textIndex(doc).text,text);a.r.setupDocumentSidebar();assert.equal(toc.querySelectorAll('[data-htmlmemo-doc-sidebar-ui]').length,1);
+});
+test('native bookmarks stay in the outline sidebar, keep disclosure and edit without opening a second panel',()=>{
+  installDOM();const a=sidebar(),doc=documentFor('<html><head></head><body><nav><div id="source-tree">원래 목차</div></nav><main><h1>제목</h1><p>본문</p></main></body></html>');
+  Object.setPrototypeOf(a.r,Reader.prototype);a.r.doc=doc;a.r.viewport={scrollTop:0,scrollLeft:0};a.r.tocResize={sidebar:doc.querySelector('nav')};
+  a.r.callbacks={onSidebarView:(mode,panel,documentReader)=>a.context.renderSidebar(mode,{panel,embedded:true,documentReader})};
+  const actions=[];a.context.toolAction=action=>actions.push(action);a.r.setupDocumentSidebar();
+  let group=a.r.documentSidebarUI.querySelector('.sidebar-bookmarks');assert.equal(group.hasAttribute('open'),false);
+  group.open=true;group.ontoggle();a.r.documentSidebarUI.querySelector('[data-bookmark=b1]').onclick();assert.equal(a.r.scrollTop,480);assert.equal(a.r.scrollLeft,24);
+  a.r.documentSidebarUI.querySelector('#htmlmemo-native-add-bookmark').onclick();assert.deepEqual(actions,['bookmark']);
+  a.r.showDocumentSidebarView('search');a.r.showDocumentSidebarView('outline');group=a.r.documentSidebarUI.querySelector('.sidebar-bookmarks');assert.equal(group.hasAttribute('open'),true);
+  a.r.documentSidebarUI.querySelector('[data-delete-bookmark=b1]').onclick();assert.equal(a.r.metadata.bookmarks.length,0);assert.equal(a.calls.saved,1);
+  assert.equal(a.r.documentSidebarUI.querySelector('.bookmark-count').textContent,'0');assert.equal(a.doc.querySelector('#sidebar').hidden,true);assert.ok(doc.querySelector('#source-tree'));
+  assert.ok(a.r.documentSidebarUI.querySelector('#htmlmemo-native-add-bookmark'));assert.equal(a.r.documentSidebarUI.querySelector('[data-bookmark]'),null);
 });
 
 test('the source book strong title is hidden without removing its drawer close button or chapter labels',()=>{

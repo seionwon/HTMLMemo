@@ -137,6 +137,17 @@ body[data-codememo-design]{margin:0;font-family:var(--app-font);background:var(-
 [data-htmlmemo-doc-sidebar-ui] .sidebar-views button{justify-content:center;gap:3px;min-width:0;padding:6px 2px;font-size:11px;white-space:nowrap}
 [data-htmlmemo-doc-sidebar-ui] .sidebar-views button[aria-pressed=true]{background:var(--green-light);color:var(--green);font-weight:600}
 [data-htmlmemo-doc-sidebar-ui] .sidebar-content{padding:10px 2px;overflow-wrap:anywhere}
+[data-htmlmemo-doc-sidebar-ui] .sidebar-bookmarks{margin:0;min-width:0}
+[data-htmlmemo-doc-sidebar-ui] .sidebar-bookmarks>summary{display:flex;align-items:center;gap:6px;list-style:none;cursor:pointer;padding:2px 4px;color:var(--muted);font-size:11px}
+[data-htmlmemo-doc-sidebar-ui] .sidebar-bookmarks>summary:focus-visible{outline:2px solid var(--green);outline-offset:-2px}
+[data-htmlmemo-doc-sidebar-ui] .sidebar-bookmarks>summary::before{content:'▸';width:10px;flex-shrink:0}
+[data-htmlmemo-doc-sidebar-ui] .sidebar-bookmarks[open]>summary::before{transform:rotate(90deg)}
+[data-htmlmemo-doc-sidebar-ui] .sidebar-bookmarks>summary::-webkit-details-marker{display:none}
+[data-htmlmemo-doc-sidebar-ui] .bookmark-count{margin-left:auto;font-variant-numeric:tabular-nums}
+[data-htmlmemo-doc-sidebar-ui] .sidebar-bookmark-list{max-height:180px;overflow:auto;padding-top:6px}
+[data-htmlmemo-doc-sidebar-ui] .bookmark-row{display:flex;align-items:center;min-width:0}
+[data-htmlmemo-doc-sidebar-ui] .outline-item{flex:1;min-width:0;gap:6px;overflow-wrap:anywhere}
+[data-htmlmemo-doc-sidebar-ui] [data-delete-bookmark]{flex-shrink:0}
 [data-htmlmemo-doc-sidebar-ui] .search-field input{width:100%;min-width:0;border:1px solid var(--line);border-radius:5px;background:var(--bg);color:var(--text);padding:8px;font:inherit}
 [data-htmlmemo-doc-sidebar-ui] .search-navigation{display:flex;align-items:center;gap:3px;margin:8px 0;color:var(--muted);font-size:11px}
 [data-htmlmemo-doc-sidebar-ui] .search-navigation span{margin-right:auto}

@@ -731,18 +731,22 @@ function toolAction(action) {
     $('#zoom-out').onclick=()=>r.setZoom(r.zoom/1.2);$('#zoom-in').onclick=()=>r.setZoom(r.zoom*1.2);$('#zoom-value').onchange=e=>r.setZoom(Number(e.target.value)/100);$('#zoom-fit').onclick=()=>{r.setZoom(1,true);closePopover();};$('#zoom-reset').onclick=()=>{r.setZoom(1);closePopover();};
   });return;}
   if(action==='more') {
-    const items=[['search','search','검색'],['outline','list','목차 · 북마크'],['annotations','note','주석'],['rect','rect','사각형'],['ellipse','ellipse','타원'],['arrow','arrow','화살표'],['area','area','영역 형광펜'],['area-underline','underline','영역 밑줄'],['strike','strike','취소선'],['text','text','텍스트'],['undo','undo','실행 취소'],['redo','redo','다시 실행'],['bookmark','bookmark','현재 위치 북마크'],['history','undo','주석 저장 이력'],['migrate','file','새 판으로 주석 옮기기'],['connect','save','HTML 내보내기'],['info','file','문서 정보'],['clear','trash','주석 모두 지우기']];
+    const items=[['rect','rect','사각형'],['ellipse','ellipse','타원'],['arrow','arrow','화살표'],['area','area','영역 형광펜'],['area-underline','underline','영역 밑줄'],['strike','strike','취소선'],['text','text','텍스트'],['history','undo','주석 저장 이력'],['migrate','file','새 판으로 주석 옮기기'],['info','file','문서 정보'],['clear','trash','주석 모두 지우기']];
+    // Books already expose their three sidebar views. Plain HTML needs only a
+    // way to reopen its closed panel, not a second copy of every sidebar tab.
+    if(!r.documentSidebarUI?.isConnected && $('#sidebar').hidden)items.unshift(['sidebar','list','사이드바 열기']);
     showPopover('more',`<div class="popover-heading"><h3>문서 도구</h3><button class="icon-button popover-close" data-popover-close aria-label="문서 도구 닫기" title="닫기">${icon('close',16)}</button></div><div class="more-grid">${items.map(([id,name,label])=>`<button class="menu-button" data-more="${id}">${icon(name,16)}<span>${label}</span></button>`).join('')}</div>`,()=>{
       $('[data-popover-close]',$('#tool-popover')).onclick=closePopover;
       $$('[data-more]',$('#tool-popover')).forEach(button=>button.onclick=safely(()=>{const id=button.dataset.more;closePopover();return toolAction(id);}));
     });return;
   }
-  if(['search','outline','annotations'].includes(action)){closePopover();if(action!=='outline'&&r.documentSidebarUI)r.showDocumentSidebarView(action);else renderSidebar(action);return;}
+  if(action==='sidebar'){closePopover();if(r.documentSidebarUI?.isConnected)r.showDocumentSidebarView('outline');else renderSidebar(sidebarMode||'outline');return;}
+  if(['search','outline','annotations'].includes(action)){closePopover();if(r.documentSidebarUI?.isConnected)r.showDocumentSidebarView(action);else renderSidebar(action);return;}
   if(action==='connect')return safely(()=>exportDocument(active()))();
   if(action==='history')return safely(()=>annotationHistory(active()))();
   if(action==='migrate')return safely(()=>migrateEdition(active()))();
   if(action==='info')return documentInfo(active());
-  if(action==='bookmark')return safely(async()=>{const title=await promptText('text','읽던 위치');if(title){r.addBookmark(title);if(reader()===r&&sidebarMode==='outline')renderSidebar('outline');toast('북마크를 저장했습니다.');}})();
+  if(action==='bookmark')return safely(async()=>{const title=await promptText('text','읽던 위치');if(title){r.addBookmark(title);if(reader()===r){if(r.documentSidebarUI?.isConnected&&r.documentSidebarMode==='outline')r.showDocumentSidebarView('outline');else if(sidebarMode==='outline')renderSidebar('outline');}toast('북마크를 저장했습니다.');}})();
   if(action==='clear')return safely(async()=>{if(await confirmDialog('주석을 모두 지울까요?',`${r.metadata.annotations.length}개의 주석을 지웁니다. 실행 취소로 복원할 수 있어요.`,'모두 지우기'))r.commit([]);})();
 }
 function bindToolbarDrag() {
@@ -769,6 +773,7 @@ function renderSidebar(mode,{panel=$('#sidebar'),embedded=false,documentReader=r
   const r=documentReader;if(!r)return;
   r.annotationTreeOpen ||= new Map();
   if(panel.annotationReader===r)$$('[data-annotation-group]',panel).forEach(group=>r.annotationTreeOpen.set(group.dataset.annotationGroup,!!(group.open||group.hasAttribute('open'))));
+  const bookmarks=$('.sidebar-bookmarks',panel);if(panel.annotationReader===r&&bookmarks)r.sidebarBookmarksOpen=!!(bookmarks.open||bookmarks.hasAttribute('open'));
   panel.annotationReader=r;
   clearTimeout(panel.sidebarSearchTimer);panel.sidebarMode=mode;if(!embedded){sidebarMode=mode;closePopover();}else styleNativeSidebar(panel);panel.hidden=false;
   const id=name=>(embedded?'htmlmemo-native-':'')+name,q=name=>$('#'+id(name),panel);
@@ -781,8 +786,7 @@ function renderSidebar(mode,{panel=$('#sidebar'),embedded=false,documentReader=r
   }
   q('sidebar-title').textContent=embedded&&mode==='outline'?'목차':title;panel.setAttribute('aria-labelledby',id('sidebar-title'));
   $$('[data-sidebar-view]',panel).forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.sidebarView===mode)));
-  const content=$('.sidebar-content',panel);content.hidden=embedded&&mode==='outline';
-  if(content.hidden){content.replaceChildren();return;}
+  const content=$('.sidebar-content',panel);content.hidden=false;
   if(mode==='search'){
     content.innerHTML=`<div class="search-field"><input id="${id('document-search')}" aria-label="불러온 부분 검색어" placeholder="불러온 부분에서 찾기" autocomplete="off"></div><div class="search-navigation"><span id="${id('search-count')}">검색어를 입력하세요.</span><button id="${id('search-prev')}" class="icon-button" aria-label="이전 검색 결과">${icon('back')}</button><button id="${id('search-next')}" class="icon-button" aria-label="다음 검색 결과">${icon('forward')}</button></div><div id="${id('search-results')}"></div>`;
     const input=q('document-search');input.value=r.sidebarSearchQuery??r.searchQuery??'';
@@ -790,10 +794,15 @@ function renderSidebar(mode,{panel=$('#sidebar'),embedded=false,documentReader=r
     input.oninput=()=>{r.sidebarSearchQuery=input.value;clearTimeout(panel.sidebarSearchTimer);panel.sidebarSearchTimer=setTimeout(run,120);};input.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();r.nextSearch(e.shiftKey?-1:1);}};
     q('search-prev').onclick=()=>r.nextSearch(-1);q('search-next').onclick=()=>r.nextSearch(1);input.focus();if(input.value)run();
   }else if(mode==='outline'){
-    const outline=r.outline();content.innerHTML=`<p class="panel-label">목차</p>${outline.length?outline.map((item,index)=>`<button class="outline-item" style="padding-left:${12+(item.level-1)*12}px" data-heading="${index}">${esc(item.title)}</button>`).join(''):'<p class="panel-empty">이 문서에 제목 목차가 없습니다.</p>'}<p class="panel-label">북마크</p>${r.metadata.bookmarks.map(mark=>`<div class="bookmark-row"><button class="outline-item" data-bookmark="${esc(mark.id)}">${icon('bookmark',14)} ${esc(mark.title)}</button><button class="icon-button" data-delete-bookmark="${esc(mark.id)}" aria-label="북마크 삭제">${icon('close',13)}</button></div>`).join('')}<button id="add-bookmark" class="text-button">+ 현재 위치 저장</button>`;
+    const outline=embedded?[]:r.outline();
+    const marks=`${r.metadata.bookmarks.map(mark=>`<div class="bookmark-row"><button class="outline-item" data-bookmark="${esc(mark.id)}">${icon('bookmark',14)} ${esc(mark.title)}</button><button class="icon-button" data-delete-bookmark="${esc(mark.id)}" aria-label="북마크 삭제">${icon('close',13)}</button></div>`).join('')}<button id="${id('add-bookmark')}" class="text-button">+ 현재 위치 저장</button>`;
+    // Native books keep their original TOC nodes below this editor-owned panel.
+    // Put HTMLMemo bookmarks here too, so the tools menu no longer duplicates them.
+    content.innerHTML=embedded?`<details class="sidebar-bookmarks"${r.sidebarBookmarksOpen?' open':''}><summary>${icon('bookmark',14)}<span>북마크</span><span class="bookmark-count">${r.metadata.bookmarks.length}</span></summary><div class="sidebar-bookmark-list">${marks}</div></details>`:`<p class="panel-label">목차</p>${outline.length?outline.map((item,index)=>`<button class="outline-item" style="padding-left:${12+(item.level-1)*12}px" data-heading="${index}">${esc(item.title)}</button>`).join(''):'<p class="panel-empty">이 문서에 제목 목차가 없습니다.</p>'}<p class="panel-label">북마크</p>${marks}`;
+    const group=$('.sidebar-bookmarks',panel);if(group)group.ontoggle=()=>{r.sidebarBookmarksOpen=!!(group.open||group.hasAttribute('open'));};
     $$('[data-heading]',panel).forEach(button=>button.onclick=()=>r.jump(outline[Number(button.dataset.heading)].node));
     $$('[data-bookmark]',panel).forEach(button=>button.onclick=()=>{const mark=r.metadata.bookmarks.find(m=>m.id===button.dataset.bookmark);r.scrollTop=mark.top*r.zoom;r.scrollLeft=mark.left*r.zoom;});
-    $$('[data-delete-bookmark]',panel).forEach(button=>button.onclick=()=>{r.metadata.bookmarks=r.metadata.bookmarks.filter(m=>m.id!==button.dataset.deleteBookmark);active().queue.schedule();renderSidebar('outline');});q('add-bookmark').onclick=()=>toolAction('bookmark');
+    $$('[data-delete-bookmark]',panel).forEach(button=>button.onclick=()=>{r.metadata.bookmarks=r.metadata.bookmarks.filter(m=>m.id!==button.dataset.deleteBookmark);active().queue.schedule();if(embedded)r.showDocumentSidebarView('outline');else renderSidebar('outline');});q('add-bookmark').onclick=()=>toolAction('bookmark');
   }else{
     const contexts=r.annotationContexts?.()||new Map();
     const when=value=>Number.isFinite(value)?new Date(value).toLocaleString('ko-KR',{month:'long',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false}):'';

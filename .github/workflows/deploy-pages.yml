@@ -86,13 +86,15 @@ jobs:
           if(!matched)throw new Error('Published reader files do not match the deployed commit.');
           console.log('Published app, reader and model match this commit.');
           NODE
-          node --test --test-name-pattern='sidebar view choices|annotation tree|font-scaled pen|Pages-only|Chrome companion' tests/browser.integration.mjs
+          mkdir -p test-results
+          node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/published-browser-results.xml --test-name-pattern='sidebar view choices|annotation tree|font-scaled pen|Pages-only|Chrome companion' tests/browser.integration.mjs
       - name: Keep published desktop and mobile verification screenshots
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: published-sidebar-screenshots
           path: |
+            test-results/published-browser-results.xml
             test-results/sidebar-views-*.png
             test-results/font-scaled-pen-*.png
             test-results/annotation-tree-*.png

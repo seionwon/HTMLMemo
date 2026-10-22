@@ -70,6 +70,22 @@ test('document focus is entered through a document double-click, without a separ
  assert.doesNotMatch(html,/id="reader-fullscreen"/);
  assert.doesNotMatch(appSource,/reader-fullscreen/);
 });
+test('more tools contain no duplicated toolbar, sidebar, bookmark or export actions and preserve drawing tools',()=>{
+ const a=app(),selected=[];a.r.setTool=tool=>selected.push(tool);
+ Object.assign(a.context,{icon,$$:(selector,root)=>[...root.querySelectorAll(selector)],safely:fn=>fn,updateToolbarState(){},
+   showPopover(name,html,bind){a.doc.querySelector('#tool-popover').innerHTML=html;a.doc.querySelector('#tool-popover').hidden=false;bind();}});
+ const code=appSource.slice(appSource.indexOf('function toolAction('),appSource.indexOf('function bindToolbarDrag('));
+ new vm.Script('var sidebarMode="";'+code).runInContext(a.context);a.context.toolAction('more');
+ const ids=()=>[...a.doc.querySelectorAll('[data-more]')].map(b=>b.dataset.more);
+ const expected=['rect','ellipse','arrow','area','area-underline','strike','text','history','migrate','info','clear'];
+ assert.deepEqual(ids(),['sidebar',...expected]);assert.equal(new Set(ids()).size,ids().length);
+ for(const removed of ['search','outline','annotations','undo','redo','bookmark','connect'])assert.equal(a.doc.querySelector(`[data-more=${removed}]`),null);
+ a.doc.querySelector('[data-more=rect]').onclick();assert.deepEqual(selected,['rect']);assert.equal(a.doc.querySelector('#tool-popover').hidden,true);
+ a.context.toolAction('more');a.doc.querySelector('[data-more=sidebar]').onclick();assert.deepEqual(a.calls.search,['outline']);
+ a.doc.querySelector('#sidebar').hidden=false;a.context.toolAction('more');assert.deepEqual(ids(),expected,'an already open panel needs no duplicate entry');
+ a.doc.querySelector('#sidebar').hidden=true;a.r.documentSidebarUI=a.doc.createElement('section');a.doc.body.append(a.r.documentSidebarUI);a.context.toolAction('more');assert.deepEqual(ids(),expected,'native books use their own sidebar');
+ assert.ok(a.doc.querySelector('#save-page'));assert.ok(a.doc.querySelector('#app-menu #settings-button'));
+});
 
 test('document tools and palette window provide an explicit close button and full color selection controls',()=>{
  assert.match(appSource,/data-popover-close aria-label="문서 도구 닫기"/);

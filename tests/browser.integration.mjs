@@ -921,11 +921,6 @@ test('real Chrome: native sidebar view choices are visible on open and preserve 
     assert.equal(await page.evaluate(`${doc}.defaultView.getComputedStyle(${doc}.querySelector('#reader-menu')).display`),'none');
     assert.notEqual(await page.evaluate(`${doc}.defaultView.getComputedStyle(${doc}.querySelector('#book-search')).display`),'none');
     await page.evaluate(`window.nativeSidebarTree=${doc}.querySelector('#reader-tree');`);
-    for(const mode of ['search','annotations']){
-      await page.click('[data-action=more]');assert.equal(await page.evaluate(`document.querySelector('[data-more=${mode}]').textContent.trim()`),mode==='search'?'검색':'주석');await page.click(`[data-more=${mode}]`);
-      await page.waitFor(`${doc}.querySelector('#reader-nav').dataset.htmlmemoSidebarView==='${mode}'`);
-      assert.equal(await page.evaluate('document.querySelector("#sidebar").hidden'),true);
-    }
     const clickNative=async selector=>{
       await page.evaluate('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
       const point=await page.evaluate(`(()=>{const frame=${frame},element=frame.contentDocument.querySelector(${JSON.stringify(selector)});element.scrollIntoView({block:'nearest'});const f=frame.getBoundingClientRect(),r=element.getBoundingClientRect(),scale=f.width/frame.clientWidth;return {x:f.left+(r.left+r.width/2)*scale,y:f.top+(r.top+r.height/2)*scale};})()`);
@@ -941,6 +936,13 @@ test('real Chrome: native sidebar view choices are visible on open and preserve 
     };
     for(const width of [1280,390]){
       await page.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
+      await page.click('[data-action=more]');
+      assert.deepEqual(await page.evaluate('[...document.querySelectorAll("[data-more]")].map(b=>b.dataset.more)'),['rect','ellipse','arrow','area','area-underline','strike','text','history','migrate','info','clear']);
+      await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,`test-results/sidebar-views-tools-native-${width}.png`),await page.screenshot());
+      await page.click('[data-popover-close]');await page.click('#app-menu-button');
+      const topLabels=await page.evaluate('[...document.querySelectorAll("#app-menu button")].map(b=>b.textContent.trim())');
+      for(const duplicate of ['검색','목차 · 북마크','주석','실행 취소','다시 실행','현재 위치 북마크','HTML 내보내기','사각형','주석 저장 이력'])assert.equal(topLabels.includes(duplicate),false);
+      await page.click('#app-menu-button');
       await chooseNative('search');
       assert.equal(await page.evaluate(`${doc}.querySelector('input').placeholder`),'불러온 부분에서 찾기');
       await page.evaluate(`${doc}.querySelector('input').select()`);
@@ -954,6 +956,13 @@ test('real Chrome: native sidebar view choices are visible on open and preserve 
       assert.equal(await page.evaluate(`${doc}.querySelectorAll('[data-htmlmemo-doc-sidebar-ui]').length`),1);
       await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,`test-results/sidebar-views-native-${width}.png`),await page.screenshot());
     }
+    await clickNative('.sidebar-bookmarks>summary');await clickNative('#htmlmemo-native-add-bookmark');
+    await page.waitFor('document.querySelector("#dialog").open&&document.querySelector("#note-text")');
+    await page.evaluate('document.querySelector("#note-text").value="목차에서 남긴 북마크"');await page.click('#dialog button[value=save]');
+    await page.waitFor(`${doc}.querySelectorAll('[data-bookmark]').length===1&&document.querySelector('#status-left').textContent.includes('자동 저장됨')`);
+    assert.equal(await page.evaluate(`${doc}.querySelector('.sidebar-bookmarks').open`),true);assert.equal(await page.evaluate('document.querySelector("#sidebar").hidden'),true);
+    await writeFile(join(root,'test-results/sidebar-views-bookmarks-native.png'),await page.screenshot());
+    await clickNative('[data-delete-bookmark]');await page.waitFor(`${doc}.querySelectorAll('[data-bookmark]').length===0`);
     await clickNative('#reader-tree details:last-child summary');await page.waitFor(`${doc}.querySelector('#reader-tree details:last-child a')`);
     await clickNative('#reader-tree details:last-child a:last-child');await page.waitFor(`${doc}.querySelector('#reader-content').dataset.section==='v2:last'`);
     await clickNative('[data-sidebar-view=annotations]');await revealAnnotation(page,doc,'native-note');await clickNative('[data-delete-annotation=native-note]');
@@ -994,7 +1003,9 @@ test('real Chrome: sidebar view choices preserve search drafts, navigate saved n
     await page.waitFor('!document.querySelector("#toolbar").hidden&&document.querySelector("#status-left").textContent.includes("자동 저장됨")');
     const original=await page.evaluate(`(async()=>{const {getDocument}=await import('./src/storage.js');const record=await getDocument('sidebar-document');return {html:record.html,annotations:record.metadata.annotations,bookmarks:record.metadata.bookmarks};})()`);
     await page.evaluate('window.sidebarFrame=document.querySelector(".document-host:not([hidden]) iframe")');
-    await page.click('[data-action=more]');await page.click('[data-more=outline]');
+    await page.click('[data-action=more]');assert.ok(await page.evaluate('document.querySelector("[data-more=sidebar]")'));
+    for(const removed of ['search','outline','annotations','undo','redo','bookmark','connect'])assert.equal(await page.evaluate(`!!document.querySelector('[data-more=${removed}]')`),false);
+    await page.click('[data-more=sidebar]');
     assert.deepEqual(await page.evaluate('[...document.querySelectorAll("[data-sidebar-view]")].map(button=>button.textContent)'),['목차·북마크','검색','주석']);
     for(const width of [1280,390,320]){
       await page.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
@@ -1010,6 +1021,8 @@ test('real Chrome: sidebar view choices preserve search drafts, navigate saved n
       assert.equal(await page.evaluate('document.querySelectorAll("[data-sidebar-view][aria-pressed=true]").length'),1);
       if(width===1280||width===320){await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,`test-results/sidebar-views-${width}.png`),await page.screenshot());}
     }
+    await page.click('[data-action=more]');assert.equal(await page.evaluate('!!document.querySelector("[data-more=sidebar]")'),false);
+    await writeFile(join(root,'test-results/sidebar-views-tools-plain-320.png'),await page.screenshot());await page.click('[data-popover-close]');
     const unchanged=await page.evaluate(`(async()=>{const {getDocument}=await import('./src/storage.js');const record=await getDocument('sidebar-document');return {html:record.html,annotations:record.metadata.annotations,bookmarks:record.metadata.bookmarks};})()`);assert.deepEqual(unchanged,original);
     assert.equal(await page.evaluate('document.querySelector(".document-host:not([hidden]) iframe")===window.sidebarFrame'),true);
     await page.click('#add-bookmark');await page.evaluate(`document.querySelector('#note-text').value='새 북마크'`);await page.click('#dialog button[value=save]');
@@ -1018,7 +1031,9 @@ test('real Chrome: sidebar view choices preserve search drafts, navigate saved n
     await page.waitFor('document.querySelector("#sidebar .panel-empty")?.textContent.includes("아직 주석")&&document.querySelector("#status-left").textContent.includes("자동 저장됨")');
     const saved=await page.evaluate(`(async()=>{const {getDocument}=await import('./src/storage.js');const record=await getDocument('sidebar-document');return {html:record.html,annotations:record.metadata.annotations.length,bookmarks:record.metadata.bookmarks.map(mark=>mark.title)};})()`);
     assert.equal(saved.html,original.html);assert.equal(saved.annotations,0);assert.deepEqual(saved.bookmarks,['새 북마크']);
-    await page.click('#close-sidebar');assert.equal(await page.evaluate('document.querySelector("#sidebar").hidden'),true);assert.deepEqual(chrome.errors,[]);
+    await page.click('#close-sidebar');assert.equal(await page.evaluate('document.querySelector("#sidebar").hidden'),true);
+    await page.click('[data-action=more]');await page.click('[data-more=sidebar]');assert.equal(await page.evaluate('document.querySelector("#sidebar").hidden'),false);
+    assert.equal(await page.evaluate('document.querySelectorAll("#sidebar [data-sidebar-view]").length'),3);await page.click('#close-sidebar');assert.deepEqual(chrome.errors,[]);
   }finally{if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
 });
 
