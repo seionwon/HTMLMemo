@@ -65,6 +65,55 @@ test('real Chrome: standalone book export keeps lazy chapters and released asset
     if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});
   }
 });
+test('real Chrome: Chrome handoff switches linked tabs in one click and refreshes safely on return (simulated extension transport)',{timeout:60000},async()=>{
+  await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-chrome-handoff-'));await cp(join(root,'public'),folder,{recursive:true});
+  const server=createServer(folder);let chrome;
+  try{
+    await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));chrome=await launchChrome();const page=chrome.page;
+    const url=process.env.HTMLMEMO_SIDEBAR_TEST_URL||`http://127.0.0.1:${server.address().port}/`;
+    await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
+    // Exercise the real app UI and its message bridge, not an installed extension
+    // or desktop focus. Privileged Chrome window calls have separate unit tests.
+    await page.send('Page.addScriptToEvaluateOnNewDocument',{source:`(()=>{if(window!==top)return;window.handoffCalls=[];window.handoffRemote={};window.handoffSerial=0;
+      addEventListener('message',event=>{const m=event.data;if(event.source!==window||m?.channel!=='htmlmemo-app')return;handoffCalls.push({action:m.action,tabId:m.tabId,url:m.url});let result;
+        if(m.action==='ping')result={version:'1.2.0'};
+        else if(m.action==='openBrowser'){const tab={id:++handoffSerial,url:m.url,title:'연결한 웹페이지 '+handoffSerial};handoffRemote[tab.id]=tab;result={...tab};}
+        else if(m.action==='listTabs')result=Object.values(handoffRemote).map(t=>({...t}));
+        else if(m.action==='takeCaptures')result=[];
+        else if(m.action==='navigateTab'){handoffRemote[m.tabId].url=m.url;result=true;}
+        else result=true;
+        postMessage({channel:'htmlmemo-extension',id:m.id,result},location.origin);
+      });})()`});
+    await page.navigate(url);await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
+    await page.waitFor('document.querySelector("#connection-button").classList.contains("connected")');
+    const open=async address=>{await page.click('#library-tab');await page.evaluate(`document.querySelector('#address').value=${JSON.stringify(address)};document.querySelector('#address-form').requestSubmit();`);};
+    await open('https://alpha.example/');await page.waitFor('handoffSerial===1&&!!document.querySelector(".chrome-page-card")');
+    await open('https://beta.example/');await page.waitFor('handoffSerial===2');
+    const first=await page.evaluate('document.querySelector(".tab.browser").dataset.tab'),selector=`[data-tab="${first}"] .tab-select`;
+    await page.click(selector);await page.waitFor('handoffCalls.some(c=>c.action==="focusTab"&&c.tabId===1)');
+    assert.equal(await page.evaluate('document.querySelectorAll(".tab.browser").length'),2);
+    await open('https://alpha.example/');await page.waitFor('handoffCalls.filter(c=>c.action==="focusTab").length===2');assert.equal(await page.evaluate('handoffSerial'),2);
+    await page.click('#library-tab');await page.evaluate(`document.querySelector('#address').value='https://gamma.example/';document.querySelector('#address-form').requestSubmit();document.querySelector('#address-form').requestSubmit();`);
+    await page.waitFor('handoffSerial===3&&document.querySelectorAll(".tab.browser").length===3');
+    await page.click('#library-tab');const focused=await page.evaluate('handoffCalls.filter(c=>c.action==="focusTab").length');
+    await page.evaluate(`handoffRemote[1].url='https://alpha.example/next';handoffRemote[1].title='Chrome에서 바뀐 제목';dispatchEvent(new Event('focus'));`);
+    await page.waitFor(`document.querySelector('[data-tab="${first}"] .tab-title').textContent==='Chrome에서 바뀐 제목'`);
+    assert.equal(await page.evaluate('document.querySelector("#library").hidden'),false);assert.equal(await page.evaluate('handoffCalls.filter(c=>c.action==="focusTab").length'),focused);
+    await page.click(selector);await page.waitFor('document.querySelector(".browser-host:not([hidden]) .chrome-page-card small").textContent==="https://alpha.example/next"');
+    await page.evaluate(`delete handoffRemote[1];dispatchEvent(new Event('focus'));`);await page.waitFor('document.querySelector(".browser-host:not([hidden]) [data-save-chrome]").disabled');
+    assert.equal(await page.evaluate(`['#back','#forward','#reload','#save-page'].every(id=>document.querySelector(id).disabled)`),true);
+    assert.match(await page.evaluate('document.querySelector(".browser-host:not([hidden]) [data-focus-chrome]").textContent'),/다시 열기/);
+    await page.click(selector);await page.waitFor('handoffSerial===4&&!document.querySelector(".browser-host:not([hidden]) [data-save-chrome]").disabled');
+    assert.equal(await page.evaluate('handoffRemote[4].url'),'https://alpha.example/next');assert.equal(await page.evaluate('document.querySelectorAll(".tab.browser").length'),3);
+    await page.click('#library-tab');await page.click('#open-example');await page.waitFor('!!document.querySelector(".tab.document")&&!document.querySelector("#toolbar").hidden');
+    await page.click(selector);await page.waitFor('handoffCalls.some(c=>c.action==="focusTab"&&c.tabId===4)');
+    const beforeLocal=await page.evaluate('handoffCalls.filter(c=>c.action==="focusTab").length');await page.click('.tab.document .tab-select');
+    await page.evaluate(`dispatchEvent(new Event('focus'));`);await page.waitFor('!document.querySelector("#toolbar").hidden');assert.equal(await page.evaluate('handoffCalls.filter(c=>c.action==="focusTab").length'),beforeLocal);
+    await page.click(selector);await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/chrome-handoff-desktop.png'),await page.screenshot());
+    await page.send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await writeFile(join(root,'test-results/chrome-handoff-mobile.png'),await page.screenshot());assert.deepEqual(chrome.errors,[]);
+  }finally{if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
+});
+
 test('real Chrome: browsing, capture, local annotation, file writes, reopen and offline',{timeout:90000},async t=>{
   await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-web-test-'));await cp(join(root,'public'),folder,{recursive:true});await cp(join(root,'tests/fixtures'),join(folder,'fixtures'),{recursive:true});
   const server=createServer(folder);let chrome;

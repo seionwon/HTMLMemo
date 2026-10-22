@@ -5,4 +5,8 @@ document.getElementById('capture').onclick=async()=>{
   catch(error){status.textContent=error.message;button.disabled=false;}
 };
 document.getElementById('options').onclick=()=>chrome.runtime.openOptionsPage();
-document.getElementById('open-app').onclick=async()=>{const response=await chrome.runtime.sendMessage({action:'getAppURL'});if(response.result)await chrome.tabs.create({url:response.result});};
+document.getElementById('open-app').onclick=async()=>{
+  const button=document.getElementById('open-app');button.disabled=true;
+  try{const response=await chrome.runtime.sendMessage({action:'openApp'});if(response?.error)throw new Error(response.error);window.close();}
+  catch(error){status.textContent=error.message;button.disabled=false;}
+};

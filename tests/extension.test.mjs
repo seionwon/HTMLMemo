@@ -3,16 +3,16 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFile } from 'node:fs/promises';
 async function setup(pwaUrl='http://localhost:4173/'){
-  const local=pwaUrl?{pwaUrl}:{};const session={};const tabs=new Map([[1,{id:1,url:'https://example.test/article',title:'Article',status:'complete',windowId:1}]]);let listener;let serial=1;
+  const local=pwaUrl?{pwaUrl}:{};const session={};const windows=[];const notices=[];const tabs=new Map([[1,{id:1,url:'https://example.test/article',title:'Article',status:'complete',windowId:1}]]);let listener;let serial=1;
   const signal=()=>({addListener(){},removeListener(){}});const store=data=>({get:async key=>structuredClone({[key]:data[key]}),set:async values=>Object.assign(data,structuredClone(values))});
   const chrome={runtime:{id:'htmlmemo-test',getURL:path=>'chrome-extension://htmlmemo-test/'+path,sendMessage:async()=>{},onMessage:{addListener:fn=>listener=fn},onInstalled:signal()},storage:{local:store(local),session:store(session),onChanged:signal()},tabs:{
-    get:async id=>{if(!tabs.has(id))throw new Error('Tab closed');return tabs.get(id);},query:async()=>[...tabs.values()],create:async options=>{const tab={id:++serial,windowId:1,status:'complete',title:'Page',...options};tabs.set(tab.id,tab);return tab;},update:async(id,options)=>Object.assign(tabs.get(id),options),goBack:async()=>{},goForward:async()=>{},reload:async()=>{},sendMessage:async()=>{},onUpdated:signal(),onRemoved:signal()},windows:{update:async()=>{}},scripting:{
+    get:async id=>{if(!tabs.has(id))throw new Error('Tab closed');return tabs.get(id);},query:async()=>[...tabs.values()],create:async options=>{const tab={id:++serial,windowId:1,status:'complete',title:'Page',...options};tabs.set(tab.id,tab);return tab;},update:async(id,options)=>Object.assign(tabs.get(id),options),goBack:async()=>{},goForward:async()=>{},reload:async()=>{},sendMessage:async(id,message)=>notices.push({id,message}),onUpdated:signal(),onRemoved:signal()},windows:{update:async(id,options)=>windows.push({id,...options})},scripting:{
     executeScript:async options=>options.files?[]:[{result:{html:'<!doctype html><html><head><title>Article</title></head><body>Page content</body></html>',title:'Article',url:tabs.get(options.target.tabId).url,viewport:{width:960,height:800},warnings:[]}}],unregisterContentScripts:async()=>{},registerContentScripts:async()=>{}}};
   vm.runInNewContext(await readFile(new URL('../extension/background.js',import.meta.url),'utf8'),{chrome,crypto,URL,AbortSignal,fetch,btoa,setTimeout,clearTimeout,Uint8Array,Map,Set,Promise});
   const app={id:chrome.runtime.id,tab:{id:99},url:local.pwaUrl||'https://seionwon.github.io/HTMLMemo/'};const popup={id:chrome.runtime.id,url:chrome.runtime.getURL('popup.html')};
-  return {local,session,tabs,app,popup,send:(action,args={},sender=app)=>new Promise(resolve=>listener({action,...args},sender,resolve))};
+  return {local,session,tabs,windows,notices,app,popup,send:(action,args={},sender=app)=>new Promise(resolve=>listener({action,...args},sender,resolve))};
 }
-test('Chrome bridge rejects requests from other sites and other localhost app paths',async()=>{const ctx=await setup();for(const url of ['https://evil.test/','http://localhost:4173/other','http://localhost:4174/']){const response=await ctx.send('openBrowser',{url:'https://example.test/'},{...ctx.app,url});assert.match(response.error,/설정된 HTMLMemo/);}assert.equal(ctx.tabs.size,1);assert.equal((await ctx.send('ping')).result.version,'1.0.0');});
+test('Chrome bridge rejects requests from other sites and other localhost app paths',async()=>{const ctx=await setup();for(const url of ['https://evil.test/','http://localhost:4173/other','http://localhost:4174/']){const response=await ctx.send('openBrowser',{url:'https://example.test/'},{...ctx.app,url});assert.match(response.error,/설정된 HTMLMemo/);}assert.equal(ctx.tabs.size,1);assert.equal((await ctx.send('ping')).result.version,'1.2.0');});
 test('Chrome browse and capture operate only on explicitly connected tabs',async()=>{const ctx=await setup();assert.match((await ctx.send('captureTab',{tabId:1})).error,/연결한 Chrome 탭/);const opened=await ctx.send('openBrowser',{url:'https://example.test/page'});const captured=await ctx.send('captureTab',{tabId:opened.result.id});assert.match(captured.result.html,/Page content/);assert.equal(captured.result.url,'https://example.test/page');});
 test('popup captures remain in persistent storage until the PWA acknowledges durable storage',async()=>{const ctx=await setup();const saved=await ctx.send('popupSave',{tabId:1},ctx.popup);assert.equal(saved.result.title,'Article');assert.equal(ctx.local.captures.length,1);const received=await ctx.send('takeCaptures');assert.equal(received.result.length,1);assert.equal(ctx.local.captures.length,1);await ctx.send('ackCapture',{captureId:received.result[0].id});assert.equal(ctx.local.captures.length,0);});
 test('concurrent Chrome tab openings do not lose tracked tab ownership',async()=>{const ctx=await setup();const results=await Promise.all(Array.from({length:5},(_,i)=>ctx.send('openBrowser',{url:`https://example.test/${i}`})));assert.equal(ctx.session.tracked.length,5);assert.deepEqual(new Set(ctx.session.tracked),new Set(results.map(r=>r.result.id)));});
@@ -30,4 +30,32 @@ test('a saved previous Pages address resolves to the new default and cannot read
   assert.ok([...ctx.tabs.values()].some(tab=>tab.url.startsWith('https://seionwon.github.io/HTMLMemo/')));
   assert.match((await ctx.send('takeCaptures')).error,/설정된 HTMLMemo/);
   assert.equal((await ctx.send('takeCaptures',{}, {...ctx.app,url:'https://seionwon.github.io/HTMLMemo/'})).result.length,1);
+});
+test('opening and navigating a linked page focus its Chrome window; background capture opening does not',async()=>{
+  const ctx=await setup();const opened=(await ctx.send('openBrowser',{url:'https://example.test/first'})).result;
+  assert.deepEqual(ctx.windows,[{id:1,focused:true}]);ctx.windows.length=0;
+  await ctx.send('navigateTab',{tabId:opened.id,url:'https://example.test/next'});assert.equal(ctx.tabs.get(opened.id).url,'https://example.test/next');assert.deepEqual(ctx.windows,[{id:1,focused:true}]);ctx.windows.length=0;
+  await ctx.send('openBrowser',{url:'https://example.test/background',active:false});assert.deepEqual(ctx.windows,[]);
+  await ctx.send('focusTab',{tabId:opened.id});assert.deepEqual(ctx.windows,[{id:1,focused:true}]);
+  for(const action of ['backTab','forwardTab','reloadTab']){ctx.windows.length=0;await ctx.send(action,{tabId:opened.id});assert.deepEqual(ctx.windows,[{id:1,focused:true}]);}
+});
+test('return from the extension reuses and focuses the configured HTMLMemo tab without a capture notification',async()=>{
+  const ctx=await setup(null);ctx.tabs.set(20,{id:20,windowId:7,url:'https://seionwon.github.io/HTMLMemo/index.html',title:'HTMLMemo'});
+  ctx.tabs.set(21,{id:21,windowId:8,url:'https://seionwon.github.io/other/',title:'Other project'});
+  assert.equal((await ctx.send('openApp',{},ctx.popup)).error,undefined);assert.equal(ctx.tabs.size,3);assert.equal(ctx.tabs.get(20).active,true);assert.deepEqual(ctx.windows,[{id:7,focused:true}]);assert.deepEqual(ctx.notices,[]);
+  assert.match((await ctx.send('openApp')).error,/설정된 HTMLMemo/,'the web app cannot use popup-only commands');
+});
+test('return from the extension opens the official app only when absent and never invents a capture ID',async()=>{
+  const ctx=await setup(null);await ctx.send('openApp',{},ctx.popup);const app=[...ctx.tabs.values()].find(tab=>tab.id!==1);
+  assert.equal(app.url,'https://seionwon.github.io/HTMLMemo/');assert.deepEqual(ctx.windows,[{id:1,focused:true}]);
+  await ctx.send('openApp',{},ctx.popup);assert.equal(ctx.tabs.size,2);
+});
+test('popup return disables duplicate clicks, closes after the handoff and restores errors without opening another app URL',async()=>{
+  const {DOMParser}=await import('linkedom'),source=await readFile(new URL('../extension/popup.js',import.meta.url),'utf8');
+  for(const fail of [false,true]){
+    const doc=new DOMParser().parseFromString(await readFile(new URL('../extension/popup.html',import.meta.url),'utf8'),'text/html');let closed=0;const calls=[];
+    vm.runInNewContext(source,{document:doc,window:{close(){closed++;}},chrome:{runtime:{sendMessage:async message=>{calls.push(message.action);return fail?{error:'연결을 확인해주세요.'}:{};}}}});
+    const button=doc.getElementById('open-app'),pending=button.onclick();assert.equal(button.disabled,true);await pending;
+    assert.deepEqual(calls,['openApp']);assert.equal(closed,fail?0:1);assert.equal(button.disabled,!fail);if(fail)assert.match(doc.getElementById('status').textContent,/연결/);
+  }
 });

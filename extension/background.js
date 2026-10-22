@@ -60,8 +60,9 @@ async function captureTab(id) {
 async function openApp(captureId) {
   const url=await appURL();const expected=new URL(url);
   const tabs=await chrome.tabs.query({});const existing=tabs.find(tab=>{try{const current=new URL(tab.url);return current.protocol===expected.protocol&&current.host===expected.host&&(projectApp(expected)?appPath(current)===appPath(expected):current.pathname===expected.pathname);}catch{return false;}});
-  if(existing){await chrome.tabs.update(existing.id,{active:true});await chrome.windows.update(existing.windowId,{focused:true});await chrome.tabs.sendMessage(existing.id,{event:'capture-ready'}).catch(()=>{});await chrome.runtime.sendMessage({event:'capture-ready'}).catch(()=>{});return;}
-  expected.searchParams.set('capture',captureId);await chrome.tabs.create({url:expected.href});
+  if(existing){await chrome.tabs.update(existing.id,{active:true});await chrome.windows.update(existing.windowId,{focused:true});if(captureId){await chrome.tabs.sendMessage(existing.id,{event:'capture-ready'}).catch(()=>{});await chrome.runtime.sendMessage({event:'capture-ready'}).catch(()=>{});}return;}
+  if(captureId)expected.searchParams.set('capture',captureId);
+  const opened=await chrome.tabs.create({url:expected.href});await chrome.windows.update(opened.windowId,{focused:true});
 }
 async function dispatch(message,sender) {
   if(message.action==='resource')return fetchResource(message,sender);
@@ -73,19 +74,20 @@ async function dispatch(message,sender) {
     await mutateStorage(async()=>{const current=(await chrome.storage.local.get('captures')).captures||[];if(current.length>=10)throw new Error('HTMLMemo에서 전달받은 페이지를 먼저 저장해주세요.');await chrome.storage.local.set({captures:[...current,snapshot]});});await openApp(snapshot.id);return {title:snapshot.title,warnings:snapshot.warnings.length};
   }
   if(internal&&message.action==='getAppURL')return appURL();
+  if(internal&&message.action==='openApp')return openApp();
   if(!allowed.has(message.action)||!await isApp(sender))throw new Error('설정된 HTMLMemo 앱에서만 사용할 수 있습니다.');
-  if(message.action==='ping')return {version:'1.0.0'};
-  if(message.action==='openBrowser') {const tab=await chrome.tabs.create({url:webURL(message.url),active:message.active!==false});await track(tab.id);return {id:tab.id,title:tab.title,url:tab.url||message.url};}
+  if(message.action==='ping')return {version:'1.2.0'};
+  if(message.action==='openBrowser') {const tab=await chrome.tabs.create({url:webURL(message.url),active:message.active!==false});await track(tab.id);if(message.active!==false)await chrome.windows.update(tab.windowId,{focused:true});return {id:tab.id,title:tab.title,url:tab.url||message.url};}
   if(message.action==='listTabs'){const ids=await tracked();const listed=await chrome.tabs.query({});return listed.filter(tab=>ids.includes(tab.id)).map(tab=>({id:tab.id,title:tab.title,url:tab.url||tab.pendingUrl,status:tab.status}));}
   if(message.action==='takeCaptures')return (await chrome.storage.local.get('captures')).captures||[];
   if(message.action==='ackCapture'){await mutateStorage(async()=>{const captures=(await chrome.storage.local.get('captures')).captures||[];await chrome.storage.local.set({captures:captures.filter(c=>c.id!==message.captureId)});});return true;}
   const tab=await requireTracked(message.tabId);
   switch(message.action){
     case 'focusTab':await chrome.tabs.update(tab.id,{active:true});await chrome.windows.update(tab.windowId,{focused:true});return true;
-    case 'navigateTab':await chrome.tabs.update(tab.id,{url:webURL(message.url),active:true});return true;
-    case 'backTab':await chrome.tabs.goBack(tab.id);return true;
-    case 'forwardTab':await chrome.tabs.goForward(tab.id);return true;
-    case 'reloadTab':await chrome.tabs.reload(tab.id);return true;
+    case 'navigateTab':await chrome.tabs.update(tab.id,{url:webURL(message.url),active:true});await chrome.windows.update(tab.windowId,{focused:true});return true;
+    case 'backTab':await chrome.tabs.goBack(tab.id);await chrome.windows.update(tab.windowId,{focused:true});return true;
+    case 'forwardTab':await chrome.tabs.goForward(tab.id);await chrome.windows.update(tab.windowId,{focused:true});return true;
+    case 'reloadTab':await chrome.tabs.reload(tab.id);await chrome.windows.update(tab.windowId,{focused:true});return true;
     case 'captureTab':return captureTab(tab.id);
     default:throw new Error('지원하지 않는 요청입니다.');
   }

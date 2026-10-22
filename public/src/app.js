@@ -16,6 +16,7 @@ let preferences=normalizePreferences(), settingsFileHandle=null, settingsFolderH
 let sharingApp=false, installController;
 let readerFocused=false, nativeReaderFullscreen=false, focusBusy=false;
 let tabLayout='';
+let chromeSync=null;
 const appAddress=()=>{const url=new URL(location.href);url.search='';url.hash='';return url.href;};
 const active = () => tabs.find(tab => tab.id === activeId);
 const reader = () => active()?.reader;
@@ -156,11 +157,11 @@ function renderTabs() {
     if(!el){
       el=document.createElement('div');el.dataset.tab=tab.id;el.setAttribute('role','presentation');
       el.innerHTML=`<button class="tab-select" role="tab"><span class="tab-icon">${icon(tab.type==='document'?'file':'globe',15)}</span><span class="tab-title"></span><i class="tab-dirty" hidden></i></button><button class="tab-close" data-close="${tab.id}">${icon('close',13)}</button>`;
-      $('.tab-select',el).onclick=()=>activate(tab.id);
+      $('.tab-select',el).onclick=safely(()=>selectTab(tab.id));
       $('[data-close]',el).onclick=safely(e=>{e.stopPropagation();return closeTab(tab.id);});container.append(el);
     }
     const selected=tab.id===activeId,button=$('.tab-select',el);
-    el.className=`tab ${selected?'active':''} ${tab.type}`;el.title=tab.record?.name?tab.title+' · '+tab.record.name:tab.title;
+    el.className=`tab ${selected?'active':''} ${tab.type}`;el.title=tab.record?.name?tab.title+' · '+tab.record.name:tab.chromeId?tab.title+' · '+(tab.chromeMissing?'Chrome에서 다시 열기':'클릭하면 Chrome으로 전환'):tab.title;
     button.id='tab-'+tab.id;button.setAttribute('aria-selected',String(selected));button.setAttribute('aria-controls',tab.host.id);button.tabIndex=tab.id===focusId?0:-1;
     tab.host.setAttribute('role','tabpanel');tab.host.setAttribute('aria-labelledby',button.id);
     const title=$('.tab-title',el);if(title.textContent!==tab.title)title.textContent=tab.title;
@@ -210,17 +211,24 @@ function activate(id) {
   if(id==='library')renderLibrary();
   if(id==='execution'){$('#status-left').textContent='앱 설치 · URL 공유 · 모든 데이터는 이 기기에 저장';document.title='앱 설치 · URL 공유 · HTMLMemo';}
 }
+async function selectTab(id) {
+  const tab=tabs.find(tab=>tab.id===id);if(!tab)return;
+  activate(id);
+  // Only an explicit tab click switches windows. Returning to HTMLMemo or an
+  // automatic title refresh must never immediately send the user back out.
+  if(tab.type==='browser'&&bridgeAvailable())await openRealChrome(tab);
+}
 function updateChrome() {
   const tab=active(); const r=reader(); const local=tab?.type==='document';const execution=activeId==='execution';
   $('.chrome').dataset.page=local?'document':tab?'browser':activeId;
   if(!$('.chrome').classList.contains('address-editing'))$('#address').value=local?tab.record.name:tab?.url||'';
   $('#address-icon').innerHTML=icon(local?'file':'globe',15);$('#local-label').hidden=!local;
-  $('#back').disabled=local?!r?.linkHistory.length:!tab||!tab.chromeId&&tab.cursor<=0;
-  $('#forward').disabled=!tab||local||!tab.chromeId&&tab.cursor>=tab.history.length-1;
-  $('#reload').disabled=!tab||local;
+  $('#back').disabled=local?!r?.linkHistory.length:!tab||!!tab.chromeMissing||!tab.chromeId&&tab.cursor<=0;
+  $('#forward').disabled=!tab||local||!!tab.chromeMissing||!tab.chromeId&&tab.cursor>=tab.history.length-1;
+  $('#reload').disabled=!tab||local||!!tab.chromeMissing;
   setIconButton('#save-page',execution?'globe':local?'download':'save',execution?'URL 복사':local?'HTML 내보내기':'페이지 저장',17);
-  $('#save-page').disabled=execution?sharingApp:!tab;
-  if(local)saveStatus(tab); else if(tab)$('#status-left').textContent=tab.chromeId?'실제 Chrome 탭에서 탐색 중':'웹 탐색 · 로컬로 저장하면 주석을 남길 수 있어요.';
+  $('#save-page').disabled=execution?sharingApp:!tab||!!tab.chromeMissing;
+  if(local)saveStatus(tab); else if(tab)$('#status-left').textContent=tab.chromeMissing?'Chrome 탭이 닫혔습니다 · 웹 탭을 누르면 다시 엽니다':tab.chromeId?'Chrome 연결 · 웹 탭을 누르면 해당 페이지로 전환':'웹 탐색 · 로컬로 저장하면 주석을 남길 수 있어요.';
   document.title=tab?tab.title+' · HTMLMemo':'HTMLMemo · 나만의 웹 서재';
 }
 function createHost(id,type) { const host=document.createElement('div');host.id='workspace-'+id;host.className='workspace-host '+type+'-host';host.hidden=true;$('#workspaces').append(host);return host; }
@@ -417,7 +425,12 @@ async function exportDocument(tab) {
 async function openBrowser(input, forceNew = true) {
   if(/^file:/i.test(input.trim())){await importFiles();return;}
   const url=normalizeURL(input);const current=active();
-  if(!forceNew&&current?.type==='browser')return navigate(current,url);
+  if(!forceNew&&current?.type==='browser'){
+    if(current.url===url){await selectTab(current.id);return current;}
+    await navigate(current,url);return current;
+  }
+  const existing=tabs.find(tab=>tab.type==='browser'&&tab.url===url);
+  if(existing){await selectTab(existing.id);return existing;}
   const tab={id:uid(),type:'browser',title:displayHost(url),url,history:[url],cursor:0,chromeId:null,host:null};tab.host=createHost(tab.id,'browser');tabs.push(tab);
   tab.host.innerHTML=`<div class="browser-note"><span>${icon('globe',15)} 웹 탐색</span><button class="text-button" data-open-chrome>Chrome에서 열기 ${icon('external',13)}</button><button class="text-button" data-capture>페이지 저장 ${icon('save',13)}</button></div><iframe class="browser-frame" title="웹 페이지" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads" referrerpolicy="strict-origin-when-cross-origin"></iframe>`;
   tab.frame=$('iframe',tab.host);tab.frame.addEventListener('load',()=>{
@@ -435,15 +448,49 @@ async function openBrowser(input, forceNew = true) {
 }
 async function openRealChrome(tab) {
   if(!bridgeAvailable()){window.open(tab.url,'_blank','noopener,noreferrer');connectionDialog();return;}
-  if(tab.chromeId){await bridge('focusTab',{tabId:tab.chromeId});return;}
-  const result=await bridge('openBrowser',{url:tab.url});tab.chromeId=result.id;tab.title=result.title||tab.title;
-  tab.frame.hidden=true;
-  const card=document.createElement('div');card.className='chrome-page-card';card.innerHTML=`<div class="chrome-page-icon">${icon('globe',38)}</div><p class="eyebrow">CONNECTED TO CHROME</p><h2>${esc(displayHost(tab.url))}</h2><p>이 페이지는 실제 Chrome 탭에서 열려 있습니다.<br>탐색을 마친 뒤 저장하면, 이곳에서 주석을 남길 수 있어요.</p><div><button class="primary-button" data-focus-chrome>Chrome 탭으로 이동 ${icon('external',15)}</button><button class="secondary-button" data-save-chrome>HTML로 저장</button></div><small>웹 페이지의 확장 기능에서도 바로 저장할 수 있습니다.</small>`;
-  $('.chrome-page-card',tab.host)?.remove();tab.host.append(card);$('[data-focus-chrome]',card).onclick=safely(()=>bridge('focusTab',{tabId:tab.chromeId}));$('[data-save-chrome]',card).onclick=safely(savePage);renderTabs();updateChrome();
+  if(tab.chromeOpening)return tab.chromeOpening;
+  const opening=(async()=>{
+    if(tab.chromeId&&!tab.chromeMissing){await bridge('focusTab',{tabId:tab.chromeId});return;}
+    const result=await bridge('openBrowser',{url:tab.url});tab.chromeId=result.id;tab.chromeMissing=false;tab.title=result.title||tab.title;
+    tab.frame.hidden=true;renderChromePageCard(tab);renderTabs();if(active()===tab)updateChrome();
+  })();
+  tab.chromeOpening=opening;
+  try{return await opening;}finally{if(tab.chromeOpening===opening)tab.chromeOpening=null;}
+}
+function renderChromePageCard(tab) {
+  let card=$('.chrome-page-card',tab.host);
+  if(!card){
+    card=document.createElement('div');card.className='chrome-page-card';card.innerHTML=`<div class="chrome-page-icon">${icon('globe',38)}</div><p class="eyebrow">CONNECTED TO CHROME</p><h2></h2><p data-chrome-description></p><div><button class="primary-button" data-focus-chrome></button><button class="secondary-button" data-save-chrome>HTML로 저장</button></div><small></small>`;
+    tab.host.append(card);$('[data-focus-chrome]',card).onclick=safely(()=>openRealChrome(tab));$('[data-save-chrome]',card).onclick=safely(savePage);
+  }
+  $('h2',card).textContent=tab.title||displayHost(tab.url);
+  $('[data-chrome-description]',card).textContent=tab.chromeMissing?'Chrome 탭이 닫혔습니다. 위의 웹 탭을 누르면 이 주소로 다시 엽니다.':'위의 웹 탭을 누르면 이 Chrome 페이지로 바로 전환합니다. 돌아오면 페이지 제목과 주소를 갱신합니다.';
+  $('[data-focus-chrome]',card).innerHTML=(tab.chromeMissing?'Chrome에서 다시 열기':'Chrome으로 전환')+' '+icon('external',15);
+  $('[data-save-chrome]',card).disabled=!!tab.chromeMissing;
+  $('small',card).textContent=tab.url;$('small',card).style.overflowWrap='anywhere';
+  const capture=$('[data-capture]',tab.host);if(capture)capture.disabled=!!tab.chromeMissing;
+}
+function syncChromeTabs() {
+  if(document.hidden||!bridgeAvailable())return Promise.resolve();
+  if(chromeSync)return chromeSync;
+  chromeSync=(async()=>{
+    const linked=tabs.filter(tab=>tab.chromeId&&!tab.chromeOpening).map(tab=>({tab,id:tab.chromeId,url:tab.url}));
+    const listed=await bridge('listTabs');
+    for(const {tab,id,url} of linked){
+      if(!tabs.includes(tab)||tab.chromeOpening||tab.chromeId!==id||tab.url!==url)continue;
+      const found=listed.find(item=>item.id===tab.chromeId);tab.chromeMissing=!found;
+      if(found){tab.url=found.url||tab.url;tab.title=found.title||displayHost(tab.url);}
+      renderChromePageCard(tab);
+    }
+    renderTabs();if(active()?.type==='browser')updateChrome();await receiveCaptures();
+  })().catch(()=>{/* Local documents remain available when Chrome disconnects. */}).finally(()=>{chromeSync=null;});
+  return chromeSync;
 }
 async function navigate(tab,url) {
+  if(tab.chromeOpening)await tab.chromeOpening;
   tab.url=url;tab.title=displayHost(url);tab.history.splice(tab.cursor+1);tab.history.push(url);tab.cursor++;
-  if(tab.chromeId)await bridge('navigateTab',{tabId:tab.chromeId,url});else tab.frame.src=url;
+  if(tab.chromeId&&!tab.chromeMissing)await bridge('navigateTab',{tabId:tab.chromeId,url});
+  else if(bridgeAvailable())await openRealChrome(tab);else tab.frame.src=url;
   renderTabs();updateChrome();
 }
 async function browserHistory(direction) {
@@ -927,6 +974,7 @@ function bindUI() {
   document.addEventListener('visibilitychange',()=>{if(document.hidden)savePositions();});
   window.addEventListener('pagehide',savePositions);
   window.addEventListener('online',network);window.addEventListener('offline',network);window.addEventListener('htmlmemo-chrome-ready',()=>{updateConnection();safely(receiveCaptures)();});window.addEventListener('htmlmemo-capture-ready',safely(receiveCaptures));
+  window.addEventListener('focus',()=>{void syncChromeTabs();});document.addEventListener('visibilitychange',()=>{if(!document.hidden)void syncChromeTabs();});
   window.addEventListener('resize',()=>{closePopover();applyToolbarPosition();requestAnimationFrame(revealActiveTab);});
   window.addEventListener('dragover',event=>{if([...event.dataTransfer.types].includes('Files'))event.preventDefault();});window.addEventListener('drop',safely(async event=>{if(![...(event.dataTransfer.types||[])].includes('Files'))return;event.preventDefault();for(const file of await droppedHTMLFiles(event.dataTransfer))await openLocalFile(file);}));
 }
@@ -950,9 +998,6 @@ async function initialize() {
   if(installableLocation(location)&&'serviceWorker'in navigator)await navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'}).then(reg=>reg?.update?.().catch(()=>{})).catch(()=>toast('오프라인 준비를 완료하지 못했습니다. 다음 접속에서 다시 준비합니다.',true));
   if('launchQueue'in window)window.launchQueue.setConsumer(safely(async params=>{for(const handle of params.files||[])await openLocalFile(handle);}));
   if(await discoverBridge()){updateConnection();await receiveCaptures();}
-  setInterval(async()=>{
-    if(document.hidden||!bridgeAvailable())return;
-    try{const listed=await bridge('listTabs');for(const tab of tabs.filter(t=>t.chromeId)){const found=listed.find(t=>t.id===tab.chromeId);if(found){tab.url=found.url;tab.title=found.title||displayHost(found.url);}}renderTabs();if(active()?.type==='browser')updateChrome();await receiveCaptures();}catch{/* Existing local documents keep working while the extension reconnects. */}
-  },3500);
+  setInterval(syncChromeTabs,3500);
 }
 initialize().catch(error=>{$('#status-left').textContent='서재를 준비하지 못했습니다.';showError(error);});
