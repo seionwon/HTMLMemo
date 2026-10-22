@@ -123,6 +123,14 @@ body[data-codememo-design]{margin:0;font-family:var(--app-font);background:var(-
 .sidebar-views button[aria-pressed=true]{background:var(--green-light);color:var(--green);font-weight:600}
 .sidebar-views button:focus-visible{outline-offset:-2px}
 .sidebar-content{min-height:0}
+.floating-toolbar .tool-has-modes{position:relative}
+.floating-toolbar .tool-has-modes::after{content:'';position:absolute;right:1px;bottom:1px;width:0;height:0;border-left:3px solid transparent;border-top:3px solid transparent;border-bottom:3px solid currentColor;opacity:.65;pointer-events:none}
+.annotation-tool-modes .menu-button{gap:9px;align-items:center}
+.annotation-tool-modes .menu-button>span{flex:1;min-width:0}
+.annotation-tool-modes strong,.annotation-tool-modes small{display:block}
+.annotation-tool-modes strong{font-size:12px;font-weight:550}
+.annotation-tool-modes small{font-size:10px;color:var(--muted);margin-top:2px}
+.annotation-tool-modes [aria-checked=true]{background:var(--green-light);color:var(--green)}
 /* Reused inside the document iframe; every rule is scoped to editor-owned UI. */
 [data-htmlmemo-doc-sidebar-ui]{display:block;position:relative;isolation:isolate;flex:0 0 auto;min-width:0;max-width:100%;background:var(--surface);color:var(--text);font:12px/1.6 var(--app-font);text-align:left}
 [data-htmlmemo-native-sidebar][data-htmlmemo-sidebar-view=outline]>[data-htmlmemo-doc-sidebar-ui]{position:sticky;top:0;z-index:2}

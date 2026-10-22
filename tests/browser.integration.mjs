@@ -15,6 +15,73 @@ const appVersion=JSON.parse(await readFile(new URL('../package.json',import.meta
 async function revealAnnotation(page,doc,id){
   await page.evaluate(`(()=>{let node=${doc}.querySelector('[data-annotation="'+${JSON.stringify(id)}+'"]');if(!node)throw Error('Missing annotation');for(node=node.parentElement;node;node=node.parentElement)if(node.matches('details[data-annotation-group]'))node.open=true;})()`);
 }
+test('real Chrome: toolbar mode groups remove semantic duplicates and keep area, underline and text annotations usable',{timeout:90000},async()=>{
+  await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-tool-modes-'));await cp(join(root,'public'),folder,{recursive:true});
+  const server=createServer(folder);let chrome;
+  try{
+    await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));chrome=await launchChrome();const page=chrome.page;
+    const url=process.env.HTMLMEMO_SIDEBAR_TEST_URL||`http://127.0.0.1:${server.address().port}/`;
+    await page.navigate(url);await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
+    await page.evaluate(`(async()=>{const {putDocumentRevision}=await import('./src/storage.js'),{parseHTML}=await import('./src/document.js');const parsed=parseHTML('<html><head><title>도구 방식 검증</title><style>body{margin:0;font:18px/1.6 system-ui}main{padding:60px 40px}#target{max-width:600px;height:200px;padding:24px;background:#f1f5f9}</style></head><body><main><h1>도구 방식 검증</h1><p id="target">같은 도구에서 글자와 영역 방식을 고릅니다. 형광펜과 밑줄, 메모 상자와 자유 텍스트를 그대로 사용할 수 있습니다.</p></main></body></html>');await putDocumentRevision({id:'tool-modes-document',title:parsed.metadata.title,name:'tool-modes.html',created:Date.now(),modified:Date.now(),html:parsed.html,metadata:parsed.metadata});})()`);
+    await page.navigate(url);await page.waitFor('document.querySelector("[data-open=tool-modes-document]")');await page.click('[data-open=tool-modes-document]');
+    const frame='document.querySelector(".document-host:not([hidden]) iframe")',doc=frame+'.contentDocument';
+    await page.waitFor(`${frame}?.style.visibility==='visible'&&document.querySelector('#toolbar [data-action=highlight]')`);
+    const saved=()=>page.evaluate(`(async()=>{const {getDocument}=await import('./src/storage.js');return (await getDocument('tool-modes-document')).metadata.annotations;})()`);
+    const choose=async(group,variant)=>{
+      if(await page.evaluate(`document.querySelector('[data-action=${group}]').getAttribute('aria-pressed')!=='true'`))await page.click(`[data-action=${group}]`);
+      await page.click(`[data-action=${group}]`);await page.waitFor(`!!document.querySelector('[data-tool-mode=${variant}]')`);await page.click(`[data-tool-mode=${variant}]`);
+      assert.equal(await page.evaluate(`document.querySelector('[data-action=${group}]').getAttribute('aria-pressed')`),'true');
+      assert.equal(await page.evaluate('document.querySelector("#tool-popover").hidden'),true);
+    };
+    await mkdir(join(root,'test-results'),{recursive:true});
+    for(const width of [1280,390,320]){
+      await page.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
+      await page.send('Emulation.setEmulatedMedia',{features:[{name:'prefers-color-scheme',value:width<600?'dark':'light'}]});
+      for(const [group,variant] of [['highlight','area'],['underline','area-underline'],['note','text']])await choose(group,variant);
+      await page.click('[data-action=highlight]');await page.click('[data-action=highlight]');
+      await page.waitFor('document.querySelectorAll("[data-tool-mode]").length===2');
+      assert.deepEqual(await page.evaluate('[...document.querySelectorAll("[data-tool-mode]")].map(b=>b.dataset.toolMode)'),['highlight','area']);
+      await writeFile(join(root,`test-results/toolbar-modes-choice-${width}.png`),await page.screenshot());await page.click('[data-popover-close]');
+      await page.click('[data-action=more]');assert.deepEqual(await page.evaluate('[...document.querySelectorAll("[data-more]")].map(b=>b.dataset.more)'),['sidebar','rect','ellipse','arrow','strike','history','migrate','info']);
+      assert.equal(await page.evaluate('document.querySelector("[data-more=history] svg").innerHTML===document.querySelector("[data-action=undo] svg").innerHTML'),false);
+      await writeFile(join(root,`test-results/toolbar-modes-more-${width}.png`),await page.screenshot());await page.click('[data-popover-close]');
+      assert.equal((await saved()).length,0,'choosing modes alone does not create annotations');
+    }
+    await page.evaluate('document.querySelector("[data-action=underline]").focus()');
+    const key=async(key,code,number)=>{await page.send('Input.dispatchKeyEvent',{type:'keyDown',key,code,windowsVirtualKeyCode:number});await page.send('Input.dispatchKeyEvent',{type:'keyUp',key,code,windowsVirtualKeyCode:number});};
+    await key('ArrowDown','ArrowDown',40);await page.waitFor('document.activeElement?.matches("[data-tool-mode]")');
+    await key('Escape','Escape',27);assert.equal(await page.evaluate('document.activeElement?.dataset.action'),'underline');
+    const pointer=async(points)=>{
+      const translated=await page.evaluate(`(()=>{const f=${frame},p=f.contentDocument.querySelector('#target').getBoundingClientRect(),b=f.getBoundingClientRect();return ${JSON.stringify(points)}.map(([x,y])=>({x:b.left+(p.left+x)*b.width/f.clientWidth,y:b.top+(p.top+y)*b.height/f.clientHeight}));})()`);
+      await page.send('Input.dispatchMouseEvent',{type:'mousePressed',...translated[0],button:'left',buttons:1,clickCount:1});
+      for(const p of translated.slice(1))await page.send('Input.dispatchMouseEvent',{type:'mouseMoved',...p,button:'left',buttons:1});
+      await page.send('Input.dispatchMouseEvent',{type:'mouseReleased',...translated.at(-1),button:'left',buttons:0,clickCount:1});
+    };
+    await choose('highlight','area');await pointer([[20,20],[100,45]]);await page.waitFor(`(async()=>{const {getDocument}=await import('./src/storage.js');return (await getDocument('tool-modes-document')).metadata.annotations.length===1;})()`);
+    await choose('underline','area-underline');await pointer([[120,80],[200,100]]);await page.waitFor(`(async()=>{const {getDocument}=await import('./src/storage.js');return (await getDocument('tool-modes-document')).metadata.annotations.length===2;})()`);
+    for(const [variant,point,text] of [['text',[260,100],'자유 텍스트 확인'],['note',[320,130],'메모 상자 확인']]){
+      await choose('note',variant);await pointer([point]);await page.waitFor('document.querySelector("#dialog").open&&document.querySelector("#note-text")');
+      await page.evaluate(`document.querySelector('#note-text').value=${JSON.stringify(text)}`);await page.click('#dialog button[value=save]');
+      await page.waitFor(`(async()=>{const {getDocument}=await import('./src/storage.js');return (await getDocument('tool-modes-document')).metadata.annotations.some(a=>a.type===${JSON.stringify(variant)});})()`);
+    }
+    const before=await saved();assert.deepEqual(before.map(a=>a.type),['area','area-underline','text','note']);
+    await choose('eraser','clear');await page.waitFor('document.querySelector("#dialog").open&&document.querySelector("#dialog button[value=cancel]")');
+    await page.click('#dialog button[value=cancel]');assert.deepEqual(await saved(),before,'cancelling clear-all preserves every annotation');
+    await page.click('[data-action=eraser]');await page.waitFor('document.querySelector("[data-tool-mode=clear]")');
+    assert.equal(await page.evaluate('document.querySelector("[data-tool-mode=clear]").getAttribute("role")'),'menuitem');
+    await writeFile(join(root,'test-results/toolbar-modes-eraser-320.png'),await page.screenshot());
+    await page.click('[data-tool-mode=clear]');await page.waitFor('document.querySelector("#dialog").open');await page.click('#dialog button[value=confirm]');
+    await page.waitFor(`(async()=>{const {getDocument}=await import('./src/storage.js');return (await getDocument('tool-modes-document')).metadata.annotations.length===0;})()`);
+    await page.click('[data-action=eraser]');await page.waitFor('document.querySelector("[data-tool-mode=clear]")');assert.equal(await page.evaluate('document.querySelector("[data-tool-mode=clear]").disabled'),true);await page.click('[data-popover-close]');
+    await page.click('[data-action=undo]');await page.waitFor(`(async()=>{const {getDocument}=await import('./src/storage.js');return (await getDocument('tool-modes-document')).metadata.annotations.length===4;})()`);assert.deepEqual(await saved(),before);
+    await page.navigate(url);await page.waitFor('document.querySelector("[data-open=tool-modes-document]")');await page.click('[data-open=tool-modes-document]');
+    await page.waitFor(`${frame}?.style.visibility==='visible'&&${doc}?.querySelectorAll('#htmlmemo-annotation-layer [data-htmlmemo-id]').length===4`);assert.deepEqual(await saved(),before);
+    await page.evaluate(`window.showSaveFilePicker=async()=> (await navigator.storage.getDirectory()).getFileHandle('tool-modes-export.html',{create:true});`);await page.click('#save-page');
+    await page.waitFor(`(async()=>{try{return (await (await (await navigator.storage.getDirectory()).getFileHandle('tool-modes-export.html')).getFile()).size>0;}catch{return false;}})()`);
+    const exported=await page.evaluate(`(async()=>{const html=await (await (await (await navigator.storage.getDirectory()).getFileHandle('tool-modes-export.html')).getFile()).text();return JSON.parse(new DOMParser().parseFromString(html,'text/html').getElementById('htmlmemo-data').textContent).annotations;})()`);
+    assert.deepEqual(exported,before);assert.deepEqual(chrome.errors,[]);
+  }finally{if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
+});
 test('real Chrome: standalone book export keeps lazy chapters and released assets; incomplete copies stay recoverable', {timeout:60000}, async () => {
   await prepareAssets();
   const folder=await mkdtemp(join(tmpdir(),'htmlmemo-book-test-'));
@@ -937,7 +1004,7 @@ test('real Chrome: native sidebar view choices are visible on open and preserve 
     for(const width of [1280,390]){
       await page.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
       await page.click('[data-action=more]');
-      assert.deepEqual(await page.evaluate('[...document.querySelectorAll("[data-more]")].map(b=>b.dataset.more)'),['rect','ellipse','arrow','area','area-underline','strike','text','history','migrate','info','clear']);
+      assert.deepEqual(await page.evaluate('[...document.querySelectorAll("[data-more]")].map(b=>b.dataset.more)'),['rect','ellipse','arrow','strike','history','migrate','info']);
       await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,`test-results/sidebar-views-tools-native-${width}.png`),await page.screenshot());
       await page.click('[data-popover-close]');await page.click('#app-menu-button');
       const topLabels=await page.evaluate('[...document.querySelectorAll("#app-menu button")].map(b=>b.textContent.trim())');
@@ -1004,7 +1071,7 @@ test('real Chrome: sidebar view choices preserve search drafts, navigate saved n
     const original=await page.evaluate(`(async()=>{const {getDocument}=await import('./src/storage.js');const record=await getDocument('sidebar-document');return {html:record.html,annotations:record.metadata.annotations,bookmarks:record.metadata.bookmarks};})()`);
     await page.evaluate('window.sidebarFrame=document.querySelector(".document-host:not([hidden]) iframe")');
     await page.click('[data-action=more]');assert.ok(await page.evaluate('document.querySelector("[data-more=sidebar]")'));
-    for(const removed of ['search','outline','annotations','undo','redo','bookmark','connect'])assert.equal(await page.evaluate(`!!document.querySelector('[data-more=${removed}]')`),false);
+    for(const removed of ['search','outline','annotations','undo','redo','bookmark','connect','area','area-underline','text','clear'])assert.equal(await page.evaluate(`!!document.querySelector('[data-more=${removed}]')`),false);
     await page.click('[data-more=sidebar]');
     assert.deepEqual(await page.evaluate('[...document.querySelectorAll("[data-sidebar-view]")].map(button=>button.textContent)'),['목차·북마크','검색','주석']);
     for(const width of [1280,390,320]){

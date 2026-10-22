@@ -77,14 +77,49 @@ test('more tools contain no duplicated toolbar, sidebar, bookmark or export acti
  const code=appSource.slice(appSource.indexOf('function toolAction('),appSource.indexOf('function bindToolbarDrag('));
  new vm.Script('var sidebarMode="";'+code).runInContext(a.context);a.context.toolAction('more');
  const ids=()=>[...a.doc.querySelectorAll('[data-more]')].map(b=>b.dataset.more);
- const expected=['rect','ellipse','arrow','area','area-underline','strike','text','history','migrate','info','clear'];
+ const expected=['rect','ellipse','arrow','strike','history','migrate','info'];
  assert.deepEqual(ids(),['sidebar',...expected]);assert.equal(new Set(ids()).size,ids().length);
- for(const removed of ['search','outline','annotations','undo','redo','bookmark','connect'])assert.equal(a.doc.querySelector(`[data-more=${removed}]`),null);
+ for(const removed of ['search','outline','annotations','undo','redo','bookmark','connect','area','area-underline','text','clear'])assert.equal(a.doc.querySelector(`[data-more=${removed}]`),null);
  a.doc.querySelector('[data-more=rect]').onclick();assert.deepEqual(selected,['rect']);assert.equal(a.doc.querySelector('#tool-popover').hidden,true);
  a.context.toolAction('more');a.doc.querySelector('[data-more=sidebar]').onclick();assert.deepEqual(a.calls.search,['outline']);
  a.doc.querySelector('#sidebar').hidden=false;a.context.toolAction('more');assert.deepEqual(ids(),expected,'an already open panel needs no duplicate entry');
  a.doc.querySelector('#sidebar').hidden=true;a.r.documentSidebarUI=a.doc.createElement('section');a.doc.body.append(a.r.documentSidebarUI);a.context.toolAction('more');assert.deepEqual(ids(),expected,'native books use their own sidebar');
  assert.ok(a.doc.querySelector('#save-page'));assert.ok(a.doc.querySelector('#app-menu #settings-button'));
+});
+test('toolbar groups keep area and text variants in one tool with repeat-click, keyboard selection and no wider toolbar',()=>{
+ const a=app();Object.assign(a.r,{tool:'select',zoom:1,color:'#edcf67',history:{canUndo:false,canRedo:false}});
+ const original=a.r.metadata.annotations,chosen=[];a.r.setTool=tool=>{a.r.tool=tool;chosen.push(tool);};
+ Object.assign(a.context,{icon,$$:(selector,root=a.doc)=>[...root.querySelectorAll(selector)],safely:fn=>fn,bindToolbarDrag(){},
+   showPopover(name,html,bind){const pop=a.doc.querySelector('#tool-popover');pop.innerHTML=html;pop.hidden=false;a.context.popoverName=name;bind();}});
+ const controls=appSource.slice(appSource.indexOf('function toolbarButton('),appSource.indexOf('function positionPopover('));
+ const actions=appSource.slice(appSource.indexOf('function toolAction('),appSource.indexOf('function bindToolbarDrag('));
+ vm.runInContext('var popoverName="",sidebarMode="";'+controls+actions+'renderToolbar();',a.context);
+ const button=action=>a.doc.querySelector(`#toolbar [data-action=${action}]`),pop=a.doc.querySelector('#tool-popover');
+ const count=a.doc.querySelectorAll('#toolbar button').length;
+ for(const [group,variant] of [['highlight','area'],['underline','area-underline'],['note','text']]){
+   button(group).onclick();assert.equal(a.r.tool,group);assert.equal(pop.hidden,true,'first click keeps normal tool activation');
+   button(group).onclick();assert.equal(pop.hidden,false);assert.equal(a.r.tool,group,'opening options does not create or change an annotation');
+   assert.equal(pop.querySelectorAll('[role=menuitemradio]').length,2);assert.equal(button(group).getAttribute('aria-expanded'),'true');
+   pop.querySelector(`[data-tool-mode=${variant}]`).onclick();assert.equal(a.r.tool,variant);assert.equal(pop.hidden,true);
+   assert.equal(button(group).getAttribute('aria-pressed'),'true');assert.equal(button(group).getAttribute('aria-expanded'),'false');
+   assert.match(button(group).getAttribute('aria-label'),variant==='text'?/자유 텍스트/:/영역/);
+   a.context.toolAction('pen');button(group).onclick();assert.equal(a.r.tool,variant,'reactivation remembers this document’s last mode');
+   a.context.toolAction(group);assert.equal(a.r.tool,group,'the existing keyboard shortcut still chooses its original tool');
+ }
+ a.context.toolAction('pen');const trigger=button('highlight');let focused;
+ Object.defineProperty(a.doc,'activeElement',{get:()=>focused,configurable:true});trigger.focus=()=>{focused=trigger;};
+ trigger.onkeydown({key:'ArrowDown',preventDefault(){},stopPropagation(){}});
+ const items=[...pop.querySelectorAll('[data-tool-mode]')];items.forEach(item=>item.focus=()=>{focused=item;});focused=items[0];
+ pop.onkeydown({key:'ArrowDown',preventDefault(){},stopPropagation(){}});assert.strictEqual(focused,items[1]);
+ pop.onkeydown({key:'Escape',preventDefault(){},stopPropagation(){}});assert.strictEqual(focused,trigger);assert.equal(pop.hidden,true);assert.equal(a.r.tool,'pen');
+ assert.equal(a.doc.querySelectorAll('#toolbar button').length,count);assert.strictEqual(a.r.metadata.annotations,original);assert.ok(chosen.includes('area')&&chosen.includes('area-underline')&&chosen.includes('text'));
+ a.context.toolAction('eraser');button('eraser').onclick();const clear=pop.querySelector('[data-tool-mode=clear]');
+ assert.equal(clear.getAttribute('role'),'menuitem');assert.equal(clear.hasAttribute('aria-checked'),false);assert.equal(clear.disabled,false);
+ a.r.metadata.annotations=[];a.context.closePopover();button('eraser').onclick();assert.equal(pop.querySelector('[data-tool-mode=clear]').disabled,true);
+});
+test('saved history, document transfer and freehand area underline have distinct icons from basic toolbar actions',()=>{
+ assert.notEqual(icon('history'),icon('undo'));assert.notEqual(icon('file-transfer'),icon('file'));assert.notEqual(icon('area-underline'),icon('underline'));
+ assert.match(appSource,/\['history','history','주석 저장 이력'\]/);assert.match(appSource,/\['info','info','문서 정보'\]/);
 });
 
 test('document tools and palette window provide an explicit close button and full color selection controls',()=>{

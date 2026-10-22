@@ -271,7 +271,7 @@ async function openRecord(record, prepared = null, {deferReady = false} = {}) {
     onChange:()=>{tab.queue.schedule();if(activeId===tab.id){renderToolbar();if(sidebarMode==='annotations')renderSidebar('annotations');tab.reader?.refreshDocumentSidebar();}},
     onPosition:()=>{tab.queue.schedule({background:true});},onView:()=>{if(activeId===tab.id){updateChrome();updateToolbarState();}},
     onTextSelection:()=>{if(activeId===tab.id)showSelectionMenu(tab.reader);},
-    onSelectionDismiss:()=>{if(popoverName==='selection')closePopover();},
+    onSelectionDismiss:()=>{if(popoverName==='selection'||popoverName.startsWith('tool-mode-'))closePopover();},
     onLink:url=>safely(openBrowser)(url),onKey:handleKey,requestText:promptText,onError:showError,onNotice:message=>toast(message),
     onDocumentFocus:()=>{if(activeId===tab.id)void toggleReaderFocus();},
     onSidebarView:(mode,panel,documentReader)=>renderSidebar(mode,{panel,embedded:true,documentReader}),
@@ -512,29 +512,74 @@ async function browserHistory(direction){
   tab.cursor=next;tab.url=tab.history[next];tab.readable=false;tab.loading=true;tab.frame.src=tab.url;renderBrowserState(tab);updateChrome();
 }
 function toolbarButton(action,name,label,extra='') {return `<button class="tool-button" data-action="${action}" aria-label="${label}" title="${label}" ${extra}>${icon(name,18)}</button>`;}
+function annotationToolFamily(tool) {return {area:'highlight','area-underline':'underline',text:'note'}[tool]||tool;}
+function annotationToolModes(group) {
+  return {
+    highlight:{title:'형광펜',key:'H',modes:[['highlight','highlight','글자 형광펜','선택한 글자를 따라 표시'],['area','area','영역 형광펜','원하는 영역을 드래그해 표시']]},
+    underline:{title:'밑줄',key:'U',modes:[['underline','underline','글자 밑줄','선택한 글자를 따라 표시'],['area-underline','area-underline','영역 밑줄','원하는 위치에 직접 그리기']]},
+    note:{title:'메모 · 텍스트',key:'N',modes:[['note','note','메모 상자','상자 안에 메모 쓰기'],['text','text','자유 텍스트','배경 상자 없이 글자만 쓰기']]},
+    eraser:{title:'지우개',key:'E',modes:[['eraser','eraser','개별 주석 지우기','지울 주석을 직접 선택'],['clear','trash','주석 모두 지우기','확인한 뒤 전체 삭제 · 실행 취소 가능',true]]},
+  }[group];
+}
+function showAnnotationToolModes(group, keyboard = false) {
+  const r=reader(),definition=annotationToolModes(group);if(!r||!definition)return;
+  const current=annotationToolFamily(r.tool)===group?r.tool:r.toolChoices?.[group]||group;
+  showPopover('tool-mode-'+group,`<div class="popover-heading"><h3>${definition.title} 방식</h3><button type="button" class="icon-button popover-close" data-popover-close aria-label="${definition.title} 방식 닫기">${icon('close',16)}</button></div><div class="annotation-tool-modes" role="menu" aria-label="${definition.title} 방식">${definition.modes.map(([id,name,label,hint,command])=>`<button type="button" class="menu-button${command?' danger':''}" role="${command?'menuitem':'menuitemradio'}" data-tool-mode="${id}" ${command?`data-tool-command${!r.metadata.annotations.length?' disabled':''}`:`aria-checked="${id===current}"`}>${icon(name,18)}<span><strong>${label}</strong><small>${hint}</small></span>${!command&&id===current?icon('check',14):''}</button>`).join('')}</div>`,()=>{
+    const pop=$('#tool-popover'),trigger=$(`[data-action="${group}"]`,$('#toolbar'));
+    trigger?.setAttribute('aria-expanded','true');
+    $$('[data-tool-mode]',pop).forEach(button=>button.onclick=()=>toolAction(button.dataset.toolMode));
+    pop.onkeydown=event=>{
+      if(event.key==='Escape'){event.preventDefault();event.stopPropagation();closePopover();trigger?.focus();return;}
+      if(event.key==='Tab'){closePopover();return;}
+      if(!['ArrowDown','ArrowUp','Home','End'].includes(event.key))return;
+      event.preventDefault();event.stopPropagation();const items=$$('[data-tool-mode]',pop).filter(item=>!item.disabled),at=items.indexOf(document.activeElement);
+      items[event.key==='Home'?0:event.key==='End'?items.length-1:(at+(event.key==='ArrowDown'?1:-1)+items.length)%items.length]?.focus();
+    };
+    if(keyboard)($('[aria-checked=true]',pop)||$('[data-tool-mode]',pop))?.focus();
+  });
+}
 function renderToolbar() {
   const r=reader();if(!r||!r.doc)return;
   $('#toolbar').hidden=false;
   $('#toolbar').innerHTML=`<button class="toolbar-grip" aria-label="툴바 이동">${icon('grip',14)}</button><span class="tool-group">${toolbarButton('select','select','선택 / 읽기 (V)')}${toolbarButton('pen','pen','펜 (P)')}${toolbarButton('highlight','highlight','형광펜 (H)')}${toolbarButton('underline','underline','밑줄 (U)')}${toolbarButton('eraser','eraser','지우개 (E)')}${toolbarButton('note','note','메모 (N)')}</span><span class="toolbar-divider"></span>${toolbarButton('palette','palette','색상 · 굵기 · 투명도 설정','class="tool-button palette-button"')}<span class="tool-group toolbar-history">${toolbarButton('undo','undo','실행 취소 (Ctrl/⌘ Z)')}${toolbarButton('redo','redo','다시 실행 (Ctrl/⌘ Shift Z)')}</span><span class="toolbar-divider"></span><button class="tool-button zoom-button" data-action="zoom" title="확대 / 축소" aria-label="확대 / 축소">${Math.round(r.zoom*100)}%</button>${toolbarButton('speak','speaker','소리내어 읽기 (TTS 툴바)')}${toolbarButton('more','more','더 많은 도구')}`;
-  $$('[data-action]',$('#toolbar')).forEach(button=>{button.onpointerdown=e=>{if(e.pointerType==='mouse')e.preventDefault();};button.onclick=()=>toolAction(button.dataset.action);});
+  $$('[data-action]',$('#toolbar')).forEach(button=>{
+    const action=button.dataset.action,modes=annotationToolModes(action);
+    button.onpointerdown=e=>{if(e.pointerType==='mouse')e.preventDefault();};
+    button.onclick=()=>modes&&annotationToolFamily(r.tool)===action?showAnnotationToolModes(action):toolAction(modes?(r.toolChoices?.[action]||action):action);
+    if(modes){
+      button.classList.add('tool-has-modes');button.setAttribute('aria-haspopup','menu');button.setAttribute('aria-expanded','false');
+      button.onkeydown=event=>{if(event.key==='ArrowDown'){event.preventDefault();event.stopPropagation();showAnnotationToolModes(action,true);}};
+      button.oncontextmenu=event=>{event.preventDefault();showAnnotationToolModes(action);};
+    }
+  });
   bindToolbarDrag();updateToolbarState();
   applyToolbarPosition();
 }
 function updateToolbarState() {
   const r=reader();if(!r)return;
-  $$('[data-action]',$('#toolbar')).forEach(button=>{const selected=button.dataset.action===r.tool;button.classList.toggle('active',selected);if(['select','pen','highlight','underline','eraser','note'].includes(button.dataset.action))button.setAttribute('aria-pressed',String(selected));});
+  $$('[data-action]',$('#toolbar')).forEach(button=>{
+    const action=button.dataset.action,selected=action===annotationToolFamily(r.tool);button.classList.toggle('active',selected);
+    if(['select','pen','highlight','underline','eraser','note'].includes(action))button.setAttribute('aria-pressed',String(selected));
+    const definition=annotationToolModes(action);
+    if(definition){
+      const mode=definition.modes.find(([id])=>id===(selected?r.tool:r.toolChoices?.[action]))||definition.modes[0];
+      button.innerHTML=icon(mode[1],18);button.title=`${definition.title}: ${mode[2]} (${definition.key}) · 다시 누르거나 ↓ 키로 방식 선택`;
+      button.setAttribute('aria-label',button.title);
+    }
+  });
   const undo=$('[data-action="undo"]',$('#toolbar'));if(undo)undo.disabled=!r.history.canUndo;
   const redo=$('[data-action="redo"]',$('#toolbar'));if(redo)redo.disabled=!r.history.canRedo;
   const zoom=$('.zoom-button');if(zoom)zoom.textContent=Math.round(r.zoom*100)+'%';
   const palette=$('[data-action="palette"]',$('#toolbar'));if(palette)palette.style.setProperty('--tool-color',r.color);
 }
-function closePopover() {popoverName='';$('#tool-popover').hidden=true;}
+function closePopover() {popoverName='';$('#tool-popover').hidden=true;$('#tool-popover').onkeydown=null;$$('.tool-has-modes',$('#toolbar')).forEach(button=>button.setAttribute('aria-expanded','false'));}
 function positionPopover() {
   const pop=$('#tool-popover');const bar=$('#toolbar').getBoundingClientRect();pop.style.left=Math.max(10,Math.min(innerWidth-pop.offsetWidth-10,bar.left+bar.width-pop.offsetWidth))+'px';
   const above=bar.top-pop.offsetHeight-10;pop.style.top=(above>8?above:Math.min(innerHeight-pop.offsetHeight-8,bar.bottom+10))+'px';
 }
 function showPopover(name,html,bind=()=>{}) {
   if(popoverName===name){closePopover();return;}
+  $('#tool-popover').onkeydown=null;$$('.tool-has-modes',$('#toolbar')).forEach(button=>button.setAttribute('aria-expanded','false'));
   $('#tool-popover').removeAttribute('aria-label');$('#tool-popover').removeAttribute('role');
   // A notice must not sit over the menu it just made room for; errors stay until they time out.
   if(!$('#toast').classList.contains('error'))$('#toast').hidden=true;
@@ -720,6 +765,7 @@ function toolAction(action) {
   const r=reader();if(!r)return;
   if(action==='speak'){closePopover();r.toggleReadAloud();return;}
   if(['select','pen','highlight','underline','eraser','note','text','rect','ellipse','arrow','area','area-underline','strike'].includes(action)){
+    if(['highlight','area','underline','area-underline','note','text'].includes(action)){r.toolChoices||={};r.toolChoices[annotationToolFamily(action)]=action;}
     closePopover();r.setTool(action);updateToolbarState();return;
   }
   if(action==='undo'){r.undo();return;}if(action==='redo'){r.redo();return;}
@@ -731,7 +777,7 @@ function toolAction(action) {
     $('#zoom-out').onclick=()=>r.setZoom(r.zoom/1.2);$('#zoom-in').onclick=()=>r.setZoom(r.zoom*1.2);$('#zoom-value').onchange=e=>r.setZoom(Number(e.target.value)/100);$('#zoom-fit').onclick=()=>{r.setZoom(1,true);closePopover();};$('#zoom-reset').onclick=()=>{r.setZoom(1);closePopover();};
   });return;}
   if(action==='more') {
-    const items=[['rect','rect','사각형'],['ellipse','ellipse','타원'],['arrow','arrow','화살표'],['area','area','영역 형광펜'],['area-underline','underline','영역 밑줄'],['strike','strike','취소선'],['text','text','텍스트'],['history','undo','주석 저장 이력'],['migrate','file','새 판으로 주석 옮기기'],['info','file','문서 정보'],['clear','trash','주석 모두 지우기']];
+    const items=[['rect','rect','사각형'],['ellipse','ellipse','타원'],['arrow','arrow','화살표'],['strike','strike','취소선'],['history','history','주석 저장 이력'],['migrate','file-transfer','새 판으로 주석 옮기기'],['info','info','문서 정보']];
     // Books already expose their three sidebar views. Plain HTML needs only a
     // way to reopen its closed panel, not a second copy of every sidebar tab.
     if(!r.documentSidebarUI?.isConnected && $('#sidebar').hidden)items.unshift(['sidebar','list','사이드바 열기']);

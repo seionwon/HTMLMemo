@@ -70,7 +70,7 @@ jobs:
         run: |
           node --input-type=module <<'NODE'
           import {readFile} from 'node:fs/promises';
-          const files=['index.html','src/app.js','src/web.js','src/reader.js','src/model.js','styles.css'];
+          const files=['index.html','src/app.js','src/utils.js','src/web.js','src/reader.js','src/model.js','styles.css'];
           const expected=await Promise.all(files.map(file=>readFile('public/'+file,'utf8')));
           let matched=false;
           for(let attempt=0;attempt<30;attempt++){
@@ -87,7 +87,7 @@ jobs:
           console.log('Published app, reader and model match this commit.');
           NODE
           mkdir -p test-results
-          node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/published-browser-results.xml --test-name-pattern='sidebar view choices|annotation tree|font-scaled pen|Pages-only|Chrome companion' tests/browser.integration.mjs
+          node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/published-browser-results.xml --test-name-pattern='toolbar mode groups|sidebar view choices|annotation tree|font-scaled pen|Pages-only|Chrome companion' tests/browser.integration.mjs
       - name: Keep published desktop and mobile verification screenshots
         if: always()
         uses: actions/upload-artifact@v4
@@ -95,6 +95,7 @@ jobs:
           name: published-sidebar-screenshots
           path: |
             test-results/published-browser-results.xml
+            test-results/toolbar-modes-*.png
             test-results/sidebar-views-*.png
             test-results/font-scaled-pen-*.png
             test-results/annotation-tree-*.png
