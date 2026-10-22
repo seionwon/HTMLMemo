@@ -112,16 +112,51 @@ test('real Chrome: Pages-only URL use, safe text import, app tabs and optional i
   }finally{if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
 });
 
+test('real Chrome: Chrome companion search has no iframe, preserves the reader and imports the actual article URL',{timeout:60000},async()=>{
+  await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-native-chrome-'));await cp(join(root,'public'),folder,{recursive:true});
+  const server=createServer(folder);let chrome;
+  try{
+    await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));chrome=await launchChrome();const page=chrome.page,url=process.env.HTMLMEMO_SIDEBAR_TEST_URL||`http://127.0.0.1:${server.address().port}/`;
+    await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
+    await page.navigate(url);await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');await page.click('#open-example');await page.waitFor('!document.querySelector("#toolbar").hidden&&document.querySelector("#status-left").textContent.includes("자동 저장됨")');
+    const id=await page.evaluate('document.querySelector(".tab.document.active").dataset.tab');
+    await page.evaluate('document.querySelector("#address").focus();document.querySelector("#address").value="크롬 연결 검증";');await page.click('#address-open');
+    await page.send('Page.bringToFront');await page.waitFor('document.querySelectorAll(".tab.browser").length===1');
+    assert.equal(await page.evaluate('document.querySelector(".tab.document.active").dataset.tab'),id);
+    assert.equal(await page.evaluate('document.querySelectorAll(".browser-frame").length'),0);
+    assert.equal(await page.evaluate('document.querySelector(".document-host:not([hidden]) iframe").contentDocument.title'),'천천히 읽는다는 것');
+    let targets=[];for(let attempt=0;attempt<100;attempt++){targets=(await page.send('Target.getTargets')).targetInfos;if(targets.some(t=>t.type==='page'&&t.url.startsWith('https://www.google.com/')))break;await new Promise(resolve=>setTimeout(resolve,50));}assert.ok(targets.some(t=>t.type==='page'&&t.url.startsWith('https://www.google.com/')));
+    // No clipboard permission or clipboard read: this shortcut only opens the form.
+    await page.evaluate('document.dispatchEvent(new KeyboardEvent("keydown",{key:"V",ctrlKey:true,shiftKey:true,bubbles:true}));');
+    await page.waitFor('document.querySelector("#dialog").open&&!!document.querySelector("#paste-source")');assert.equal(await page.evaluate('document.querySelector("#paste-source").value'),'');
+    await page.click('#dialog [data-dialog-close]');
+    await page.click('.tab.browser .tab-select');await page.send('Page.bringToFront');await page.waitFor('!document.querySelector(".browser-host").hidden');
+    assert.equal(await page.evaluate('["#back","#forward","#reload"].every(s=>document.querySelector(s).disabled)'),true);
+    assert.equal(await page.evaluate('document.querySelector("#save-page").getAttribute("aria-label")'),'Chrome에서 가져오기');
+    await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/chrome-companion-desktop.png'),await page.screenshot());
+    await page.send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
+    await writeFile(join(root,'test-results/chrome-companion-mobile.png'),await page.screenshot());
+    await page.click('[data-browser-paste]');await page.waitFor('document.querySelector("#paste-text")===document.activeElement');
+    await page.evaluate('document.querySelector("#paste-title").value="Chrome에서 가져온 실제 글";document.querySelector("#paste-source").value="https://source.example/actual-article";document.querySelector("#paste-text").value="실제 글을 복사한 내용입니다.\\n\\n<script>window.shouldNotRun=true</script>";');
+    await page.click('#paste-save');await page.waitFor('!document.querySelector("#dialog").open&&document.querySelector("#status-left").textContent.includes("자동 저장됨")');
+    const stored=await page.evaluate(`(async()=>{const s=await import('./src/storage.js'),rows=await s.listDocuments(),r=rows.find(r=>r.title==='Chrome에서 가져온 실제 글');return {count:rows.length,source:r.source,oldNotes:rows.find(r=>r.title==='천천히 읽는다는 것').metadata.annotations.length};})()`);
+    assert.deepEqual(stored,{count:2,source:'https://source.example/actual-article',oldNotes:0});
+    assert.equal(await page.evaluate('document.querySelector(".document-host:not([hidden]) iframe").contentWindow.shouldNotRun'),undefined);
+    assert.deepEqual(chrome.errors,[]);
+  }finally{if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
+});
+
 test('real Chrome: cross-origin CORS capture and blocked-site fallback use only the app',{timeout:60000},async()=>{
   await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-cors-'));await cp(join(root,'public'),folder,{recursive:true});
   const server=createServer(folder),requests=[];
   const site=createHTTPServer((request,response)=>{
-    requests.push({path:request.url,mode:request.headers['sec-fetch-mode'],cookie:request.headers.cookie,authorization:request.headers.authorization});
+    requests.push({path:request.url,mode:request.headers['sec-fetch-mode'],origin:request.headers.origin,dest:request.headers['sec-fetch-dest'],referer:request.headers.referer,cookie:request.headers.cookie,authorization:request.headers.authorization});
     response.setHeader('X-Frame-Options','DENY');
     if(request.url!=='/blocked.html')response.setHeader('Access-Control-Allow-Origin','*');
+    if(request.url.startsWith('/opened?')){response.end('ok');return;}
     if(request.url==='/assets/style.css'){response.setHeader('Content-Type','text/css');response.end('p{color:rgb(12,34,56)}');}
     else if(request.url==='/assets/picture.svg'){response.setHeader('Content-Type','image/svg+xml');response.end('<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"><path d="M0 0h2v2H0z"/></svg>');}
-    else{response.setHeader('Content-Type','text/html; charset=utf-8');response.end('<!doctype html><title>CORS 허용 글</title><base href="/assets/"><link rel="stylesheet" href="style.css"><p id="cors-text" onclick="window.unwanted=true">서버나 확장 없이 가져온 본문입니다.</p><img src="picture.svg"><script>window.unwanted=true</script>');}
+    else{response.setHeader('Content-Type','text/html; charset=utf-8');response.end('<!doctype html><title>CORS 허용 글</title><base href="/assets/"><link rel="stylesheet" href="style.css"><p id="cors-text" onclick="window.unwanted=true">서버나 확장 없이 가져온 본문입니다.</p><img src="picture.svg"><script>fetch("/opened?has-opener="+!!window.opener);window.unwanted=true</script>');}
   });let chrome;
   try{
     await Promise.all([server,site].map(s=>new Promise((resolve,reject)=>{s.once('error',reject);s.listen(0,'127.0.0.1',resolve);})));
@@ -129,8 +164,16 @@ test('real Chrome: cross-origin CORS capture and blocked-site fallback use only 
     chrome=await launchChrome();const page=chrome.page;
     await page.navigate(url);await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
     await page.evaluate('document.cookie="htmlmemo_cors_test=not_sent;path=/";window.pickerCalls=0;window.showSaveFilePicker=async()=>{pickerCalls++;throw Error("Library saving must not open a picker");};');
-    const open=async address=>{await page.click('#library-tab');await page.evaluate(`document.querySelector('#address').value=${JSON.stringify(address)};document.querySelector('#address-form').requestSubmit();`);await page.waitFor('!!document.querySelector(".browser-host:not([hidden]) [data-capture]")');};
-    await open(origin+'/allowed.html');await page.click('#save-page');await page.waitFor('!document.querySelector("#toolbar").hidden&&document.querySelector("#status-left").textContent.includes("자동 저장됨")');
+    const open=async address=>{await page.send('Page.bringToFront');await page.click('#library-tab');await page.evaluate(`document.querySelector('#address').value=${JSON.stringify(address)};document.querySelector('#address-form').requestSubmit();`);await page.send('Page.bringToFront');await page.waitFor('!!document.querySelector(".browser-host:not([hidden]) [data-capture]")');await page.evaluate('document.querySelector(".browser-host:not([hidden]) details").open=true');};
+    await open(origin+'/allowed.html');
+    await page.waitFor(`document.querySelector('.browser-handoff [data-web-status]').textContent.includes('보냈습니다')||document.querySelector('.browser-handoff [data-web-status]').textContent.includes('돌아왔습니다')`);
+    assert.equal(await page.evaluate('document.querySelectorAll(".browser-frame").length'),0);
+    for(let attempt=0;attempt<100&&!requests.some(r=>r.path==='/opened?has-opener=false');attempt++)await new Promise(resolve=>setTimeout(resolve,50));
+    assert.ok(requests.some(r=>r.path==='/opened?has-opener=false'),'the real browser tab loaded with no reverse opener access');
+    assert.ok(requests.some(r=>r.path==='/allowed.html'&&r.dest==='document'&&!r.referer),'the browser handoff does not disclose the app referrer');
+    const beforeTargets=(await page.send('Target.getTargets')).targetInfos.filter(t=>t.type==='page'&&t.url===origin+'/allowed.html');assert.equal(beforeTargets.length,1);
+    await page.click('.tab.browser .tab-select');await page.send('Page.bringToFront');assert.equal((await page.send('Target.getTargets')).targetInfos.filter(t=>t.type==='page'&&t.url===origin+'/allowed.html').length,1);
+    await page.click('[data-capture]');await page.waitFor('!document.querySelector("#toolbar").hidden&&document.querySelector("#status-left").textContent.includes("자동 저장됨")');
     const frame='document.querySelector(".document-host:not([hidden]) iframe")';
     assert.equal(await page.evaluate(`${frame}.contentWindow.unwanted`),undefined);
     assert.equal(await page.evaluate(`${frame}.contentDocument.querySelector('#cors-text').hasAttribute('onclick')`),false);
@@ -138,10 +181,10 @@ test('real Chrome: cross-origin CORS capture and blocked-site fallback use only 
     assert.equal(await page.evaluate(`getComputedStyle(${frame}.contentDocument.querySelector('#cors-text')).color`),'rgb(12, 34, 56)');
     const rows=await page.evaluate(`(async()=>{const s=await import(${JSON.stringify(storageURL)});return (await s.listDocuments()).map(r=>({source:r.source,warnings:r.metadata.warnings}));})()`);
     assert.deepEqual(rows,[{source:origin+'/allowed.html',warnings:[]}]);
-    const direct=requests.filter(r=>r.mode==='cors');
+    const direct=requests.filter(r=>r.mode==='cors'&&r.origin===new URL(url).origin);
     assert.ok(['/allowed.html','/assets/style.css','/assets/picture.svg'].every(path=>direct.some(r=>r.path===path)));
     assert.ok(direct.every(r=>!r.cookie&&!r.authorization));assert.equal(await page.evaluate('window.pickerCalls'),0);
-    await open(origin+'/blocked.html');await page.click('#save-page');await page.waitFor('document.querySelector("#dialog").open&&!!document.querySelector("#web-help-paste")');
+    await open(origin+'/blocked.html');await page.click('.browser-host:not([hidden]) [data-capture]');await page.waitFor('document.querySelector("#dialog").open&&!!document.querySelector("#web-help-paste")');
     assert.match(await page.evaluate('document.querySelector("#dialog").textContent'),/직접 가져오지 못했습니다/);
     assert.equal(await page.evaluate('document.querySelectorAll(".tab.document").length'),1);
     assert.equal(await page.evaluate('document.querySelector("#dialog a[target=_blank]").href'),origin+'/blocked.html');

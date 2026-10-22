@@ -4,7 +4,7 @@ import { SaveQueue, ANNOTATION_LABELS } from './model.js';
 import { openEditionProbe, migrateAnnotations } from './migrate.js';
 import { Reader } from './reader.js';
 import { listDocuments, getDocument, deleteDocument, getSetting, setSetting, saveDocumentHTML, listRevisionSummaries, getRevision, putDocumentRevision, putDocumentView, writeExternalHTML } from './storage.js';
-import {readWebPage,pastedPage,PASTE_LIMIT} from './web.js';
+import {readWebPage,pastedPage,PASTE_LIMIT,isWebSearch,BrowserTabs} from './web.js';
 import { readLocalHTML, droppedHTMLFiles } from './local-files.js';
 import { normalizePreferences, loadPreferences, storePreferences, serializeSettings, readSettingsFile, PRESET_COLORS, PRESET_PALETTES, normalizeHexColor, hexToRgb, rgbToHex, hexToHsv, hsvToHex } from './preferences.js';
 import {bundledExample} from './distribution.js';
@@ -16,6 +16,7 @@ let preferences=normalizePreferences(), settingsFileHandle=null, settingsFolderH
 let sharingApp=false, installController;
 let readerFocused=false, nativeReaderFullscreen=false, focusBusy=false;
 let tabLayout='';
+const browserTabs=new BrowserTabs(window);let lastWebTab=null;
 const active = () => tabs.find(tab => tab.id === activeId);
 const reader = () => active()?.reader;
 const savePicker = () => typeof window.showSaveFilePicker === 'function';
@@ -87,21 +88,21 @@ function confirmDialog(title, description, label = '확인') {
     const done=()=>{resolve(dialog.returnValue==='confirm');dialog.removeEventListener('close',done);};dialog.addEventListener('close',done);
   }));
 }
-function webHelpDialog(tab=active()?.type==='browser'?active():null,message='') {
-  modal(`<div class="dialog-heading"><h2>설치 없이 웹페이지 가져오기</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div>${message?`<p class="web-notice" role="status">${esc(message)}</p>`:''}<p class="dialog-description">HTMLMemo는 이 URL만 열면 사용할 수 있습니다. 앱 설치는 선택 사항이며 추가 프로그램이나 서버 연결은 필요하지 않습니다.</p><ol class="setup-steps"><li>사이트가 읽기를 허용하면 <strong>페이지 저장</strong>으로 읽기용 사본을 만들고 주석을 남깁니다.</li><li>빈 화면이거나 직접 가져오기가 제한되면 <strong>새 탭에서 열기</strong>로 원문을 봅니다.</li><li>필요한 글을 복사해 <strong>텍스트 붙여넣기</strong>하거나, 브라우저에서 저장한 HTML 파일을 가져옵니다.</li></ol><p class="dialog-description small">다른 사이트의 로그인 정보나 열린 탭을 읽지 않습니다. 화면 표시와 직접 읽기 허용은 서로 다르며, 표시되는 페이지도 저장은 제한될 수 있습니다. HTML은 가능한 경우 단일 파일로 저장하세요.</p><div class="web-actions">${tab?`<a class="secondary-button" href="${esc(tab.url)}" target="_blank" rel="noopener noreferrer">새 탭에서 열기 ${icon('external',14)}</a>`:''}<button id="web-help-import" class="secondary-button">HTML 파일 가져오기</button><button id="web-help-paste" class="primary-button">텍스트 붙여넣기</button></div>`,()=>{
+function webHelpDialog(tab=webContext(),message=''){
+  modal(`<div class="dialog-heading"><h2>Chrome에서 탐색하고 여기서 메모하기</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div>${message?`<p class="web-notice" role="status">${esc(message)}</p>`:''}<p class="dialog-description">HTMLMemo는 이 URL만 열면 사용할 수 있습니다. 앱 설치는 선택 사항이며 추가 프로그램이나 서버 연결은 필요하지 않습니다.</p><ol class="setup-steps"><li>주소창에 검색어나 웹 주소를 입력하면 <strong>Chrome의 일반 탭</strong>에서 엽니다. 다른 브라우저로 앱을 열었다면 그 브라우저에서 열립니다.</li><li>필요한 글을 복사한 뒤 <strong>HTMLMemo 탭으로 돌아옵니다.</strong> 읽던 문서와 주석은 그대로입니다.</li><li><strong>텍스트 붙여넣기</strong>에서 글과 실제 원문 주소를 넣거나, Chrome에서 저장한 <strong>HTML 파일을 가져옵니다.</strong></li></ol><p class="dialog-description small">다른 Chrome 탭의 현재 주소·본문·로그인 정보나 클립보드를 자동으로 읽지 않습니다. 사이트가 탭 연결을 격리하거나 팝업을 막으면 직접 링크를 사용하세요. HTML은 가능한 경우 단일 파일로 저장하세요.</p><div class="web-actions">${tab?`<a class="secondary-button" href="${esc(tab.url)}" target="_blank" rel="noopener noreferrer">보낸 주소 열기 ${icon('external',14)}</a>`:''}<button id="web-help-import" class="secondary-button">HTML 파일 가져오기</button><button id="web-help-paste" class="primary-button">텍스트 붙여넣기</button></div>`,()=>{
     $('#web-help-import').onclick=safely(async()=>{$('#dialog').close();await importFiles();});
     $('#web-help-paste').onclick=()=>pasteTextDialog(tab);
   });
 }
-function pasteTextDialog(tab=active()?.type==='browser'?active():null) {
-  modal(`<form id="paste-form"><div class="dialog-heading"><h2>텍스트 붙여넣기</h2><button type="button" class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><p class="dialog-description">필요한 글을 복사해 아래에 붙여넣으세요. 서재에 저장한 뒤 바로 주석을 남길 수 있습니다. 서식·이미지·실행 코드는 가져오지 않습니다.</p><label class="paste-label" for="paste-title">제목</label><input id="paste-title" class="paste-title" maxlength="300" value="${esc(tab?.title||'붙여넣은 글')}"><label class="paste-label" for="paste-text">내용</label><textarea id="paste-text" class="paste-text" maxlength="${PASTE_LIMIT}" rows="12" required placeholder="여기에 글을 붙여넣으세요."></textarea><p class="dialog-description small">최대 200,000자 · 이 기기에만 저장${tab?' · 원문 주소도 함께 보관':''}</p><div class="dialog-actions"><button type="button" class="secondary-button" data-dialog-close>취소</button><button id="paste-save" type="submit" class="primary-button">저장하고 주석 달기</button></div></form>`,()=>{
+function pasteTextDialog(tab=webContext()){
+  const search=tab&&isWebSearch(tab.url);
+  modal(`<form id="paste-form"><div class="dialog-heading"><h2>텍스트 붙여넣기</h2><button type="button" class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><p class="dialog-description">Chrome에서 복사한 글을 아래에 붙여넣으세요. 서재에 저장한 뒤 바로 주석을 남깁니다. 서식·이미지·실행 코드는 가져오지 않습니다.</p><label class="paste-label" for="paste-title">제목</label><input id="paste-title" class="paste-title" maxlength="300" value="${esc(!search&&tab?.title||'붙여넣은 글')}"><label class="paste-label" for="paste-source">원문 주소 (선택)</label><input id="paste-source" class="paste-title" type="url" value="${esc(!search&&tab?.url||'')}" placeholder="Chrome에서 복사한 실제 글의 https:// 주소"><label class="paste-label" for="paste-text">내용</label><textarea id="paste-text" class="paste-text" maxlength="${PASTE_LIMIT}" rows="8" required placeholder="여기에 글을 붙여넣으세요."></textarea><p class="dialog-description small">최대 200,000자 · 이 기기에만 저장${search?' · 검색 주소 대신 실제 글의 주소를 넣으세요.':''}</p><div class="dialog-actions"><button type="button" class="secondary-button" data-dialog-close>취소</button><button id="paste-save" type="submit" class="primary-button">저장하고 주석 달기</button></div></form>`,()=>{
     $('#paste-form').onsubmit=safely(async event=>{
-      event.preventDefault();
-      if($('#paste-save').disabled)return;
-      const snapshot=pastedPage({text:$('#paste-text').value,title:$('#paste-title').value,url:tab?.url||''}),button=$('#paste-save');button.disabled=true;
+      event.preventDefault();if($('#paste-save').disabled)return;
+      const snapshot=pastedPage({text:$('#paste-text').value,title:$('#paste-title').value,url:$('#paste-source').value.trim()}),button=$('#paste-save');button.disabled=true;
       try{const saved=await createDocument(snapshot,await folderFile(snapshot.title));$('#dialog').close();if(!saved?.queue?.error)toast('붙여넣은 글을 서재에 저장했습니다.');}finally{button.disabled=false;}
     });
-    requestAnimationFrame(()=>$('#paste-text').focus());
+    requestAnimationFrame(()=>$('#paste-text')?.focus());
   });
 }
 function settingsDialog() {
@@ -218,18 +219,19 @@ function activate(id) {
 async function selectTab(id) {
   const tab=tabs.find(tab=>tab.id===id);if(!tab)return;
   activate(id);
+  if(tab.external)focusBrowserTab(tab);
 }
 function updateChrome() {
   const tab=active(); const r=reader(); const local=tab?.type==='document';const execution=activeId==='execution';
   $('.chrome').dataset.page=local?'document':tab?'browser':activeId;
   if(!$('.chrome').classList.contains('address-editing'))$('#address').value=local?tab.record.name:tab?.url||'';
   $('#address-icon').innerHTML=icon(local?'file':'globe',15);$('#local-label').hidden=!local;
-  $('#back').disabled=local?!r?.linkHistory.length:!tab||tab.cursor<=0||!!tab.capturing;
-  $('#forward').disabled=!tab||local||tab.cursor>=tab.history.length-1||!!tab.capturing;
-  $('#reload').disabled=!tab||local||!!tab.capturing;
-  setIconButton('#save-page',execution?'globe':local?'download':'save',execution?'URL 복사':local?'HTML 내보내기':'페이지 저장',17);
+  $('#back').disabled=local?!r?.linkHistory.length:!tab||tab.external||tab.cursor<=0||!!tab.capturing;
+  $('#forward').disabled=!tab||local||tab.external||tab.cursor>=tab.history.length-1||!!tab.capturing;
+  $('#reload').disabled=!tab||local||tab.external||!!tab.capturing;
+  setIconButton('#save-page',execution?'globe':local?'download':tab?.external?'folder':'save',execution?'URL 복사':local?'HTML 내보내기':tab?.external?'Chrome에서 가져오기':'페이지 저장',17);
   $('#save-page').disabled=execution?sharingApp:!tab||!!tab.capturing;
-  if(local)saveStatus(tab); else if(tab)$('#status-left').textContent=tab.capturing?'읽기용 사본을 준비하는 중…':tab.readable?'페이지 저장 → 주석 달기 · 추가 설치 없음':'사이트 허용 범위에서 표시·가져오기 · 제한되면 HTML 또는 텍스트로 가져오세요.';
+  if(local)saveStatus(tab); else if(tab)$('#status-left').textContent=tab.external?'웹 탐색은 브라우저 탭 · 복사한 글과 저장한 HTML은 여기서 주석 달기':tab.capturing?'읽기용 사본을 준비하는 중…':tab.readable?'페이지 저장 → 주석 달기 · 추가 설치 없음':'앱 문서를 준비하는 중…';
   document.title=tab?tab.title+' · HTMLMemo':'HTMLMemo · 나만의 웹 서재';
 }
 function createHost(id,type) { const host=document.createElement('div');host.id='workspace-'+id;host.className='workspace-host '+type+'-host';host.hidden=true;$('#workspaces').append(host);return host; }
@@ -317,7 +319,7 @@ async function closeTab(id) {
   tab.closePromise=(async()=>{
     try{
       if(tab.reader){await tab.reader.ready;tab.reader.rememberPosition();await tab.queue.flush();tab.reader.dispose();}else tab.host.remove();
-      tabs.splice(tabs.indexOf(tab),1);if(activeId===id)activate(tabs.at(-1)?.id||'library');else renderTabs();await refreshLibrary();
+      browserTabs.forget(id);if(lastWebTab===tab)lastWebTab=null;tabs.splice(tabs.indexOf(tab),1);if(activeId===id)activate(tabs.at(-1)?.id||'library');else renderTabs();await refreshLibrary();
     }finally{tab.closing=false;tab.closePromise=null;}
   })();
   return tab.closePromise;
@@ -387,6 +389,11 @@ async function savePage() {
   if(activeId==='execution')return copyAppURL();
   const tab=active();if(!tab)return;
   if(tab.reader)return exportDocument(tab);
+  if(tab.external)return pasteTextDialog(tab);
+  return capturePage(tab);
+}
+async function capturePage(tab) {
+  if(isWebSearch(tab.url))return pasteTextDialog(tab);
   if(tab.capturing)return tab.capturing;
   const saving=(async()=>{
     let snapshot;
@@ -420,19 +427,38 @@ async function exportDocument(tab) {
   toast('현재 주석을 포함한 HTML을 내보냈습니다. 이후 주석은 앱에 자동 저장됩니다.');
 }
 
-async function openBrowser(input,forceNew=true) {
+function webContext(){return active()?.type==='browser'?active():tabs.includes(lastWebTab)?lastWebTab:null;}
+function externalURL(url){return new URL(url).origin!==location.origin;}
+function focusBrowserTab(tab){
+  const state=browserTabs.open(tab.id,tab.url);lastWebTab=tab;tab.browserState=state;tab.away=state==='opened'||state==='focused';tab.returned=false;
+  renderBrowserState(tab);return state;
+}
+function resumeBrowser(){
+  if(document.hidden||!lastWebTab?.away||!tabs.includes(lastWebTab))return;
+  lastWebTab.away=false;lastWebTab.returned=true;renderBrowserState(lastWebTab);
+  if(reader())toast('읽던 문서로 돌아왔습니다. 복사한 글은 메뉴 → 텍스트 붙여넣기로 가져오세요.');
+}
+function renderExternalTab(tab){
+  const search=isWebSearch(tab.url);
+  tab.host.innerHTML=`<div class="browser-handoff"><div class="handoff-heading">${icon('external',32)}<p class="eyebrow">CHROME · HTMLMEMO</p><h2>${search?'검색은 Chrome에서, 메모는 여기서.':'웹 탐색은 Chrome에서, 주석은 여기서.'}</h2><p>외부 사이트는 이 앱을 연 브라우저의 일반 탭에서 엽니다.<br>HTMLMemo 안에 넣지 않아 연결 거부 화면이 나오지 않습니다.</p></div><p class="web-notice" data-web-status role="status"></p><div class="web-actions"><button class="primary-button" data-browser-focus>브라우저로 전환 ${icon('external',15)}</button><button class="secondary-button" data-browser-paste>글 붙여넣고 주석 달기</button><button class="secondary-button" data-browser-import>HTML 파일 가져오기</button></div><p class="handoff-return">Chrome 탭에서 필요한 글을 복사한 뒤 HTMLMemo 탭으로 돌아오세요.<br>읽던 문서와 주석은 그대로 유지됩니다. <kbd>Ctrl/⌘ Shift V</kbd>로 붙여넣기 창을 바로 열 수 있습니다.</p><details class="handoff-details"><summary>보낸 주소 · 직접 가져오기</summary><a data-open-external href="${esc(tab.url)}" target="_blank" rel="noopener noreferrer">${esc(tab.url)} ${icon('external',13)}</a><p>이 주소는 HTMLMemo에서 마지막으로 보낸 주소입니다. Chrome에서 이동한 현재 주소는 읽지 않습니다. 검색 결과의 글을 가져올 때는 붙여넣기 창에 실제 원문 주소를 넣으세요.</p><button class="secondary-button" data-capture${search?' disabled':''}>이 주소에서 직접 저장</button><p>검색 페이지는 직접 저장하지 않습니다. 일반 페이지도 사이트가 읽기를 허용할 때만 저장됩니다.</p></details></div>`;
+  $('[data-browser-focus]',tab.host).onclick=()=>focusBrowserTab(tab);
+  $('[data-browser-paste]',tab.host).onclick=()=>pasteTextDialog(tab);
+  $('[data-browser-import]',tab.host).onclick=safely(importFiles);
+  $('[data-capture]',tab.host).onclick=safely(()=>capturePage(tab));
+}
+async function openBrowser(input,forceNew=true){
   if(/^file:/i.test(input.trim())){await importFiles();return;}
-  const url=normalizeURL(input),current=active();
+  const url=normalizeURL(input),current=active(),external=externalURL(url);
   const existing=tabs.find(tab=>tab.type==='browser'&&tab.url===url);
-  if(existing){activate(existing.id);return existing;}
-  if(!forceNew&&current?.type==='browser'){
-    if(current.url!==url)await navigate(current,url);
-    else activate(current.id);
-    return current;
-  }
-  const tab={id:uid(),type:'browser',title:displayHost(url),url,history:[url],cursor:0,readable:false,loading:true};
+  if(existing){if(!current?.reader)activate(existing.id);else renderTabs();if(existing.external)focusBrowserTab(existing);return existing;}
+  if(!forceNew&&current?.type==='browser'&&current.external===external){await navigate(current,url);return current;}
+  const tab={id:uid(),type:'browser',title:isWebSearch(url)?'웹 검색':displayHost(url),url,history:[url],cursor:0,readable:false,loading:!external,external};
   tab.host=createHost(tab.id,'browser');tabs.push(tab);
-  tab.host.innerHTML=`<div class="browser-note"><span>${icon('globe',15)} 웹 탐색</span><a class="text-button" data-open-external href="${esc(url)}" target="_blank" rel="noopener noreferrer">새 탭에서 열기 ${icon('external',13)}</a><button class="text-button" data-capture>페이지 저장 ${icon('save',13)}</button><button class="text-button" data-web-help>가져오기 안내</button></div><div class="web-status" data-web-status role="status"></div><iframe class="browser-frame" title="웹 페이지" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads" referrerpolicy="no-referrer"></iframe>`;
+  if(external){
+    renderExternalTab(tab);if(!current?.reader)activate(tab.id);else{renderTabs();updateChrome();}
+    focusBrowserTab(tab);return tab;
+  }
+  tab.host.innerHTML=`<div class="browser-note"><span>${icon('globe',15)} 앱 문서 미리보기</span><a class="text-button" data-open-external href="${esc(url)}" target="_blank" rel="noopener noreferrer">새 탭에서 열기 ${icon('external',13)}</a><button class="text-button" data-capture>페이지 저장 ${icon('save',13)}</button><button class="text-button" data-web-help>가져오기 안내</button></div><div class="web-status" data-web-status role="status"></div><iframe class="browser-frame" title="앱 문서 미리보기" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads" referrerpolicy="no-referrer"></iframe>`;
   tab.frame=$('iframe',tab.host);
   tab.frame.addEventListener('load',()=>{
     tab.loading=false;const doc=browserDocument(tab);tab.readable=!!doc;
@@ -445,36 +471,43 @@ async function openBrowser(input,forceNew=true) {
         doc.addEventListener('click',event=>{
           if(event.button!==0||event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;
           const link=event.target.closest?.('a[href]');
-          if(link&&/^https?:/.test(link.href)){event.preventDefault();safely(()=>link.target==='_blank'?openBrowser(link.href):navigate(tab,link.href))();}
+          if(link&&/^https?:/.test(link.href)){event.preventDefault();safely(()=>link.target==='_blank'||externalURL(link.href)?openBrowser(link.href):navigate(tab,link.href))();}
         });
       }
     }
     renderBrowserState(tab);renderTabs();if(active()===tab)updateChrome();
   });
-  $('[data-capture]',tab.host).onclick=safely(savePage);
+  $('[data-capture]',tab.host).onclick=safely(()=>capturePage(tab));
   $('[data-web-help]',tab.host).onclick=()=>webHelpDialog(tab);
   activate(tab.id);renderBrowserState(tab);tab.frame.src=url;return tab;
 }
-function browserDocument(tab) {
-  if(tab.loading)return null;
-  try{const doc=tab.frame.contentDocument;return doc?.documentElement&&/^https?:/.test(doc.location?.href||'')?doc:null;}catch{return null;}
+function browserDocument(tab){
+  if(tab.external||tab.loading)return null;
+  try{const doc=tab.frame?.contentDocument;return doc?.documentElement&&/^https?:/.test(doc.location?.href||'')?doc:null;}catch{return null;}
 }
-function renderBrowserState(tab) {
-  const status=$('[data-web-status]',tab.host),capture=$('[data-capture]',tab.host);
-  if(!status)return;
-  status.textContent=tab.capturing?'읽기용 사본을 준비하는 중…':tab.readable?'이 페이지는 앱에서 저장할 수 있습니다. 페이지 저장 후 바로 주석을 남기세요.':'다른 사이트는 앱 안 표시·직접 저장이 제한될 수 있습니다. 빈 화면이면 새 탭에서 열고, 가져오기 안내를 이용하세요.';
-  capture.disabled=!!tab.capturing;
-  $('[data-open-external]',tab.host).href=tab.url;
+function renderBrowserState(tab){
+  const status=$('[data-web-status]',tab.host),capture=$('[data-capture]',tab.host);if(!status)return;
+  if(tab.external){
+    const unavailable=tab.browserState==='blocked'||tab.browserState==='unavailable';
+    status.textContent=unavailable?'탭 열기 또는 전환이 제한됐습니다. 아래 「보낸 주소」의 링크를 눌러 직접 여세요.':tab.returned?'HTMLMemo로 돌아왔습니다. 복사한 글을 붙여넣거나 저장한 HTML을 가져오세요.':'브라우저 탭으로 보냈습니다. 돌아오면 읽던 문서에서 계속 작업할 수 있습니다.';
+    $('[data-browser-focus]',tab.host).textContent=browserTabs.available(tab.id)?'브라우저로 전환':'브라우저에서 다시 열기';
+    capture.disabled=!!tab.capturing||isWebSearch(tab.url);
+    return;
+  }
+  status.textContent=tab.capturing?'읽기용 사본을 준비하는 중…':tab.readable?'이 페이지는 앱에서 저장할 수 있습니다. 페이지 저장 후 바로 주석을 남기세요.':'앱 문서를 준비하는 중입니다. 외부 사이트는 브라우저 탭에서 엽니다.';
+  capture.disabled=!!tab.capturing;$('[data-open-external]',tab.host).href=tab.url;
 }
-async function navigate(tab,url) {
+async function navigate(tab,url){
   if(tab.capturing){toast('가져오기가 끝난 뒤 주소를 이동해주세요.');return;}
-  tab.url=normalizeURL(url);tab.title=displayHost(tab.url);tab.history.splice(tab.cursor+1);tab.history.push(tab.url);tab.cursor++;
-  tab.readable=false;tab.loading=true;tab.frame.src=tab.url;renderBrowserState(tab);renderTabs();updateChrome();
+  url=normalizeURL(url);if(externalURL(url)!==tab.external)return openBrowser(url);
+  tab.url=url;tab.title=isWebSearch(url)?'웹 검색':displayHost(url);tab.history.splice(tab.cursor+1);tab.history.push(url);tab.cursor++;
+  if(tab.external){renderExternalTab(tab);renderTabs();updateChrome();focusBrowserTab(tab);return;}
+  tab.readable=false;tab.loading=true;tab.frame.src=url;renderBrowserState(tab);renderTabs();updateChrome();
 }
-async function browserHistory(direction) {
+async function browserHistory(direction){
   const tab=active();if(!tab)return;
   if(tab.reader){if(direction<0)await tab.reader.back();updateChrome();return;}
-  if(tab.capturing)return;
+  if(tab.external||tab.capturing)return;
   const next=tab.cursor+direction;if(next<0||next>=tab.history.length)return;
   tab.cursor=next;tab.url=tab.history[next];tab.readable=false;tab.loading=true;tab.frame.src=tab.url;renderBrowserState(tab);updateChrome();
 }
@@ -677,7 +710,7 @@ function showSelectionMenu(r) {
         }
         else if(action==='copy'){try{await navigator.clipboard.writeText(anchor.quote);toast('텍스트를 복사했습니다.');}catch{toast('글자를 다시 선택한 뒤 Ctrl/⌘+C로 복사하세요.');}}
         else if(action==='speak'){r.selection=anchor;if(!r.speakSelection())return;}
-        else if(action==='webSearch')window.open('https://www.google.com/search?q='+encodeURIComponent(anchor.quote.slice(0,2000)),'_blank','noopener,noreferrer');
+        else if(action==='webSearch')await openBrowser('https://www.google.com/search?q='+encodeURIComponent(anchor.quote.slice(0,2000)));
         closePopover();
       });
     });
@@ -874,6 +907,7 @@ function documentMenu(record) {
 }
 function handleKey(event) {
   const isField=/^(INPUT|TEXTAREA|SELECT)$/.test(event.target?.tagName)||event.target?.isContentEditable;
+  if((event.ctrlKey||event.metaKey)&&event.shiftKey&&event.key.toLowerCase()==='v'&&!isField&&!$('#dialog').open){event.preventDefault();pasteTextDialog();return;}
   if(event.key==='Escape') {if(reader()?.readAloud?.escape()){event.preventDefault();return;}reader()?.stopSpeech();if($('#dialog').open)return;if(!$('#tool-popover').hidden)closePopover();else if(!$('#sidebar').hidden)closeSidebar();else if(reader()?.documentSidebarUI&&reader().documentSidebarMode!=='outline')reader().showDocumentSidebarView('outline');else if(readerFocused)void leaveReaderFocus();else if(reader())reader().setTool('select');return;}
   if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='s'){event.preventDefault();if(reader())safely(()=>{const tab=active();tab.reader.rememberPosition();return tab.queue.flush();})();else safely(savePage)();return;}
   if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='l'){event.preventDefault();focusAddress();return;}
@@ -921,7 +955,7 @@ async function copyAppURL(){
 }
 function bindUI() {
   document.addEventListener('fullscreenchange',()=>{if(document.fullscreenElement===$('#app') && readerFocused)nativeReaderFullscreen=true;else if(nativeReaderFullscreen){nativeReaderFullscreen=false;setReaderFocus(false);}});
-  [['#new-tab','globe','웹 페이지 열기'],['#paste-button','note','텍스트 붙여넣기'],['#web-help-button','info','웹페이지 가져오기 안내'],['#execution-tab','external','실행과 앱 전달'],['#back','back'],['#forward','forward'],['#reload','reload'],['#import-button','folder'],['#save-page','save'],['#app-menu-button','chevron-down','메뉴'],['#settings-button','settings','설정'],['#menu-folder','folder','저장 폴더 연결'],['#about-button','info','About'],['#library-search-icon','search'],['#empty-icon','file'],['#library-card-view','grid','카드'],['#library-list-view','list','목록']].forEach(([id,name,label])=>setButton(id,name,label));
+  [['#new-tab','globe','웹 페이지 열기'],['#paste-button','note','텍스트 붙여넣기'],['#web-help-button','info','웹페이지 가져오기 안내'],['#execution-tab','external','실행과 앱 전달'],['#address-open','external'],['#back','back'],['#forward','forward'],['#reload','reload'],['#import-button','folder'],['#save-page','save'],['#app-menu-button','chevron-down','메뉴'],['#settings-button','settings','설정'],['#menu-folder','folder','저장 폴더 연결'],['#about-button','info','About'],['#library-search-icon','search'],['#empty-icon','file'],['#library-card-view','grid','카드'],['#library-list-view','list','목록']].forEach(([id,name,label])=>setButton(id,name,label));
   setIconButton('#library-tab','library','내 서재');
   bindAppMenu();bindTabs();$('#menu-folder').onclick=safely(chooseFolder);$('#about-button').onclick=aboutDialog;
   $('#library-tab').onclick=()=>activate('library');$('#new-tab').onclick=()=>{activate('library');focusAddress();};$('#browse-start').onclick=focusAddress;
@@ -948,6 +982,7 @@ function bindUI() {
   document.addEventListener('visibilitychange',()=>{if(document.hidden)savePositions();});
   window.addEventListener('pagehide',savePositions);
   window.addEventListener('online',network);window.addEventListener('offline',network);
+  window.addEventListener('focus',resumeBrowser);document.addEventListener('visibilitychange',resumeBrowser);
   window.addEventListener('resize',()=>{closePopover();applyToolbarPosition();requestAnimationFrame(revealActiveTab);});
   window.addEventListener('dragover',event=>{if([...event.dataTransfer.types].includes('Files'))event.preventDefault();});window.addEventListener('drop',safely(async event=>{if(![...(event.dataTransfer.types||[])].includes('Files'))return;event.preventDefault();for(const file of await droppedHTMLFiles(event.dataTransfer))await openLocalFile(file);}));
 }

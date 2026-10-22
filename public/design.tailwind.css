@@ -96,6 +96,7 @@ body[data-codememo-design]{margin:0;font-family:var(--app-font);background:var(-
 .app-menu .menu-button span{font-size:inherit}
 .app-menu .menu-button:hover,.app-menu .menu-button[aria-current=page]{background:var(--green-light);color:var(--green)}
 .app-menu #connection-button i{position:static;margin-left:auto}
+.browser-handoff{width:min(850px,100%);margin:0 auto;padding:clamp(24px,6vw,64px) 24px;overflow-y:auto}.handoff-heading>svg{color:var(--green)}.handoff-heading h2{font-size:clamp(21px,3vw,30px);letter-spacing:-.8px;line-height:1.5}.handoff-heading>p:not(.eyebrow),.handoff-return{font-size:13px;line-height:1.9;color:var(--muted)}.browser-handoff .web-notice{margin:24px 0 18px}.browser-handoff .web-actions{gap:10px}.browser-handoff .web-actions>button{padding:10px 14px}.handoff-return{margin:24px 0}.handoff-return kbd{font:inherit;white-space:nowrap}.handoff-details{border-top:1px solid var(--line);padding-top:16px;font-size:12px;line-height:1.8;color:var(--muted)}.handoff-details summary{cursor:pointer;color:var(--text)}.handoff-details a{display:block;margin-top:12px;overflow-wrap:anywhere}.handoff-details p{font-size:11px}.handoff-details button{padding:8px 12px}
 .addressbar>#tabs{display:flex;flex:1;min-width:0;height:24px;align-items:stretch;gap:3px;overflow-x:auto;overflow-y:hidden;overscroll-behavior-x:contain;scrollbar-width:none}
 .addressbar>#tabs::-webkit-scrollbar{display:none}
 .chrome:not([data-page=document]) #tabs{flex:0 1 40%}

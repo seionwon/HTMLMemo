@@ -7,6 +7,33 @@ export function webURL(value){
   if(!['http:','https:'].includes(url.protocol)||url.username||url.password)throw new Error('사용자 정보가 없는 http 또는 https 주소를 입력해주세요.');
   return url.href;
 }
+export function isWebSearch(value){
+  try{const url=new URL(value);return ['google.com','www.google.com'].includes(url.hostname)&&url.pathname==='/search';}catch{return false;}
+}
+// Only references to tabs opened by this app, held in memory for this session.
+// Never inspect a destination's DOM, address, history, clipboard or other tabs.
+export class BrowserTabs {
+  constructor(browser){this.browser=browser;this.entries=new Map();}
+  available(id){try{return !!this.entries.get(id)&&!this.entries.get(id).window.closed;}catch{return false;}}
+  forget(id){this.entries.delete(id);}
+  open(id,address,{refresh=false}={}){
+    const url=webURL(address),entry=this.entries.get(id);
+    if(this.available(id)){
+      try{if(refresh||entry.url!==url){entry.window.location.href=url;entry.url=url;}entry.window.focus();return 'focused';}
+      catch{return 'unavailable';}
+    }
+    let target,navigating=false;
+    try{
+      // Start with our own empty page, sever reverse access BEFORE navigation,
+      // and retain only the limited WindowProxy allowed by the browser.
+      target=this.browser.open('about:blank','_blank');if(!target)return 'blocked';
+      target.opener=null;
+      const meta=target.document.createElement('meta');meta.name='referrer';meta.content='no-referrer';target.document.head.append(meta);
+      navigating=true;target.location.replace(url);this.entries.set(id,{window:target,url});
+      try{target.focus();}catch{/* A successful open does not guarantee browser focus. */}return 'opened';
+    }catch{if(!navigating)try{target?.close();}catch{/* Only the new empty tab is ours to close. */}return 'blocked';}
+  }
+}
 async function readResource(url,fetchPage){
   const response=await fetchPage(webURL(url),{mode:'cors',credentials:'omit',referrerPolicy:'no-referrer',signal:AbortSignal.timeout(15000)});
   if(!response.ok)throw new Error('HTTP '+response.status);
