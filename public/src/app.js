@@ -712,7 +712,11 @@ function styleNativeSidebar(panel) {
   for(const name of ['--bg','--surface','--surface-muted','--text','--muted','--line','--green','--green-light','--app-font'])panel.style.setProperty(name,theme.getPropertyValue(name));
 }
 function renderSidebar(mode,{panel=$('#sidebar'),embedded=false,documentReader=reader()}={}) {
-  const r=documentReader;if(!r)return;clearTimeout(panel.sidebarSearchTimer);panel.sidebarMode=mode;if(!embedded){sidebarMode=mode;closePopover();}else styleNativeSidebar(panel);panel.hidden=false;
+  const r=documentReader;if(!r)return;
+  r.annotationTreeOpen ||= new Map();
+  if(panel.annotationReader===r)$$('[data-annotation-group]',panel).forEach(group=>r.annotationTreeOpen.set(group.dataset.annotationGroup,!!(group.open||group.hasAttribute('open'))));
+  panel.annotationReader=r;
+  clearTimeout(panel.sidebarSearchTimer);panel.sidebarMode=mode;if(!embedded){sidebarMode=mode;closePopover();}else styleNativeSidebar(panel);panel.hidden=false;
   const id=name=>(embedded?'htmlmemo-native-':'')+name,q=name=>$('#'+id(name),panel);
   const title={search:'검색',outline:'목차 · 북마크',annotations:'주석'}[mode];
   if(!$('.sidebar-views',panel)){
@@ -741,7 +745,11 @@ function renderSidebar(mode,{panel=$('#sidebar'),embedded=false,documentReader=r
     const when=value=>Number.isFinite(value)?new Date(value).toLocaleString('ko-KR',{month:'long',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false}):'';
     // Type alone ("펜 그림") says nothing about where an annotation is. Show the text it marks or was
     // drawn on, then the kind · the heading above it · when it was made.
-    content.innerHTML=r.metadata.annotations.length?r.metadata.annotations.map(a=>{const c=contexts.get(a.id)||{quote:a.textAnchor?.quote||a.anchorTarget?.quote||'',heading:''};const main=a.text||c.quote;const meta=[ANNOTATION_LABELS[a.type]||'주석',c.heading,when(a.created)].filter(Boolean).join(' · ');return `<div class="annotation-row"><button class="annotation-item" data-annotation="${esc(a.id)}" title="${esc([main,meta].filter(Boolean).join('\n'))}"><span class="annotation-type" style="color:${a.color}">${icon(a.type==='pen'?'pen':a.type==='note'?'note':a.type==='highlight'?'highlight':a.type==='underline'?'underline':'shapes',16)}</span><span class="annotation-text">${main?`<span class="annotation-main">${esc(main)}</span>`:''}${a.text&&c.quote?`<span class="annotation-context">“${esc(c.quote)}”</span>`:''}<span class="annotation-meta">${esc(meta)}</span></span></button><button class="icon-button" data-delete-annotation="${esc(a.id)}" aria-label="주석 삭제">${icon('trash',14)}</button></div>`;}).join(''):'<p class="panel-empty">아직 주석이 없어요.<br>툴바에서 도구를 골라 생각을 남겨보세요.</p>';
+    const row=a=>{const c=contexts.get(a.id)||{quote:a.textAnchor?.quote||a.anchorTarget?.quote||'',heading:''};const main=a.text||c.quote;const meta=[ANNOTATION_LABELS[a.type]||'주석',c.heading,when(a.created)].filter(Boolean).join(' · ');return `<div class="annotation-row"><button class="annotation-item" data-annotation="${esc(a.id)}" title="${esc([main,meta].filter(Boolean).join('\n'))}"><span class="annotation-type" style="color:${a.color}">${icon(a.type==='pen'?'pen':a.type==='note'?'note':a.type==='highlight'?'highlight':a.type==='underline'?'underline':'shapes',16)}</span><span class="annotation-text">${main?`<span class="annotation-main">${esc(main)}</span>`:''}${a.text&&c.quote?`<span class="annotation-context">“${esc(c.quote)}”</span>`:''}<span class="annotation-meta">${esc(meta)}</span></span></button><button class="icon-button" data-delete-annotation="${esc(a.id)}" aria-label="주석 삭제">${icon('trash',14)}</button></div>`;};
+    const tree=r.annotationTree?.(contexts)||[{id:'document',title:'문서 전체',count:r.metadata.annotations.length,annotations:r.metadata.annotations,children:[]}];
+    const branch=group=>`<details class="annotation-group" data-annotation-group="${esc(group.id)}"${r.annotationTreeOpen.get(group.id)?' open':''}><summary><span class="annotation-group-title">${esc(group.title)}</span><span class="annotation-group-count" aria-label="${group.count}개 주석">${group.count}</span></summary><div class="annotation-group-body">${group.children.map(branch).join('')}${group.annotations.map(row).join('')}</div></details>`;
+    content.innerHTML=r.metadata.annotations.length?`<div class="annotation-tree" aria-label="목차별 주석">${tree.map(branch).join('')}</div>`:'<p class="panel-empty">아직 주석이 없어요.<br>툴바에서 도구를 골라 생각을 남겨보세요.</p>';
+    $$('[data-annotation-group]',panel).forEach(group=>group.ontoggle=()=>{if(group.isConnected)r.annotationTreeOpen.set(group.dataset.annotationGroup,!!(group.open||group.hasAttribute('open')));});
     $$('[data-annotation]',panel).forEach(button=>button.onclick=()=>r.jumpAnnotation(button.dataset.annotation));$$('[data-delete-annotation]',panel).forEach(button=>button.onclick=()=>r.remove(button.dataset.deleteAnnotation));
   }
 }

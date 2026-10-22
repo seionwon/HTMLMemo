@@ -146,6 +146,17 @@ body[data-codememo-design]{margin:0;font-family:var(--app-font);background:var(-
 [data-htmlmemo-doc-sidebar-ui] .annotation-main,[data-htmlmemo-doc-sidebar-ui] .annotation-context{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
 [data-htmlmemo-doc-sidebar-ui] .annotation-context{opacity:.75;font-style:italic}
 [data-htmlmemo-doc-sidebar-ui] .annotation-meta{font-size:11px;line-height:1.5;opacity:.7;overflow-wrap:anywhere}
+.annotation-tree,[data-htmlmemo-doc-sidebar-ui] .annotation-tree{font-size:12px;line-height:1.6;min-width:0}
+.annotation-group,[data-htmlmemo-doc-sidebar-ui] .annotation-group{margin:3px 0;min-width:0}
+.annotation-group>summary,[data-htmlmemo-doc-sidebar-ui] .annotation-group>summary{display:flex;align-items:center;gap:5px;list-style:none;cursor:pointer;border-radius:5px;padding:8px 3px;color:var(--text);font-weight:600;overflow-wrap:anywhere}
+.annotation-group>summary::-webkit-details-marker,[data-htmlmemo-doc-sidebar-ui] .annotation-group>summary::-webkit-details-marker{display:none}
+.annotation-group>summary::before,[data-htmlmemo-doc-sidebar-ui] .annotation-group>summary::before{content:'▸';display:block;flex-shrink:0;width:12px;color:var(--muted)}
+.annotation-group[open]>summary::before,[data-htmlmemo-doc-sidebar-ui] .annotation-group[open]>summary::before{transform:rotate(90deg)}
+.annotation-group>summary:hover,[data-htmlmemo-doc-sidebar-ui] .annotation-group>summary:hover{background:var(--surface-muted)}
+.annotation-group>summary:focus-visible,[data-htmlmemo-doc-sidebar-ui] .annotation-group>summary:focus-visible{outline:2px solid var(--green);outline-offset:-2px}
+.annotation-group-title,[data-htmlmemo-doc-sidebar-ui] .annotation-group-title{flex:1;min-width:0}
+.annotation-group-count,[data-htmlmemo-doc-sidebar-ui] .annotation-group-count{flex-shrink:0;color:var(--muted);background:var(--surface-muted);border-radius:10px;padding:0 6px;font-size:10px;font-weight:500;font-variant-numeric:tabular-nums}
+.annotation-group-body,[data-htmlmemo-doc-sidebar-ui] .annotation-group-body{margin-left:6px;padding-left:8px;border-left:1px solid var(--line);min-width:0}
 [data-htmlmemo-native-sidebar][data-htmlmemo-sidebar-view=search]>:not([data-htmlmemo-doc-sidebar-ui]):not([data-htmlmemo-toc-resizer]):not([data-htmlmemo-toc-resizer-bound]),[data-htmlmemo-native-sidebar][data-htmlmemo-sidebar-view=annotations]>:not([data-htmlmemo-doc-sidebar-ui]):not([data-htmlmemo-toc-resizer]):not([data-htmlmemo-toc-resizer-bound]){display:none!important}
 @media(max-width:480px){
  .addressbar>.menu-toggle{padding:0 5px}

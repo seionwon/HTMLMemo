@@ -54,13 +54,13 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
-      - name: Wait for the published app and verify sidebar and pen scaling in Chrome
+      - name: Wait for the published app and verify sidebar, annotation tree and pen scaling in Chrome
         env:
           HTMLMEMO_SIDEBAR_TEST_URL: https://seionwon.github.io/HTMLMemo/
         run: |
           node --input-type=module <<'NODE'
           import {readFile} from 'node:fs/promises';
-          const files=['src/app.js','src/reader.js','src/model.js'];
+          const files=['src/app.js','src/reader.js','src/model.js','styles.css'];
           const expected=await Promise.all(files.map(file=>readFile('public/'+file,'utf8')));
           let matched=false;
           for(let attempt=0;attempt<30;attempt++){
@@ -76,7 +76,7 @@ jobs:
           if(!matched)throw new Error('Published reader files do not match the deployed commit.');
           console.log('Published app, reader and model match this commit.');
           NODE
-          node --test --test-name-pattern='sidebar view choices|font-scaled pen' tests/browser.integration.mjs
+          node --test --test-name-pattern='sidebar view choices|annotation tree|font-scaled pen' tests/browser.integration.mjs
       - name: Keep published desktop and mobile verification screenshots
         if: always()
         uses: actions/upload-artifact@v4
@@ -85,4 +85,5 @@ jobs:
           path: |
             test-results/sidebar-views-*.png
             test-results/font-scaled-pen-*.png
+            test-results/annotation-tree-*.png
           if-no-files-found: ignore

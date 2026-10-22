@@ -1697,16 +1697,95 @@ export class Reader {
   jump(target) {
     const r = target.getBoundingClientRect(), origin = this.layerOrigin(); this.scrollTop = Math.max(0,(r.top-origin.top+r.height/2)*this.zoom-this.viewport.clientHeight/2); this.scrollLeft = Math.max(0,(r.left-origin.left+r.width/2)*this.zoom-this.viewport.clientWidth/2);
   }
-  jumpAnnotation(id) {
-    const annotation = this.metadata.annotations.find(a=>a.id===id); if (!annotation) return;
-    const element = this.doc.querySelector(`[data-htmlmemo-id="${id}"]`); if (element) this.jump(element);
-    this.selectedId=id; this.callbacks.onView?.();
+  async jumpAnnotation(id) {
+    this.cancelAnnotationJump?.();
+    const generation=this.annotationJumpGeneration=(this.annotationJumpGeneration||0)+1;
+    const annotation=this.metadata.annotations.find(a=>a.id===id);if(!annotation)return false;
+    const section=annotation.textAnchor?.section||annotation.anchorTarget?.section;
+    try{
+      if(section&&currentSection(this.doc)!==section){
+        if(!this.annotationBookPaths().has(section))throw new Error('이 주석의 장을 현재 책 목차에서 찾지 못했습니다. 주석은 보관됩니다.');
+        const loaded=await new Promise(resolve=>{
+          let settled=false;
+          const finish=value=>{if(settled)return;settled=true;observer.disconnect();clearTimeout(timer);this.cancelAnnotationJump=null;resolve(value);};
+          const ready=()=>currentSection(this.doc)===section&&!this.doc.getElementById('reader-status')?.textContent.trim();
+          const observer=new this.doc.defaultView.MutationObserver(()=>{if(ready())finish(true);});
+          const timer=setTimeout(()=>finish(false),15000);this.cancelAnnotationJump=()=>finish(false);
+          observer.observe(this.doc.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['data-section']});
+          try{this.doc.defaultView.location.hash=encodeURIComponent(section);if(ready())finish(true);}catch{finish(false);}
+        });
+        if(this.disposed||generation!==this.annotationJumpGeneration)return false;
+        if(!loaded)throw new Error('주석이 있는 장을 불러오지 못했습니다. 원본 책 목차에서 다시 열어 주세요. 주석은 보관됩니다.');
+        this.dynamicRoots?.add(this.doc.getElementById('reader-content'));
+        await this.refreshDynamicDocument();
+        if(this.disposed||generation!==this.annotationJumpGeneration)return false;
+        this.render();this.measure();
+      }
+      const element=this.doc.querySelector(`[data-htmlmemo-id="${id}"]`);
+      if(!element)throw new Error('이 주석의 원문 위치를 찾지 못했습니다. 주석은 보관됩니다.');
+      this.jump(element);this.selectedId=id;this.callbacks.onView?.();return true;
+    }catch(error){if(!this.disposed&&generation===this.annotationJumpGeneration)this.callbacks.onError?.(error);return false;}
+  }
+  // Read only the small, complete TOC manifest. Never decode unopened book bodies
+  // or expand the source reader's lazy tree just to list annotations.
+  annotationBookPaths() {
+    const data=this.doc.getElementById('book-manifest'),source=data?.textContent||'';
+    if(this.annotationCatalogSource===source)return this.annotationCatalog;
+    const paths=new Map();let manifest;
+    try{manifest=JSON.parse(source);}catch{/* Ordinary HTML has no book manifest. */}
+    if(manifest?.format==='memosuite-book-html-v1'&&Array.isArray(manifest.volumes)){
+      let order=0;const categories=new Map();
+      manifest.volumes.forEach((volume,vi)=>{
+        if(!volume||typeof volume!=='object')return;
+        const root={id:JSON.stringify(['volume',vi]),title:volume.label||volume.title||volume.book||`${vi+1}권`,order:vi,kind:'volume'};
+        for(const section of Array.isArray(volume.sections)?volume.sections:[]){
+          if(typeof section?.key!=='string'||paths.has(section.key))continue;
+          const path=[root],names=[];
+          for(const title of String(section.category||'').split(' › ').map(s=>s.trim()).filter(Boolean).slice(0,32)){
+            names.push(title);const id=JSON.stringify(['category',vi,...names]);
+            if(!categories.has(id))categories.set(id,{id,title,order:order++,kind:'category'});
+            path.push(categories.get(id));
+          }
+          path.push({id:JSON.stringify(['section',section.key]),title:section.title||section.key,order:order++,kind:'section'});
+          paths.set(section.key,path);
+        }
+      });
+    }
+    this.annotationCatalogSource=source;this.annotationCatalog=paths;return paths;
+  }
+  annotationTree(contexts=this.annotationContexts()) {
+    const paths=this.annotationBookPaths(),roots=[],nodes=new Map();
+    const preamble=this.outline().some(item=>!this.isInsideTocOrTopbar(item.node))?'목차 밖 주석':'문서 전체';
+    for(const annotation of this.metadata.annotations){
+      const section=annotation.textAnchor?.section||annotation.anchorTarget?.section;
+      let path=section?paths.get(section):null;
+      if(!path?.length){
+        path=paths.size||section?[{id:'unlocated',title:'목차 위치 미확인',order:Number.MAX_SAFE_INTEGER,kind:'other'}]
+          :contexts.get(annotation.id)?.path;
+        if(!path?.length)path=[{id:'preamble',title:preamble,order:-1,kind:'other'}];
+      }
+      let children=roots,node;
+      for(const part of path){
+        node=nodes.get(part.id);
+        if(!node){node={...part,children:[],annotations:[],count:0};nodes.set(part.id,node);children.push(node);}
+        node.count++;children=node.children;
+      }
+      node.annotations.push(annotation);
+    }
+    const sort=list=>{list.sort((a,b)=>(a.kind==='section')-(b.kind==='section')||a.order-b.order);for(const node of list)sort(node.children);};
+    sort(roots);return roots;
   }
   // The annotation list shows more than the tool name: the text an annotation marks or was drawn on,
   // and the heading it sits under. Headings are in document order, so the last one at or before the
   // annotation is found by binary search. A drawing on empty space falls back to its drawn position.
   annotationContexts() {
-    const headings = this.outline().map(item=>item.node), result = new Map();
+    const outline=this.outline().filter(item=>!this.isInsideTocOrTopbar(item.node)),headings=outline.map(item=>item.node),result=new Map();
+    const paths=[],stack=[];
+    outline.forEach((item,index)=>{
+      while(stack.length&&stack.at(-1).level>=item.level)stack.pop();
+      stack.push({id:JSON.stringify(['heading',currentSection(this.doc),index,item.node.id||'']),title:item.title,level:item.level,order:index,kind:'heading'});
+      paths.push([...stack]);
+    });
     const headingBefore = node => {
       let lo = 0, hi = headings.length - 1, found = -1;
       while (lo <= hi) {
@@ -1729,7 +1808,7 @@ export class Reader {
       let index = node?.isConnected && node !== this.doc.body ? headingBefore(node) : -1;
       if (index < 0 && !marked) { const drawn = this.doc.querySelector(`[data-htmlmemo-id="${annotation.id}"]`); if (drawn) index = headingAbove(drawn); }
       result.set(annotation.id, {quote:annotation.textAnchor?.quote || annotation.anchorTarget?.quote || (node?.isConnected ? this.drawingTargetQuote(node) : ''),
-        heading:index >= 0 ? headings[index].textContent.replace(/\s+/g, ' ').trim() : ''});
+        heading:index >= 0 ? headings[index].textContent.replace(/\s+/g, ' ').trim() : '',path:index>=0?paths[index]:[]});
     }
     return result;
   }
@@ -1776,5 +1855,5 @@ export class Reader {
     this.readAloud?.toggle();
   }
   stopSpeech() { this.readAloud?.close(); this.host?.ownerDocument?.defaultView?.speechSynthesis?.cancel(); }
-  dispose() { this.stopMiddleScroll();this.readAloud?.dispose();this.readAloud=null;this.stopSpeech(); this.disposed=true;this.cancelOpeningWait?.(); clearTimeout(this.positionTimer);clearTimeout(this.dynamicTimer);clearTimeout(this.documentSidebarUI?.sidebarSearchTimer);this.dynamicObserver?.disconnect();this.fontObserver?.disconnect();if(this.fontFrame)this.doc.defaultView?.cancelAnimationFrame(this.fontFrame); this.resizeObserver?.disconnect(); this.hostObserver?.disconnect(); this.frame.srcdoc=''; if(this.documentURL){URL.revokeObjectURL(this.documentURL);this.documentURL=null;} this.host.remove(); }
+  dispose() { this.stopMiddleScroll();this.readAloud?.dispose();this.readAloud=null;this.stopSpeech(); this.disposed=true;this.cancelOpeningWait?.();this.cancelAnnotationJump?.(); clearTimeout(this.positionTimer);clearTimeout(this.dynamicTimer);clearTimeout(this.documentSidebarUI?.sidebarSearchTimer);this.dynamicObserver?.disconnect();this.fontObserver?.disconnect();if(this.fontFrame)this.doc.defaultView?.cancelAnimationFrame(this.fontFrame); this.resizeObserver?.disconnect(); this.hostObserver?.disconnect(); this.frame.srcdoc=''; if(this.documentURL){URL.revokeObjectURL(this.documentURL);this.documentURL=null;} this.host.remove(); }
 }

@@ -67,12 +67,88 @@ test('annotation list names what each annotation marks, the heading above it and
     {id:'h1',type:'highlight',color:'#edcf67',textAnchor:{quote:'핵심 문장',start:0,end:5},created},
     {id:'n1',type:'note',color:'#334155',text:'다시 읽기',textAnchor:{quote:'핵심 문장',start:0,end:5}}];
   a.open('annotations');
-  const rows=[...a.doc.querySelectorAll('[data-annotation]')].map(row=>[...row.querySelectorAll('.annotation-text>span')].map(span=>span.textContent));
+  const rows=['p1','h1','n1'].map(id=>[...a.doc.querySelector(`[data-annotation="${id}"]`).querySelectorAll('.annotation-text>span')].map(span=>span.textContent));
   const stamp=new Date(created).toLocaleString('ko-KR',{month:'long',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false});
   assert.deepEqual(rows,[
     ['에이전트를 설치하는 문단입니다.',`펜 그림 · 설치하기 · ${stamp}`],
     ['핵심 문장',`형광펜 · 설치하기 · ${stamp}`],
     ['다시 읽기','“핵심 문장”','메모']]);
+});
+
+test('annotation tree follows complete volume/category/section order and omits every empty branch',()=>{
+  installDOM();const a=sidebar();
+  const volumes=[{label:'입문',sections:[{key:'v0:empty',title:'주석 없는 장',category:'빈 분류'},{key:'v0:one',title:'첫 장',category:'기초 › 시작'},{key:'v0:two',title:'둘째 장',category:'기초 › 다음'}]},
+    {label:'실전',sections:[{key:'v1:one',title:'첫 장',category:'기초 › 시작'}]},{label:'빈 책',sections:[{key:'v2:none',title:'빈 장'}]}];
+  const doc=documentFor(`<html><head><script id="book-manifest" type="application/json">${JSON.stringify({format:'memosuite-book-html-v1',volumes})}</script></head><body><main><article id="reader-content" data-section="v0:one"><h1>첫 장</h1></article></main></body></html>`);
+  // A list must never read compressed bodies or force unopened source TOC groups open.
+  const payload=doc.createElement('script');payload.id='book-volume-0';Object.defineProperty(payload,'textContent',{get(){throw Error('Book body read');}});doc.body.append(payload);
+  Object.setPrototypeOf(a.r,Reader.prototype);a.r.doc=doc;a.r.metadata.annotations=[
+    {id:'later',type:'pen',anchorTarget:{section:'v1:one',quote:'실전의 문장'}},
+    {id:'second',type:'highlight',textAnchor:{section:'v0:two',quote:'둘째 장 문장'}},
+    {id:'first',type:'note',text:'첫 장 메모',anchorTarget:{section:'v0:one',quote:'첫 장 문장'}},
+    {id:'first-again',type:'underline',textAnchor:{section:'v0:one',quote:'또 다른 문장'}}];
+  const before=structuredClone(a.r.metadata),tree=a.r.annotationTree(new Map());
+  assert.deepEqual(tree.map(g=>[g.title,g.count]),[['입문',3],['실전',1]]);
+  assert.deepEqual(tree[0].children.map(g=>[g.title,g.count]),[['기초',3]]);
+  assert.deepEqual(tree[0].children[0].children.map(g=>g.title),['시작','다음']);
+  assert.deepEqual(tree[0].children[0].children[0].children[0].annotations.map(g=>g.id),['first','first-again']);
+  assert.equal(tree[1].children[0].children[0].children[0].title,'첫 장','same titles in different volumes stay separate');
+  assert.equal(JSON.stringify(tree).includes('주석 없는 장'),false);assert.equal(JSON.stringify(tree).includes('빈 분류'),false);
+  a.r.metadata.annotations.push({id:'orphan',textAnchor:{section:'deleted',quote:'옛 문장'}});
+  assert.equal(a.r.annotationTree(new Map()).at(-1).title,'목차 위치 미확인');
+  a.r.metadata.annotations.pop();assert.deepEqual(a.r.metadata,before);
+});
+
+test('ordinary HTML annotation tree keeps nested headings in document order and prunes empty headings',()=>{
+  installDOM();const doc=documentFor('<html><body><nav><h2>목차</h2></nav><main><h1>첫 장</h1><h2>동일 이름</h2><p data-htmlmemo-anchor="n1">첫 내용</p><h3>빈 절</h3><h1>둘째 장</h1><h2>동일 이름</h2><p data-htmlmemo-anchor="n2">다음 내용</p><h1>주석 없는 장</h1></main></body></html>');
+  const r=Object.create(Reader.prototype);r.doc=doc;r.metadata={annotations:[{id:'two',type:'pen',anchor:'n2'},{id:'one',type:'pen',anchor:'n1'}]};
+  const tree=r.annotationTree();assert.deepEqual(tree.map(g=>g.title),['첫 장','둘째 장']);
+  assert.equal(tree[0].children[0].title,'동일 이름');assert.equal(tree[1].children[0].title,'동일 이름');assert.notEqual(tree[0].children[0].id,tree[1].children[0].id);
+  assert.deepEqual(tree[0].children[0].annotations.map(g=>g.id),['one']);assert.deepEqual(tree[1].children[0].annotations.map(g=>g.id),['two']);
+  assert.equal(JSON.stringify(tree).includes('빈 절'),false);assert.equal(JSON.stringify(tree).includes('주석 없는 장'),false);
+});
+
+test('annotation disclosure state survives view changes and deletion without saving UI state or showing empty groups',()=>{
+  const a=sidebar(),before=structuredClone(a.r.metadata);
+  a.r.metadata.annotations.push({id:'a2',type:'note',text:'다른 장 메모',color:'#334155'});
+  a.r.annotationTree=()=>a.r.metadata.annotations.map((annotation,index)=>({id:annotation.id,title:index?'둘째 장':'첫 장',count:1,children:[],annotations:[annotation]}));
+  a.open('annotations');let group=a.doc.querySelector('[data-annotation-group="a1"]');assert.equal(group.hasAttribute('open'),false);
+  group.open=true;group.ontoggle();a.choose('search');a.choose('annotations');
+  assert.equal(a.doc.querySelector('[data-annotation-group="a1"]').hasAttribute('open'),true);assert.equal(a.doc.querySelector('[data-annotation-group="a2"]').hasAttribute('open'),false);
+  a.r.remove=id=>{a.r.metadata.annotations=a.r.metadata.annotations.filter(annotation=>annotation.id!==id);a.open('annotations');};
+  a.doc.querySelector('[data-delete-annotation="a1"]').onclick();assert.equal(a.doc.querySelector('[data-annotation-group="a1"]'),null);
+  assert.equal(a.doc.querySelector('[data-annotation-group="a2"]').hasAttribute('open'),false);assert.equal(a.calls.saved,0);
+  a.r.metadata.annotations=[];a.open('annotations');assert.equal(a.doc.querySelector('[data-annotation-group]'),null);assert.match(a.doc.querySelector('.panel-empty').textContent,/아직 주석/);
+  assert.deepEqual(before.annotations[0],{id:'a1',type:'note',color:'#334155',text:'남겨 둔 메모'});
+});
+
+test('annotation tree escapes source titles and annotation text',()=>{
+  const a=sidebar();a.r.annotationTree=()=>[{id:'a"<',title:'<img src=x onerror=bad()>',count:1,children:[],annotations:a.r.metadata.annotations}];
+  a.r.metadata.annotations[0].text='<script>bad()</script>';a.open('annotations');
+  assert.equal(a.doc.querySelector('.annotation-group-title').textContent,'<img src=x onerror=bad()>');assert.equal(a.doc.querySelector('.annotation-main').textContent,'<script>bad()</script>');
+  assert.equal(a.doc.querySelector('img,script'),null);assert.equal(a.doc.querySelector('[data-annotation-group]').dataset.annotationGroup,'a"<');
+});
+
+test('annotation navigation loads only the requested section before rendering and jumping',async()=>{
+  installDOM();const doc=documentFor('<html><head><script id="book-manifest" type="application/json">{"format":"memosuite-book-html-v1","volumes":[{"sections":[{"key":"v0:first"},{"key":"v0:next"}]}]}</script></head><body><main><article id="reader-content" data-section="v0:first"></article></main></body></html>');
+  let callback,hash,jumped,rendered=0,refreshed=0;const errors=[];
+  Object.defineProperty(doc,'defaultView',{value:{MutationObserver:class{constructor(fn){callback=fn;}observe(){}disconnect(){}},location:{set hash(value){hash=value;doc.getElementById('reader-content').dataset.section=decodeURIComponent(value);queueMicrotask(callback);}}}});
+  const r=Object.create(Reader.prototype);r.doc=doc;r.metadata={annotations:[{id:'next-note',type:'note',anchorTarget:{section:'v0:next'}}]};r.callbacks={onError:error=>errors.push(error.message)};
+  r.refreshDynamicDocument=async()=>{refreshed++;};r.render=()=>{rendered++;doc.getElementById('reader-content').innerHTML='<span data-htmlmemo-id="next-note">A note</span>';};r.measure=()=>{};r.jump=element=>jumped=element;
+  assert.equal(await r.jumpAnnotation('next-note'),true);assert.equal(hash,'v0%3Anext');assert.equal(refreshed,1);assert.equal(rendered,1);assert.equal(jumped.dataset.htmlmemoId,'next-note');assert.deepEqual(errors,[]);
+  r.metadata.annotations.push({id:'missing',textAnchor:{section:'not-in-book'}});assert.equal(await r.jumpAnnotation('missing'),false);assert.match(errors[0],/目|목차/);assert.equal(r.metadata.annotations.length,2);
+});
+
+test('cancelled and timed-out annotation navigation never deletes annotations or jumps to stale content',async t=>{
+  t.mock.timers.enable({apis:['setTimeout']});installDOM();
+  const doc=documentFor('<html><body><article id="reader-content" data-section="local"><span data-htmlmemo-id="here">Here</span></article></body></html>');
+  let disconnected=0,jumps=0;const errors=[];
+  Object.defineProperty(doc,'defaultView',{value:{MutationObserver:class{observe(){}disconnect(){disconnected++;}},location:{hash:''}}});
+  const r=Object.create(Reader.prototype);r.doc=doc;r.metadata={annotations:[{id:'there',textAnchor:{section:'remote'}},{id:'here',textAnchor:{section:'local'}}]};
+  r.annotationBookPaths=()=>new Map([['remote',[]]]);r.callbacks={onError:error=>errors.push(error.message)};r.jump=()=>jumps++;
+  const cancelled=r.jumpAnnotation('there');assert.equal(await r.jumpAnnotation('here'),true);assert.equal(await cancelled,false);assert.equal(errors.length,0);assert.equal(jumps,1);
+  const timedOut=r.jumpAnnotation('there');t.mock.timers.tick(15000);assert.equal(await timedOut,false);assert.match(errors[0],/불러오지 못했습니다/);
+  assert.equal(disconnected,2);assert.equal(r.metadata.annotations.length,2);assert.equal(jumps,1);assert.equal(r.cancelAnnotationJump,null);
 });
 
 test('the visible source TOC gets inline choices without moving its tree, listeners or text anchors',()=>{

@@ -11,6 +11,9 @@ import { launchChrome, clickAppMenu } from './chrome.mjs';
 import { FORMAT_VERSION } from '../public/src/model.js';
 import { deflateRawSync } from 'node:zlib';
 const appVersion=JSON.parse(await readFile(new URL('../package.json',import.meta.url),'utf8')).version;
+async function revealAnnotation(page,doc,id){
+  await page.evaluate(`(()=>{let node=${doc}.querySelector('[data-annotation="'+${JSON.stringify(id)}+'"]');if(!node)throw Error('Missing annotation');for(node=node.parentElement;node;node=node.parentElement)if(node.matches('details[data-annotation-group]'))node.open=true;})()`);
+}
 test('real Chrome: standalone book export keeps lazy chapters and released assets; incomplete copies stay recoverable', {timeout:60000}, async () => {
   await prepareAssets();
   const folder=await mkdtemp(join(tmpdir(),'htmlmemo-book-test-'));
@@ -639,6 +642,71 @@ test('real Chrome: font-scaled pen geometry, thickness, legacy baselines, reopen
   }finally{if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
 });
 
+test('real Chrome: annotation tree follows book TOC, prunes empty branches, remembers disclosure and navigates unopened chapters',{timeout:90000},async()=>{
+  await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-annotation-tree-'));await cp(join(root,'public'),folder,{recursive:true});
+  const server=createServer(folder);let chrome;
+  try{
+    await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));chrome=await launchChrome();const page=chrome.page;
+    const url=process.env.HTMLMEMO_SIDEBAR_TEST_URL||`http://127.0.0.1:${server.address().port}/`,source=await readFile(join(root,'tests/fixtures/annotation-tree.html'),'utf8');
+    await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});await page.navigate(url);await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
+    await page.evaluate(`(async()=>{
+      const {putDocumentRevision}=await import('./src/storage.js'),{parseHTML}=await import('./src/document.js');
+      const parsed=parseHTML(${JSON.stringify(source)},{viewport:{width:1100,height:800}},{allowScripts:true});
+      const base={color:'#334155',width:3,opacity:1,created:Date.now()},target=section=>({tag:'p',id:'p-'+section,rootId:'reader-content',path:[],quote:'대상 문장 '+section,section});
+      parsed.metadata.annotations=[{...base,id:'practice-note',type:'note',text:'실전에서 남긴 메모',anchor:'body',anchorTarget:target('v1:one'),points:[{x:.05,y:.1}]},
+        {...base,id:'second-highlight',type:'highlight',textAnchor:{section:'v0:two',quote:'대상 문장 v0:two',start:0,end:12}},
+        {...base,id:'intro-note',type:'note',text:'입문에서 남긴 메모',anchor:'body',anchorTarget:target('v0:one'),points:[{x:.05,y:.1}]},
+        {...base,id:'intro-pen',type:'pen',anchor:'body',anchorTarget:target('v0:one'),points:[{x:.1,y:.4},{x:.7,y:.6}]}];
+      window.treeOriginal=structuredClone(parsed.metadata.annotations);
+      await putDocumentRevision({id:'annotation-tree-document',title:'목차별 주석 검증 책',name:'annotation-tree.html',created:Date.now(),modified:Date.now(),html:parsed.html,metadata:parsed.metadata});
+    })()`);
+    await page.navigate(url);await page.waitFor('!!document.querySelector("[data-open=annotation-tree-document]")');await page.click('[data-open=annotation-tree-document]');
+    const frame='document.querySelector(".document-host:not([hidden]) iframe")',doc=frame+'.contentDocument',panel=doc+'.querySelector("[data-htmlmemo-doc-sidebar-ui]")';
+    await page.waitFor(`${panel}?.querySelector('[data-sidebar-view=annotations]')&&!${frame}.hasAttribute('aria-hidden')`);
+    const clickNative=async selector=>{
+      const point=await page.evaluate(`(()=>{const f=${frame},e=f.contentDocument.querySelector(${JSON.stringify(selector)});e.scrollIntoView({block:'nearest'});const r=e.getBoundingClientRect(),b=f.getBoundingClientRect(),z=b.width/f.clientWidth;return {x:b.left+(r.left+r.width/2)*z,y:b.top+(r.top+r.height/2)*z};})()`);
+      await page.send('Input.dispatchMouseEvent',{type:'mousePressed',...point,button:'left',clickCount:1});await page.send('Input.dispatchMouseEvent',{type:'mouseReleased',...point,button:'left',clickCount:1});
+    };
+    const openGroup=async title=>{
+      const key=await page.evaluate(`(()=>{const p=${panel},g=[...p.querySelectorAll('[data-annotation-group]')].find(g=>g.querySelector(':scope>summary>.annotation-group-title').textContent===${JSON.stringify(title)});if(!g)throw Error('Missing group');return g.dataset.annotationGroup;})()`);
+      const selector='[data-annotation-group='+JSON.stringify(key)+']';
+      if(!await page.evaluate(`${doc}.querySelector(${JSON.stringify(selector)}).open`))await clickNative(selector+'>summary');
+      await page.waitFor(`${doc}.querySelector(${JSON.stringify(selector)}).open`);return selector;
+    };
+    await clickNative('[data-sidebar-view=annotations]');
+    assert.deepEqual(await page.evaluate(`[...${panel}.querySelectorAll('.annotation-tree>[data-annotation-group]')].map(g=>[g.querySelector('.annotation-group-title').textContent,g.querySelector('.annotation-group-count').textContent,g.open])`),[['입문','3',false],['실전','1',false]]);
+    assert.equal(await page.evaluate(`${panel}.textContent.includes('주석 없는')||${panel}.textContent.includes('빈 분류')`),false);
+    assert.deepEqual(await page.evaluate(`${frame}.contentWindow.renderedSections`),['v0:one']);
+    assert.equal(await page.evaluate(`${doc}.querySelectorAll('#reader-tree details[open]').length`),0);
+    const intro=await openGroup('입문');await openGroup('기초');await openGroup('시작');const first=await openGroup('첫 장');
+    assert.equal(await page.evaluate(`${doc}.querySelector(${JSON.stringify(first)}).querySelectorAll('[data-annotation]').length`),2);
+    await clickNative(first+'>summary');await page.waitFor(`!${doc}.querySelector(${JSON.stringify(first)}).open`);await openGroup('첫 장');
+    await clickNative('[data-sidebar-view=search]');await clickNative('[data-sidebar-view=annotations]');
+    assert.equal(await page.evaluate(`${doc}.querySelector(${JSON.stringify(first)}).open`),true);
+    await openGroup('실전');await openGroup('응용');await openGroup('도구');await openGroup('실전의 장');
+    await clickNative('[data-annotation=practice-note]');await page.waitFor(`${doc}.querySelector('#reader-content').dataset.section==='v1:one'&&${doc}.querySelector('[data-htmlmemo-id=practice-note]')&&${doc}.querySelector('#reader-main').scrollTop>500`);
+    assert.deepEqual(await page.evaluate(`${frame}.contentWindow.renderedSections`),['v0:one','v1:one']);
+    await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/annotation-tree-desktop.png'),await page.screenshot());
+    await clickNative('[data-delete-annotation=practice-note]');await page.waitFor(`${panel}.querySelectorAll('.annotation-tree>[data-annotation-group]').length===1`);
+    assert.equal(await page.evaluate(`${doc}.querySelector(${JSON.stringify(intro)}).open`),true);
+    await page.click('#toolbar [data-action=undo]');await page.waitFor(`${panel}.querySelectorAll('.annotation-tree>[data-annotation-group]').length===2`);
+    await openGroup('다음');await openGroup('둘째 장');await clickNative('[data-annotation=second-highlight]');
+    await page.waitFor(`${doc}.querySelector('#reader-content').dataset.section==='v0:two'&&${doc}.querySelector('[data-htmlmemo-mark][data-htmlmemo-id=second-highlight]')`);
+    await clickNative('[data-delete-annotation=second-highlight]');await page.waitFor(`!${panel}.querySelector('[data-annotation=second-highlight]')`);
+    assert.equal(await page.evaluate(`${panel}.textContent.includes('둘째 장')`),false);assert.equal(await page.evaluate(`${panel}.textContent.includes('다음')`),false);
+    await page.waitFor('document.querySelectorAll(".tab-dirty:not([hidden])").length===0');
+    await page.evaluate(`window.showSaveFilePicker=async()=> (await navigator.storage.getDirectory()).getFileHandle('annotation-tree-export.html',{create:true});`);await page.click('#save-page');
+    await page.waitFor(`(async()=>{try{const root=await navigator.storage.getDirectory();return (await(await root.getFileHandle('annotation-tree-export.html')).getFile()).size>0;}catch{return false;}})()`);
+    const exported=await page.evaluate(`(async()=>{const root=await navigator.storage.getDirectory(),html=await(await(await root.getFileHandle('annotation-tree-export.html')).getFile()).text(),d=new DOMParser().parseFromString(html,'text/html'),metadata=JSON.parse(d.getElementById('htmlmemo-data').textContent);return {ids:metadata.annotations.map(a=>a.id),ui:!!d.querySelector('[data-annotation-group],[data-htmlmemo-doc-sidebar-ui]'),volumes:[0,1,2].every(i=>!!d.getElementById('book-volume-'+i))};})()`);
+    assert.deepEqual(exported,{ids:['practice-note','intro-note','intro-pen'],ui:false,volumes:true});
+    await page.send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await writeFile(join(root,'test-results/annotation-tree-mobile.png'),await page.screenshot());
+    await page.navigate(url);await page.waitFor('!!document.querySelector("[data-open=annotation-tree-document]")');await page.click('[data-open=annotation-tree-document]');await page.waitFor(`${panel}?.querySelector('[data-sidebar-view=annotations]')&&!${frame}.hasAttribute('aria-hidden')`);
+    await clickNative('[data-sidebar-view=annotations]');
+    assert.deepEqual(await page.evaluate(`[...${panel}.querySelectorAll('.annotation-tree>[data-annotation-group]')].map(g=>[g.querySelector('.annotation-group-title').textContent,g.querySelector('.annotation-group-count').textContent,g.open])`),[['입문','2',false],['실전','1',false]]);
+    assert.deepEqual(chrome.errors,[]);
+  }finally{if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
+});
+
 test('real Chrome: native sidebar view choices are visible on open and preserve the original book tree and export',{timeout:60000},async()=>{
   await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-native-sidebar-'));await cp(join(root,'public'),folder,{recursive:true});
   const server=createServer(folder);let chrome;
@@ -688,7 +756,7 @@ test('real Chrome: native sidebar view choices are visible on open and preserve 
       await page.evaluate(`${doc}.querySelector('input').select()`);
       await page.send('Input.insertText',{text:'Introduction'});await page.waitFor(`${doc}.querySelectorAll('[data-search-index]').length===6`);
       assert.equal(await page.evaluate(`${doc}.defaultView.getComputedStyle(${doc}.querySelector('#reader-tree')).display`),'none');
-      await chooseNative('annotations');assert.equal(await page.evaluate(`${doc}.querySelector('[data-annotation=native-note] .annotation-main').textContent`),'책의 메모');await clickNative('[data-annotation=native-note]');
+      await chooseNative('annotations');assert.equal(await page.evaluate(`${doc}.querySelector('[data-annotation=native-note] .annotation-main').textContent`),'책의 메모');await revealAnnotation(page,doc,'native-note');await clickNative('[data-annotation=native-note]');
       await chooseNative('search');assert.equal(await page.evaluate(`${doc}.querySelector('input').value`),'Introduction');
       await chooseNative('outline');assert.equal(await page.evaluate(`${doc}.querySelector('#reader-tree')===window.nativeSidebarTree`),true);
       assert.notEqual(await page.evaluate(`${doc}.defaultView.getComputedStyle(${doc}.querySelector('#reader-tree')).display`),'none');
@@ -698,7 +766,7 @@ test('real Chrome: native sidebar view choices are visible on open and preserve 
     }
     await clickNative('#reader-tree details:last-child summary');await page.waitFor(`${doc}.querySelector('#reader-tree details:last-child a')`);
     await clickNative('#reader-tree details:last-child a:last-child');await page.waitFor(`${doc}.querySelector('#reader-content').dataset.section==='v2:last'`);
-    await clickNative('[data-sidebar-view=annotations]');await clickNative('[data-delete-annotation=native-note]');
+    await clickNative('[data-sidebar-view=annotations]');await revealAnnotation(page,doc,'native-note');await clickNative('[data-delete-annotation=native-note]');
     await page.waitFor(`${doc}.querySelector('.panel-empty')?.textContent.includes('아직 주석')`);
     await page.evaluate(`window.showSaveFilePicker=async()=> (await navigator.storage.getDirectory()).getFileHandle('native-sidebar-export.html',{create:true});`);await page.click('#save-page');
     const exported=await page.evaluate(`(async()=>{const root=await navigator.storage.getDirectory();let file;for(let i=0;i<50;i++){try{file=await(await root.getFileHandle('native-sidebar-export.html')).getFile();if(file.size)break;}catch{}await new Promise(resolve=>setTimeout(resolve,50));}const html=await file.text(),doc=new DOMParser().parseFromString(html,'text/html');return {runtime:!!doc.querySelector('[data-htmlmemo-doc-sidebar-ui],[data-htmlmemo-native-sidebar],[data-htmlmemo-sidebar-view],[data-htmlmemo-redundant-toc-title],#htmlmemo-doc-sidebar-style'),volumes:[0,1,2].every(i=>!!doc.getElementById('book-volume-'+i)),notes:JSON.parse(doc.getElementById('htmlmemo-data').textContent).annotations.length,title:doc.querySelector('#reader-nav>.nav-head>strong').textContent,menu:!!doc.getElementById('reader-menu'),close:!!doc.getElementById('reader-close')};})()`);
@@ -745,7 +813,7 @@ test('real Chrome: sidebar view choices preserve search drafts, navigate saved n
       assert.equal(await page.evaluate('document.querySelector("#document-search").placeholder'),'불러온 부분에서 찾기');assert.equal(await page.evaluate('document.querySelector("#sidebar-title").textContent'),'검색');
       await page.evaluate(`(()=>{const input=document.querySelector('#document-search');input.value='검색어';input.dispatchEvent(new Event('input'));})()`);
       await page.waitFor('document.querySelectorAll("[data-search-index]").length===2');await page.click('[data-search-index="1"]');
-      await page.click('[data-sidebar-view=annotations]');assert.equal(await page.evaluate('document.querySelector("[data-annotation=sidebar-note] .annotation-main").textContent'),'보관한 메모');await page.click('[data-annotation=sidebar-note]');
+      await page.click('[data-sidebar-view=annotations]');assert.equal(await page.evaluate('document.querySelector("[data-annotation=sidebar-note] .annotation-main").textContent'),'보관한 메모');await revealAnnotation(page,'document','sidebar-note');await page.click('[data-annotation=sidebar-note]');
       await page.click('[data-sidebar-view=search]');assert.equal(await page.evaluate('document.querySelector("#document-search").value'),'검색어');
       await page.evaluate(`(()=>{const input=document.querySelector('#document-search');input.value='빠른 전환';input.dispatchEvent(new Event('input'));document.querySelector('[data-sidebar-view=outline]').click();})()`);
       await page.evaluate('new Promise(resolve=>setTimeout(resolve,160))');
@@ -756,7 +824,7 @@ test('real Chrome: sidebar view choices preserve search drafts, navigate saved n
     assert.equal(await page.evaluate('document.querySelector(".document-host:not([hidden]) iframe")===window.sidebarFrame'),true);
     await page.click('#add-bookmark');await page.evaluate(`document.querySelector('#note-text').value='새 북마크'`);await page.click('#dialog button[value=save]');
     await page.waitFor('document.querySelectorAll("[data-bookmark]").length===2&&document.querySelector("#status-left").textContent.includes("자동 저장됨")');
-    await page.click('[data-delete-bookmark=sidebar-bookmark]');await page.click('[data-sidebar-view=annotations]');await page.click('[data-delete-annotation=sidebar-note]');
+    await page.click('[data-delete-bookmark=sidebar-bookmark]');await page.click('[data-sidebar-view=annotations]');await revealAnnotation(page,'document','sidebar-note');await page.click('[data-delete-annotation=sidebar-note]');
     await page.waitFor('document.querySelector("#sidebar .panel-empty")?.textContent.includes("아직 주석")&&document.querySelector("#status-left").textContent.includes("자동 저장됨")');
     const saved=await page.evaluate(`(async()=>{const {getDocument}=await import('./src/storage.js');const record=await getDocument('sidebar-document');return {html:record.html,annotations:record.metadata.annotations.length,bookmarks:record.metadata.bookmarks.map(mark=>mark.title)};})()`);
     assert.equal(saved.html,original.html);assert.equal(saved.annotations,0);assert.deepEqual(saved.bookmarks,['새 북마크']);

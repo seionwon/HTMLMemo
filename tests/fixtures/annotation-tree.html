@@ -1,0 +1,25 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>목차별 주석 검증 책</title>
+<style>*{box-sizing:border-box}html,body{height:100%;margin:0;overflow:hidden;font:16px/1.6 system-ui,sans-serif}.layout{display:grid;grid-template-columns:280px minmax(0,1fr);height:100%}nav,main{overflow:auto;padding:12px}nav{border-right:1px solid #cbd5e1}.nav-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}summary{padding:8px;cursor:pointer}.toc-children{padding-left:12px}a{display:block;padding:8px;color:inherit}main{padding:24px}p{line-height:1.8}.spacer{height:1100px}</style></head>
+<body><div class="layout"><nav id="reader-nav"><div class="nav-head"><strong>목차</strong></div><div id="reader-tree"></div></nav><main id="reader-main"><div id="reader-status"></div><article id="reader-content"></article></main></div>
+<script id="book-manifest" type="application/json">{"format":"memosuite-book-html-v1","title":"목차별 주석 검증 책","volumes":[{"label":"입문","sections":[{"key":"v0:one","title":"첫 장","category":"기초 › 시작"},{"key":"v0:two","title":"둘째 장","category":"기초 › 다음"},{"key":"v0:empty","title":"주석 없는 장","category":"빈 분류"}]},{"label":"실전","sections":[{"key":"v1:one","title":"실전의 장","category":"응용 › 도구"},{"key":"v1:empty","title":"빈 실전 장","category":"빈 분류"}]},{"label":"주석 없는 책","sections":[{"key":"v2:empty","title":"빈 책의 장","category":"빈 분류"}]}]}</script>
+<script id="book-volume-0" type="application/octet-stream">["입문 원본"]</script>
+<script id="book-volume-1" type="application/octet-stream">["실전 원본"]</script>
+<script id="book-volume-2" type="application/octet-stream">["빈 책 원본"]</script>
+<script>
+(()=>{
+  const manifest=JSON.parse(document.getElementById('book-manifest').textContent),sections=manifest.volumes.flatMap(v=>v.sections),content=document.getElementById('reader-content'),tree=document.getElementById('reader-tree');
+  window.renderedSections=[];
+  for(const volume of manifest.volumes){
+    const details=document.createElement('details'),summary=document.createElement('summary');summary.textContent=volume.label;details.append(summary);
+    details.addEventListener('toggle',()=>{if(!details.open||details.children.length>1)return;const children=document.createElement('div');children.className='toc-children';for(const section of volume.sections){const link=document.createElement('a');link.href='#'+encodeURIComponent(section.key);link.textContent=section.title;children.append(link);}details.append(children);});tree.append(details);
+  }
+  function show(){
+    const key=decodeURIComponent(location.hash.slice(1)),section=sections.find(s=>s.key===key)||sections[0];
+    const heading=document.createElement('h1');heading.textContent=section.title;
+    const p=document.createElement('p');p.id='p-'+section.key;p.textContent='대상 문장 '+section.key;
+    const spacer=document.createElement('div');spacer.className='spacer';
+    content.replaceChildren(heading,...(section.key==='v1:one'?[spacer]:[]),p);content.dataset.section=section.key;document.documentElement.dataset.readerReady='true';window.renderedSections.push(section.key);
+  }
+  addEventListener('hashchange',()=>setTimeout(show,60));show();
+})();
+</script></body></html>
