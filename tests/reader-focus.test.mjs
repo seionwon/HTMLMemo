@@ -246,6 +246,28 @@ test('document and blank pane double-click enter focus without changing annotati
  r.disposed=true;click(doc.body);assert.equal(a.context.readerFocused,false);
 });
 
+test('sidebar double-click keeps normal and fullscreen views unchanged without cancelling native sidebar actions',()=>{
+ const r=Object.create(Reader.prototype),doc=new DOMParser().parseFromString('<html><head></head><body><header><span>Original header</span></header><div id="menu-shell"><section id="book-menu"><h2><span>목차</span></h2><details><summary><span>1부</span></summary><p>목차 항목</p></details><section data-htmlmemo-doc-sidebar-ui><div class="sidebar-views"><button><svg><path></path></svg></button></div><div class="sidebar-content"><p>빈 주석 목록</p></div></section></section></div><aside><span>Aside</span></aside><nav><span>Navigation</span></nav><div role="navigation"><span>Navigation role</span></div><div class="sidebar"><span>App sidebar</span></div><div data-htmlmemo-native-sidebar><span>Native sidebar</span></div><main><p>본문</p></main></body></html>','text/html');
+ let focused=false,calls=0,prevented=0;const annotations=[{id:'keep',text:'주석 보존'}];r.metadata={annotations};
+ r.tocResize={sidebar:doc.querySelector('#book-menu'),sidebarItem:doc.querySelector('#menu-shell')};r.topbarNode=doc.querySelector('header');
+ r.callbacks={onDocumentFocus(){focused=!focused;calls++;}};
+ const click=target=>r.focusDocument({target,button:0,preventDefault(){prevented++;}});
+ const roots=[doc.querySelector('#menu-shell'),...doc.querySelectorAll('aside,nav,[role="navigation"],.sidebar,[data-htmlmemo-native-sidebar]')];
+ for(const initial of [false,true]){focused=initial;for(const root of roots)for(const node of [root,...root.querySelectorAll('*')])click(node);click(doc.querySelector('#book-menu h2 span').firstChild);assert.equal(focused,initial);}
+ assert.equal(calls,0);assert.equal(prevented,0);assert.strictEqual(r.metadata.annotations,annotations);
+ focused=false;click(doc.querySelector('main p'));assert.equal(focused,true);click(doc.querySelector('main'));assert.equal(focused,false);
+ click(doc.querySelector('header span'));assert.equal(focused,true,'the original source header behavior is unchanged');assert.equal(prevented,3);
+ assert.equal(r.isInsideTocOrTopbar(doc.querySelector('header span')),true);assert.equal(r.isInsideTocOrTopbar(doc.querySelector('#book-menu p')),true);
+});
+
+test('sidebar resizer double-click still resets its width instead of toggling fullscreen',()=>{
+ const r=Object.create(Reader.prototype);let reset=0,focused=0,prevented=0,stopped=0;
+ r.isTocResizeTarget=()=>true;r.resetTocWidth=()=>reset++;r.callbacks={onDocumentFocus:()=>focused++};
+ const event={button:0,preventDefault(){prevented++;},stopPropagation(){stopped++;},stopImmediatePropagation(){stopped++;}};
+ if(!r.handleTocDblClick(event))r.focusDocument(event);
+ assert.equal(reset,1);assert.equal(focused,0);assert.equal(prevented,1);assert.equal(stopped,2);
+});
+
 
 test('full pane focus fits even a saved manual zoom and restores it on exit',()=>{
  const a=app(),r=Object.create(Reader.prototype),host=a.doc.createElement('div');a.doc.querySelector('#workspaces').append(host);

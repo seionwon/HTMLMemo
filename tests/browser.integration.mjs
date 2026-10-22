@@ -1061,12 +1061,13 @@ test('real Chrome: native sidebar view choices are visible on open and preserve 
     assert.equal(await page.evaluate(`${doc}.querySelector('#reader-nav>.nav-head>strong').getBoundingClientRect().height`),0);
     assert.equal(await page.evaluate(`${doc}.defaultView.getComputedStyle(${doc}.querySelector('#reader-menu')).display`),'none');
     assert.equal(await page.evaluate(`${doc}.querySelector('#book-search').getBoundingClientRect().height`),0);
-    await page.evaluate(`window.nativeSidebarTree=${doc}.querySelector('#reader-tree');window.nativeBookSearch=${doc}.querySelector('#book-search');`);
-    const clickNative=async selector=>{
+    await page.evaluate(`window.nativeSidebarTree=${doc}.querySelector('#reader-tree');window.nativeBookSearch=${doc}.querySelector('#book-search');window.nativeSidebarDblClicks=0;${doc}.addEventListener('dblclick',()=>window.nativeSidebarDblClicks++,true);`);
+    const clickNative=async(selector,double=false,blank=false)=>{
       await page.evaluate('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
-      const point=await page.evaluate(`(()=>{const frame=${frame},element=frame.contentDocument.querySelector(${JSON.stringify(selector)});element.scrollIntoView({block:'nearest'});const f=frame.getBoundingClientRect(),r=element.getBoundingClientRect(),scale=f.width/frame.clientWidth;return {x:f.left+(r.left+r.width/2)*scale,y:f.top+(r.top+r.height/2)*scale};})()`);
-      await page.send('Input.dispatchMouseEvent',{type:'mousePressed',...point,button:'left',clickCount:1});await page.send('Input.dispatchMouseEvent',{type:'mouseReleased',...point,button:'left',clickCount:1});
+      const point=await page.evaluate(`(()=>{const frame=${frame},d=frame.contentDocument,element=d.querySelector(${JSON.stringify(selector)});element.scrollIntoView({block:'nearest'});const f=frame.getBoundingClientRect(),r=element.getBoundingClientRect(),scale=f.width/frame.clientWidth;let x=r.left+r.width/2,y=r.top+r.height/2;if(${blank}){x=r.left+20;for(y=Math.min(r.bottom,frame.clientHeight)-16;y>Math.max(0,r.top)+16;y-=8)if(d.elementFromPoint(x,y)===element)break;if(d.elementFromPoint(x,y)!==element)throw Error('No visible sidebar blank space');}return {x:f.left+x*scale,y:f.top+y*scale};})()`);
+      for(const clickCount of double?[1,2]:[1]){await page.send('Input.dispatchMouseEvent',{type:'mousePressed',...point,button:'left',clickCount});await page.send('Input.dispatchMouseEvent',{type:'mouseReleased',...point,button:'left',clickCount});}
     };
+    const doubleClickNative=async(selector,blank=false)=>{const before=await page.evaluate('window.nativeSidebarDblClicks');await clickNative(selector,true,blank);await page.waitFor(`window.nativeSidebarDblClicks===${before+1}`);};
     // At 390px a view tap right after typing a search is occasionally ignored (seen before the
     // annotation list changes too); a reader taps again, so the check does the same, up to 3 times.
     const chooseNative=async view=>{
@@ -1093,6 +1094,7 @@ test('real Chrome: native sidebar view choices are visible on open and preserve 
       const fields=await page.evaluate(`(()=>{const d=${doc},upper=d.querySelector('#book-search'),lower=d.querySelector('#htmlmemo-native-document-search'),content=d.querySelector('[data-htmlmemo-doc-sidebar-ui] .sidebar-content'),host=d.querySelector('[data-htmlmemo-book-search]'),props=['fontFamily','fontSize','fontWeight','lineHeight','letterSpacing','paddingTop','paddingRight','paddingBottom','paddingLeft','borderTopWidth','borderRightWidth','borderBottomWidth','borderLeftWidth','borderRadius','boxSizing'],metrics=e=>{const s=d.defaultView.getComputedStyle(e),r=e.getBoundingClientRect();return {styles:props.map(p=>s[p]),width:r.width,height:r.height,left:r.left};},a=upper.getBoundingClientRect(),b=lower.getBoundingClientRect();return {upper:metrics(upper),lower:metrics(lower),topGap:a.top-content.getBoundingClientRect().top,betweenGap:b.top-a.bottom,separator:[host,d.querySelector('#book-search-ui')].map(e=>d.defaultView.getComputedStyle(e).borderBottomWidth)};})()`);
       assert.deepEqual(fields.upper,fields.lower,'both fields use the lower field metrics despite source ID styles');assert.equal(fields.upper.styles[1],'12px');
       assert.equal(fields.topGap,10);assert.equal(fields.betweenGap,fields.topGap);assert.deepEqual(fields.separator,['0px','0px']);
+      await doubleClickNative('#htmlmemo-native-search-count');assert.equal(await page.evaluate('document.querySelector("#app").classList.contains("reader-focus")'),false);
       await writeFile(join(root,`test-results/sidebar-views-search-empty-native-${width}.png`),await page.screenshot());
       await clickNative('#book-search');await page.evaluate(`${doc}.querySelector('#book-search').select()`);await page.send('Input.insertText',{text:'용어 전체'});
       await page.waitFor(`${doc}.querySelector('#book-search-results').textContent==='전체 검색: 용어 전체'`);
@@ -1108,6 +1110,14 @@ test('real Chrome: native sidebar view choices are visible on open and preserve 
       assert.notEqual(await page.evaluate(`${doc}.defaultView.getComputedStyle(${doc}.querySelector('#reader-tree')).display`),'none');
       assert.equal(await page.evaluate(`${doc}.defaultView.getComputedStyle(${doc}.querySelector('[data-htmlmemo-redundant-toc-title]')).display`),'none');
       assert.equal(await page.evaluate(`${doc}.querySelectorAll('[data-htmlmemo-doc-sidebar-ui]').length`),1);
+      const groupOpen=await page.evaluate(`${doc}.querySelector('#reader-tree details').open`);
+      for(const focused of [false,true]){
+        if(focused){await doubleClickNative('#reader-content p');await page.waitFor('document.querySelector("#app").classList.contains("reader-focus")');}
+        await doubleClickNative('#reader-nav',true);assert.equal(await page.evaluate('document.querySelector("#app").classList.contains("reader-focus")'),focused);
+        await doubleClickNative('#reader-tree details:first-child summary');assert.equal(await page.evaluate('document.querySelector("#app").classList.contains("reader-focus")'),focused);
+        assert.equal(await page.evaluate(`${doc}.querySelector('#reader-tree details').open`),groupOpen,'native TOC disclosure still handles both clicks');
+      }
+      await doubleClickNative('#reader-content p');await page.waitFor('!document.querySelector("#app").classList.contains("reader-focus")&&!document.fullscreenElement');
       await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,`test-results/sidebar-views-native-${width}.png`),await page.screenshot());
     }
     await clickNative('[data-sidebar-view=bookmarks]');await clickNative('#htmlmemo-native-add-bookmark');

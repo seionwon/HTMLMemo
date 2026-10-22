@@ -966,14 +966,20 @@ export class Reader {
     }
     return event.clientX;
   }
-  isInsideTocOrTopbar(node) {
+  isInsideTocSidebar(node) {
     const el = node?.nodeType === 1 ? node : node?.parentElement;
     if (!el) return false;
     const sidebar = this.tocResize?.sidebar;
     const sidebarItem = this.tocResize?.sidebarItem;
     if (sidebar && (el === sidebar || sidebar.contains?.(el) || (sidebarItem && (el === sidebarItem || sidebarItem.contains?.(el))))) return true;
+    return !!el.closest?.('[data-htmlmemo-toc-sidebar],[data-htmlmemo-toc-item],[data-htmlmemo-native-sidebar],[data-htmlmemo-doc-sidebar-ui],aside,nav,[role="navigation"],.toc,#toc,.sidebar,#sidebar');
+  }
+  isInsideTocOrTopbar(node) {
+    const el = node?.nodeType === 1 ? node : node?.parentElement;
+    if (!el) return false;
+    if (this.isInsideTocSidebar(el)) return true;
     if (this.topbarNode && (el === this.topbarNode || this.topbarNode.contains?.(el))) return true;
-    return !!el.closest?.('[data-htmlmemo-toc-sidebar],[data-htmlmemo-toc-item],[data-htmlmemo-doc-topbar],[data-htmlmemo-doc-topbar-item],aside,nav,[role="navigation"],.toc,#toc,.sidebar,#sidebar');
+    return !!el.closest?.('[data-htmlmemo-doc-topbar],[data-htmlmemo-doc-topbar-item]');
   }
   isInteractiveControl(node) {
     const el = node?.nodeType === 1 ? node : node?.parentElement;
@@ -1283,6 +1289,7 @@ export class Reader {
   }
   focusDocument(event) {
     if (this.disposed || event.button != null && event.button !== 0) return;
+    if (this.isInsideTocSidebar(event.target)) return;
     if (event.target.closest?.('a,button,input,textarea,select,[contenteditable],[data-htmlmemo-id],[role="separator"],[data-htmlmemo-toc-resizer],[data-htmlmemo-toc-resizer-bound],[data-htmlmemo-toc-strip]')) return;
     event.preventDefault();
     this.callbacks.onDocumentFocus?.();
