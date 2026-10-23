@@ -258,6 +258,21 @@ export function rangeFromOffsets(doc, start, end, index = textIndex(doc)) {
   if (!first || !last || start < 0 || end > index.text.length || end <= start) return null;
   const range = doc.createRange(); range.setStart(first.node, start - first.start); range.setEnd(last.node, end - last.start); return range;
 }
+export function sentenceOffsets(text,offset,language) {
+  if(!text.trim()||!Number.isInteger(offset)||offset<0||offset>=text.length)return null;
+  const normalized=text.replace(/[\t\r\n]/g,' ');let start=0,end=text.length;
+  try{
+    const segments=new Intl.Segmenter(language||undefined,{granularity:'sentence'}).segment(normalized);
+    for(const part of segments)if(offset>=part.index&&offset<part.index+part.segment.length){start=part.index;end=start+part.segment.length;break;}
+  }catch{
+    // Older engines still select complete punctuation-delimited sentences.
+    const pattern=/[^.!?。！？\u2029]+(?:[.!?。！？]+["'”’»」』】）)]*)?|[.!?。！？]+/gu;
+    for(const part of normalized.matchAll(pattern))if(offset>=part.index&&offset<part.index+part[0].length){start=part.index;end=start+part[0].length;break;}
+  }
+  while(start<end&&/\s/u.test(text[start]))start++;
+  while(end>start&&/\s/u.test(text[end-1]))end--;
+  return end>start?{start,end}:null;
+}
 export function selectionAnchor(doc, range) {
   const index = textIndex(doc); let start; let end;
   // Compare boundary points instead of Range.toString: CSS-hidden and excluded

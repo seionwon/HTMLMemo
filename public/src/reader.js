@@ -1,7 +1,7 @@
 import { createReadAloud } from './read-aloud.js';
 import { clamp, uid } from './utils.js';
 import { History, TEXT_TOOLS, DRAW_TOOLS } from './model.js';
-import { LAYER_ID, prepareLoadedHTML, cleanAnnotations, textIndex, selectionAnchor, resolveTextAnchor, wrapOffsets, rangeFromOffsets, serializeHTML, inspectBookDocument, drawingTargetQuote, describeDrawingTarget, currentSection } from './document.js';
+import { LAYER_ID, prepareLoadedHTML, cleanAnnotations, textIndex, selectionAnchor, resolveTextAnchor, wrapOffsets, rangeFromOffsets, sentenceOffsets, serializeHTML, inspectBookDocument, drawingTargetQuote, describeDrawingTarget, currentSection } from './document.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const TOC_WIDTH_KEY = 'htmlmemo-doc-toc-width-v1', TOC_EXPANDED_WIDTH_KEY = 'htmlmemo-doc-toc-expanded-width-v1', TOC_MIN = 8, TOC_STRIP_SNAP = 48, TOC_MAX = 640, TOC_DEFAULT = 260;
@@ -351,7 +351,7 @@ export class Reader {
     this.startFontObserver();
     this.doc.addEventListener('wheel', event => this.forwardWheel(event), {capture:true,passive:false});
     this.doc.addEventListener('pointerdown', event => { if(this.startTocResize(event))return; if(this.startMiddleScroll(event))return;this.stopMiddleScroll();this.callbacks.onSelectionDismiss?.(); this.pointerDown(event); }, true);
-    this.doc.addEventListener('mousedown', event => { if(this.startTocResize(event))return; }, true);
+    this.doc.addEventListener('mousedown', event => { if(this.startTocResize(event))return;this.selectSentenceAtClick(event); }, true);
     this.doc.addEventListener('dragstart', event => { if(this.tocDrag||this.isTocResizeTarget(event))event.preventDefault(); }, true);
     this.doc.addEventListener('pointermove', event => { if(this.tocDrag)return; if(this.moveMiddleScroll(event))return;this.pointerMove(event); }, true);
     this.doc.addEventListener('pointerup', event => { if(this.tocDrag)return; if(this.endMiddleScroll(event))return;this.pointerUp(event); }, true);
@@ -1287,10 +1287,55 @@ export class Reader {
       if (this.dynamicDirty && !this.disposed) this.scheduleDynamicRefresh();
     }
   }
+  textAtClick(event) {
+    const doc=this.doc,target=event.target?.nodeType===1?event.target:event.target?.parentElement;
+    if(!doc||target?.ownerDocument!==doc||!Number.isFinite(event.clientX)||!Number.isFinite(event.clientY))return null;
+    const {clientX:x,clientY:y}=event;let node,offset;
+    try{
+      const caret=doc.caretPositionFromPoint?.(x,y),range=caret?null:doc.caretRangeFromPoint?.(x,y);
+      node=caret?.offsetNode||range?.startContainer;offset=caret?.offset??range?.startOffset;
+    }catch{/* Missing hit-testing must not turn a word selection into fullscreen. */}
+    if(!node){return target.matches?.('p,span,strong,em,b,i,u,small,h1,h2,h3,h4,h5,h6,li,td,th,pre,code')?{unknown:true}:null;}
+    if(node.nodeType!==3||!node.textContent.trim()||node.parentElement?.closest('script,style,noscript,svg,textarea,template,[data-htmlmemo-ui]'))return null;
+    const range=doc.createRange();
+    for(const at of [offset,offset-1]){
+      if(at<0||at>=node.textContent.length)continue;
+      range.setStart(node,at);range.setEnd(node,at+1);
+      if(!range.getClientRects)return {unknown:true};
+      for(const rect of range.getClientRects())if(rect.width>0&&rect.height>0&&x>=rect.left-.5&&x<=rect.right+.5&&y>=rect.top&&y<=rect.bottom)return {node,offset:at};
+    }
+    return null;
+  }
+  sentenceIndex(point) {
+    const doc=this.doc,block=element=>!!element&&(element.matches('p,h1,h2,h3,h4,h5,h6,li,dt,dd,blockquote,figcaption,td,th,caption,pre')||/^(block|flow-root|list-item|table-cell|flex|grid)$/.test(doc.defaultView?.getComputedStyle?.(element)?.display||''));
+    let root=point.node.parentElement;while(root!==doc.body&&root.parentElement&&!block(root))root=root.parentElement;
+    let first=point.node;while(first.parentNode!==root)first=first.parentNode;
+    let last=first;while(first.previousSibling&&!(first.previousSibling.nodeType===1&&block(first.previousSibling)))first=first.previousSibling;
+    while(last.nextSibling&&!(last.nextSibling.nodeType===1&&block(last.nextSibling)))last=last.nextSibling;
+    const index={text:'',nodes:[]};
+    const collect=node=>{
+      if(node.nodeType===3){const start=index.text.length;index.text+=node.textContent;index.nodes.push({node,start,end:index.text.length});return;}
+      if(node.nodeType!==1||node.matches('script,style,noscript,svg,textarea,template,[data-htmlmemo-ui],[hidden],[aria-hidden="true"]'))return;
+      const style=doc.defaultView?.getComputedStyle?.(node);if(style?.display==='none'||style?.visibility==='hidden')return;
+      if(block(node)){index.text+='\u2029';return;} // Do not join separate block descendants into one sentence.
+      if(node.localName==='br'){index.text+='\n';return;}
+      for(const child of node.childNodes)collect(child);
+    };
+    for(let node=first;node;node=node.nextSibling){collect(node);if(node===last)break;}
+    return index;
+  }
+  selectSentenceAtClick(event) {
+    if(this.disposed||event.button!==0||event.detail!==3||this.tool!=='select'||this.isInsideTocOrTopbar(event.target)||event.target.closest?.('a,button,input,textarea,select,[contenteditable],[data-htmlmemo-id]'))return false;
+    const point=this.textAtClick(event);if(!point?.node)return false;
+    const index=this.sentenceIndex(point),entry=index.nodes.find(item=>item.node===point.node);if(!entry)return false;
+    const bounds=sentenceOffsets(index.text,entry.start+point.offset,this.doc.documentElement.lang||undefined);if(!bounds)return false;
+    const range=rangeFromOffsets(this.doc,bounds.start,bounds.end,index),selection=this.doc.getSelection();if(!range||!selection)return false;
+    event.preventDefault();selection.removeAllRanges();selection.addRange(range);return true;
+  }
   focusDocument(event) {
     if (this.disposed || event.button != null && event.button !== 0) return;
     if (this.isInsideTocSidebar(event.target)) return;
-    if (event.target.closest?.('a,button,input,textarea,select,[contenteditable],[data-htmlmemo-id],[role="separator"],[data-htmlmemo-toc-resizer],[data-htmlmemo-toc-resizer-bound],[data-htmlmemo-toc-strip]')) return;
+    if (event.target.closest?.('a,button,input,textarea,select,img,svg,canvas,video,audio,object,embed,iframe,[role="img"],[contenteditable],[data-htmlmemo-id],[role="separator"],[data-htmlmemo-toc-resizer],[data-htmlmemo-toc-resizer-bound],[data-htmlmemo-toc-strip]')||this.textAtClick(event)) return;
     event.preventDefault();
     this.callbacks.onDocumentFocus?.();
   }

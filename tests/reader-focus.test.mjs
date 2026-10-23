@@ -235,14 +235,15 @@ test('rapid reentry waits for browser fullscreen exit to settle',async()=>{
 });
 
 
-test('document and blank pane double-click enter focus without changing annotations; controls and links retain their actions',async()=>{
+test('blank pane double-click enters focus while word selection, controls and links retain their actions',async()=>{
  const a=app(),r=Object.create(Reader.prototype);let prevented=0;
  r.callbacks={onDocumentFocus:()=>{if(!a.context.readerFocused)void a.context.toggleReaderFocus();}};
  const doc=new DOMParser().parseFromString('<html><head></head><body><p>Document text</p><a href="#chapter">Link</a><input><span data-htmlmemo-id="note">Note</span></body></html>','text/html');
+ r.textAtClick=event=>event.target===doc.querySelector('p')?{unknown:true}:null;
  const click=target=>r.focusDocument({target,button:0,preventDefault(){prevented++;}});
- const original=a.r.metadata.annotations;click(doc.querySelector('p'));assert.equal(a.context.readerFocused,true);assert.strictEqual(a.r.metadata.annotations,original);
- click(doc.body);assert.equal(a.context.readerFocused,true);assert.equal(prevented,2);
- await a.context.leaveReaderFocus();for(const target of doc.querySelectorAll('a,input,[data-htmlmemo-id]'))click(target);assert.equal(a.context.readerFocused,false);assert.equal(prevented,2);
+ const original=a.r.metadata.annotations;click(doc.querySelector('p'));assert.equal(a.context.readerFocused,false);assert.strictEqual(a.r.metadata.annotations,original);
+ click(doc.body);assert.equal(a.context.readerFocused,true);assert.equal(prevented,1);
+ await a.context.leaveReaderFocus();for(const target of doc.querySelectorAll('a,input,[data-htmlmemo-id]'))click(target);assert.equal(a.context.readerFocused,false);assert.equal(prevented,1);
  r.disposed=true;click(doc.body);assert.equal(a.context.readerFocused,false);
 });
 

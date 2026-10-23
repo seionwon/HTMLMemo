@@ -1112,12 +1112,12 @@ test('real Chrome: native sidebar view choices are visible on open and preserve 
       assert.equal(await page.evaluate(`${doc}.querySelectorAll('[data-htmlmemo-doc-sidebar-ui]').length`),1);
       const groupOpen=await page.evaluate(`${doc}.querySelector('#reader-tree details').open`);
       for(const focused of [false,true]){
-        if(focused){await doubleClickNative('#reader-content p');await page.waitFor('document.querySelector("#app").classList.contains("reader-focus")');}
+        if(focused){await doubleClickNative('#reader-main',true);await page.waitFor('document.querySelector("#app").classList.contains("reader-focus")');}
         await doubleClickNative('#reader-nav',true);assert.equal(await page.evaluate('document.querySelector("#app").classList.contains("reader-focus")'),focused);
         await doubleClickNative('#reader-tree details:first-child summary');assert.equal(await page.evaluate('document.querySelector("#app").classList.contains("reader-focus")'),focused);
         assert.equal(await page.evaluate(`${doc}.querySelector('#reader-tree details').open`),groupOpen,'native TOC disclosure still handles both clicks');
       }
-      await doubleClickNative('#reader-content p');await page.waitFor('!document.querySelector("#app").classList.contains("reader-focus")&&!document.fullscreenElement');
+      await doubleClickNative('#reader-main',true);await page.waitFor('!document.querySelector("#app").classList.contains("reader-focus")&&!document.fullscreenElement');
       await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,`test-results/sidebar-views-native-${width}.png`),await page.screenshot());
     }
     await clickNative('[data-sidebar-view=bookmarks]');await clickNative('#htmlmemo-native-add-bookmark');
@@ -1201,6 +1201,47 @@ test('real Chrome: sidebar view choices preserve search drafts, navigate saved n
     await page.click('#close-sidebar');assert.equal(await page.evaluate('document.querySelector("#sidebar").hidden'),true);
     await page.click('[data-action=more]');await page.click('[data-more=sidebar]');assert.equal(await page.evaluate('document.querySelector("#sidebar").hidden'),false);
     assert.equal(await page.evaluate('document.querySelectorAll("#sidebar [data-sidebar-view]").length'),4);await page.click('#close-sidebar');assert.deepEqual(chrome.errors,[]);
+  }finally{if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
+});
+
+test('real Chrome: sidebar view choices preserve word and sentence selection with blank-only fullscreen',{timeout:90000},async()=>{
+  await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-text-clicks-'));await cp(join(root,'public'),folder,{recursive:true});
+  const server=createServer(folder);let chrome;
+  try{
+    await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));chrome=await launchChrome();const page=chrome.page;
+    const url=process.env.HTMLMEMO_SIDEBAR_TEST_URL||`http://127.0.0.1:${server.address().port}/`;
+    const english='A second sentence with nested formatting!',korean='두 번째 문장입니다!',wrapped='A longer sentence with wrapping across several visible lines and its original punctuation intact!';
+    const source='<html lang="ko"><head><title>Text click fixture</title><style>html,body{height:100%;margin:0;overflow:hidden;font:18px/1.7 sans-serif}.layout{display:grid;grid-template-columns:220px 1fr;height:100%}nav,main{padding:12px;overflow:auto}p{max-width:620px}#wrapped{width:250px}#blank{height:220px}</style></head><body><div class="layout"><nav id="reader-nav"><h2>목차</h2><div id="reader-tree"><p>Sidebar text</p><a href="#english">Part</a></div></nav><main id="reader-main"><article id="reader-content"><p id="english">First sentence. A <em>second</em> sentence with <strong>nested formatting</strong>! Last sentence?</p><p id="korean">첫 문장입니다. <em>두 번째</em> 문장입니다! 마지막 문장입니다.</p><p id="wrapped">A longer sentence with <em>wrapping</em> across several visible lines and its original punctuation intact! A separate sentence.</p><button id="source-control">Control</button><div id="blank"></div></article></main></div></body></html>';
+    await page.navigate(url);await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
+    await page.evaluate(`(async()=>{const {putDocumentRevision}=await import('./src/storage.js'),{parseHTML}=await import('./src/document.js'),parsed=parseHTML(${JSON.stringify(source)});await putDocumentRevision({id:'text-click-document',title:'Text click fixture',name:'text-clicks.html',created:Date.now(),modified:Date.now(),html:parsed.html,metadata:parsed.metadata});})()`);
+    await page.navigate(url);await page.waitFor('document.querySelector("[data-open=text-click-document]")');await page.click('[data-open=text-click-document]');
+    const frame='document.querySelector(".document-host:not([hidden]) iframe")',doc=frame+'.contentDocument';
+    await page.waitFor(`${doc}?.querySelector('[data-htmlmemo-doc-sidebar-ui]')&&${doc}.querySelector('#english')&&!${frame}.hasAttribute('aria-hidden')`);
+    const clickAt=async(selector,count,{word='',corner=false}={})=>{
+      await page.evaluate('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
+      const point=await page.evaluate(`(()=>{const f=${frame},d=f.contentDocument,e=d.querySelector(${JSON.stringify(selector)});e.scrollIntoView({block:'nearest'});let r=e.getBoundingClientRect(),x=r.left+r.width/2,y=r.top+r.height/2;const word=${JSON.stringify(word)};if(word){const w=d.createTreeWalker(e,NodeFilter.SHOW_TEXT);let found=false;while(w.nextNode()){const n=w.currentNode,at=n.textContent.indexOf(word);if(at<0)continue;const range=d.createRange();range.setStart(n,at);range.setEnd(n,at+word.length);r=range.getClientRects()[0];x=r.left+r.width/2;y=r.top+r.height/2;found=true;break;}if(!found)throw Error('Missing text point: '+word);}else if(${corner}){x=r.right-3;y=r.bottom-2;}const b=f.getBoundingClientRect(),z=b.width/f.clientWidth;return {x:b.left+x*z,y:b.top+y*z};})()`);
+      for(let clickCount=1;clickCount<=count;clickCount++){await page.send('Input.dispatchMouseEvent',{type:'mousePressed',...point,button:'left',clickCount});await page.send('Input.dispatchMouseEvent',{type:'mouseReleased',...point,button:'left',clickCount});}
+    };
+    const focused=()=>page.evaluate('document.querySelector("#app").classList.contains("reader-focus")');
+    const selected=()=>page.evaluate(`${doc}.getSelection().toString().trim()`);
+    await mkdir(join(root,'test-results'),{recursive:true});
+    for(const width of [1280,390]){
+      await page.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
+      for(const fullscreen of [false,true]){
+        if(fullscreen){await clickAt('#english',2,{corner:true});await page.waitFor('document.querySelector("#app").classList.contains("reader-focus")');}
+        await clickAt('#english em',2,{word:'second'});await page.waitFor(`${doc}.getSelection().toString().trim()==='second'`);assert.equal(await focused(),fullscreen);
+        await clickAt('#english em',3,{word:'second'});await page.waitFor(`${doc}.getSelection().toString().trim()===${JSON.stringify(english)}`);assert.equal(await selected(),english);assert.equal(await focused(),fullscreen);
+        await clickAt('#korean em',3,{word:'번째'});await page.waitFor(`${doc}.getSelection().toString().trim()===${JSON.stringify(korean)}`);assert.equal(await focused(),fullscreen);
+        await clickAt('#wrapped em',3,{word:'wrapping'});await page.waitFor(`${doc}.getSelection().toString().trim()===${JSON.stringify(wrapped)}`);assert.equal(await focused(),fullscreen);
+        await writeFile(join(root,`test-results/sidebar-views-text-clicks-${width}-${fullscreen?'focused':'normal'}.png`),await page.screenshot());
+        await clickAt('#reader-tree p',2,{word:'Sidebar'});assert.equal(await focused(),fullscreen);await clickAt('#source-control',2);assert.equal(await focused(),fullscreen);
+      }
+      await clickAt('#blank',2);await page.waitFor('!document.querySelector("#app").classList.contains("reader-focus")&&!document.fullscreenElement');
+    }
+    await clickAt('#english em',3,{word:'second'});await page.waitFor(`${doc}.getSelection().toString().trim()===${JSON.stringify(english)}`);await page.click('[data-action=highlight]');
+    await page.waitFor(`${doc}.querySelector('[data-htmlmemo-mark]')&&document.querySelector('#status-left').textContent.includes('자동 저장됨')`);
+    const saved=await page.evaluate(`(async()=>{const {getDocument}=await import('./src/storage.js'),r=await getDocument('text-click-document');return r.metadata.annotations.map(a=>({type:a.type,quote:a.textAnchor.quote}));})()`);
+    assert.deepEqual(saved,[{type:'highlight',quote:english}]);assert.deepEqual(chrome.errors,[]);
   }finally{if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
 });
 
