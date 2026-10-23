@@ -635,6 +635,7 @@ function showPopover(name,html,bind=()=>{},readingAnchor=null) {
   $('#tool-popover').cancelPaletteDrag?.();
   $('#tool-popover').onkeydown=null;$$('.tool-has-modes',$('#toolbar')).forEach(button=>button.setAttribute('aria-expanded','false'));
   $('#tool-popover').removeAttribute('aria-label');$('#tool-popover').removeAttribute('role');
+  if(name==='zoom'){$('#tool-popover').setAttribute('role','dialog');$('#tool-popover').setAttribute('aria-label','확대 · 축소');}
   // A notice must not sit over the menu it just made room for; errors stay until they time out.
   if(!$('#toast').classList.contains('error'))$('#toast').hidden=true;
   popoverName=name;$('#tool-popover').readingAnchor=readingAnchor;$('#tool-popover').classList.toggle('selection',name==='selection');$('#tool-popover').classList.toggle('palette-popover',name==='palette');$('#tool-popover').innerHTML=html;$('#tool-popover').hidden=false;positionPopover();
@@ -1093,7 +1094,7 @@ function bindUI() {
   $('#settings-file-input').onchange=safely(async event=>{const file=event.target.files[0];event.target.value='';if(file){await restoreSettings(file);settingsDialog();}});
   $('#library-filter').oninput=renderLibrary;$('#library-sort').onchange=safely(e=>{const [librarySort,librarySortDirection]=e.target.value.split(':');changePreferences({librarySort,librarySortDirection});});$$('[data-library-view]').forEach(button=>button.onclick=safely(()=>changePreferences({libraryView:button.dataset.libraryView})));$('#settings-button').onclick=settingsDialog;$('#web-help-button').onclick=()=>webHelpDialog();$('#paste-button').onclick=()=>pasteTextDialog();
   $('#open-example').onclick=safely(async()=>{let html=await bundledExample();if(html===null){const response=await fetch('./example.html');if(!response.ok)throw new Error('예제 문서를 불러오지 못했습니다.');html=await response.text();}await createDocument({html,title:'천천히 읽는다는 것',viewport:{width:960,height:800}},await folderFile('천천히 읽는다는 것'));});
-  document.addEventListener('keydown',handleKey);document.addEventListener('pointerdown',event=>{if(!event.target.closest('#toolbar,#tool-popover')&&!$('#tool-popover').hidden)closePopover();});
+  document.addEventListener('keydown',handleKey);document.addEventListener('pointerdown',event=>{if(!event.target.closest('#toolbar,#tool-popover,[data-htmlmemo-reading-controls]')&&!$('#tool-popover').hidden)closePopover();});
   $('#dialog').addEventListener('click',event=>{if(event.target===$('#dialog'))$('#dialog').close();});
   window.addEventListener('beforeunload',event=>{if(tabs.some(t=>t.opening||t.queue?.editsPending)){event.preventDefault();event.returnValue='';}});
   const savePositions=()=>{for(const tab of tabs)if(tab.reader?.doc){tab.reader.rememberPosition();tab.queue.flush().catch(()=>{});}};

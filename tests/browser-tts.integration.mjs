@@ -10,7 +10,7 @@ import { createServer } from '../scripts/server.mjs';
 import { launchChrome, clickAppMenu } from './chrome.mjs';
 import { FORMAT_VERSION } from '../public/src/model.js';
 test('real Chrome: MemoSuite TTS toolbar in HTMLMemo',{timeout:90000},async t=>{
-  await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-web-test-'));await cp(join(root,'public'),folder,{recursive:true});await cp(join(root,'tests/fixtures'),join(folder,'fixtures'),{recursive:true});
+  await prepareAssets();await mkdir(join(root,'test-results'),{recursive:true});const folder=await mkdtemp(join(tmpdir(),'htmlmemo-web-test-'));await cp(join(root,'public'),folder,{recursive:true});await cp(join(root,'tests/fixtures'),join(folder,'fixtures'),{recursive:true});
   const server=createServer(folder);let chrome;
   try{
     await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});const url=`http://127.0.0.1:${server.address().port}/`;chrome=await launchChrome();const page=chrome.page;
@@ -22,6 +22,7 @@ test('real Chrome: MemoSuite TTS toolbar in HTMLMemo',{timeout:90000},async t=>{
       // IndexedDB structured-clone contracts as an external picked file.
       await page.evaluate(`window.showSaveFilePicker=async()=>{const root=await navigator.storage.getDirectory();return root.getFileHandle('picked-document.html',{create:true});};`);
       await page.click('#save-page');await page.waitFor('!document.querySelector("#toolbar").hidden && document.querySelector("#status-left").textContent.includes("자동 저장됨")');
+      await page.click('#save-page');await page.waitFor(`(async()=>{try{const root=await navigator.storage.getDirectory();return (await(await root.getFileHandle('picked-document.html')).getFile()).size>0;}catch{return false;}})()`);
       const html=await page.evaluate(`(async()=>{const root=await navigator.storage.getDirectory();return (await (await root.getFileHandle('picked-document.html')).getFile()).text();})()`);assert.match(html,/data:image\/svg\+xml;base64/);assert.match(html,/htmlmemo-data/);assert.ok(!html.includes('fixtureLoaded'));
     });
     await t.test('MemoSuite toolbar opens without speech and retains original controls and styling',async()=>{try {
@@ -39,7 +40,7 @@ test('real Chrome: MemoSuite TTS toolbar in HTMLMemo',{timeout:90000},async t=>{
       assert.deepEqual(await page.evaluate('[...document.querySelectorAll("[role=option]")].map(b=>b.textContent.replace("✓",""))'),['자동 (UI 언어)','Google 한국어']);
       await page.evaluate(`document.querySelectorAll('[role=option]')[1].click();`);
       assert.equal(await page.evaluate('localStorage.getItem("msuite_tts_voice_ko")'),'ko-test');
-      await writeFile('/tmp/htmlmemo-tts-toolbar-desktop.png',await page.screenshot());
+      await writeFile(join(root,'test-results/reading-controls-tts-desktop.png'),await page.screenshot());
       await page.click('.mstts-player [aria-label="소리내어 읽기"]');
       await page.waitFor('window.__utterances.length===1');
       assert.equal(await page.evaluate('window.__utterances[0].voice.voiceURI'),'ko-test');
@@ -71,7 +72,7 @@ test('real Chrome: MemoSuite TTS toolbar in HTMLMemo',{timeout:90000},async t=>{
       assert.equal(await page.evaluate(`document.querySelector('.mstts-player [aria-label="읽는 속도"]').textContent`),'1.25×');
       await page.send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
       await page.click('.mstts-player [aria-label="낭독 설정"]');
-      await writeFile('/tmp/htmlmemo-tts-toolbar-mobile.png',await page.screenshot());
+      await writeFile(join(root,'test-results/reading-controls-tts-mobile.png'),await page.screenshot());
       assert.equal(await page.evaluate(`(()=>{const r=document.querySelector('.mstts-player').getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.bottom<=innerHeight;})()`),true);
       await page.click('.mstts-player [aria-label="낭독 설정"]');
       // Real pointer drag, not a CSS-only position change.
@@ -84,7 +85,7 @@ test('real Chrome: MemoSuite TTS toolbar in HTMLMemo',{timeout:90000},async t=>{
       await page.click('.mstts-player [aria-label="플레이어 닫기"]');await page.click('.document-host:not([hidden]) > [data-htmlmemo-reading-controls] [data-action=speak]');
       assert.equal(await page.evaluate('document.querySelector(".mstts-player").getBoundingClientRect().top'),moved);
       await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
-      await page.evaluate(`document.querySelector('.document-host:not([hidden]) iframe').contentDocument.body.dispatchEvent(new MouseEvent('dblclick',{bubbles:true,button:0,cancelable:true}));`);
+      await page.send('Input.dispatchKeyEvent',{type:'keyDown',key:'f',code:'KeyF',windowsVirtualKeyCode:70});await page.send('Input.dispatchKeyEvent',{type:'keyUp',key:'f',code:'KeyF',windowsVirtualKeyCode:70});
       await page.waitFor('document.querySelector("#app").classList.contains("reader-focus")');
       assert.equal(await page.evaluate('document.querySelector("#app").contains(document.querySelector(".mstts-player"))'),true);
       await page.click('.mstts-player [aria-label="소리내어 읽기"]');

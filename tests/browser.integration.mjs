@@ -28,7 +28,7 @@ test('real Chrome: reading controls move zoom above the shorter floating toolbar
     const frame='document.querySelector(".document-host:not([hidden]) iframe")',doc=frame+'.contentDocument';
     const nativeZoom=doc+'.querySelector("[data-htmlmemo-reading-controls] [data-action=zoom]")';
     await page.waitFor(`${frame}?.style.visibility==='visible'&&${nativeZoom}`);
-    const point=expression=>page.evaluate(`(()=>{const el=${expression},r=el.getBoundingClientRect(),f=${frame}.getBoundingClientRect(),s=f.width/${frame}.offsetWidth;return {x:f.left+(r.left+r.width/2)*s,y:f.top+(r.top+r.height/2)*s};})()`);
+    const point=expression=>page.evaluate(`(async()=>{await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));const el=${expression},r=el.getBoundingClientRect(),f=${frame}.getBoundingClientRect(),s=f.width/${frame}.offsetWidth;return {x:f.left+(r.left+r.width/2)*s,y:f.top+(r.top+r.height/2)*s};})()`);
     const clickNative=async expression=>{const p=await point(expression);await page.send('Input.dispatchMouseEvent',{type:'mousePressed',...p,button:'left',clickCount:1});await page.send('Input.dispatchMouseEvent',{type:'mouseReleased',...p,button:'left',clickCount:1});};
     const contained=()=>page.evaluate(`(()=>{const r=document.querySelector('#tool-popover').getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight;})()`);
     await mkdir(join(root,'test-results'),{recursive:true});
@@ -50,7 +50,7 @@ test('real Chrome: reading controls move zoom above the shorter floating toolbar
       const fitted=await page.evaluate(`Math.round(document.querySelector('.document-host:not([hidden]) .reader-viewport').clientWidth/${frame}.offsetWidth*100)+'%'`);assert.equal(await page.evaluate(`${nativeZoom}.textContent`),fitted);
       await page.evaluate(`${doc}.body.dispatchEvent(new MouseEvent('dblclick',{bubbles:true,button:0,cancelable:true}))`);await page.waitFor('document.querySelector("#app").classList.contains("reader-focus")');
       await clickNative(nativeZoom);await page.waitFor('!document.querySelector("#tool-popover").hidden');assert.equal(await contained(),true);await page.click('[data-popover-close]');
-      await page.evaluate(`${doc}.body.dispatchEvent(new MouseEvent('dblclick',{bubbles:true,button:0,cancelable:true}))`);await page.waitFor('!document.querySelector("#app").classList.contains("reader-focus")');
+      await page.evaluate(`${doc}.body.dispatchEvent(new MouseEvent('dblclick',{bubbles:true,button:0,cancelable:true}))`);await page.waitFor('!document.querySelector("#app").classList.contains("reader-focus")&&!document.fullscreenElement');
     }
     await page.evaluate(`window.showSaveFilePicker=async()=>{const root=await navigator.storage.getDirectory();return root.getFileHandle('reading-controls-export.html',{create:true});}`);await page.click('#save-page');
     await page.waitFor(`(async()=>{try{const root=await navigator.storage.getDirectory();return (await(await root.getFileHandle('reading-controls-export.html')).getFile()).size>0;}catch{return false;}})()`);
@@ -58,7 +58,7 @@ test('real Chrome: reading controls move zoom above the shorter floating toolbar
     await page.click('#library-tab');await page.waitFor('document.querySelector("[data-open=reading-plain]")');await page.click('[data-open=reading-plain]');await page.waitFor('document.querySelector(".document-host:not([hidden]) > [data-htmlmemo-reading-controls] [data-action=zoom]")');
     const upper='.document-host:not([hidden]) > [data-htmlmemo-reading-controls]';
     assert.equal(await page.evaluate(`document.querySelectorAll('${upper} [data-action=speak]').length`),1);
-    await page.click(upper+' [data-action=zoom]');await page.waitFor('!document.querySelector("#tool-popover").hidden');assert.equal(await contained(),true);await writeFile(join(root,'test-results/reading-controls-plain-390.png'),await page.screenshot());await page.click('[data-popover-close]');
+    await page.click(upper+' [data-action=zoom]');await page.waitFor('!document.querySelector("#tool-popover").hidden');assert.equal(await contained(),true);await writeFile(join(root,'test-results/reading-controls-plain-390.png'),await page.screenshot());await page.click(upper+' [data-action=zoom]');await page.waitFor('document.querySelector("#tool-popover").hidden');
     await page.click(upper+' [data-action=speak]');await page.waitFor('document.querySelector("[data-memo-readaloud]")');await page.click('.mstts-player [aria-label="플레이어 닫기"]');
     assert.deepEqual(chrome.errors,[]);
   }finally{await chrome?.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}

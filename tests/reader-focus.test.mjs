@@ -71,6 +71,13 @@ test('document focus is entered through a document double-click, without a separ
  assert.doesNotMatch(html,/id="reader-fullscreen"/);
  assert.doesNotMatch(appSource,/reader-fullscreen/);
 });
+test('upper reading controls preserve the open popover until their click can toggle it',()=>{
+ const a=app(),pop=a.doc.querySelector('#tool-popover');pop.hidden=false;
+ const controls=a.doc.createElement('div');controls.setAttribute('data-htmlmemo-reading-controls','');controls.innerHTML='<button>100%</button>';a.doc.querySelector('#app').append(controls);
+ vm.runInContext(appSource.match(/^  document.addEventListener\('keydown',handleKey\);document.addEventListener\('pointerdown'.*$/m)[0],a.context);
+ controls.firstElementChild.dispatchEvent(new a.doc.defaultView.Event('pointerdown',{bubbles:true}));assert.equal(pop.hidden,false);
+ a.doc.body.dispatchEvent(new a.doc.defaultView.Event('pointerdown',{bubbles:true}));assert.equal(pop.hidden,true,'outside clicks still dismiss the popover');
+});
 test('more tools contain no duplicated toolbar, sidebar, bookmark or export actions and preserve drawing tools',()=>{
  const a=app(),selected=[];a.r.setTool=tool=>selected.push(tool);
  Object.assign(a.context,{icon,$$:(selector,root)=>[...root.querySelectorAll(selector)],safely:fn=>fn,updateToolbarState(){},
