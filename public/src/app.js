@@ -389,6 +389,7 @@ function duplicateImportDialog(local, matches) {
     return `<option value="${esc(record.id)}">${index+1}. ${esc(record.title||record.name)} · 주석 ${record.metadata?.annotations?.length||0}개 · ${esc(stamp)}</option>`;
   }).join('');
   return new Promise(resolve=>modal(`<form method="dialog" data-duplicate-import><div class="dialog-heading"><h2>이미 불러온 HTML 파일입니다</h2></div><p class="dialog-description"><strong>${esc(local.name)}</strong> 파일은 이미 보관함에 있습니다. 새롭게 열어 별도의 주석을 시작할까요?</p><p class="dialog-description small">새롭게 열면 주석과 북마크가 없는 독립 사본을 만듭니다. 기존 문서와 주석, 원본 HTML 파일은 변경하지 않습니다.</p><label class="duplicate-import-target">기존 주석 파일<select id="duplicate-import-target" aria-label="기존 주석 파일">${options}</select></label><div class="dialog-actions duplicate-import-actions"><button class="secondary-button" value="cancel" autofocus>취소</button><button class="secondary-button" value="new">새롭게 열기</button><button class="primary-button" value="existing">기존의 주석 파일로 가기</button></div></form>`,dialog=>{
+    $('[data-duplicate-import]',dialog).addEventListener('keydown',event=>{if(event.key==='Escape')event.stopPropagation();});
     dialog.addEventListener('close',()=>resolve({action:['new','existing'].includes(dialog.returnValue)?dialog.returnValue:'cancel',id:$('#duplicate-import-target').value}),{once:true});
   }));
 }

@@ -15,7 +15,7 @@ function app(rows=[structuredClone(record)]){
   const doc=documentFor('<html><head></head><body><span id="status-left"></span><dialog id="dialog"><div id="dialog-content"></div></dialog></body></html>');
   const dialog=doc.querySelector('#dialog'),created=[],opened=[],reads=[];let restored=0;
   dialog.close=value=>{dialog.returnValue=value||'';dialog.open=false;dialog.dispatchEvent(new doc.defaultView.Event('close'));};
-  const context=vm.createContext({document:doc,$:s=>doc.querySelector(s),esc:escapeHTML,formatDate:()=> '10월 23일',
+  const context=vm.createContext({document:doc,$:(s,root=doc)=>root.querySelector(s),esc:escapeHTML,formatDate:()=> '10월 23일',
     modal(html,bind){doc.querySelector('#dialog-content').innerHTML=html;dialog.open=true;dialog.returnValue='';const select=doc.querySelector('select');let value=select.firstElementChild.value;Object.defineProperty(select,'value',{configurable:true,get:()=>value,set:next=>value=next});bind(dialog);},
     readLocalHTML:async input=>{reads.push(input);if(input.error)throw Error('read failed');return {...input};},findLocalDuplicates,listDocuments:async()=>rows,getDocument:async id=>rows.find(row=>row.id===id),
     openRecord:async item=>{opened.push(item);return item;},createDocument:async(...args)=>{created.push(args);return {id:'new'};},renderLibrary:()=>restored++,updateChrome:()=>restored++,setTimeout:fn=>fn(),
@@ -31,6 +31,11 @@ test('duplicate import presents exactly the three requested choices and safely f
 });
 test('Escape or backdrop close is cancellation, not permission to create a new document',async()=>{
   const a=app(),pending=a.context.openLocalFile(local);await tick();a.dialog.close();assert.equal(await pending,null);assert.equal(a.created.length,0);assert.equal(a.opened.length,0);
+});
+test('Escape remains available to the import dialog instead of reaching reader/TTS shortcuts',async()=>{
+  const a=app(),pending=a.context.openLocalFile({...local});await tick();let reached=false;
+  a.doc.addEventListener('keydown',()=>reached=true);const event=new a.doc.defaultView.Event('keydown',{bubbles:true,cancelable:true});event.key='Escape';a.doc.querySelector('[data-duplicate-import] button').dispatchEvent(event);
+  assert.equal(reached,false);assert.equal(event.defaultPrevented,false);a.dialog.close();await pending;assert.equal(a.created.length,0);
 });
 test('new opens an independent fresh annotation copy without mutating the existing record or input',async()=>{
   const a=app(),before=structuredClone(local),pending=a.context.openLocalFile(local);await tick();a.dialog.close('new');await pending;
