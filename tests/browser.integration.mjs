@@ -47,7 +47,8 @@ test('real Chrome: reading controls provide one app TTS, wait for Play and keep 
       await writeFile(join(root,`test-results/reading-controls-tts-ready-${width}.png`),await page.screenshot());
       await page.click('.mstts-player [aria-label="소리내어 읽기"]');await page.waitFor(`window.__ttsUtterances.length===${before+1}`);
       await page.click('.mstts-player [aria-label="일시정지"]');await page.click('.mstts-player [aria-label="플레이어 닫기"]');
-      await page.evaluate(`${upperTTS}.focus()`);await page.send('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});await page.send('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
+      await page.evaluate(`${upperTTS}.focus()`);assert.equal(await page.evaluate(`document.activeElement===${frame}&&${doc}.activeElement===${upperTTS}`),true);
+      await page.send('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13,text:'\r',unmodifiedText:'\r'});await page.send('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
       await page.waitFor(playerReady);assert.equal(await page.evaluate('window.__ttsUtterances.length'),before+1,'keyboard reopen after pausing does not resume speech');
       await page.click('.mstts-player [aria-label="플레이어 닫기"]');
       await clickNative(nativeZoom);await page.waitFor('!document.querySelector("#tool-popover").hidden&&document.querySelector("#zoom-value")');assert.equal(await contained(),true);
