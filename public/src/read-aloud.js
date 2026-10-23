@@ -3,22 +3,24 @@
 const PLAYER_CSS = String.raw`
 .mstts-player {
   position: fixed; z-index: 9000;
-  display: inline-flex; align-items: center; gap: 2px;
+  display: inline-flex; align-items: center; gap: 1px;
   background: var(--surface, #fff); border: 1px solid var(--border, #e2e8f0); border-radius: 999px;
-  padding: 4px 10px 4px 6px; box-shadow: 0 6px 20px rgba(0,0,0,.18); font-size: 12px; font-weight: 600;
+  height: 20px; padding: 0 3px; box-shadow: 0 2px 8px rgba(0,0,0,.14); font-size: 10px; font-weight: 600;
   color: var(--text-secondary, #667085); font-variant-numeric: tabular-nums;
   touch-action: none; user-select: none;
 }
 .mstts-player .mstts-btn {
-  border: none; background: transparent; cursor: pointer; font-size: 14px; line-height: 1; padding: 3px 5px;
-  color: var(--text, #344054); border-radius: 6px;
+  border: none; background: transparent; cursor: pointer; font-size: 12px; line-height: 16px; padding: 0 3px;
+  color: var(--text, #344054); border-radius: 3px; flex: 0 0 auto;
   &:hover { color: #7b61ff; background: var(--hover, rgba(130,130,130,.12)); }
+  &:focus-visible { outline: 2px solid var(--green, #334155); outline-offset: 1px; }
 }
 .mstts-grip {
-  cursor: grab; padding: 2px 3px; letter-spacing: 1px; color: var(--text-secondary, #98a2b3);
-  font-size: 12px; line-height: 1;
+  cursor: grab; padding: 0 1px; color: var(--text-secondary, #98a2b3);
+  font-size: 10px; line-height: 18px;
 }
-.mstts-count {margin-left: 3px; white-space: nowrap;}
+.mstts-count {margin-left: 1px; white-space: nowrap; font-size: 10px; line-height: 18px;}
+.mstts-count:empty {display: none;}
 .mstts-panel {
   position: absolute; left: 0; bottom:calc(100% + 8px);
   width: 240px; background: var(--surface, #fff); border: 1px solid var(--border, #e2e8f0);
@@ -34,7 +36,7 @@ const PLAYER_CSS = String.raw`
 .mstts-hint {font-size: 11px; line-height: 1.4; color: var(--text-secondary, #98a2b3);}
 
 .mstts-player {--border:var(--line);--text-secondary:var(--muted);font-family:inherit;box-sizing:border-box;line-height:normal;}
-.mstts-player .mstts-btn {font-family:inherit;min-width:0;min-height:0;height:auto;width:auto;display:inline-block;box-shadow:none;}
+.mstts-player .mstts-btn {font-family:inherit;min-width:18px;min-height:0;height:18px;width:auto;display:inline-flex;align-items:center;justify-content:center;box-shadow:none;}
 .mstts-panel {box-sizing:border-box;}
 .mstts-row select {min-width:0;flex:1;padding:5px 10px;font-size:.8rem;font-family:inherit;border:1px solid var(--border,#e2e8f0);border-radius:8px;background:var(--bg,#fff);color:var(--text,#344054);}
 @media print {.mstts-player{display:none!important}}
@@ -500,12 +502,12 @@ export function createReadAloud(reader) {
     bar.appendChild(makeBtn('⏮', lb('prev', 'Previous sentence'), function () { jumpBy(-1); }));
     bar.appendChild(makeBtn('⏭', lb('next', 'Next sentence'), function () { jumpBy(1); }));
     btnRate = makeBtn(rate + '×', lb('speed', 'Reading speed'), cycleRate);
-    btnRate.style.fontSize = '11.5px'; btnRate.style.fontWeight = '700';
+    btnRate.style.fontSize = '10px'; btnRate.style.fontWeight = '700';
     bar.appendChild(btnRate);
     var gear=makeBtn('⚙', lb('settings', 'Read-aloud settings'), togglePanel);gear.setAttribute('data-tts-gear','');bar.appendChild(gear);
     bar.appendChild(makeBtn('⏹', lb('stop', 'Stop'), stop));
     cnt = U.createElement('span'); cnt.className = 'mstts-count'; bar.appendChild(cnt);
-    var closer=makeBtn('✕', lb('close', 'Close the player'), close);closer.style.fontSize='12px';bar.appendChild(closer);
+    var closer=makeBtn('✕', lb('close', 'Close the player'), close);closer.style.fontSize='11px';bar.appendChild(closer);
     // Drag by the bar itself (buttons stop propagation), mirroring the in-app player.
     var drag = null;
     bar.addEventListener('pointerdown', function (e) {

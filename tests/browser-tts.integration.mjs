@@ -25,7 +25,7 @@ test('real Chrome: MemoSuite TTS toolbar in HTMLMemo',{timeout:90000},async t=>{
       await page.click('#save-page');await page.waitFor(`(async()=>{try{const root=await navigator.storage.getDirectory();return (await(await root.getFileHandle('picked-document.html')).getFile()).size>0;}catch{return false;}})()`);
       const html=await page.evaluate(`(async()=>{const root=await navigator.storage.getDirectory();return (await (await root.getFileHandle('picked-document.html')).getFile()).text();})()`);assert.match(html,/data:image\/svg\+xml;base64/);assert.match(html,/htmlmemo-data/);assert.ok(!html.includes('fixtureLoaded'));
     });
-    await t.test('MemoSuite toolbar opens without speech and retains original controls and styling',async()=>{try {
+    await t.test('compact toolbar opens without speech and retains all playback controls',async()=>{try {
       await page.evaluate(`window.__speechCalls=[];window.__utterances=[];window.SpeechSynthesisUtterance=class{constructor(text){this.text=text;this.rate=1;this.pitch=1;this.volume=1;this.voice=null;}};const engine=new EventTarget();engine.getVoices=()=>[{voiceURI:'ko-test',name:'Google 한국어',lang:'ko-KR',localService:false},{voiceURI:'junk',name:'eSpeak',lang:'ko-KR',localService:true},{voiceURI:'en-test',name:'Google English',lang:'en-US',localService:false}];engine.cancel=()=>window.__speechCalls.push(['cancel']);engine.speak=u=>{window.__utterances.push(u);window.__speechCalls.push(['speak',u.text,u.lang,u.rate]);};void Object.defineProperty(window,'speechSynthesis',{configurable:true,value:engine});`);
       await page.evaluate(`(()=>{const d=document.querySelector('.document-host:not([hidden]) iframe').contentDocument;const sidebar=d.createElement('aside');sidebar.textContent='읽으면 안 되는 사이드바 목차.';d.body.prepend(sidebar);const toc=d.createElement('nav');toc.textContent='읽으면 안 되는 본문 안 목차.';d.querySelector('main').prepend(toc);})()`);
       assert.equal(await page.evaluate('!!document.querySelector("#toolbar [data-action=speak],#toolbar [data-action=zoom]")'),false);
@@ -33,7 +33,8 @@ test('real Chrome: MemoSuite TTS toolbar in HTMLMemo',{timeout:90000},async t=>{
       await page.waitFor('!!document.querySelector("[data-memo-readaloud]")');
       assert.deepEqual(await page.evaluate('window.__speechCalls'),[]);
       assert.deepEqual(await page.evaluate('[...document.querySelectorAll(".mstts-player > button")].map(b=>b.textContent)'),['▶','⏮','⏭','1×','⚙','⏹','✕']);
-      assert.deepEqual(await page.evaluate(`(()=>{const s=getComputedStyle(document.querySelector('.mstts-player'));return [s.padding,s.gap,s.borderRadius,s.fontSize,s.fontWeight,s.position];})()`),['4px 10px 4px 6px','2px','999px','12px','600','fixed']);
+      assert.deepEqual(await page.evaluate(`(()=>{const s=getComputedStyle(document.querySelector('.mstts-player'));return [s.padding,s.gap,s.borderRadius,s.fontSize,s.fontWeight,s.position];})()`),['0px 3px','1px','999px','10px','600','fixed']);
+      assert.equal(await page.evaluate(`(()=>{const bar=document.querySelector('.mstts-player'),r=bar.getBoundingClientRect();return r.height===20&&r.width<185&&[...bar.querySelectorAll(':scope > button')].every(b=>b.getBoundingClientRect().height===18);})()`),true);
       await page.click('.mstts-player [aria-label="낭독 설정"]');
       await page.waitFor('!!document.querySelector(".mstts-panel")');
       await page.click('.mstts-select-trigger[aria-label="음성"]');

@@ -1,5 +1,5 @@
 import { createReadAloud } from './read-aloud.js';
-import { clamp, uid } from './utils.js';
+import { clamp, uid, icon } from './utils.js';
 import { History, TEXT_TOOLS, DRAW_TOOLS } from './model.js';
 import { LAYER_ID, prepareLoadedHTML, cleanAnnotations, textIndex, selectionAnchor, resolveTextAnchor, wrapOffsets, rangeFromOffsets, sentenceOffsets, serializeHTML, inspectBookDocument, drawingTargetQuote, describeDrawingTarget, currentSection } from './document.js';
 
@@ -786,18 +786,23 @@ export class Reader {
     const target=topbar?(topbar.querySelector('.controls,.toolbar-actions,.reader-actions')||topbar):this.host;
     const doc=target.ownerDocument;
     if(!this.readingControls||this.readingControls.ownerDocument!==doc){
-      this.readingControls?.remove();
-      const controls=doc.createElement('div');controls.className='htmlmemo-reading-controls';
-      controls.style.position='relative';controls.style.zIndex='1';
-      controls.setAttribute('data-htmlmemo-ui','');controls.setAttribute('data-htmlmemo-reading-controls','');
-      controls.setAttribute('role','toolbar');controls.setAttribute('aria-label','읽기 도구');
+      this.readingControls?.remove();this.speechControls?.remove();
+      const group=label=>{
+        const node=doc.createElement('div');node.className='htmlmemo-reading-controls';
+        node.style.position='relative';node.style.zIndex='1';
+        node.setAttribute('data-htmlmemo-ui','');node.setAttribute('data-htmlmemo-reading-controls','');
+        node.setAttribute('role','toolbar');node.setAttribute('aria-label',label);return node;
+      };
       const button=(action,label,text)=>{
         const node=doc.createElement('button');node.type='button';node.dataset.action=action;node.title=label;node.setAttribute('aria-label',label);node.textContent=text;
         node.onpointerdown=event=>{if(event.pointerType==='mouse')event.preventDefault();};
-        node.onclick=()=>this.callbacks.onReadingAction?.(action,node);controls.append(node);return node;
+        node.onclick=()=>this.callbacks.onReadingAction?.(action,node);return node;
       };
+      const controls=group('읽기 도구');
       this.zoomControl=button('zoom','확대 / 축소','');this.zoomControl.setAttribute('aria-haspopup','dialog');
-      this.speechControl=button('speak','소리내어 읽기 (TTS 툴바)','TTS');
+      this.speechControl=button('speak','소리내어 읽기 (TTS 툴바)','');this.speechControl.innerHTML=icon('speaker',14);
+      this.speechControls=group('소리내어 읽기');this.speechControls.append(this.speechControl);
+      controls.append(this.zoomControl);
       this.readingControls=controls;
     }
     if(topbar){
@@ -805,12 +810,23 @@ export class Reader {
         const style=doc.createElement('style');style.id='htmlmemo-reading-controls-style';style.textContent=this.readingControlsStyle();doc.head.append(style);
       }
       if(this.readingControls.parentElement!==target)target.append(this.readingControls);
-    }else if(this.readingControls.parentElement!==this.host)this.host.prepend(this.readingControls);
+      // Keep source font buttons and their handlers intact. Insert immediately
+      // before A−, even when the book nests its font controls in another group.
+      const smaller=[...topbar.querySelectorAll('button,[role="button"]')].find(node=>!node.closest('[data-htmlmemo-ui]')&&(
+        /^A[−–-]$/i.test(node.textContent.replace(/\s+/g,''))||/^(?:글자|글씨|폰트)\s*(?:작게|줄이기|축소)$/.test(node.getAttribute('aria-label')||node.title||'')
+      ));
+      const parent=smaller?.parentElement||target;
+      const before=smaller||[...target.children].find(node=>!node.hasAttribute('data-htmlmemo-reading-controls'))||this.readingControls;
+      if(this.speechControls.parentElement!==parent||this.speechControls.nextSibling!==before)parent.insertBefore(this.speechControls,before);
+    }else{
+      if(this.speechControl.parentElement!==this.readingControls)this.readingControls.prepend(this.speechControl);
+      if(this.readingControls.parentElement!==this.host)this.host.prepend(this.readingControls);
+    }
     this.host.classList.toggle('reader-controls-row',!topbar);
     this.updateReadingControls();
   }
   readingControlsStyle() {
-    return '[data-htmlmemo-reading-controls]{display:inline-flex!important;align-items:center!important;gap:3px!important;flex:0 0 auto!important;vertical-align:middle!important;margin-inline-start:4px!important}[data-htmlmemo-reading-controls] button{font:500 12px/18px system-ui!important;letter-spacing:0!important;white-space:nowrap!important;width:auto!important;min-width:40px!important;height:20px!important;padding:0 5px!important;border:1px solid currentColor!important;border-radius:4px!important;background:transparent!important;color:inherit!important;cursor:pointer!important}[data-htmlmemo-reading-controls] button:hover{background:#80808020!important}[data-htmlmemo-reading-controls] button:focus-visible{outline:2px solid currentColor!important;outline-offset:1px!important}[data-htmlmemo-reading-controls] [hidden]{display:none!important}';
+    return '[data-htmlmemo-reading-controls]{display:inline-flex!important;align-items:center!important;gap:3px!important;flex:0 0 auto!important;vertical-align:middle!important;margin-inline-start:4px!important}[data-htmlmemo-reading-controls] button{box-sizing:border-box!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;font:500 12px/18px system-ui!important;letter-spacing:0!important;white-space:nowrap!important;width:auto!important;min-width:40px!important;height:20px!important;padding:0 5px!important;border:1px solid currentColor!important;border-radius:4px!important;background:transparent!important;color:inherit!important;cursor:pointer!important}[data-htmlmemo-reading-controls] [data-action=speak]{width:24px!important;min-width:24px!important;padding:0!important}[data-htmlmemo-reading-controls] svg{display:block!important;width:14px!important;height:14px!important;pointer-events:none!important}[data-htmlmemo-reading-controls] button:hover{background:#80808020!important}[data-htmlmemo-reading-controls] button:focus-visible{outline:2px solid currentColor!important;outline-offset:1px!important}[data-htmlmemo-reading-controls] [hidden]{display:none!important}';
   }
   updateReadingControls() {
     if(this.zoomControl){const text=Math.round(this.zoom*100)+'%';if(this.zoomControl.textContent!==text)this.zoomControl.textContent=text;}
