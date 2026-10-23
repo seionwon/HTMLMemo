@@ -253,6 +253,8 @@ async function openRecord(record, prepared = null, {deferReady = false, sourceId
   const tab={id:uid(),type:'document',title:record.title,opening:true,record:{...record,nativeScroll:!!parsed.nativeScroll},host:null};tab.host=createHost(tab.id,'document');
   tab.queue=new SaveQueue(async()=>{
     await tab.reader.ready;
+    // Early scrolling/edits must not save before the import identity is ready.
+    if(sourceIdentity)await sourceIdentity;
     if (!tab.queue.editsPending) {
       const saved = await putDocumentView(tab.record.id, tab.reader.metadata.view);
       tab.record.metadata = saved.metadata;
@@ -282,15 +284,17 @@ async function openRecord(record, prepared = null, {deferReady = false, sourceId
     onSelect:id=>{if(activeId===tab.id)annotationDialog(tab,id);},
   });
   Object.assign(tab.reader,preferences.annotation);
+  let baselineMetadata;
   try {
     await tab.reader.ready;
+    baselineMetadata=structuredClone(tab.reader.metadata);
     if(sourceIdentity){const identity=await sourceIdentity;if(identity)tab.record.sourceIdentity=identity;}
   } catch(error) {tabs.splice(tabs.indexOf(tab),1);tab.reader.dispose();activate('library');throw error;}
   if(parsed.file){tab.record.file=parsed.file;delete tab.record.html;tab.reader.initialHTML=null;tab.record.metadata=tab.reader.metadata;tab.record.source=tab.reader.metadata.source;tab.title=tab.record.title=tab.reader.metadata.title;}
   renderToolbar();
   updateChrome();
   // Preserve the imported/current annotation baseline before the first new edit.
-  try{const saved=await putDocumentRevision(tab.record,{baseline:true});tab.record.byteSize=saved.byteSize;delete tab.record.html;delete tab.record.file;}
+  try{const saved=await putDocumentRevision({...tab.record,metadata:baselineMetadata},{baseline:true});tab.record.byteSize=saved.byteSize;delete tab.record.html;delete tab.record.file;}
   catch(error){tab.queue.schedule();try{await tab.queue.flush();}catch{showError(error);}}
   record.html=null;record.file=null;parsed.html=null;parsed.file=null;
   if(!deferReady){tab.opening=false;renderTabs();if(activeId===tab.id)updateChrome();}

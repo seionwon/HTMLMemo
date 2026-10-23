@@ -36,6 +36,7 @@ jobs:
           name: browser-verification
           path: |
             test-results/browser-results.xml
+            test-results/duplicate-import-performance.json
             test-results/*.png
           if-no-files-found: ignore
       - run: npm run build
@@ -95,6 +96,7 @@ jobs:
           name: published-sidebar-screenshots
           path: |
             test-results/published-browser-results.xml
+            test-results/duplicate-import-performance.json
             test-results/palette-controls-*.png
             test-results/palette-drag-*.png
             test-results/toolbar-modes-*.png
