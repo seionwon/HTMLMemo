@@ -369,7 +369,7 @@ export function createReadAloud(reader) {
   // A code BOX (pre) stays silent — reading a whole listing aloud is noise. INLINE code is NOT
   // skipped: it is part of the sentence ("현재 src에 있다면" must not lose the word), so only a
   // <code> that sits inside a <pre> is rejected (see acceptNode).
-  var SKIP = 'script, style, noscript, button, input, textarea, select, [hidden], #htmlmemo-annotation-layer, [data-memo-panel], [data-tts-skip], pre, .toc, .mstts-player, .mstts-launch, .wm-nav-btn, .wm-pdf-float';
+  var SKIP = 'script, style, noscript, button, input, textarea, select, [hidden], #htmlmemo-annotation-layer, [data-memo-panel], [data-tts-skip], pre, .toc, .mstts-player, .wm-nav-btn, .wm-pdf-float';
   // A skipped island may still hold the one thing that IS prose (a widget's finished piece),
   // marked [data-tts-keep]. The NEAREST marker decides — same rule as the in-app player, kept in
   // sync with it.
@@ -786,7 +786,7 @@ export function createReadAloud(reader) {
     if (state !== 'playing' && state !== 'paused') return;
     var t = e.target;
     if (!t || !ROOT.contains(t)) return;
-    if (t.closest('a, button, input, textarea, select, summary, .mstts-player, .mstts-launch, .mstts-panel')) return;
+    if (t.closest('a, button, input, textarea, select, summary, .mstts-player, .mstts-panel')) return;
     if (skipped(t)) return;
     var sel = D.getSelection();
     if (sel && !sel.isCollapsed) return;

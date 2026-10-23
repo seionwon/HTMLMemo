@@ -349,10 +349,6 @@ export class Reader {
       return;
     }
     this.bound = true;
-    // Run before document/target handlers in imported books: their TTS
-    // launchers may start speaking immediately instead of opening controls.
-    this.readAloudLauncherClick=event=>this.handleReadAloudLauncher(event);
-    this.doc.defaultView?.addEventListener('click',this.readAloudLauncherClick,true);
     this.startFontObserver();
     this.doc.addEventListener('wheel', event => this.forwardWheel(event), {capture:true,passive:false});
     this.doc.addEventListener('pointerdown', event => { if(this.startTocResize(event))return; if(this.startMiddleScroll(event))return;this.stopMiddleScroll();this.callbacks.onSelectionDismiss?.(); this.pointerDown(event); }, true);
@@ -782,25 +778,12 @@ export class Reader {
     }
     return topbar;
   }
-  isReadAloudLauncher(button) {
-    return !!button&&!button.closest('[data-htmlmemo-ui]')&&(button.matches('.mstts-launch,[data-tts-launch],[data-read-aloud]')||/\btts\b|read.?aloud|소리\s*내어|낭독|읽어\s*주기/i.test([button.id,button.className,button.title,button.getAttribute('aria-label'),button.textContent].join(' ')));
-  }
-  handleReadAloudLauncher(event) {
-    if(this.disposed||event.button!=null&&event.button!==0||!this.callbacks.onReadingAction)return false;
-    const target=event.target?.nodeType===1?event.target:event.target?.parentElement,button=target?.closest?.('button,a,[role="button"]');
-    if(!this.isReadAloudLauncher(button))return false;
-    const topbar=this.topbarNode?.isConnected?this.topbarNode:this.findDocumentTopbar();
-    if(!topbar?.contains(button))return false;
-    event.preventDefault();event.stopImmediatePropagation();
-    this.callbacks.onReadingAction('speak',button);
-    return true;
-  }
   setupReadingControls() {
     if(this.disposed||this.preparing||!this.host?.ownerDocument)return;
     const topbar=this.topbarNode?.isConnected?this.topbarNode:this.findDocumentTopbar();
     if(topbar&&topbar!==this.topbarNode)this.setupDocumentTopbar();
-    const nativeSpeech=topbar&&[...topbar.querySelectorAll('button,a,[role="button"]')].find(button=>this.isReadAloudLauncher(button));
-    const target=topbar?(nativeSpeech?.parentElement||topbar.querySelector('.controls,.toolbar-actions,.reader-actions')||topbar):this.host;
+    // Imported HTML supplies content and layout, never a second TTS engine.
+    const target=topbar?(topbar.querySelector('.controls,.toolbar-actions,.reader-actions')||topbar):this.host;
     const doc=target.ownerDocument;
     if(!this.readingControls||this.readingControls.ownerDocument!==doc){
       this.readingControls?.remove();
@@ -817,8 +800,6 @@ export class Reader {
       this.speechControl=button('speak','소리내어 읽기 (TTS 툴바)','TTS');
       this.readingControls=controls;
     }
-    if(nativeSpeech)this.speechControl.remove();
-    else if(this.speechControl.parentElement!==this.readingControls)this.readingControls.append(this.speechControl);
     if(topbar){
       if(!doc.getElementById('htmlmemo-reading-controls-style')){
         const style=doc.createElement('style');style.id='htmlmemo-reading-controls-style';style.textContent=this.readingControlsStyle();doc.head.append(style);
@@ -2186,7 +2167,6 @@ export class Reader {
   }
   stopSpeech() { this.readAloud?.close(); this.host?.ownerDocument?.defaultView?.speechSynthesis?.cancel(); }
   dispose() {
-    if(this.readAloudLauncherClick)this.doc?.defaultView?.removeEventListener('click',this.readAloudLauncherClick,true);
     this.stopMiddleScroll();this.readAloud?.dispose();this.readAloud=null;this.stopSpeech(); this.disposed=true;this.cancelOpeningWait?.();this.cancelAnnotationJump?.(); clearTimeout(this.positionTimer);clearTimeout(this.dynamicTimer);clearTimeout(this.documentSidebarUI?.sidebarSearchTimer);this.dynamicObserver?.disconnect();this.fontObserver?.disconnect();if(this.fontFrame)this.doc.defaultView?.cancelAnimationFrame(this.fontFrame); this.resizeObserver?.disconnect(); this.hostObserver?.disconnect(); this.frame.srcdoc=''; if(this.documentURL){URL.revokeObjectURL(this.documentURL);this.documentURL=null;} this.host.remove();
   }
 }
