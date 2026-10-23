@@ -1203,6 +1203,8 @@ test('real Chrome: native sidebar view choices are visible on open and preserve 
     for(const width of [1280,390]){
       await page.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
       if(width===390){await clickAppMenu(page,'#settings-button');await page.evaluate(`(()=>{const n=document.querySelector('#appearance');n.value='dark';n.dispatchEvent(new Event('change',{bubbles:true}));})()`);await page.click('#dialog [data-dialog-close]');}
+      const compact=await page.evaluate(`(()=>{const d=${doc},sidebar=d.querySelector('[data-htmlmemo-native-sidebar]'),panel=d.querySelector('[data-htmlmemo-doc-sidebar-ui]'),row=panel.querySelector('.sidebar-views');sidebar.scrollTop=0;const r=row.getBoundingClientRect(),s=sidebar.getBoundingClientRect(),style=d.defaultView.getComputedStyle(sidebar);return {height:r.height,buttons:[...row.querySelectorAll('button')].map(b=>b.getBoundingClientRect().height),topGap:r.top-s.top-parseFloat(style.borderTopWidth),sidebarPadding:style.paddingTop,rowPadding:d.defaultView.getComputedStyle(row).paddingTop};})()`);
+      assert.equal(compact.height,25);assert.deepEqual(compact.buttons,[24,24,24,24]);assert.equal(compact.topGap,0);assert.equal(compact.sidebarPadding,'0px');assert.equal(compact.rowPadding,'0px');
       assert.equal(await page.evaluate(`(()=>{const buttons=[...${doc}.querySelectorAll('[data-htmlmemo-doc-sidebar-ui] [data-sidebar-view]')];return buttons.every(button=>button.title&&button.querySelector('svg')&&/^\\d*$/.test(button.textContent))&&Math.max(...buttons.map(button=>button.getBoundingClientRect().top))-Math.min(...buttons.map(button=>button.getBoundingClientRect().top))<1;})()`),true);
       await page.click('[data-action=more]');
       assert.deepEqual(await page.evaluate('[...document.querySelectorAll("[data-more]")].map(b=>b.dataset.more)'),['rect','ellipse','arrow','strike','history','migrate','info']);
@@ -1298,6 +1300,8 @@ test('real Chrome: sidebar view choices preserve search drafts, navigate saved n
     assert.deepEqual(await page.evaluate('[...document.querySelectorAll("[data-sidebar-view]")].map(button=>button.textContent)'),['','','1','1']);
     for(const width of [1280,390,320]){
       await page.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
+      const compact=await page.evaluate(`(()=>{const panel=document.querySelector('#sidebar'),row=panel.querySelector('.sidebar-views'),r=row.getBoundingClientRect();return {height:r.height,buttons:[...row.querySelectorAll('button')].map(b=>b.getBoundingClientRect().height),topGap:r.top-panel.getBoundingClientRect().top,padding:getComputedStyle(row).paddingTop};})()`);
+      assert.equal(compact.height,25);assert.deepEqual(compact.buttons,[24,24,24,24,24]);assert.equal(compact.topGap,0);assert.equal(compact.padding,'0px');
       const visible=await page.evaluate('[...document.querySelectorAll("[data-sidebar-view]")].every(button=>{const r=button.getBoundingClientRect();return r.width>0&&r.left>=0&&r.right<=innerWidth&&button.contains(document.elementFromPoint(r.left+r.width/2,r.top+r.height/2));})');assert.equal(visible,true);
       assert.equal(await page.evaluate(`(()=>{const b=[...document.querySelectorAll('[data-sidebar-view]')];return b.every(e=>e.title&&e.querySelector('svg')&&/^\\d*$/.test(e.textContent))&&new Set(b.map(e=>e.getBoundingClientRect().top)).size===1;})()`),true);
       await page.click('[data-sidebar-view=search]');

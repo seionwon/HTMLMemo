@@ -80,6 +80,16 @@ test('native search fields share loaded-part metrics and equal top/between spaci
   assert.match(css,/\.sidebar-book-search>\[data-htmlmemo-book-search-part\]:not\(input\)\{margin:0!important;padding:0!important;border:0!important\}/);
 });
 
+test('both sidebar icon rows are 25px high with 24px buttons and no top inset',async()=>{
+  const css=await readFile(new URL('../public/design.tailwind.css',import.meta.url),'utf8');
+  const row=css.match(/^\.sidebar-views\{([^}]+)\}/m)?.[1],nativeRow=css.match(/^\[data-htmlmemo-doc-sidebar-ui\] \.sidebar-views\{([^}]+)\}/m)?.[1];
+  for(const rules of [row,nativeRow])for(const declaration of ['box-sizing:border-box','height:25px','min-height:25px','margin:0','padding:0 '])assert.ok(rules?.includes(declaration),declaration);
+  const button=css.match(/^\.sidebar-views button\{([^}]+)\}/m)?.[1],nativeButton=css.match(/^\[data-htmlmemo-doc-sidebar-ui\] \.sidebar-views button\{([^}]+)\}/m)?.[1];
+  for(const rules of [button,nativeButton])for(const declaration of ['height:24px','min-height:24px','max-height:24px','padding:0 ','line-height:1'])assert.ok(rules?.includes(declaration),declaration);
+  assert.match(css,/^\[data-htmlmemo-native-sidebar\]\{padding-top:0!important\}/m);
+  assert.match(css,/^\[data-htmlmemo-doc-sidebar-ui\]\{[^}]*margin:0!important;padding:0!important/m);
+});
+
 test('native whole-book search keeps its nodes, listeners and query above loaded-part search across all views and export',()=>{
   installDOM();const a=sidebar(),doc=documentFor('<html><head></head><body><nav id="reader-nav"><h2>목차</h2><form id="whole-book-search"><input id="whole-query" placeholder="책 전체 검색"><button id="whole-clear" type="button">지우기</button><div id="whole-results"></div></form><div id="reader-tree"><details><summary>원래 목차</summary></details></div></nav><main><h1>본문</h1><p>검색할 내용</p></main></body></html>');
   const nav=doc.querySelector('nav'),form=doc.querySelector('form'),query=doc.querySelector('#whole-query'),clear=doc.querySelector('#whole-clear'),tree=doc.querySelector('#reader-tree'),text=textIndex(doc).text;
