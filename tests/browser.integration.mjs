@@ -29,11 +29,12 @@ test('real Chrome: duplicate HTML import offers cancel, fresh annotations or exi
     const dialog='document.querySelector("#dialog").open&&document.querySelector("[data-duplicate-import]")';
     await page.click('#import-button');await page.waitFor(ready);
     const original=(await state())[0],originalTab=await page.evaluate('document.querySelector(".tab.document.active").dataset.tab');assert.equal(original.annotations.length,1);assert.equal(original.bookmarks.length,1);
+    const originalReady='!document.querySelector("#dialog").open&&document.querySelector(".tab.document.active")?.dataset.tab==='+JSON.stringify(originalTab)+'&&'+ready;
     await page.click('#import-button');await page.waitFor(dialog);
     assert.deepEqual(await page.evaluate('[...document.querySelectorAll("[data-duplicate-import] button")].map(b=>b.textContent)'),['취소','새롭게 열기','기존의 주석 파일로 가기']);assert.equal(await page.evaluate('document.activeElement.value'),'cancel');
     await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/duplicate-import-1280.png'),await page.screenshot());
     await page.click('[data-duplicate-import] [value=cancel]');await page.waitFor('!document.querySelector("#dialog").open');assert.deepEqual(await state(),[original]);
-    await input('renamed-copy.html');await page.waitFor(dialog);await page.click('[data-duplicate-import] [value=existing]');await page.waitFor(ready);assert.equal(await page.evaluate('document.querySelectorAll(".tab.document").length'),1);assert.equal(await page.evaluate('document.querySelector(".tab.document.active").dataset.tab'),originalTab);assert.deepEqual(await state(),[original]);
+    await input('renamed-copy.html');await page.waitFor(dialog);await page.click('[data-duplicate-import] [value=existing]');await page.waitFor(originalReady);assert.equal(await page.evaluate('document.querySelectorAll(".tab.document").length'),1);assert.equal(await page.evaluate('document.querySelector(".tab.document.active").dataset.tab'),originalTab);assert.deepEqual(await state(),[original]);
     // A drop uses the same serialized import path as both file pickers.
     await page.evaluate(`(()=>{const transfer=new DataTransfer();transfer.items.add(new File([${JSON.stringify(raw)}],'duplicate.html',{type:'text/html'}));window.dispatchEvent(new DragEvent('drop',{dataTransfer:transfer,cancelable:true}));})()`);await page.waitFor(dialog);await page.click('[data-duplicate-import] [value=new]');
     await page.waitFor('document.querySelectorAll(".tab.document").length===2&&'+ready);
@@ -49,7 +50,7 @@ test('real Chrome: duplicate HTML import offers cancel, fresh annotations or exi
     assert.equal(await page.evaluate(`(()=>{const d=document.querySelector('#dialog').getBoundingClientRect();return d.left>=0&&d.right<=innerWidth&&d.top>=0&&d.bottom<=innerHeight&&[...document.querySelectorAll('[data-duplicate-import] button')].every(b=>{const r=b.getBoundingClientRect();return r.left>=d.left&&r.right<=d.right&&r.bottom<=d.bottom;});})()`),true);
     assert.equal(await page.evaluate('document.querySelectorAll("#duplicate-import-target option").length'),2);
     await writeFile(join(root,'test-results/duplicate-import-390.png'),await page.screenshot());
-    await page.evaluate(`document.querySelector('#duplicate-import-target').value=${JSON.stringify(original.id)}`);await page.click('[data-duplicate-import] [value=existing]');await page.waitFor(ready);assert.equal(await page.evaluate('document.querySelector(".tab.document.active").dataset.tab'),originalTab);
+    await page.evaluate(`document.querySelector('#duplicate-import-target').value=${JSON.stringify(original.id)}`);await page.click('[data-duplicate-import] [value=existing]');await page.waitFor(originalReady);assert.equal(await page.evaluate('document.querySelector(".tab.document.active").dataset.tab'),originalTab);
     await page.click('.tab.document.active .tab-close');await page.waitFor('document.querySelectorAll(".tab.document").length===1');await input();await page.waitFor(dialog);
     await page.evaluate(`document.querySelector('#duplicate-import-target').value=${JSON.stringify(original.id)}`);await page.click('[data-duplicate-import] [value=existing]');await page.waitFor('document.querySelectorAll(".tab.document").length===2&&'+ready);assert.deepEqual((await state()).find(r=>r.id===original.id),original);
     await page.click('.document-host:not([hidden]) > [data-htmlmemo-reading-controls] [data-action=speak]');await page.waitFor('document.querySelector(".mstts-player")');
