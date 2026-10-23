@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readLocalHTML, droppedHTMLFiles } from '../public/src/local-files.js';
-import { parseHTML, serializeHTML } from '../public/src/document.js';
+import { readLocalHTML, droppedHTMLFiles, localFileIdentity, sameLocalFile, findLocalDuplicates } from '../public/src/local-files.js';
+import { parseHTML, serializeHTML, prepareLoadedHTML } from '../public/src/document.js';
 import { documentFor, installDOM } from './dom.mjs';
 import { writeExternalHTML } from '../public/src/storage.js';
 installDOM();
@@ -67,4 +67,49 @@ test('large local JavaScript option streams bytes with scripts, workers and data
   const raw=file('<html><head></head><body><script>document.body.append("ready")</script>'+ 'x'.repeat(4*1024*1024)+'</body></html>');raw.arrayBuffer=async()=>{throw Error('Full read');};
   const local=await readLocalHTML(raw,{native:true,allowScripts:true});const header=await local.snapshot.file.slice(0,1024).text();
   assert.equal(local.snapshot.allowScripts,true);assert.match(header,/script-src 'unsafe-inline' 'unsafe-eval'/);assert.match(header,/connect-src data: blob:/);assert.match(header,/document.body.append/);
+});
+test('file identity uses contents rather than filename, timestamps or size alone',async()=>{
+  const a=file('<body>first</body>'),copy=file('<body>first</body>','renamed.htm'),different=file('<body>other</body>');
+  const identity=await localFileIdentity(a);
+  assert.equal(sameLocalFile(identity,await localFileIdentity(copy)),true);
+  assert.equal(a.size,different.size);assert.equal(sameLocalFile(identity,await localFileIdentity(different)),false);
+  assert.equal(sameLocalFile(identity,{...identity,version:2}),false);assert.equal(sameLocalFile({version:1,size:1},{version:1,size:1}),false);
+});
+test('identity hashes ordered bounded chunks without calling a large file full-read method',async()=>{
+  const raw=file('a'.repeat(1024*1024)+'b'.repeat(1024*1024)+'c'),originalSlice=raw.slice.bind(raw);let largest=0;
+  raw.arrayBuffer=raw.text=async()=>{throw Error('Full file read');};raw.slice=(start,end)=>{largest=Math.max(largest,end-start);return originalSlice(start,end);};
+  const identity=await localFileIdentity(raw);assert.equal(largest,1024*1024);
+  assert.equal(sameLocalFile(identity,await localFileIdentity(file('b'.repeat(1024*1024)+'a'.repeat(1024*1024)+'c'))),false);
+});
+test('duplicate matching finds renamed copies and independent annotation records without loading bodies',async()=>{
+  const local=await readLocalHTML(file('<body>same</body>'));
+  const records=[{id:'one',name:'original.html',sourceIdentity:local.sourceIdentity},{id:'two',name:'another.html',sourceIdentity:local.sourceIdentity},{id:'other',name:local.name,sourceIdentity:await localFileIdentity(file('<body>else</body>'))}];
+  assert.deepEqual((await findLocalDuplicates(local,records,()=>{throw Error('No body read needed');})).map(record=>record.id),['one','two']);
+});
+test('legacy prepared HTML matches without altering annotations, and same-name different content does not match',async()=>{
+  const local=await readLocalHTML(file('<html><head><title>Old</title></head><body><p>Same text</p></body></html>'));
+  const parsed=parseHTML(local.snapshot.html,{}, {allowScripts:true,includeMetadata:true});
+  parsed.metadata.annotations=[{id:'kept',type:'note',text:'Keep this note',color:'#334155',width:3,opacity:1,points:[{x:1,y:2}]}];
+  const stored={id:'legacy',name:local.name,html:serializeHTML(documentFor(parsed.html),parsed.metadata),metadata:parsed.metadata};
+  const before=structuredClone(stored),other={id:'other',name:local.name,html:parseHTML('<body>Different content</body>',{}, {allowScripts:true}).html};
+  assert.deepEqual((await findLocalDuplicates(local,[stored,other],async id=>id==='legacy'?stored:other)).map(record=>record.id),['legacy']);assert.deepEqual(stored,before);
+});
+test('legacy large streamed sources match without full-file or full-text reads',async()=>{
+  const raw=file('<html><head><title>Large</title></head><body><!--'+'x'.repeat(4*1024*1024)+'--><p>Body</p></body></html>');
+  const a=await readLocalHTML(raw,{native:true,allowScripts:true}),b=await readLocalHTML(raw,{native:true,allowScripts:true});
+  a.snapshot.file.text=a.snapshot.file.arrayBuffer=b.snapshot.file.text=b.snapshot.file.arrayBuffer=async()=>{throw Error('Full read');};
+  const record={id:'legacy-large',name:raw.name,file:b.snapshot.file};
+  assert.deepEqual((await findLocalDuplicates(a,[record],async()=>record)).map(record=>record.id),['legacy-large']);
+});
+test('fresh annotations remove imported notes and bookmarks on both parsed and streamed DOM paths',async()=>{
+  const parsed=parseHTML('<html><head><title>Saved</title></head><body><p>Original body</p><script>window.sourceKept=true</script></body></html>',{source:'https://example.test/book'}, {allowScripts:true});
+  parsed.metadata.annotations=[{id:'old',type:'note',text:'Existing note',color:'#334155',width:3,opacity:1,points:[{x:1,y:2}]}];
+  parsed.metadata.bookmarks=[{id:'mark',title:'Existing bookmark',top:10,left:0}];
+  const html=serializeHTML(documentFor(parsed.html),parsed.metadata),before=html;
+  assert.equal(parseHTML(html,{}, {allowScripts:true}).metadata.annotations.length,1);
+  for(const result of [parseHTML(html,{}, {allowScripts:true,includeMetadata:true,freshAnnotations:true}),await prepareLoadedHTML(documentFor(html),{execution:{allowScripts:true}},()=>false,{freshAnnotations:true})]){
+    assert.deepEqual(result.metadata.annotations,[]);assert.deepEqual(result.metadata.bookmarks,[]);assert.equal(result.metadata.title,'Saved');assert.equal(result.metadata.source,'https://example.test/book');assert.match(result.html,/Original body/);assert.match(result.html,/window.sourceKept=true/);
+    assert.deepEqual(parseHTML(result.html,{}, {allowScripts:true}).metadata.annotations,[]);
+  }
+  assert.equal(html,before);assert.equal(parsed.metadata.annotations.length,1);assert.equal(parsed.metadata.bookmarks.length,1);
 });

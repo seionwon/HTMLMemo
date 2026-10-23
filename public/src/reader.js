@@ -58,7 +58,7 @@ export class Reader {
               } else if (target?.closest?.('form')) event.preventDefault();
             };
             this.doc.addEventListener('click',blockNavigation,true);this.doc.addEventListener('keydown',blockNavigation,true);
-            const prepared = await prepareLoadedHTML(this.doc, this.metadata, () => this.disposed, {serialize:false});
+            const prepared = await prepareLoadedHTML(this.doc, this.metadata, () => this.disposed, {serialize:false,freshAnnotations:!!parsed.freshAnnotations});
             this.doc.removeEventListener('click',blockNavigation,true);this.doc.removeEventListener('keydown',blockNavigation,true);
             const openingScroll = {top:this.doc.defaultView.scrollY,left:this.doc.defaultView.scrollX};
             this.metadata = parsed.savedMetadata ? {...prepared.metadata,...parsed.metadata} : prepared.metadata; this.history = new History(this.metadata.annotations);

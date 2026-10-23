@@ -1,9 +1,51 @@
-import { LOCAL_CSP, SCRIPT_CSP } from './document.js';
+import { LOCAL_CSP, SCRIPT_CSP, parseHTML } from './document.js';
+
+// Hash bounded chunks so large books never require a second full-file buffer.
+// The final digest includes their order and the exact source byte count.
+export async function localFileIdentity(file) {
+  const hashes=[],chunkSize=1024*1024;
+  for(let offset=0;offset<file.size;offset+=chunkSize){
+    const bytes=await file.slice(offset,offset+chunkSize).arrayBuffer();
+    hashes.push(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)));
+  }
+  const prefix=new TextEncoder().encode('HTMLMemo local file v1:'+file.size+':');
+  const joined=new Uint8Array(prefix.length+hashes.length*32);joined.set(prefix);
+  hashes.forEach((hash,index)=>joined.set(hash,prefix.length+index*32));
+  const digest=new Uint8Array(await crypto.subtle.digest('SHA-256',joined));
+  return {version:1,size:file.size,digest:[...digest].map(byte=>byte.toString(16).padStart(2,'0')).join('')};
+}
+export function sameLocalFile(a,b) {
+  return a?.version===1&&b?.version===1&&Number.isSafeInteger(a.size)&&a.size>=0&&a.size===b.size&&/^[a-f0-9]{64}$/.test(a.digest)&&a.digest===b.digest;
+}
+export async function findLocalDuplicates(local, records, loadRecord) {
+  const matches=[];let preparedHTML,preparedFile;
+  for(const record of records){
+    if(sameLocalFile(local.sourceIdentity,record.sourceIdentity)){matches.push(record);continue;}
+    // A different known digest is never treated as the same file merely
+    // because its filename, size, title or modification date matches.
+    if(record.sourceIdentity||record.name!==local.name)continue;
+    const stored=await loadRecord(record.id);
+    if(!stored)continue;
+    let same=false;
+    if(local.snapshot.file&&stored.file instanceof Blob){
+      preparedFile??=await localFileIdentity(local.snapshot.file);
+      same=sameLocalFile(preparedFile,await localFileIdentity(stored.file));
+    }else if(typeof local.snapshot.html==='string'&&typeof stored.html==='string'){
+      preparedHTML??=parseHTML(local.snapshot.html,{}, {allowScripts:true}).html;
+      // Older records have no source digest. Compare their immutable prepared
+      // HTML, excluding annotations/metadata, without changing either record.
+      try{same=preparedHTML===parseHTML(stored.html,{}, {allowScripts:true}).html;}catch{ /* A damaged old record cannot prove identity. */ }
+    }
+    if(same)matches.push(record);
+  }
+  return matches;
+}
 
 export async function readLocalHTML(input, {native = false, allowScripts = false} = {}) {
   const originalHandle = input?.kind === 'file' && typeof input.getFile === 'function' ? input : null;
   const file = originalHandle ? await originalHandle.getFile() : input;
   if (!file || typeof file.text !== 'function' || !/\.html?$/i.test(file.name || '') && file.type !== 'text/html') throw new Error('HTML 또는 HTM 파일을 선택해주세요.');
+  const sourceIdentity=await localFileIdentity(file);
   // Inspect only the encoding header. Blob slices retain the original file bytes;
   // the browser streams/parses them without making a giant JS string first.
   let nativeFile = null;
@@ -37,7 +79,7 @@ export async function readLocalHTML(input, {native = false, allowScripts = false
   // files still become local document tabs with a recoverable internal copy.
   return {
     snapshot:{html,file:nativeFile,title:file.name,allowScripts}, name:file.name, handle:null,
-    originalHandle, diskStamp:originalHandle ? {modified:file.lastModified,size:file.size} : null,
+    originalHandle, sourceIdentity, diskStamp:originalHandle ? {modified:file.lastModified,size:file.size} : null,
   };
 }
 export async function droppedHTMLFiles(dataTransfer) {

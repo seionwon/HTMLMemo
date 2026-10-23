@@ -5,7 +5,7 @@ import { openEditionProbe, migrateAnnotations } from './migrate.js';
 import { Reader } from './reader.js';
 import { listDocuments, getDocument, deleteDocument, getSetting, setSetting, saveDocumentHTML, listRevisionSummaries, getRevision, putDocumentRevision, putDocumentView, writeExternalHTML } from './storage.js';
 import {readWebPage,pastedPage,PASTE_LIMIT,isWebSearch,BrowserTabs} from './web.js';
-import { readLocalHTML, droppedHTMLFiles } from './local-files.js';
+import { readLocalHTML, droppedHTMLFiles, findLocalDuplicates } from './local-files.js';
 import { normalizePreferences, loadPreferences, storePreferences, serializeSettings, readSettingsFile, PRESET_COLORS, PRESET_PALETTES, normalizeHexColor, hexToRgb, rgbToHex, hexToHsv, hsvToHex } from './preferences.js';
 import {bundledExample} from './distribution.js';
 import { InstallController, isIOS, installableLocation, installationURL, PUBLIC_APP_URL } from './install.js';
@@ -16,6 +16,7 @@ let preferences=normalizePreferences(), settingsFileHandle=null, settingsFolderH
 let sharingApp=false, installController;
 let readerFocused=false, nativeReaderFullscreen=false, focusBusy=false;
 let tabLayout='';
+let localImportQueue=Promise.resolve();
 const browserTabs=new BrowserTabs(window);let lastWebTab=null;
 const active = () => tabs.find(tab => tab.id === activeId);
 const reader = () => active()?.reader;
@@ -327,9 +328,10 @@ async function closeTab(id) {
   return tab.closePromise;
 }
 async function createDocument(snapshot, handle = null, name = null, local = {}) {
-  const parsed=snapshot.file ? {...parseHTML('<html><head></head><body></body></html>',{title:snapshot.title,execution:{allowScripts:!!snapshot.allowScripts}}),file:snapshot.file,nativeScroll:true} : parseHTML(snapshot.html,{title:snapshot.title,source:snapshot.url,viewport:snapshot.viewport,warnings:snapshot.warnings},{includeMetadata:true,allowScripts:snapshot.allowScripts});
+  const parsed=snapshot.file ? {...parseHTML('<html><head></head><body></body></html>',{title:snapshot.title,execution:{allowScripts:!!snapshot.allowScripts}}),file:snapshot.file,nativeScroll:true,freshAnnotations:!!local.freshAnnotations} : parseHTML(snapshot.html,{title:snapshot.title,source:snapshot.url,viewport:snapshot.viewport,warnings:snapshot.warnings},{includeMetadata:true,allowScripts:snapshot.allowScripts,freshAnnotations:!!local.freshAnnotations});
   const title=parsed.metadata.title; const record={id:uid(),title,name:name||handle?.name||filename(title),source:parsed.metadata.source,created:Date.now(),modified:Date.now(),fileHandle:handle,originalHandle:local.originalHandle||null,metadata:parsed.metadata};
   if(snapshot.file)record.file=snapshot.file;else record.html=parsed.html;
+  if(local.sourceIdentity)record.sourceIdentity=local.sourceIdentity;
   if(local.diskStamp)record.diskStamp=local.diskStamp;
   else if(handle){const disk=await handle.getFile();record.diskStamp={modified:disk.lastModified,size:disk.size};}
   const {html:body,file:sourceFile,...summary}=record;records=records.filter(r=>r.id!==record.id).concat(summary);let tab;
@@ -380,12 +382,41 @@ async function importFiles() {
   let handles;try{handles=await window.showOpenFilePicker({types:htmlTypes,multiple:true});}catch(error){if(['SecurityError','NotSupportedError'].includes(error.name)){$('#file-input').click();return;}throw error;}
   for(const handle of handles)await openLocalFile(handle);
 }
-async function openLocalFile(input) {
-  $('#status-left').textContent='로컬 HTML을 읽는 중…';
-  const local=await readLocalHTML(input,{native:true,allowScripts:true});
-  $('#status-left').textContent='HTML 문서를 준비하는 중…';
-  await new Promise(resolve=>setTimeout(resolve,0));
-  return createDocument(local.snapshot,local.handle,local.name,local);
+function duplicateImportDialog(local, matches) {
+  const choices=[...matches].sort((a,b)=>Number(!!b.metadata?.annotations?.length)-Number(!!a.metadata?.annotations?.length)||(b.modified||0)-(a.modified||0));
+  const options=choices.map((record,index)=>{
+    const stamp=new Date(record.modified||record.created||Date.now()).toLocaleString('ko-KR');
+    return `<option value="${esc(record.id)}">${index+1}. ${esc(record.title||record.name)} · 주석 ${record.metadata?.annotations?.length||0}개 · ${esc(stamp)}</option>`;
+  }).join('');
+  return new Promise(resolve=>modal(`<form method="dialog" data-duplicate-import><div class="dialog-heading"><h2>이미 불러온 HTML 파일입니다</h2></div><p class="dialog-description"><strong>${esc(local.name)}</strong> 파일은 이미 보관함에 있습니다. 새롭게 열어 별도의 주석을 시작할까요?</p><p class="dialog-description small">새롭게 열면 주석과 북마크가 없는 독립 사본을 만듭니다. 기존 문서와 주석, 원본 HTML 파일은 변경하지 않습니다.</p><label class="duplicate-import-target">기존 주석 파일<select id="duplicate-import-target" aria-label="기존 주석 파일">${options}</select></label><div class="dialog-actions duplicate-import-actions"><button class="secondary-button" value="cancel" autofocus>취소</button><button class="secondary-button" value="new">새롭게 열기</button><button class="primary-button" value="existing">기존의 주석 파일로 가기</button></div></form>`,dialog=>{
+    dialog.addEventListener('close',()=>resolve({action:['new','existing'].includes(dialog.returnValue)?dialog.returnValue:'cancel',id:$('#duplicate-import-target').value}),{once:true});
+  }));
+}
+function openLocalFile(input) {
+  // File picker, input, drop and launch events share one queue. Concurrent
+  // imports must not overwrite a pending three-way choice or miss each other.
+  const pending=localImportQueue.then(()=>importLocalFile(input));
+  localImportQueue=pending.catch(()=>{});return pending;
+}
+async function importLocalFile(input) {
+  try{
+    $('#status-left').textContent='로컬 HTML을 읽고 중복을 확인하는 중…';
+    const local=await readLocalHTML(input,{native:true,allowScripts:true});
+    const matches=await findLocalDuplicates(local,await listDocuments(),getDocument);
+    if(matches.length){
+      const choice=await duplicateImportDialog(local,matches);
+      if(choice.action==='cancel')return null;
+      if(choice.action==='existing'){
+        const record=matches.find(record=>record.id===choice.id);
+        if(!record)throw new Error('기존 주석 문서를 선택해주세요.');
+        return await openRecord(record);
+      }
+      local.freshAnnotations=true;
+    }
+    $('#status-left').textContent='HTML 문서를 준비하는 중…';
+    await new Promise(resolve=>setTimeout(resolve,0));
+    return await createDocument(local.snapshot,local.handle,local.name,local);
+  }finally{if(activeId==='library')renderLibrary();else updateChrome();}
 }
 async function savePage() {
   if(activeId==='execution')return copyAppURL();

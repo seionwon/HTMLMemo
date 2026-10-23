@@ -142,8 +142,8 @@ export function parseHTML(html, defaults = {}, options = {}) {
   let step; do { step = work.next(); } while (!step.done);
   return step.value;
 }
-export async function prepareLoadedHTML(doc, defaults = {}, isCancelled = () => false, {serialize = true} = {}) {
-  const work = prepareHTML(null, defaults, {document:doc,includeMetadata:true,allowScripts:defaults.execution?.allowScripts,serialize});
+export async function prepareLoadedHTML(doc, defaults = {}, isCancelled = () => false, {serialize = true, freshAnnotations = false} = {}) {
+  const work = prepareHTML(null, defaults, {document:doc,includeMetadata:true,allowScripts:defaults.execution?.allowScripts,serialize,freshAnnotations});
   try {
     for (;;) {
       if (isCancelled()) throw new DOMException('문서 열기가 취소되었습니다.','AbortError');
@@ -157,7 +157,7 @@ export async function prepareLoadedHTML(doc, defaults = {}, isCancelled = () => 
     }
   } finally { work.return(); }
 }
-function* prepareHTML(html, defaults, {includeMetadata = false, document: loadedDocument = null, allowScripts = undefined, serialize = true} = {}) {
+function* prepareHTML(html, defaults, {includeMetadata = false, document: loadedDocument = null, allowScripts = undefined, serialize = true, freshAnnotations = false} = {}) {
   if (!loadedDocument && (typeof html !== 'string' || !html.trim())) throw new Error('HTML 파일이 비어 있습니다.');
   const doc = loadedDocument || new DOMParser().parseFromString(html, 'text/html');
   let embedded = {};
@@ -208,7 +208,7 @@ function* prepareHTML(html, defaults, {includeMetadata = false, document: loaded
   const metadata = {
     version: FORMAT_VERSION, title: String(embedded.title || doc.title || defaults.title || 'HTML 문서').slice(0,1000),
     source, capturedAt: embedded.capturedAt || Date.now(), viewport: {width: Math.min(4096, Math.max(320, Number(viewport.width) || 1100)), height: Number(viewport.height) || 800},
-    execution:{allowScripts:!!allowScripts}, annotations: embedded.annotations || [], view: {scrollTop:Math.max(0,Number(view.scrollTop)||0),scrollLeft:Math.max(0,Number(view.scrollLeft)||0),zoom:Number.isFinite(view.zoom)?Math.min(8,Math.max(.2,view.zoom)):null,autoFit:view.autoFit==null?!Number.isFinite(view.zoom):view.autoFit!==false,...(Number.isFinite(view.tocWidth)?{tocWidth:Math.min(640,Math.max(8,Math.round(Number(view.tocWidth))))}:{})}, bookmarks,
+    execution:{allowScripts:!!allowScripts}, annotations: freshAnnotations?[]:embedded.annotations || [], view: {scrollTop:Math.max(0,Number(view.scrollTop)||0),scrollLeft:Math.max(0,Number(view.scrollLeft)||0),zoom:Number.isFinite(view.zoom)?Math.min(8,Math.max(.2,view.zoom)):null,autoFit:view.autoFit==null?!Number.isFinite(view.zoom):view.autoFit!==false,...(Number.isFinite(view.tocWidth)?{tocWidth:Math.min(640,Math.max(8,Math.round(Number(view.tocWidth))))}:{})}, bookmarks:freshAnnotations?[]:bookmarks,
     warnings: [...new Set([...(Array.isArray(embedded.warnings) ? embedded.warnings : defaults.warnings || []), ...(book && !book.complete ? [BOOK_DATA_MISSING] : [])])].filter(w=>typeof w==='string').slice(0,5000),
   };
   const nativeScroll = !!allowScripts || !!loadedDocument || html.length >= 4 * 1024 * 1024 || n >= 20000;
