@@ -15,6 +15,19 @@ const appVersion=JSON.parse(await readFile(new URL('../package.json',import.meta
 async function revealAnnotation(page,doc,id){
   await page.evaluate(`(()=>{let node=${doc}.querySelector('[data-annotation="'+${JSON.stringify(id)}+'"]');if(!node)throw Error('Missing annotation');for(node=node.parentElement;node;node=node.parentElement)if(node.matches('details[data-annotation-group]'))node.open=true;})()`);
 }
+async function verifyLoadedSearchEnds(page,doc,prefix,total,click,screenshotName){
+  const state=()=>page.evaluate(`(()=>{const d=${doc};return {count:d.querySelector('#${prefix}search-count').textContent,prev:d.querySelector('#${prefix}search-prev').disabled,next:d.querySelector('#${prefix}search-next').disabled};})()`);
+  const expected=position=>({count:`${position} / ${total}개 결과`,prev:position===1,next:position===total});
+  const enter=async shift=>{await page.evaluate(`${doc}.querySelector('#${prefix}document-search').focus()`);await page.send('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13,modifiers:shift?8:0,text:'\r',unmodifiedText:'\r'});await page.send('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});};
+  assert.deepEqual(await state(),expected(1));await click('#'+prefix+'search-prev');await enter(true);assert.deepEqual(await state(),expected(1));
+  for(let position=2;position<=total;position++){await click('#'+prefix+'search-next');assert.deepEqual(await state(),expected(position));}
+  const mark=await page.evaluate(`(()=>{const d=${doc},m=d.querySelector('[data-htmlmemo-search]');return {text:m?.textContent,top:m?.getBoundingClientRect().top};})()`);
+  await click('#'+prefix+'search-next');await enter(false);assert.deepEqual(await state(),expected(total));assert.deepEqual(await page.evaluate(`(()=>{const d=${doc},m=d.querySelector('[data-htmlmemo-search]');return {text:m?.textContent,top:m?.getBoundingClientRect().top};})()`),mark);
+  await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,`test-results/sidebar-views-search-end-${screenshotName}.png`),await page.screenshot());
+  for(let position=total-1;position>=1;position--){await click('#'+prefix+'search-prev');assert.deepEqual(await state(),expected(position));}
+  await enter(true);assert.deepEqual(await state(),expected(1));
+  await click('[data-search-index="'+(total-1)+'"]');assert.deepEqual(await state(),expected(total));await click('[data-search-index="0"]');assert.deepEqual(await state(),expected(1));
+}
 test('real Chrome: duplicate HTML import offers cancel, fresh annotations or existing notes',{timeout:90000},async()=>{
   await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-duplicate-import-'));await cp(join(root,'public'),folder,{recursive:true});
   const server=createServer(folder);let chrome;
@@ -1284,6 +1297,7 @@ test('real Chrome: native sidebar view choices are visible on open and preserve 
       await clickNative('#htmlmemo-native-document-search');
       await page.evaluate(`${doc}.querySelector('#htmlmemo-native-document-search').select()`);
       await page.send('Input.insertText',{text:'Introduction'});await page.waitFor(`${doc}.querySelectorAll('[data-search-index]').length===6`);
+      await verifyLoadedSearchEnds(page,doc,'htmlmemo-native-',6,clickNative,'native-'+width);
       await writeFile(join(root,`test-results/sidebar-views-search-native-${width}.png`),await page.screenshot());
       assert.equal(await page.evaluate(`${doc}.defaultView.getComputedStyle(${doc}.querySelector('#reader-tree')).display`),'block');
       await chooseNative('annotations');assert.equal(await page.evaluate(`${doc}.querySelector('[data-annotation=native-note] .annotation-main').textContent`),'책의 메모');await revealAnnotation(page,doc,'native-note');await clickNative('[data-annotation=native-note]');
@@ -1364,7 +1378,7 @@ test('real Chrome: sidebar view choices preserve search drafts, navigate saved n
       await page.click('[data-sidebar-view=search]');
       assert.equal(await page.evaluate('document.querySelector("#document-search").placeholder'),'불러온 부분에서 찾기');assert.equal(await page.evaluate('document.querySelector("#sidebar-title").textContent'),'검색');
       await page.evaluate(`(()=>{const input=document.querySelector('#document-search');input.value='검색어';input.dispatchEvent(new Event('input'));})()`);
-      await page.waitFor('document.querySelectorAll("[data-search-index]").length===2');await page.click('[data-search-index="1"]');
+      await page.waitFor('document.querySelectorAll("[data-search-index]").length===2');await verifyLoadedSearchEnds(page,'document','',2,selector=>page.click(selector),'plain-'+width);await page.click('[data-search-index="1"]');
       await page.click('[data-sidebar-view=annotations]');assert.equal(await page.evaluate('document.querySelector("[data-annotation=sidebar-note] .annotation-main").textContent'),'보관한 메모');await revealAnnotation(page,'document','sidebar-note');await page.click('[data-annotation=sidebar-note]');
       await page.click('[data-sidebar-view=search]');assert.equal(await page.evaluate('document.querySelector("#document-search").value'),'검색어');
       await page.evaluate(`(()=>{const input=document.querySelector('#document-search');input.value='빠른 전환';input.dispatchEvent(new Event('input'));document.querySelector('[data-sidebar-view=outline]').click();})()`);

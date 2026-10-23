@@ -278,6 +278,7 @@ async function openRecord(record, prepared = null, {deferReady = false} = {}) {
     onReadingAction:(action,button)=>{if(activeId===tab.id)toolAction(action,button);},
     onSidebarView:(mode,panel,documentReader)=>renderSidebar(mode,{panel,embedded:true,documentReader}),
     onSidebarCounts:(panel,documentReader)=>updateSidebarCounts(panel,documentReader),
+    onSearchChange:documentReader=>updateSearchNavigation(documentReader),
     onSelect:id=>{if(activeId===tab.id)annotationDialog(tab,id);},
   });
   Object.assign(tab.reader,preferences.annotation);
@@ -892,6 +893,15 @@ function bindToolbarDrag() {
   };
 }
 function closeSidebar() {const panel=$('#sidebar'),wasOpen=!panel.hidden;clearTimeout(panel.sidebarSearchTimer);panel.sidebarMode='';sidebarMode='';panel.hidden=true;const r=reader();if(wasOpen&&r&&r.documentSidebarMode!=='search'){r.sidebarSearchQuery='';r.search('');}}
+function updateSearchNavigation(r) {
+  for(const panel of [$('#sidebar'),r.documentSidebarUI]){
+    if(!panel?.isConnected||panel.annotationReader!==r||panel.sidebarMode!=='search')continue;
+    const prefix=panel.hasAttribute('data-htmlmemo-doc-sidebar-ui')?'htmlmemo-native-':'',q=name=>$('#'+prefix+name,panel),total=r.searchResults?.length||0,position=r.searchPosition??-1;
+    const count=q('search-count');if(!count||q('document-search')?.value!==r.searchQuery)continue;
+    count.textContent=!r.searchQuery?.trim()?'검색어를 입력하세요.':total?`${position>=0?`${position+1} / `:''}${total}${total===3000?'+':''}개 결과`:'검색 결과가 없습니다.';
+    q('search-prev').disabled=!total||position<=0;q('search-next').disabled=total<=1||position>=total-1;
+  }
+}
 function updateSidebarCounts(panel,r) {
   if(!panel||!r||panel.annotationReader!==r)return;
   for(const view of ['annotations','bookmarks']){
@@ -930,11 +940,12 @@ function renderSidebar(mode,{panel=$('#sidebar'),embedded=false,documentReader=r
   updateSidebarCounts(panel,r);
   const content=$('.sidebar-content',panel);content.hidden=false;
   if(mode==='search'){
-    content.innerHTML=`<div class="search-field"><input id="${id('document-search')}" aria-label="불러온 부분 검색어" placeholder="불러온 부분에서 찾기" autocomplete="off"></div><div class="search-navigation"><span id="${id('search-count')}">검색어를 입력하세요.</span><button id="${id('search-prev')}" class="icon-button" aria-label="이전 검색 결과">${icon('back')}</button><button id="${id('search-next')}" class="icon-button" aria-label="다음 검색 결과">${icon('forward')}</button></div><div id="${id('search-results')}"></div>`;
+    content.innerHTML=`<div class="search-field"><input id="${id('document-search')}" aria-label="불러온 부분 검색어" placeholder="불러온 부분에서 찾기" autocomplete="off"></div><div class="search-navigation loaded-search-navigation"><span id="${id('search-count')}" role="status" aria-live="polite">검색어를 입력하세요.</span><button id="${id('search-prev')}" class="icon-button" aria-label="이전 검색 결과" disabled>${icon('back')}</button><button id="${id('search-next')}" class="icon-button" aria-label="다음 검색 결과" disabled>${icon('forward')}</button></div><div id="${id('search-results')}"></div>`;
     const input=q('document-search');input.value=r.sidebarSearchQuery??r.searchQuery??'';
-    const run=()=>{if(panel.sidebarMode!=='search'||reader()!==r||!input.isConnected)return;const results=r.search(input.value);q('search-count').textContent=results.length?`${results.length}${results.length===3000?'+':''}개 결과`:'검색 결과가 없습니다.';q('search-results').innerHTML=results.slice(0,150).map((result,index)=>`<button class="search-result" data-search-index="${index}">${esc(result.quote)}</button>`).join('');$$('[data-search-index]',panel).forEach(button=>button.onclick=()=>{r.searchPosition=Number(button.dataset.searchIndex)-1;r.nextSearch(1);});};
-    input.oninput=()=>{r.sidebarSearchQuery=input.value;clearTimeout(panel.sidebarSearchTimer);panel.sidebarSearchTimer=setTimeout(run,120);};input.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();r.nextSearch(e.shiftKey?-1:1);}};
-    q('search-prev').onclick=()=>r.nextSearch(-1);q('search-next').onclick=()=>r.nextSearch(1);input.focus();if(input.value)run();
+    const run=()=>{if(panel.sidebarMode!=='search'||reader()!==r||!input.isConnected)return;const results=r.search(input.value);updateSearchNavigation(r);q('search-results').innerHTML=results.slice(0,150).map((result,index)=>`<button class="search-result" data-search-index="${index}">${esc(result.quote)}</button>`).join('');$$('[data-search-index]',panel).forEach(button=>button.onclick=()=>{r.searchPosition=Number(button.dataset.searchIndex)-1;r.nextSearch(1);updateSearchNavigation(r);});};
+    const advance=direction=>{clearTimeout(panel.sidebarSearchTimer);if(r.searchQuery!==input.value){run();return;}r.nextSearch(direction);updateSearchNavigation(r);};
+    input.oninput=()=>{r.sidebarSearchQuery=input.value;clearTimeout(panel.sidebarSearchTimer);panel.sidebarSearchTimer=setTimeout(run,120);};input.onkeydown=e=>{if(e.key==='Enter'&&!e.isComposing){e.preventDefault();advance(e.shiftKey?-1:1);}};
+    q('search-prev').onclick=()=>advance(-1);q('search-next').onclick=()=>advance(1);input.focus();if(input.value)run();
   }else if(mode==='outline'){
     const outline=embedded?[]:r.outline();
     // Native books keep their original TOC nodes below this editor-owned panel.

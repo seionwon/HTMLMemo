@@ -17,7 +17,7 @@ function sidebar() {
   const calls={search:[],next:[],headings:[],annotations:[],saved:0},timers=new Map();let timerId=0;
   const r={zoom:2,metadata:{bookmarks:[{id:'b1',title:'읽던 곳',top:240,left:12}],annotations:[{id:'a1',type:'note',color:'#334155',text:'남겨 둔 메모'}]},
     outline:()=>[{node:'heading-1',level:1,title:'첫 번째 절'}],jump:node=>calls.headings.push(node),jumpAnnotation:id=>calls.annotations.push(id),
-    search(query){this.searchQuery=query;calls.search.push(query);return query?[{quote:'찾은 문장: '+query}]:[];},nextSearch:direction=>calls.next.push(direction)};
+    search(query){this.searchQuery=query;calls.search.push(query);this.searchResults=query?[{quote:'찾은 문장: '+query}]:[];this.searchPosition=this.searchResults.length?0:-1;return this.searchResults;},nextSearch(direction){calls.next.push(direction);if(this.searchResults?.length)this.searchPosition=Math.max(0,Math.min(this.searchResults.length-1,this.searchPosition+direction));}};
   let current=r;
   const context=vm.createContext({ANNOTATION_LABELS,document:doc,$:(selector,root=doc)=>$(selector,root),$$:(selector,root=doc)=>$$(selector,root),icon,esc:escapeHTML,
     reader:()=>current,active:()=>({queue:{schedule(){calls.saved++;}}}),closePopover(){},toolAction(){},
@@ -39,7 +39,7 @@ test('sidebar switches four icon-only views with tooltip labels and total counts
   a.doc.querySelector('[data-heading]').onclick();assert.deepEqual(a.calls.headings,['heading-1']);
   const button=a.doc.querySelector('[data-sidebar-view=search]');a.choose('search');
   const input=a.doc.querySelector('#document-search');assert.equal(input.getAttribute('placeholder'),'불러온 부분에서 찾기');assert.equal(input.getAttribute('aria-label'),'불러온 부분 검색어');assert.equal(a.doc.querySelector('#sidebar-title').textContent,'검색');input.value='기억';input.oninput();a.flush();
-  assert.equal(a.doc.querySelector('#search-count').textContent,'1개 결과');
+  assert.equal(a.doc.querySelector('#search-count').textContent,'1 / 1개 결과');
   a.doc.querySelector('[data-search-index]').onclick();assert.deepEqual(a.calls.next,[1]);
   a.choose('annotations');assert.equal(a.doc.querySelector('#sidebar-title').textContent,'주석');a.doc.querySelector('[data-annotation]').onclick();assert.deepEqual(a.calls.annotations,['a1']);
   assert.equal(a.doc.querySelector('[data-sidebar-view=annotations]').getAttribute('aria-pressed'),'true');
@@ -58,6 +58,33 @@ test('sidebar cancels pending searches on view changes, close and document switc
   assert.equal(a.doc.querySelector('#sidebar').hidden,true);assert.equal(a.timers.size,0);assert.equal(a.r.searchQuery,'');
   a.open('search');input=a.doc.querySelector('#document-search');input.value='이전 문서';input.oninput();
   a.setReader({});a.flush();assert.equal(a.calls.search.includes('이전 문서'),false);
+});
+
+test('loaded-part search disables its first/last arrows, updates the position and flushes a pending query before keyboard navigation',()=>{
+  const a=sidebar();a.r.search=function(query){this.searchQuery=query;this.searchResults=query==='여러 개'?[{quote:'첫째'},{quote:'둘째'},{quote:'셋째'}]:query==='하나'?[{quote:'하나'}]:[];this.searchPosition=this.searchResults.length?0:-1;return this.searchResults;};
+  a.open('search');const input=a.doc.querySelector('#document-search'),prev=a.doc.querySelector('#search-prev'),next=a.doc.querySelector('#search-next'),count=a.doc.querySelector('#search-count');
+  assert.equal(prev.disabled,true);assert.equal(next.disabled,true);
+  input.value='여러 개';input.oninput();a.flush();assert.equal(count.textContent,'1 / 3개 결과');assert.equal(prev.disabled,true);assert.equal(next.disabled,false);
+  prev.onclick();assert.equal(count.textContent,'1 / 3개 결과');next.onclick();assert.equal(count.textContent,'2 / 3개 결과');assert.equal(prev.disabled,false);next.onclick();assert.equal(count.textContent,'3 / 3개 결과');assert.equal(next.disabled,true);
+  input.onkeydown({key:'Enter',preventDefault(){}});assert.equal(count.textContent,'3 / 3개 결과');prev.onclick();assert.equal(count.textContent,'2 / 3개 결과');
+  a.doc.querySelector('[data-search-index="0"]').onclick();assert.equal(count.textContent,'1 / 3개 결과');assert.equal(prev.disabled,true);assert.equal(next.disabled,false);
+  input.onkeydown({key:'Enter',shiftKey:true,preventDefault(){}});assert.equal(count.textContent,'1 / 3개 결과');
+  input.value='하나';input.oninput();input.onkeydown({key:'Enter',preventDefault(){}});a.flush();assert.equal(count.textContent,'1 / 1개 결과');assert.equal(prev.disabled,true);assert.equal(next.disabled,true);
+  a.r.searchPosition=-1;a.context.updateSearchNavigation(a.r);assert.equal(prev.disabled,true);assert.equal(next.disabled,true);
+  input.value='없음';input.oninput();a.flush();assert.equal(count.textContent,'검색 결과가 없습니다.');assert.equal(prev.disabled,true);assert.equal(next.disabled,true);
+  input.value='';input.oninput();a.flush();assert.equal(count.textContent,'검색어를 입력하세요.');assert.equal(prev.disabled,true);assert.equal(next.disabled,true);
+});
+
+test('reader loaded-part search stops at both ends without replacing the active mark or scrolling again',()=>{
+  installDOM();const doc=documentFor('<html><body><main><p>첫 키워드, 둘째 키워드, 셋째 키워드.</p></main></body></html>');let rangeCalls=0;const states=[];
+  doc.createRange=()=>{rangeCalls++;return {setStart(){},setEnd(){},getBoundingClientRect:()=>({left:20,top:300,width:30,height:10})};};
+  const r=Object.create(Reader.prototype);r.doc=doc;r.viewport={clientHeight:200,clientWidth:200};r.zoom=1;r.layerOrigin=()=>({left:0,top:0});r.metadata={annotations:[],bookmarks:[]};r.callbacks={onSearchChange:reader=>states.push(reader.searchPosition)};
+  const before=structuredClone(r.metadata);assert.equal(r.search('키워드').length,3);assert.equal(r.searchPosition,0);const first=doc.querySelector('[data-htmlmemo-search]'),top=r.scrollTop;
+  assert.equal(r.nextSearch(-1),false);assert.strictEqual(doc.querySelector('[data-htmlmemo-search]'),first);assert.equal(r.scrollTop,top);assert.equal(rangeCalls,1);
+  assert.equal(r.nextSearch(1),true);assert.equal(r.searchPosition,1);assert.equal(r.nextSearch(1),true);assert.equal(r.searchPosition,2);const last=doc.querySelector('[data-htmlmemo-search]');assert.equal(r.nextSearch(1),false);assert.strictEqual(doc.querySelector('[data-htmlmemo-search]'),last);assert.equal(rangeCalls,3);
+  r.nextSearch(-1);r.nextSearch(-1);assert.equal(r.searchPosition,0);assert.equal(r.nextSearch(-1),false);assert.deepEqual(states,[0,1,2,1,0]);assert.deepEqual(r.metadata,before);
+  r.search('키워드',false);assert.equal(r.searchPosition,-1);r.nextSearch(-1);assert.equal(r.searchPosition,0,'an unselected search never jumps backwards to its last result');
+  r.search('없음');assert.equal(r.nextSearch(1),false);assert.equal(r.searchPosition,-1);r.search('');assert.equal(doc.querySelector('[data-htmlmemo-search]'),null);
 });
 
 test('icon totals include all annotations and bookmarks, update in place and show zero',()=>{

@@ -2249,22 +2249,25 @@ export class Reader {
     this.searchQuery = query;
     for (const mark of [...this.doc.querySelectorAll('[data-htmlmemo-search]')].reverse()) mark.replaceWith(...mark.childNodes);
     this.doc.body.normalize(); this.searchResults = []; this.searchPosition = -1;
-    if (!query.trim()) return [];
+    if (!query.trim()) { this.callbacks?.onSearchChange?.(this); return []; }
     const index = textIndex(this.doc); const haystack=index.text.toLocaleLowerCase(); const needle=query.toLocaleLowerCase(); let found=haystack.indexOf(needle);
     const sourceSearchText=index.nodes.filter(item=>item.node.parentElement?.closest('[data-htmlmemo-book-search-slot]'));
     while (found !== -1 && this.searchResults.length < 3000) { if(!sourceSearchText.some(item=>found<item.end&&found+query.length>item.start))this.searchResults.push({start:found,end:found+query.length,quote:index.text.slice(Math.max(0,found-35),found+query.length+45)}); found=haystack.indexOf(needle,found+Math.max(needle.length,1)); }
     // Only the active hit is marked, keeping long documents responsive.
-    if (move && this.searchResults.length) this.nextSearch(1); return this.searchResults;
+    if (move && this.searchResults.length) this.nextSearch(1); else this.callbacks?.onSearchChange?.(this); return this.searchResults;
   }
   nextSearch(direction) {
-    if (!this.searchResults.length) return;
-    this.searchPosition = (this.searchPosition + direction + this.searchResults.length) % this.searchResults.length;
+    if (!this.searchResults.length) return false;
+    const position=clamp(this.searchPosition+direction,0,this.searchResults.length-1);
+    if(position===this.searchPosition)return false;
+    this.searchPosition=position;
     for (const mark of [...this.doc.querySelectorAll('[data-htmlmemo-search]')].reverse()) mark.replaceWith(...mark.childNodes);
     this.doc.body.normalize(); const result=this.searchResults[this.searchPosition];
-    const range=rangeFromOffsets(this.doc,result.start,result.end); if (!range) return;
+    const range=rangeFromOffsets(this.doc,result.start,result.end); if (!range) { this.callbacks?.onSearchChange?.(this); return false; }
     const rect=range.getBoundingClientRect(), origin=this.layerOrigin(); this.scrollTop=Math.max(0,(rect.top-origin.top+rect.height/2)*this.zoom-this.viewport.clientHeight/2);
     this.scrollLeft=Math.max(0,(rect.left-origin.left+rect.width/2)*this.zoom-this.viewport.clientWidth/2);
     wrapOffsets(this.doc,result.start,result.end,{'data-htmlmemo-search':''},'background:#f0a85b80;outline:2px solid #df9057;border-radius:2px;color:inherit');
+    this.callbacks?.onSearchChange?.(this);return true;
   }
   outline() { return [...this.doc.querySelectorAll('h1,h2,h3,h4,h5,h6')].filter(n=>n.textContent.trim()&&!n.closest('[data-htmlmemo-ui]')).map(node=>({node,level:Number(node.localName[1]),title:node.textContent.trim()})); }
   addBookmark(title) { this.metadata.bookmarks.push({id:uid(),title,top:this.scrollTop/this.zoom,left:this.scrollLeft/this.zoom}); this.callbacks.onChange?.(); }
