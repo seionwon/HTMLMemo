@@ -65,6 +65,11 @@ body[data-codememo-design]{margin:0;font-family:var(--app-font);background:var(-
 .floating-toolbar{border-radius:5px}
 
 .floating-toolbar .toolbar-history{display:flex}
+.reader-controls-row{display:flex;flex-direction:column}
+.reader-controls-row>.reader-viewport{flex:1;min-height:0;height:auto}
+.reader-controls-row>[data-htmlmemo-reading-controls]{display:flex;align-items:center;justify-content:flex-end;gap:3px;height:24px;flex:0 0 24px;padding:0 8px;border-bottom:1px solid var(--line);background:var(--surface);color:var(--text)}
+.reader-controls-row>[data-htmlmemo-reading-controls] button{font-family:inherit;font-size:12px;font-weight:500;line-height:18px;min-width:40px;height:20px;padding:0 5px;border:1px solid var(--line);border-radius:4px;background:transparent;white-space:nowrap}
+.reader-controls-row>[data-htmlmemo-reading-controls] button:hover{background:var(--surface-muted)}
 .tool-popover .popover-heading{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .tool-popover .popover-heading h3{margin:0}
 .tool-popover .popover-close{flex:0 0 auto;width:28px;height:28px;padding:4px}

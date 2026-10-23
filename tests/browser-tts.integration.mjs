@@ -27,7 +27,8 @@ test('real Chrome: MemoSuite TTS toolbar in HTMLMemo',{timeout:90000},async t=>{
     await t.test('MemoSuite toolbar opens without speech and retains original controls and styling',async()=>{try {
       await page.evaluate(`window.__speechCalls=[];window.__utterances=[];window.SpeechSynthesisUtterance=class{constructor(text){this.text=text;this.rate=1;this.pitch=1;this.volume=1;this.voice=null;}};const engine=new EventTarget();engine.getVoices=()=>[{voiceURI:'ko-test',name:'Google 한국어',lang:'ko-KR',localService:false},{voiceURI:'junk',name:'eSpeak',lang:'ko-KR',localService:true},{voiceURI:'en-test',name:'Google English',lang:'en-US',localService:false}];engine.cancel=()=>window.__speechCalls.push(['cancel']);engine.speak=u=>{window.__utterances.push(u);window.__speechCalls.push(['speak',u.text,u.lang,u.rate]);};void Object.defineProperty(window,'speechSynthesis',{configurable:true,value:engine});`);
       await page.evaluate(`(()=>{const d=document.querySelector('.document-host:not([hidden]) iframe').contentDocument;const sidebar=d.createElement('aside');sidebar.textContent='읽으면 안 되는 사이드바 목차.';d.body.prepend(sidebar);const toc=d.createElement('nav');toc.textContent='읽으면 안 되는 본문 안 목차.';d.querySelector('main').prepend(toc);})()`);
-      await page.click('#toolbar [data-action=speak]');
+      assert.equal(await page.evaluate('!!document.querySelector("#toolbar [data-action=speak],#toolbar [data-action=zoom]")'),false);
+      await page.click('.document-host:not([hidden]) > [data-htmlmemo-reading-controls] [data-action=speak]');
       await page.waitFor('!!document.querySelector("[data-memo-readaloud]")');
       assert.deepEqual(await page.evaluate('window.__speechCalls'),[]);
       assert.deepEqual(await page.evaluate('[...document.querySelectorAll(".mstts-player > button")].map(b=>b.textContent)'),['▶','⏮','⏭','1×','⚙','⏹','✕']);
@@ -66,7 +67,7 @@ test('real Chrome: MemoSuite TTS toolbar in HTMLMemo',{timeout:90000},async t=>{
       assert.equal(await page.evaluate('!!document.querySelector(".mstts-player")'),true);
       await page.send('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
       assert.equal(await page.evaluate('!!document.querySelector(".mstts-player")'),false);
-      await page.click('#toolbar [data-action=speak]');
+      await page.click('.document-host:not([hidden]) > [data-htmlmemo-reading-controls] [data-action=speak]');
       assert.equal(await page.evaluate(`document.querySelector('.mstts-player [aria-label="읽는 속도"]').textContent`),'1.25×');
       await page.send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
       await page.click('.mstts-player [aria-label="낭독 설정"]');
@@ -80,7 +81,7 @@ test('real Chrome: MemoSuite TTS toolbar in HTMLMemo',{timeout:90000},async t=>{
       await page.send('Input.dispatchMouseEvent',{type:'mouseReleased',x:grip.x+32,y:150,button:'left',clickCount:1});
       const moved=await page.evaluate('document.querySelector(".mstts-player").getBoundingClientRect().top');
       assert.ok(moved<200);
-      await page.click('.mstts-player [aria-label="플레이어 닫기"]');await page.click('#toolbar [data-action=speak]');
+      await page.click('.mstts-player [aria-label="플레이어 닫기"]');await page.click('.document-host:not([hidden]) > [data-htmlmemo-reading-controls] [data-action=speak]');
       assert.equal(await page.evaluate('document.querySelector(".mstts-player").getBoundingClientRect().top'),moved);
       await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
       await page.evaluate(`document.querySelector('.document-host:not([hidden]) iframe').contentDocument.body.dispatchEvent(new MouseEvent('dblclick',{bubbles:true,button:0,cancelable:true}));`);
@@ -92,7 +93,7 @@ test('real Chrome: MemoSuite TTS toolbar in HTMLMemo',{timeout:90000},async t=>{
       await page.evaluate('window.__utterances.at(-1).onend()');assert.equal(await page.evaluate('window.__utterances.length'),count);
       await page.send('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
       await page.waitFor('!document.querySelector("#app").classList.contains("reader-focus")');
-      await page.click('#toolbar [data-action=speak]');await clickAppMenu(page,'#library-tab');
+      await page.click('.document-host:not([hidden]) > [data-htmlmemo-reading-controls] [data-action=speak]');await clickAppMenu(page,'#library-tab');
       assert.equal(await page.evaluate('!!document.querySelector(".mstts-player")'),false);
       assert.equal(await page.evaluate('window.__utterances.some(u=>u.text.includes("읽으면 안 되는"))'),false);
       assert.equal(chrome.errors.length,0,chrome.errors.join('\n'));

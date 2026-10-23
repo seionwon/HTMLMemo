@@ -15,6 +15,54 @@ const appVersion=JSON.parse(await readFile(new URL('../package.json',import.meta
 async function revealAnnotation(page,doc,id){
   await page.evaluate(`(()=>{let node=${doc}.querySelector('[data-annotation="'+${JSON.stringify(id)}+'"]');if(!node)throw Error('Missing annotation');for(node=node.parentElement;node;node=node.parentElement)if(node.matches('details[data-annotation-group]'))node.open=true;})()`);
 }
+test('real Chrome: reading controls move zoom above the shorter floating toolbar and preserve one native TTS',{timeout:90000},async()=>{
+  await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-reading-controls-'));await cp(join(root,'public'),folder,{recursive:true});
+  const server=createServer(folder);let chrome;
+  try{
+    await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));chrome=await launchChrome();const page=chrome.page;
+    const url=process.env.HTMLMEMO_SIDEBAR_TEST_URL||`http://127.0.0.1:${server.address().port}/`;
+    await page.navigate(url);await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
+    const html='<html><head><title>상단 읽기 도구</title><style>html,body{height:100%;margin:0}body{display:flex;flex-direction:column;font:18px/1.6 system-ui}.topbar{display:flex;align-items:center;justify-content:space-between;flex:none;height:44px;padding:0 8px;background:#e2e8f0;color:#1e293b}.controls{display:flex;align-items:center;gap:4px}main{flex:1;overflow:auto;padding:24px}p{max-width:700px}button{font:inherit}</style></head><body><header class="topbar"><strong>책 읽기</strong><div class="controls"><button id="native-tts" title="TTS" onclick="window.nativeSpeechClicks=(window.nativeSpeechClicks||0)+1">TTS</button></div></header><main><h1>상단 읽기 도구</h1><p>본문의 확대 비율은 상단에서 바꿉니다. 원래 책의 TTS 버튼은 그대로 유지합니다.</p></main></body></html>';
+    await page.evaluate(`(async()=>{const {putDocumentRevision}=await import('./src/storage.js'),{parseHTML}=await import('./src/document.js');for(const [id,source] of [['reading-native',${JSON.stringify(html)}],['reading-plain','<html><head><title>일반 HTML</title></head><body><main><p>자체 상단바 없는 문서에서도 읽기 도구를 사용합니다.</p></main></body></html>']]){const parsed=parseHTML(source,{}, {allowScripts:true});await putDocumentRevision({id,title:parsed.metadata.title,name:id+'.html',created:Date.now(),modified:Date.now(),html:parsed.html,metadata:parsed.metadata});}})()`);
+    await page.navigate(url);await page.waitFor('document.querySelector("[data-open=reading-native]")');await page.click('[data-open=reading-native]');
+    const frame='document.querySelector(".document-host:not([hidden]) iframe")',doc=frame+'.contentDocument';
+    const nativeZoom=doc+'.querySelector("[data-htmlmemo-reading-controls] [data-action=zoom]")';
+    await page.waitFor(`${frame}?.style.visibility==='visible'&&${nativeZoom}`);
+    const point=expression=>page.evaluate(`(()=>{const el=${expression},r=el.getBoundingClientRect(),f=${frame}.getBoundingClientRect(),s=f.width/${frame}.offsetWidth;return {x:f.left+(r.left+r.width/2)*s,y:f.top+(r.top+r.height/2)*s};})()`);
+    const clickNative=async expression=>{const p=await point(expression);await page.send('Input.dispatchMouseEvent',{type:'mousePressed',...p,button:'left',clickCount:1});await page.send('Input.dispatchMouseEvent',{type:'mouseReleased',...p,button:'left',clickCount:1});};
+    const contained=()=>page.evaluate(`(()=>{const r=document.querySelector('#tool-popover').getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight;})()`);
+    await mkdir(join(root,'test-results'),{recursive:true});
+    for(const width of [1280,390]){
+      await page.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
+      assert.equal(await page.evaluate('!!document.querySelector("#toolbar [data-action=speak],#toolbar [data-action=zoom]")'),false);
+      assert.equal(await page.evaluate(`${doc}.querySelectorAll('#native-tts').length`),1);
+      assert.equal(await page.evaluate(`${doc}.querySelectorAll('[data-action=speak]').length`),0);
+      assert.equal(await page.evaluate(`${nativeZoom}.closest('[data-htmlmemo-doc-topbar]')!==null`),true);
+      const before=await page.evaluate(`${doc}.defaultView.nativeSpeechClicks||0`);await clickNative(doc+'.querySelector("#native-tts")');assert.equal(await page.evaluate(`${doc}.defaultView.nativeSpeechClicks`),before+1);
+      await clickNative(nativeZoom);await page.waitFor('!document.querySelector("#tool-popover").hidden&&document.querySelector("#zoom-value")');assert.equal(await contained(),true);
+      const button=await point(nativeZoom),pop=await page.evaluate(`(()=>{const r=document.querySelector('#tool-popover').getBoundingClientRect();return {top:r.top,bottom:r.bottom};})()`);assert.ok(Math.abs(pop.top-button.y)<35,'zoom opens below the upper button, not by the floating toolbar');
+      await writeFile(join(root,`test-results/reading-controls-native-${width}.png`),await page.screenshot());
+      await page.evaluate(`(()=>{const input=document.querySelector('#zoom-value');input.value='125';input.dispatchEvent(new Event('change',{bubbles:true}));})()`);await page.waitFor(`${nativeZoom}.textContent==='125%'&&${frame}.style.transform==='scale(1.25)'`);
+      await page.click('#zoom-out');await page.waitFor(`${nativeZoom}.textContent==='104%'`);
+      await page.click('#zoom-in');await page.waitFor(`${nativeZoom}.textContent==='125%'`);
+      await page.click('#zoom-reset');await page.waitFor(`${nativeZoom}.textContent==='100%'&&document.querySelector('#tool-popover').hidden`);
+      await clickNative(nativeZoom);await page.waitFor('!document.querySelector("#tool-popover").hidden');await page.click('#zoom-fit');await page.waitFor(`document.querySelector('#tool-popover').hidden`);
+      const fitted=await page.evaluate(`Math.round(document.querySelector('.document-host:not([hidden]) .reader-viewport').clientWidth/${frame}.offsetWidth*100)+'%'`);assert.equal(await page.evaluate(`${nativeZoom}.textContent`),fitted);
+      await page.evaluate(`${doc}.body.dispatchEvent(new MouseEvent('dblclick',{bubbles:true,button:0,cancelable:true}))`);await page.waitFor('document.querySelector("#app").classList.contains("reader-focus")');
+      await clickNative(nativeZoom);await page.waitFor('!document.querySelector("#tool-popover").hidden');assert.equal(await contained(),true);await page.click('[data-popover-close]');
+      await page.evaluate(`${doc}.body.dispatchEvent(new MouseEvent('dblclick',{bubbles:true,button:0,cancelable:true}))`);await page.waitFor('!document.querySelector("#app").classList.contains("reader-focus")');
+    }
+    await page.evaluate(`window.showSaveFilePicker=async()=>{const root=await navigator.storage.getDirectory();return root.getFileHandle('reading-controls-export.html',{create:true});}`);await page.click('#save-page');
+    await page.waitFor(`(async()=>{try{const root=await navigator.storage.getDirectory();return (await(await root.getFileHandle('reading-controls-export.html')).getFile()).size>0;}catch{return false;}})()`);
+    const exported=await page.evaluate(`(async()=>{const root=await navigator.storage.getDirectory();return (await(await root.getFileHandle('reading-controls-export.html')).getFile()).text();})()`);assert.doesNotMatch(exported,/htmlmemo-reading-controls|data-action="zoom"/);assert.match(exported,/nativeSpeechClicks/);
+    await page.click('#library-tab');await page.waitFor('document.querySelector("[data-open=reading-plain]")');await page.click('[data-open=reading-plain]');await page.waitFor('document.querySelector(".document-host:not([hidden]) > [data-htmlmemo-reading-controls] [data-action=zoom]")');
+    const upper='.document-host:not([hidden]) > [data-htmlmemo-reading-controls]';
+    assert.equal(await page.evaluate(`document.querySelectorAll('${upper} [data-action=speak]').length`),1);
+    await page.click(upper+' [data-action=zoom]');await page.waitFor('!document.querySelector("#tool-popover").hidden');assert.equal(await contained(),true);await writeFile(join(root,'test-results/reading-controls-plain-390.png'),await page.screenshot());await page.click('[data-popover-close]');
+    await page.click(upper+' [data-action=speak]');await page.waitFor('document.querySelector("[data-memo-readaloud]")');await page.click('.mstts-player [aria-label="플레이어 닫기"]');
+    assert.deepEqual(chrome.errors,[]);
+  }finally{await chrome?.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
+});
 test('real Chrome: palette controls stay above palettes and retain their settings and title-drag position',{timeout:60000},async()=>{
   await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-palette-order-'));await cp(join(root,'public'),folder,{recursive:true});
   const server=createServer(folder);let chrome;
@@ -431,10 +479,10 @@ test('real Chrome: browsing, capture, local annotation, file writes, reopen and 
       const height=await page.evaluate('document.querySelector("#toolbar").getBoundingClientRect().height');assert.ok(height>=20&&height<=22);
       await page.waitFor(`document.querySelector('#status-left').textContent.includes('자동 저장됨')`);
       const blobSource=await page.evaluate(`new Promise((resolve,reject)=>{const request=indexedDB.open('HTMLMemo-v1',3);request.onsuccess=()=>{const db=request.result,tx=db.transaction('contents','readonly'),r=tx.objectStore('contents').getAll();tx.oncomplete=()=>{resolve(r.result.some(source=>source.file instanceof Blob && source.file.size>4*1024*1024 && !source.html));db.close();};tx.onabort=()=>reject(tx.error);};})`);assert.equal(blobSource,true);
-      await page.waitFor('document.querySelector("#toolbar [data-action=zoom]").textContent === "50%"');
+      await page.waitFor('document.querySelector(".document-host:not([hidden]) [data-action=zoom]").textContent === "50%"');
       await page.evaluate(`document.querySelector('.document-host:not([hidden]) iframe').contentDocument.body.dispatchEvent(new MouseEvent('dblclick',{bubbles:true,button:0,cancelable:true}));`);
       await page.waitFor(`(()=>{const app=document.querySelector('#app'),viewport=document.querySelector('.document-host:not([hidden]) .reader-viewport'),frame=viewport.querySelector('iframe');const v=viewport.getBoundingClientRect(),f=frame.getBoundingClientRect();return app.classList.contains('reader-focus') && Math.abs(f.left-v.left)<1 && Math.abs(f.width-viewport.clientWidth)<1;})()`);
-      await page.evaluate(`document.querySelector('.document-host:not([hidden]) iframe').contentDocument.body.dispatchEvent(new MouseEvent('dblclick',{bubbles:true,button:0,cancelable:true}));`);await page.waitFor('!document.querySelector("#app").classList.contains("reader-focus") && document.querySelector("#toolbar [data-action=zoom]").textContent === "50%"');
+      await page.evaluate(`document.querySelector('.document-host:not([hidden]) iframe').contentDocument.body.dispatchEvent(new MouseEvent('dblclick',{bubbles:true,button:0,cancelable:true}));`);await page.waitFor('!document.querySelector("#app").classList.contains("reader-focus") && document.querySelector(".document-host:not([hidden]) [data-action=zoom]").textContent === "50%"');
       await page.evaluate(`(()=>{const doc=document.querySelector('.document-host:not([hidden]) iframe').contentDocument;const range=doc.createRange();range.selectNodeContents(doc.querySelector('#first'));const selection=doc.getSelection();selection.removeAllRanges();selection.addRange(range);doc.dispatchEvent(new Event('selectionchange'));})()`);
       await page.click('[data-action="highlight"]');await page.waitFor('document.querySelector(".document-host:not([hidden]) iframe").contentDocument.querySelector("[data-htmlmemo-mark]") && document.querySelector("#status-left").textContent.includes("자동 저장됨")',30000);
     });
@@ -652,7 +700,7 @@ test('real Chrome: self-observing HTML settles without overlay resize feedback o
     assert.equal(new Set(samples.samples.map(s=>s.width)).size,1);assert.equal(new Set(samples.samples.map(s=>s.height)).size,1);assert.equal(new Set(samples.samples.map(s=>s.scroll)).size,1);assert.equal(samples.samples[0].scroll,300);assert.equal(new Set(samples.samples.map(s=>s.relayouts)).size,1);
     // Actual window resizing still updates fitted width; manual zoom remains usable.
     await page.send('Emulation.setDeviceMetricsOverride',{width:1001,height:801,deviceScaleFactor:1,mobile:false});await page.evaluate(`new Promise(resolve=>setTimeout(resolve,200))`);
-    await page.evaluate(`document.querySelector('[data-action="zoom"]').click()`);await page.waitFor(`!!document.querySelector('#zoom-value')`);await page.evaluate(`const input=document.querySelector('#zoom-value');input.value='125';input.dispatchEvent(new Event('change',{bubbles:true}));`);await page.waitFor(`document.querySelector('#toolbar [data-action="zoom"]').textContent==='125%'`);
+    await page.evaluate(`document.querySelector('.document-host:not([hidden]) [data-action="zoom"]').click()`);await page.waitFor(`!!document.querySelector('#zoom-value')`);await page.evaluate(`const input=document.querySelector('#zoom-value');input.value='125';input.dispatchEvent(new Event('change',{bubbles:true}));`);await page.waitFor(`document.querySelector('.document-host:not([hidden]) [data-action="zoom"]').textContent==='125%'`);
     assert.deepEqual(chrome.errors,[]);
   }finally{if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
 });

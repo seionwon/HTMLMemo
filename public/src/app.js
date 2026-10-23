@@ -274,6 +274,7 @@ async function openRecord(record, prepared = null, {deferReady = false} = {}) {
     onSelectionDismiss:()=>{if(popoverName==='selection'||popoverName.startsWith('tool-mode-'))closePopover();},
     onLink:url=>safely(openBrowser)(url),onKey:handleKey,requestText:promptText,onError:showError,onNotice:message=>toast(message),
     onDocumentFocus:()=>{if(activeId===tab.id)void toggleReaderFocus();},
+    onReadingAction:(action,button)=>{if(activeId===tab.id)toolAction(action,button);},
     onSidebarView:(mode,panel,documentReader)=>renderSidebar(mode,{panel,embedded:true,documentReader}),
     onSidebarCounts:(panel,documentReader)=>updateSidebarCounts(panel,documentReader),
     onSelect:id=>{if(activeId===tab.id)annotationDialog(tab,id);},
@@ -542,7 +543,7 @@ function showAnnotationToolModes(group, keyboard = false) {
 function renderToolbar() {
   const r=reader();if(!r||!r.doc)return;
   $('#toolbar').hidden=false;
-  $('#toolbar').innerHTML=`<button class="toolbar-grip" aria-label="툴바 이동">${icon('grip',14)}</button><span class="tool-group">${toolbarButton('select','select','선택 / 읽기 (V)')}${toolbarButton('pen','pen','펜 (P)')}${toolbarButton('highlight','highlight','형광펜 (H)')}${toolbarButton('underline','underline','밑줄 (U)')}${toolbarButton('eraser','eraser','지우개 (E)')}${toolbarButton('note','note','메모 (N)')}</span><span class="toolbar-divider"></span>${toolbarButton('palette','palette','색상 · 굵기 · 투명도 설정','class="tool-button palette-button"')}<span class="tool-group toolbar-history">${toolbarButton('undo','undo','실행 취소 (Ctrl/⌘ Z)')}${toolbarButton('redo','redo','다시 실행 (Ctrl/⌘ Shift Z)')}</span><span class="toolbar-divider"></span><button class="tool-button zoom-button" data-action="zoom" title="확대 / 축소" aria-label="확대 / 축소">${Math.round(r.zoom*100)}%</button>${toolbarButton('speak','speaker','소리내어 읽기 (TTS 툴바)')}${toolbarButton('more','more','더 많은 도구')}`;
+  $('#toolbar').innerHTML=`<button class="toolbar-grip" aria-label="툴바 이동">${icon('grip',14)}</button><span class="tool-group">${toolbarButton('select','select','선택 / 읽기 (V)')}${toolbarButton('pen','pen','펜 (P)')}${toolbarButton('highlight','highlight','형광펜 (H)')}${toolbarButton('underline','underline','밑줄 (U)')}${toolbarButton('eraser','eraser','지우개 (E)')}${toolbarButton('note','note','메모 (N)')}</span><span class="toolbar-divider"></span>${toolbarButton('palette','palette','색상 · 굵기 · 투명도 설정','class="tool-button palette-button"')}<span class="tool-group toolbar-history">${toolbarButton('undo','undo','실행 취소 (Ctrl/⌘ Z)')}${toolbarButton('redo','redo','다시 실행 (Ctrl/⌘ Shift Z)')}</span><span class="toolbar-divider"></span>${toolbarButton('more','more','더 많은 도구')}`;
   $$('[data-action]',$('#toolbar')).forEach(button=>{
     const action=button.dataset.action,modes=annotationToolModes(action);
     button.onpointerdown=e=>{if(e.pointerType==='mouse')e.preventDefault();};
@@ -576,13 +577,24 @@ function updateToolbarState() {
   });
   const undo=$('[data-action="undo"]',$('#toolbar'));if(undo)undo.disabled=!r.history.canUndo;
   const redo=$('[data-action="redo"]',$('#toolbar'));if(redo)redo.disabled=!r.history.canRedo;
-  const zoom=$('.zoom-button');if(zoom)zoom.textContent=Math.round(r.zoom*100)+'%';
+  r.updateReadingControls?.();
   const palette=$('[data-action="palette"]',$('#toolbar'));if(palette)palette.style.setProperty('--tool-color',r.color);
 }
 function closePopover() {popoverName='';$('#tool-popover').cancelPaletteDrag?.();$('#tool-popover').hidden=true;$('#tool-popover').onkeydown=null;$$('.tool-has-modes',$('#toolbar')).forEach(button=>button.setAttribute('aria-expanded','false'));}
 function positionPopover() {
   const pop=$('#tool-popover');
   if(pop.classList.contains('palette-popover')&&pop.palettePosition){placePalettePopover(pop,pop.palettePosition);return;}
+  if(pop.readingAnchor?.isConnected&&popoverName==='zoom'){
+    const button=pop.readingAnchor,rect=button.getBoundingClientRect();let right=rect.right,top=rect.top,bottom=rect.bottom;
+    if(button.ownerDocument!==document){
+      const frame=reader()?.frame;if(!frame)return;
+      const bounds=frame.getBoundingClientRect(),scale=bounds.width/frame.offsetWidth;
+      right=bounds.left+right*scale;top=bounds.top+top*scale;bottom=bounds.top+bottom*scale;
+    }
+    pop.style.left=Math.max(10,Math.min(innerWidth-pop.offsetWidth-10,right-pop.offsetWidth))+'px';
+    pop.style.top=Math.max(8,Math.min(innerHeight-pop.offsetHeight-8,bottom+6+pop.offsetHeight<=innerHeight-8?bottom+6:top-pop.offsetHeight-6))+'px';
+    return;
+  }
   const bar=$('#toolbar').getBoundingClientRect();pop.style.left=Math.max(10,Math.min(innerWidth-pop.offsetWidth-10,bar.left+bar.width-pop.offsetWidth))+'px';
   const above=bar.top-pop.offsetHeight-10;pop.style.top=(above>8?above:Math.min(innerHeight-pop.offsetHeight-8,bar.bottom+10))+'px';
 }
@@ -618,14 +630,14 @@ function bindPaletteDrag(pop) {
     placePalettePopover(pop,{x:rect.left+direction[0]*step,y:rect.top+direction[1]*step});
   });
 }
-function showPopover(name,html,bind=()=>{}) {
+function showPopover(name,html,bind=()=>{},readingAnchor=null) {
   if(popoverName===name){closePopover();return;}
   $('#tool-popover').cancelPaletteDrag?.();
   $('#tool-popover').onkeydown=null;$$('.tool-has-modes',$('#toolbar')).forEach(button=>button.setAttribute('aria-expanded','false'));
   $('#tool-popover').removeAttribute('aria-label');$('#tool-popover').removeAttribute('role');
   // A notice must not sit over the menu it just made room for; errors stay until they time out.
   if(!$('#toast').classList.contains('error'))$('#toast').hidden=true;
-  popoverName=name;$('#tool-popover').classList.toggle('selection',name==='selection');$('#tool-popover').classList.toggle('palette-popover',name==='palette');$('#tool-popover').innerHTML=html;$('#tool-popover').hidden=false;positionPopover();
+  popoverName=name;$('#tool-popover').readingAnchor=readingAnchor;$('#tool-popover').classList.toggle('selection',name==='selection');$('#tool-popover').classList.toggle('palette-popover',name==='palette');$('#tool-popover').innerHTML=html;$('#tool-popover').hidden=false;positionPopover();
   $$('[data-popover-close]',$('#tool-popover')).forEach(button=>button.onclick=closePopover);
   bind();
 }
@@ -804,7 +816,7 @@ function showSelectionMenu(r) {
     });
   });
 }
-function toolAction(action) {
+function toolAction(action,button=null) {
   const r=reader();if(!r)return;
   if(action==='speak'){closePopover();r.toggleReadAloud();return;}
   if(['select','pen','highlight','underline','eraser','note','text','rect','ellipse','arrow','area','area-underline','strike'].includes(action)){
@@ -818,7 +830,7 @@ function toolAction(action) {
   }
   if(action==='zoom') {showPopover('zoom',`<div class="popover-heading"><h3>확대 · 축소</h3><button type="button" class="icon-button popover-close" data-popover-close aria-label="확대 · 축소 닫기" title="닫기">${icon('close',16)}</button></div><div class="zoom-controls"><button class="secondary-button" id="zoom-out">${icon('minus')}</button><input id="zoom-value" type="number" min="20" max="800" value="${Math.round(r.zoom*100)}" aria-label="확대 비율"><span>%</span><button class="secondary-button" id="zoom-in">${icon('plus')}</button></div><button id="zoom-fit" class="menu-button">화면 너비에 맞추기</button><button id="zoom-reset" class="menu-button">100% 원래 크기</button>`,()=>{
     $('#zoom-out').onclick=()=>r.setZoom(r.zoom/1.2);$('#zoom-in').onclick=()=>r.setZoom(r.zoom*1.2);$('#zoom-value').onchange=e=>r.setZoom(Number(e.target.value)/100);$('#zoom-fit').onclick=()=>{r.setZoom(1,true);closePopover();};$('#zoom-reset').onclick=()=>{r.setZoom(1);closePopover();};
-  });return;}
+  },button||r.zoomControl);return;}
   if(action==='more') {
     const items=[['rect','rect','사각형'],['ellipse','ellipse','타원'],['arrow','arrow','화살표'],['strike','strike','취소선'],['history','history','주석 저장 이력'],['migrate','file-transfer','새 판으로 주석 옮기기'],['info','info','문서 정보']];
     // Books already expose their three sidebar views. Plain HTML needs only a

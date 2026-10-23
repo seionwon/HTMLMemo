@@ -85,6 +85,7 @@ export class Reader {
           if (this.disposed) { resolve(this); return; }
           this.measure(); this.renderDrawingLayer();
           this.setupDocumentSidebar();
+          this.setupReadingControls();
           this.frame.style.visibility = 'visible'; this.frame.style.pointerEvents = '';
           this.frame.removeAttribute('aria-hidden'); this.viewport.setAttribute('aria-busy', 'false');this.loading.remove();
           this.callbacks.onView?.(); resolve(this);
@@ -361,6 +362,7 @@ export class Reader {
     this.doc.addEventListener('keydown', event => {if(this.handleTocKeydown(event))return; if(event.key==='Escape'&&this.middleScroll){this.stopMiddleScroll();event.preventDefault();return;}this.callbacks.onKey?.(event);}, true);
     this.doc.addEventListener('dblclick', event => {if(this.handleTocDblClick(event))return; this.focusDocument(event);}, true);
     this.viewport.addEventListener('dblclick', event => this.focusDocument(event));
+    this.viewport.addEventListener('scroll',()=>this.updateReadingControls(),{passive:true});
     const jumpToHash = hash => {
       if (!hash || hash === '#') return false;
       let id; try { id = decodeURIComponent(hash.slice(1)); } catch { id = hash.slice(1); }
@@ -775,6 +777,55 @@ export class Reader {
       }
     }
     return topbar;
+  }
+  setupReadingControls() {
+    if(this.disposed||this.preparing||!this.host?.ownerDocument)return;
+    const topbar=this.topbarNode?.isConnected?this.topbarNode:this.findDocumentTopbar();
+    if(topbar&&topbar!==this.topbarNode)this.setupDocumentTopbar();
+    const nativeSpeech=topbar&&[...topbar.querySelectorAll('button,a,[role="button"]')].find(button=>
+      !button.closest('[data-htmlmemo-ui]')&&(button.matches('.mstts-launch,[data-tts-launch],[data-read-aloud]')||/\btts\b|read.?aloud|소리\s*내어|낭독|읽어\s*주기/i.test([button.id,button.className,button.title,button.getAttribute('aria-label'),button.textContent].join(' '))));
+    const target=topbar?(nativeSpeech?.parentElement||topbar.querySelector('.controls,.toolbar-actions,.reader-actions')||topbar):this.host;
+    const doc=target.ownerDocument;
+    if(!this.readingControls||this.readingControls.ownerDocument!==doc){
+      this.readingControls?.remove();
+      const controls=doc.createElement('div');controls.className='htmlmemo-reading-controls';
+      controls.style.position='relative';controls.style.zIndex='1';
+      controls.setAttribute('data-htmlmemo-ui','');controls.setAttribute('data-htmlmemo-reading-controls','');
+      controls.setAttribute('role','toolbar');controls.setAttribute('aria-label','읽기 도구');
+      const button=(action,label,text)=>{
+        const node=doc.createElement('button');node.type='button';node.dataset.action=action;node.title=label;node.setAttribute('aria-label',label);node.textContent=text;
+        node.onpointerdown=event=>{if(event.pointerType==='mouse')event.preventDefault();};
+        node.onclick=()=>this.callbacks.onReadingAction?.(action,node);controls.append(node);return node;
+      };
+      this.zoomControl=button('zoom','확대 / 축소','');this.zoomControl.setAttribute('aria-haspopup','dialog');
+      this.speechControl=button('speak','소리내어 읽기 (TTS 툴바)','TTS');
+      this.readingControls=controls;
+    }
+    if(nativeSpeech)this.speechControl.remove();
+    else if(this.speechControl.parentElement!==this.readingControls)this.readingControls.append(this.speechControl);
+    if(topbar){
+      if(!doc.getElementById('htmlmemo-reading-controls-style')){
+        const style=doc.createElement('style');style.id='htmlmemo-reading-controls-style';style.textContent=this.readingControlsStyle();doc.head.append(style);
+      }
+      if(this.readingControls.parentElement!==target)target.append(this.readingControls);
+    }else if(this.readingControls.parentElement!==this.host)this.host.prepend(this.readingControls);
+    this.host.classList.toggle('reader-controls-row',!topbar);
+    this.updateReadingControls();
+  }
+  readingControlsStyle() {
+    return '[data-htmlmemo-reading-controls]{display:inline-flex!important;align-items:center!important;gap:3px!important;flex:0 0 auto!important;vertical-align:middle!important;margin-inline-start:4px!important}[data-htmlmemo-reading-controls] button{font:500 12px/18px system-ui!important;letter-spacing:0!important;white-space:nowrap!important;width:auto!important;min-width:40px!important;height:20px!important;padding:0 5px!important;border:1px solid currentColor!important;border-radius:4px!important;background:transparent!important;color:inherit!important;cursor:pointer!important}[data-htmlmemo-reading-controls] button:hover{background:#80808020!important}[data-htmlmemo-reading-controls] button:focus-visible{outline:2px solid currentColor!important;outline-offset:1px!important}[data-htmlmemo-reading-controls] [hidden]{display:none!important}';
+  }
+  updateReadingControls() {
+    if(this.zoomControl){const text=Math.round(this.zoom*100)+'%';if(this.zoomControl.textContent!==text)this.zoomControl.textContent=text;}
+    if(!this.readingControls||this.readingControls.ownerDocument!==this.doc||!this.frame?.getBoundingClientRect||!this.viewport?.getBoundingClientRect)return;
+    // A manually enlarged iframe can extend beyond the viewport. Keep its
+    // zoom button reachable in the same top row, including after horizontal pan.
+    const rect=this.readingControls.getBoundingClientRect?.(),view=this.viewport.getBoundingClientRect(),frame=this.frame.getBoundingClientRect();
+    if(!rect?.width||!view.width||!frame.width)return;
+    const scale=frame.width/this.frame.offsetWidth,previous=Number.parseFloat(this.readingControls.style.getPropertyValue('--htmlmemo-controls-shift'))||0;
+    const min=(view.left+2-frame.left)/scale-rect.left+previous,max=(view.right-2-frame.left)/scale-rect.right+previous;
+    const shift=Math.max(min,Math.min(0,max)),value=shift.toFixed(2)+'px';
+    if(this.readingControls.style.getPropertyValue('--htmlmemo-controls-shift')!==value){this.readingControls.style.setProperty('--htmlmemo-controls-shift',value);this.readingControls.style.transform='translateX(var(--htmlmemo-controls-shift))';}
   }
   ensureDocumentTocResize() {
     if (this.disposed || !this.doc?.body) return null;
@@ -1239,6 +1290,7 @@ export class Reader {
     if (this.tocDrag) { this.scheduleDynamicRefresh(); return; }
     this.dynamicRunning = true;this.dynamicDirty = false;
     try {
+      this.setupReadingControls();
       const body = this.doc.body;if (!body) return;
       body.setAttribute('data-htmlmemo-anchor','body');
       let count=0,added=0,mainAdded=0,start=performance.now();
@@ -1373,6 +1425,7 @@ export class Reader {
     set(this.frame.style,'transform',`scale(${this.zoom})`);
     set(this.sizer.style,'width',this.naturalWidth*this.zoom+'px');
     set(this.sizer.style,'height',(this.nativeScroll?Math.max(200*this.zoom,this.viewport.clientHeight):(this.naturalHeight||800)*this.zoom)+'px');
+    this.updateReadingControls();
   }
   rootScrollTop() { return this.doc?.defaultView?.scrollY || this.doc?.scrollingElement?.scrollTop || this.doc?.documentElement?.scrollTop || 0; }
   rootScrollLeft() { return this.doc?.defaultView?.scrollX || this.doc?.scrollingElement?.scrollLeft || this.doc?.documentElement?.scrollLeft || 0; }
