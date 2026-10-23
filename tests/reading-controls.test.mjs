@@ -69,3 +69,30 @@ test('native top-row zoom stays reachable when the enlarged page is horizontally
     assert.ok(right<=390&&right>=387);const previous=shift();r.updateReadingControls();assert.equal(shift(),previous,'repeated updates do not accumulate the shift');
   }
 });
+test('book TTS launchers open the app controls and suppress immediate book playback without rewriting source handlers',()=>{
+  const {r,doc,calls}=fixture('<header class="topbar"><button id="tts" onclick="startReading()"><span>TTS</span></button></header>');
+  const button=doc.querySelector('#tts');let prevented=0,stopped=0;
+  const event={target:button.firstElementChild,button:0,preventDefault(){prevented++;},stopImmediatePropagation(){stopped++;}};
+  assert.equal(r.handleReadAloudLauncher(event),true);assert.equal(prevented,1);assert.equal(stopped,1);
+  assert.deepEqual(calls,[{action:'speak',node:button}]);assert.equal(button.getAttribute('onclick'),'startReading()');
+  const saved=serializeHTML(doc,r.metadata);assert.match(saved,/onclick="startReading\(\)"/);
+});
+test('replacement TTS launchers and keyboard clicks are recognized before the next dynamic refresh',()=>{
+  const {r,doc,calls}=fixture('<header class="topbar"><button>TTS</button></header>');r.setupReadingControls();
+  const next=doc.createElement('button');next.className='mstts-launch';next.innerHTML='<span>▶</span>';doc.querySelector('header').replaceChildren(next);
+  assert.equal(r.handleReadAloudLauncher({target:next.firstElementChild,detail:0,button:0,preventDefault(){},stopImmediatePropagation(){}}),true);
+  assert.deepEqual(calls,[{action:'speak',node:next}]);
+});
+test('read-aloud interception leaves play, other controls, prose, right clicks and disposed documents alone',()=>{
+  const {r,doc,calls}=fixture('<header class="topbar"><button id="tts">TTS</button><button id="font">A+</button></header>');r.setupReadingControls();
+  const play=doc.createElement('button');play.title='소리내어 읽기';play.textContent='▶';doc.body.append(play);
+  const event=target=>({target,button:0,preventDefault(){throw Error('must keep native action');},stopImmediatePropagation(){throw Error('must keep native action');}});
+  for(const target of [play,r.speechControl,r.zoomControl,doc.querySelector('#font'),doc.querySelector('p')])assert.equal(r.handleReadAloudLauncher(event(target)),false);
+  const button=doc.querySelector('#tts');assert.equal(r.handleReadAloudLauncher({...event(button),button:2}),false);
+  r.disposed=true;assert.equal(r.handleReadAloudLauncher(event(button)),false);assert.deepEqual(calls,[]);
+});
+test('disposing the reader removes the imported-book TTS click interceptor',()=>{
+  const {r}=fixture();const calls=[],listener=()=>{};
+  Object.assign(r,{doc:{defaultView:{removeEventListener:(...args)=>calls.push(args)}},readAloudLauncherClick:listener,frame:{},host:{remove(){}},stopMiddleScroll(){},stopSpeech(){}});
+  r.dispose();assert.deepEqual(calls,[['click',listener,true]]);assert.equal(r.disposed,true);
+});
