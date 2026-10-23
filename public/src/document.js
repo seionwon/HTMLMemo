@@ -88,6 +88,7 @@ function clearReaderSidebarArtifacts(root) {
     part.removeAttribute('data-htmlmemo-book-search-part');
   }
   for(const slot of root.querySelectorAll?.('[data-htmlmemo-book-search-slot]')||[])slot.remove();
+  for(const group of root.querySelectorAll?.('[data-htmlmemo-book-search-open]')||[]){group.toggleAttribute('open',group.getAttribute('data-htmlmemo-book-search-open')==='true');group.removeAttribute('data-htmlmemo-book-search-open');}
   for(const panel of root.querySelectorAll?.('[data-htmlmemo-doc-sidebar-ui]')||[])panel.remove();
   for(const title of root.querySelectorAll?.('[data-htmlmemo-redundant-toc-title]')||[])title.removeAttribute('data-htmlmemo-redundant-toc-title');
   for(const sidebar of root.querySelectorAll?.('[data-htmlmemo-native-sidebar],[data-htmlmemo-sidebar-view]')||[]){sidebar.removeAttribute('data-htmlmemo-native-sidebar');sidebar.removeAttribute('data-htmlmemo-sidebar-view');}

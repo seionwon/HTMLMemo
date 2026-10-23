@@ -906,7 +906,7 @@ function styleNativeSidebar(panel) {
     // Reuse only the namespaced rules from the locally compiled Tailwind asset.
     const rules=[];
     for(const sheet of document.styleSheets||[]){try{for(const rule of sheet.cssRules||[]){if(!rule.selectorText)continue;const selectors=rule.selectorText.split(',').filter(selector=>selector.includes('[data-htmlmemo-doc-sidebar-ui]')||selector.includes('[data-htmlmemo-native-sidebar]'));if(selectors.length)rules.push(selectors.join(',')+'{'+rule.style.cssText+'}');}}catch{/* App-owned same-origin stylesheets provide these rules. */}}
-    const style=doc.createElement('style');style.id='htmlmemo-doc-sidebar-style';style.setAttribute('data-htmlmemo-ui','');style.textContent=rules.join('\n');doc.head.append(style);
+    const style=doc.createElement('style');style.id='htmlmemo-doc-sidebar-style';style.setAttribute('data-htmlmemo-ui','');style.textContent=rules.join('\n')+'\n::highlight(htmlmemo-book-search){background:#f0a85b80;color:inherit}';doc.head.append(style);
   }
   const theme=getComputedStyle(document.documentElement);
   for(const name of ['--bg','--surface','--surface-muted','--text','--muted','--line','--green','--green-light','--app-font'])panel.style.setProperty(name,theme.getPropertyValue(name));

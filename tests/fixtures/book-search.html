@@ -1,0 +1,31 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>책 전체 검색 검증</title>
+<style>*{box-sizing:border-box}html,body{height:100%;margin:0;overflow:hidden;font:16px/1.6 system-ui,sans-serif}.layout{display:grid;grid-template-columns:280px minmax(0,1fr);height:100%}nav,main{overflow:auto;padding:12px}nav{border-right:1px solid #cbd5e1}summary{padding:6px;cursor:pointer}#reader-tree a{display:block;padding:8px;color:inherit}#reader-tree small{display:block;font-size:11px;color:#64748b}main{padding:24px}.spacer{height:1100px}p{line-height:1.8}</style></head>
+<body><div class="layout"><nav id="reader-nav"><h2>목차</h2><input id="reader-search" placeholder="책 전체 검색"><div id="reader-search-status" role="status"></div><button id="reader-search-clear" type="button" hidden>지우기</button><div id="reader-tree"></div></nav><main id="reader-main"><div id="reader-status"></div><article id="reader-content"></article></main></div>
+<script id="book-manifest" type="application/json">{"format":"memosuite-book-html-v1","title":"책 전체 검색 검증","volumes":[{"label":"입문","sections":[{"key":"v0:opening","title":"머리말","search":"처음 읽는 안내"},{"key":"v0:one","title":"첫 번째 장","search":"바람 앞쪽 본문 바람 뒤쪽 본문"},{"key":"v0:title","title":"바람 (제목만 일치)","search":"다른 내용"}]},{"label":"실전","sections":[{"key":"v1:one","title":"두 번째 장","search":"바람 멀리 있는 본문 바람 다음 문장"}]}]}</script>
+<script id="book-volume-0" type="application/octet-stream">["<h1>머리말</h1><p>처음 읽는 안내입니다.</p>","<h1>첫 번째 장</h1><div class='spacer'></div><p id='first-hit'>앞쪽 본문의 바<em>람</em>을 찾았습니다.</p><div class='spacer'></div><p id='second-hit'>뒤쪽 본문의 바람을 찾았습니다.</p>","<h1>다른 내용</h1><p>제목 검색 정보에만 일치하는 단어가 있습니다.</p>"]</script>
+<script id="book-volume-1" type="application/octet-stream">["<h1>두 번째 장</h1><div class='spacer'></div><p id='first-hit'>멀리 있는 본문의 바람을 찾았습니다.</p><div class='spacer'></div><p id='second-hit'>다음 문장의 바람도 찾았습니다.</p>"]</script>
+<script>
+(()=>{
+  const manifest=JSON.parse(document.getElementById('book-manifest').textContent),input=document.getElementById('reader-search'),tree=document.getElementById('reader-tree'),status=document.getElementById('reader-search-status'),clear=document.getElementById('reader-search-clear'),content=document.getElementById('reader-content'),cache=new Map();
+  window.renderedSections=[];window.decodedVolumes=[];window.nativeResultClicks=0;window.nativeQueries=[];
+  tree.addEventListener('click',event=>{if(event.target.closest('a'))window.nativeResultClicks++;});
+  function list(){
+    const query=input.value.trim().toLowerCase();let count=0;tree.replaceChildren();
+    for(const volume of manifest.volumes){
+      const sections=volume.sections.filter(section=>!query||(section.title+' '+section.search).toLowerCase().includes(query));if(!sections.length)continue;
+      const group=document.createElement('details'),heading=document.createElement('summary');heading.textContent=volume.label;group.append(heading);
+      for(const section of sections){const a=document.createElement('a'),quote=document.createElement('small');a.href='#'+encodeURIComponent(section.key);a.textContent=section.title;quote.textContent=section.search;a.append(quote);group.append(a);count++;}tree.append(group);
+    }
+    status.textContent=query?count+'개 장 검색됨':'';clear.hidden=!query;
+  }
+  let searchTimer;input.addEventListener('input',()=>{window.nativeQueries.push(input.value);clearTimeout(searchTimer);searchTimer=setTimeout(list,80);});
+  clear.onclick=()=>{input.value='';clearTimeout(searchTimer);list();};
+  function show(){
+    let key;try{key=decodeURIComponent(location.hash.slice(1));}catch{}let vi=0,si=0;
+    manifest.volumes.some((volume,index)=>{const found=volume.sections.findIndex(section=>section.key===key);if(found<0)return false;vi=index;si=found;return true;});
+    const section=manifest.volumes[vi].sections[si];document.documentElement.dataset.readerReady='false';document.getElementById('reader-status').textContent='불러오는 중…';
+    setTimeout(()=>{if(!cache.has(vi)){cache.set(vi,JSON.parse(document.getElementById('book-volume-'+vi).textContent));window.decodedVolumes.push(vi);}content.innerHTML=cache.get(vi)[si];content.dataset.section=section.key;document.getElementById('reader-status').textContent='';document.documentElement.dataset.readerReady='true';window.renderedSections.push(section.key);},60);
+  }
+  addEventListener('hashchange',show);list();show();
+})();
+</script></body></html>

@@ -912,6 +912,7 @@ export class Reader {
     this.documentSidebarMode=mode;sidebar.setAttribute('data-htmlmemo-sidebar-view',mode);
     this.callbacks.onSidebarView(mode,this.documentSidebarUI,this);
     if(search){if(mode==='search'){this.documentSidebarUI.querySelector('.sidebar-content').prepend(search);search.hidden=false;}else this.documentSidebarUI.append(search);}
+    this.syncDocumentBookSearchResults();
     if(mode==='outline'&&Number.isFinite(this.documentTocScrollTop))sidebar.scrollTop=this.documentTocScrollTop;
     else if(mode!==previous)sidebar.scrollTop=0;
   }
@@ -940,6 +941,116 @@ export class Reader {
       node.before(slot);node.setAttribute('data-htmlmemo-book-search-part',key);host.append(node);
     });
     this.documentBookSearchHost=host;
+    this.documentBookSearchInput=input;
+    // Packed readers render their actual search results in the original TOC.
+    // Keep that live tree (including its handlers), not just the count beside
+    // the input. It is returned to its original position for the outline view.
+    const tree=sidebar.querySelector('#reader-tree');
+    if(tree&&!host.contains(tree)){
+      this.documentBookSearchTree=tree;
+      const results=this.doc.createElement('section');results.className='sidebar-book-results';results.setAttribute('aria-label','책 전체 검색 결과');results.hidden=true;
+      const hint=this.doc.createElement('p');hint.className='sidebar-book-search-hint';hint.textContent='검색 결과를 누르면 해당 장의 검색어로 이동합니다.';
+      const navigation=this.doc.createElement('div');navigation.className='search-navigation';
+      const status=this.doc.createElement('span');status.setAttribute('role','status');status.setAttribute('aria-live','polite');
+      navigation.append(status);
+      for(const [direction,label,name] of [[-1,'이 장의 이전 검색어','back'],[1,'이 장의 다음 검색어','forward']]){
+        const button=this.doc.createElement('button');button.type='button';button.className='icon-button';button.setAttribute('data-book-search-step',String(direction));button.setAttribute('aria-label',label);button.title=label;button.innerHTML=icon(name,14);button.disabled=true;
+        button.onclick=()=>this.stepDocumentBookSearch(direction);navigation.append(button);
+      }
+      results.append(hint,navigation);host.append(results);this.documentBookSearchResults=results;this.documentBookSearchStatus=status;
+      host.addEventListener('click',event=>{
+        const target=event.target.closest?.('a[href],button[data-section],button[data-key]');
+        if(!target||!tree.contains(target)||!input.value.trim())return;
+        const section=this.documentBookSearchSection(target);if(!section)return;
+        event.preventDefault();void this.jumpDocumentBookSearch(section,input.value.trim());
+      },true);
+      const observer=new this.doc.defaultView.MutationObserver(()=>this.syncDocumentBookSearchResults());
+      observer.observe(tree,{subtree:true,childList:true,characterData:true});this.documentBookSearchObserver=observer;
+    }
+    host.addEventListener('input',event=>{if(event.target===input)this.syncDocumentBookSearchResults();});
+    host.addEventListener('click',()=>this.syncDocumentBookSearchResults());
+    input.addEventListener('keydown',event=>{
+      if(event.key!=='Enter'||event.isComposing||!input.value.trim()||!this.documentBookSearchTree)return;
+      const first=[...this.documentBookSearchTree.querySelectorAll('a[href],button[data-section],button[data-key]')].find(node=>this.documentBookSearchSection(node));
+      if(first){event.preventDefault();void this.jumpDocumentBookSearch(this.documentBookSearchSection(first),input.value.trim());}
+    });
+  }
+  documentBookSearchSection(node) {
+    let key=node.dataset.section||node.dataset.key||'',href=node.getAttribute('href')||'';
+    if(href.startsWith('#')){try{key=decodeURIComponent(href.slice(1));}catch{return '';}}
+    return this.annotationBookPaths().has(key)?key:'';
+  }
+  syncDocumentBookSearchResults() {
+    const tree=this.documentBookSearchTree,results=this.documentBookSearchResults;if(!tree||!results)return;
+    const query=this.documentBookSearchInput.value.trim(),active=this.documentSidebarMode==='search'&&!!query;
+    if(query!==this.documentBookSearchQuery){
+      this.documentBookSearchQuery=query;this.bookSearchJumpGeneration=(this.bookSearchJumpGeneration||0)+1;this.cancelBookSearchJump?.();this.bookSearchHit=null;this.clearDocumentBookSearchHighlight();
+      this.documentBookSearchStatus.textContent='';
+    }
+    if(active&&!results.contains(tree)){
+      const slot=this.doc.createElement('span');slot.hidden=true;slot.setAttribute('data-htmlmemo-book-search-slot','results');slot.textContent=textIndex(this.doc,tree).text;
+      tree.before(slot);tree.setAttribute('data-htmlmemo-book-search-part','results');results.insertBefore(tree,results.lastElementChild);this.documentBookSearchTreeSlot=slot;
+    }else if(!active&&this.documentBookSearchTreeSlot){
+      this.documentBookSearchTreeSlot.replaceWith(tree);tree.removeAttribute('data-htmlmemo-book-search-part');this.documentBookSearchTreeSlot=null;
+      for(const [group,wasOpen] of this.documentBookSearchGroups||[])if(group.isConnected){group.toggleAttribute('open',wasOpen);group.removeAttribute('data-htmlmemo-book-search-open');}
+      this.documentBookSearchGroups=new Map();this.bookSearchJumpGeneration=(this.bookSearchJumpGeneration||0)+1;this.cancelBookSearchJump?.();
+    }
+    results.hidden=!active;
+    if(active){
+      this.documentBookSearchGroups ||= new Map();
+      for(const group of this.documentBookSearchGroups.keys())if(!group.isConnected)this.documentBookSearchGroups.delete(group);
+      for(const group of tree.querySelectorAll('details'))if(!this.documentBookSearchGroups.has(group)){const wasOpen=group.hasAttribute('open');this.documentBookSearchGroups.set(group,wasOpen);group.setAttribute('data-htmlmemo-book-search-open',String(wasOpen));group.setAttribute('open','');}
+    }
+    for(const button of results.querySelectorAll('[data-book-search-step]'))button.disabled=!this.bookSearchHit||this.bookSearchHit.count<2||this.bookSearchHit.section!==currentSection(this.doc);
+  }
+  clearDocumentBookSearchHighlight() {
+    this.doc.defaultView.CSS?.highlights?.delete('htmlmemo-book-search');
+    for(const mark of [...this.doc.querySelectorAll('[data-htmlmemo-book-search-hit]')].reverse())mark.replaceWith(...mark.childNodes);
+  }
+  stepDocumentBookSearch(direction=0,{move=true}={}) {
+    this.clearDocumentBookSearchHighlight();
+    const hit=this.bookSearchHit,content=this.doc.getElementById('reader-content');
+    if(!hit||hit.query!==this.documentBookSearchInput?.value.trim()||!content)return false;
+    if(hit.section!==currentSection(this.doc)){this.documentBookSearchStatus.textContent='다른 검색 결과를 선택하세요.';this.syncDocumentBookSearchResults();return false;}
+    const index=textIndex(this.doc,content),pattern=new RegExp(hit.query.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'giu'),matches=[];
+    for(const match of index.text.matchAll(pattern)){matches.push({start:match.index,end:match.index+match[0].length});if(matches.length===3000)break;}
+    hit.count=matches.length;
+    if(!matches.length){this.documentBookSearchStatus.textContent='이 장의 제목·검색 정보는 일치하지만 본문에서 검색어를 찾지 못했습니다.';for(const button of this.documentBookSearchResults.querySelectorAll('[data-book-search-step]'))button.disabled=true;return false;}
+    hit.position=(hit.position+direction+matches.length)%matches.length;
+    const match=matches[hit.position],range=rangeFromOffsets(this.doc,match.start,match.end,index);if(!range)return false;
+    const win=this.doc.defaultView;
+    if(win.CSS?.highlights&&win.Highlight)win.CSS.highlights.set('htmlmemo-book-search',new win.Highlight(range));
+    else wrapOffsets(this.doc,match.start,match.end,{'data-htmlmemo-search':'','data-htmlmemo-book-search-hit':''},'background:#f0a85b80;outline:2px solid #df9057;border-radius:2px;color:inherit',index);
+    if(move){const rect=range.getBoundingClientRect(),origin=this.layerOrigin();this.scrollTop=Math.max(0,(rect.top-origin.top+rect.height/2)*this.zoom-this.viewport.clientHeight/2);this.scrollLeft=Math.max(0,(rect.left-origin.left+rect.width/2)*this.zoom-this.viewport.clientWidth/2);}
+    this.documentBookSearchStatus.textContent=`이 장에서 ${hit.position+1} / ${matches.length}${matches.length===3000?'+':''}`;
+    for(const button of this.documentBookSearchResults.querySelectorAll('[data-book-search-step]'))button.disabled=matches.length<2;
+    return true;
+  }
+  async jumpDocumentBookSearch(section,query) {
+    this.syncDocumentBookSearchResults();
+    this.cancelBookSearchJump?.();const generation=this.bookSearchJumpGeneration=(this.bookSearchJumpGeneration||0)+1;
+    if(!query||!this.annotationBookPaths().has(section))return false;
+    this.bookSearchHit=null;this.syncDocumentBookSearchResults();this.documentBookSearchStatus.textContent='검색어가 있는 장을 여는 중…';
+    try{
+      if(currentSection(this.doc)!==section){
+        const loaded=await new Promise(resolve=>{
+          let settled=false;
+          const finish=value=>{if(settled)return;settled=true;observer.disconnect();clearTimeout(timer);this.cancelBookSearchJump=null;resolve(value);};
+          const ready=()=>currentSection(this.doc)===section&&!this.doc.getElementById('reader-status')?.textContent.trim();
+          const observer=new this.doc.defaultView.MutationObserver(()=>{if(ready())finish(true);});
+          const timer=setTimeout(()=>finish(false),15000);this.cancelBookSearchJump=()=>finish(false);
+          observer.observe(this.doc.documentElement,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['data-section']});
+          try{this.doc.defaultView.location.hash=encodeURIComponent(section);if(ready())finish(true);}catch{finish(false);}
+        });
+        if(this.disposed||generation!==this.bookSearchJumpGeneration||this.documentSidebarMode!=='search'||query!==this.documentBookSearchInput.value.trim())return false;
+        if(!loaded)throw new Error('검색 결과의 장을 불러오지 못했습니다. 결과를 다시 선택해 주세요.');
+        this.dynamicRoots?.add(this.doc.getElementById('reader-content'));await this.refreshDynamicDocument();
+      }
+      if(this.disposed||generation!==this.bookSearchJumpGeneration||this.documentSidebarMode!=='search'||query!==this.documentBookSearchInput.value.trim())return false;
+      this.bookSearchHit={section,query,position:0};this.render();this.measure();
+      const found=this.stepDocumentBookSearch();if(!found)this.jump(this.doc.getElementById('reader-content'));
+      this.callbacks.onView?.();return true;
+    }catch(error){if(!this.disposed&&generation===this.bookSearchJumpGeneration){this.documentBookSearchStatus.textContent=error.message;this.callbacks.onError?.(error);}return false;}
   }
   applyTocWidth(value, {persist = false, snapStrip = true} = {}) {
     const info = this.tocResize?.sidebar?.isConnected ? this.tocResize : this.ensureDocumentTocResize();
@@ -1810,6 +1921,7 @@ export class Reader {
     }
     this.renderDrawingLayer();
     if (this.searchQuery) this.search(this.searchQuery, false);
+    if (this.bookSearchHit) this.stepDocumentBookSearch(0,{move:false});
     this.observeDynamicDocument();
   }
   drawingGeometry(annotation, textIndexes = null) {
@@ -2183,6 +2295,7 @@ export class Reader {
   }
   stopSpeech() { this.readAloud?.close(); this.host?.ownerDocument?.defaultView?.speechSynthesis?.cancel(); }
   dispose() {
+    this.cancelBookSearchJump?.();this.documentBookSearchObserver?.disconnect();if(this.documentBookSearchResults)this.clearDocumentBookSearchHighlight();
     this.stopMiddleScroll();this.readAloud?.dispose();this.readAloud=null;this.stopSpeech(); this.disposed=true;this.cancelOpeningWait?.();this.cancelAnnotationJump?.(); clearTimeout(this.positionTimer);clearTimeout(this.dynamicTimer);clearTimeout(this.documentSidebarUI?.sidebarSearchTimer);this.dynamicObserver?.disconnect();this.fontObserver?.disconnect();if(this.fontFrame)this.doc.defaultView?.cancelAnimationFrame(this.fontFrame); this.resizeObserver?.disconnect(); this.hostObserver?.disconnect(); this.frame.srcdoc=''; if(this.documentURL){URL.revokeObjectURL(this.documentURL);this.documentURL=null;} this.host.remove();
   }
 }

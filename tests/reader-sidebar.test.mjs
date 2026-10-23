@@ -115,6 +115,65 @@ test('adjacent native search results return to their source slots when opening a
   assert.deepEqual([...parsed.querySelector('nav').children].map(node=>node.id),['q','book-search-results','reader-tree']);assert.equal(parsed.querySelector('[data-htmlmemo-book-search-slot],[data-htmlmemo-book-search-part],[data-htmlmemo-doc-sidebar-ui]'),null);
 });
 
+function searchableBook(){
+  installDOM();const a=sidebar(),manifest={format:'memosuite-book-html-v1',volumes:[{label:'입문',sections:[{key:'v0:first',title:'첫 장'},{key:'v0:next',title:'다음 장'}]}]};
+  const doc=documentFor(`<html><head><script id="book-manifest" type="application/json">${JSON.stringify(manifest)}</script></head><body><nav id="reader-nav"><h2>목차</h2><input id="q" placeholder="책 전체 검색"><div id="search-status"></div><div id="reader-tree"><details><summary>입문</summary><a href="#v0%3Afirst">첫 장</a><a href="#v0%3Anext">다음 장</a></details></div></nav><main><article id="reader-content" data-section="v0:first"><p>앞의 <em>기</em>억과 뒤의 기억, 마침표 . 하나입니다.</p></article></main></body></html>`);
+  const payload=doc.createElement('script');payload.id='book-volume-0';payload.type='application/octet-stream';payload.textContent='["시험 본문"]';doc.head.append(payload);
+  const runtime=doc.createElement('script');runtime.textContent='window.testBook=true;';doc.head.append(runtime);
+  Object.setPrototypeOf(a.r,Reader.prototype);a.r.doc=doc;a.r.tocResize={sidebar:doc.querySelector('nav')};
+  a.r.callbacks={onSidebarView:(mode,panel,documentReader)=>a.context.renderSidebar(mode,{panel,embedded:true,documentReader})};a.r.setupDocumentSidebar();
+  const input=doc.querySelector('#q'),tree=doc.querySelector('#reader-tree');
+  const query=value=>{input.value=value;input.dispatchEvent(new doc.defaultView.Event('input',{bubbles:true}));};
+  return {...a,doc,input,tree,query};
+}
+
+test('whole-book search exposes its live filtered result tree, preserves offsets and returns it to the outline and export',()=>{
+  const {r,doc,tree,query}=searchableBook(),originalText=textIndex(doc).text,group=tree.querySelector('details');let nativeClicks=0;
+  tree.addEventListener('click',()=>nativeClicks++);
+  r.showDocumentSidebarView('search');assert.equal(tree.parentElement.id,'reader-nav');
+  query('기억');assert.ok(r.documentBookSearchResults.contains(tree));assert.equal(r.documentBookSearchResults.hidden,false);assert.equal(group.hasAttribute('open'),true);assert.equal(textIndex(doc).text,originalText);
+  tree.querySelector('summary').dispatchEvent(new doc.defaultView.Event('click',{bubbles:true}));assert.equal(nativeClicks,1);
+  assert.equal(r.documentBookSearchSection(tree.querySelector('a')),'v0:first');assert.equal(r.documentBookSearchSection(doc.createElement('a')),'');
+  const serialized=serializeHTML(doc,r.metadata),exported=documentFor(serialized);
+  assert.equal(exported.querySelector('#reader-tree').parentElement.id,'reader-nav');assert.equal(exported.querySelector('#reader-tree details').hasAttribute('open'),false);assert.equal(exported.querySelector('[data-htmlmemo-book-search-part],[data-htmlmemo-book-search-slot],[data-htmlmemo-book-search-open],.sidebar-book-results'),null);
+  r.showDocumentSidebarView('outline');assert.strictEqual(doc.querySelector('#reader-tree'),tree);assert.equal(tree.parentElement.id,'reader-nav');assert.equal(group.hasAttribute('open'),false);assert.equal(r.documentBookSearchResults.hidden,true);
+  r.showDocumentSidebarView('search');assert.ok(r.documentBookSearchResults.contains(tree));query('');assert.equal(tree.parentElement.id,'reader-nav');assert.equal(r.documentBookSearchResults.hidden,true);assert.equal(textIndex(doc).text,originalText);
+  r.documentBookSearchObserver.disconnect();
+});
+
+test('whole-book keyword navigation scopes matches to the loaded body, supports inline text and literal punctuation and wraps both ways',()=>{
+  const {r,doc,query}=searchableBook(),highlights=new Map(),ranges=[];
+  Object.defineProperty(doc,'defaultView',{value:{CSS:{highlights},Highlight:class{constructor(range){this.range=range;}}}});
+  doc.createRange=()=>{const range={setStart(node,offset){this.startContainer=node;this.startOffset=offset;},setEnd(node,offset){this.endContainer=node;this.endOffset=offset;},getBoundingClientRect:()=>({left:20,top:300,width:30,height:10})};ranges.push(range);return range;};
+  r.viewport={clientHeight:200,clientWidth:200};r.layerOrigin=()=>({left:0,top:10});r.sidebarSearchQuery='별도 검색';
+  r.showDocumentSidebarView('search');r.documentBookSearchInput.value='기억';r.syncDocumentBookSearchResults();
+  r.bookSearchHit={section:'v0:first',query:'기억',position:0};const before=structuredClone(r.metadata);
+  assert.equal(r.stepDocumentBookSearch(),true);assert.equal(r.documentBookSearchStatus.textContent,'이 장에서 1 / 2');assert.equal(r.viewport.scrollTop,490);
+  const first=highlights.get('htmlmemo-book-search').range;assert.equal(first.startContainer.parentElement.localName,'em');assert.equal(first.startOffset,0);assert.equal(first.endOffset,1);
+  r.stepDocumentBookSearch(1);assert.equal(r.documentBookSearchStatus.textContent,'이 장에서 2 / 2');r.stepDocumentBookSearch(1);assert.equal(r.documentBookSearchStatus.textContent,'이 장에서 1 / 2');r.stepDocumentBookSearch(-1);assert.equal(r.documentBookSearchStatus.textContent,'이 장에서 2 / 2');
+  r.documentBookSearchInput.value='.';r.syncDocumentBookSearchResults();r.bookSearchHit={section:'v0:first',query:'.',position:0};assert.equal(r.stepDocumentBookSearch(),true);assert.equal(r.documentBookSearchStatus.textContent,'이 장에서 1 / 2');
+  r.documentBookSearchInput.value='없는 검색어';r.syncDocumentBookSearchResults();r.bookSearchHit={section:'v0:first',query:'없는 검색어',position:0};assert.equal(r.stepDocumentBookSearch(),false);assert.match(r.documentBookSearchStatus.textContent,/본문에서 검색어를 찾지 못했습니다/);assert.equal(highlights.size,0);
+  assert.equal(r.sidebarSearchQuery,'별도 검색');assert.deepEqual(r.metadata,before);assert.equal(ranges.length,5);
+  r.documentBookSearchObserver.disconnect();
+});
+
+test('whole-book result navigation waits for only the selected section and does not read unopened payloads',async()=>{
+  const {r,doc,query}=searchableBook();query('기억');r.showDocumentSidebarView('search');let callback,hash,highlighted,refreshed=0;
+  Object.defineProperty(doc.getElementById('book-volume-0'),'textContent',{get(){throw Error('Unopened book decoded');}});
+  Object.defineProperty(doc,'defaultView',{value:{MutationObserver:class{constructor(fn){callback=fn;}observe(){}disconnect(){}},location:{set hash(value){hash=value;doc.getElementById('reader-content').dataset.section=decodeURIComponent(value);queueMicrotask(callback);}}}});
+  r.refreshDynamicDocument=async()=>refreshed++;r.render=()=>{};r.measure=()=>{};r.stepDocumentBookSearch=()=>{highlighted={...r.bookSearchHit};return true;};
+  const before=structuredClone(r.metadata);assert.equal(await r.jumpDocumentBookSearch('v0:next','기억'),true);assert.equal(hash,'v0%3Anext');assert.equal(refreshed,1);assert.deepEqual(highlighted,{section:'v0:next',query:'기억',position:0});assert.deepEqual(r.metadata,before);
+  assert.equal(await r.jumpDocumentBookSearch('not-in-the-book','기억'),false);r.documentBookSearchObserver.disconnect();
+});
+
+test('clearing or leaving whole-book search cancels pending navigation and a timeout reports an error without changing notes',async t=>{
+  t.mock.timers.enable({apis:['setTimeout']});const {r,doc,query}=searchableBook(),errors=[];query('기억');r.showDocumentSidebarView('search');
+  Object.defineProperty(doc,'defaultView',{value:{MutationObserver:class{observe(){}disconnect(){}},location:{hash:''}}});r.callbacks.onError=error=>errors.push(error.message);
+  const before=structuredClone(r.metadata),cancelled=r.jumpDocumentBookSearch('v0:next','기억');r.documentBookSearchInput.value='';r.syncDocumentBookSearchResults();assert.equal(await cancelled,false);assert.deepEqual(errors,[]);
+  r.documentBookSearchInput.value='기억';r.syncDocumentBookSearchResults();const leaving=r.jumpDocumentBookSearch('v0:next','기억');r.showDocumentSidebarView('outline');assert.equal(await leaving,false);assert.deepEqual(errors,[]);
+  r.showDocumentSidebarView('search');const timedOut=r.jumpDocumentBookSearch('v0:next','기억');t.mock.timers.tick(15000);assert.equal(await timedOut,false);assert.match(errors[0],/불러오지 못했습니다/);assert.equal(r.documentBookSearchStatus.textContent,errors[0]);assert.deepEqual(r.metadata,before);r.documentBookSearchObserver.disconnect();
+});
+
 test('annotation list names what each annotation marks, the heading above it and when it was made',()=>{
   installDOM();const a=sidebar();
   const doc=documentFor('<html><head></head><body><main><h1>첫 장</h1><p>머리말입니다.</p><h2>설치하기</h2><p data-htmlmemo-anchor="n7">에이전트를 설치하는 문단입니다.</p><p>강조할 <mark data-htmlmemo-mark data-htmlmemo-id="h1">핵심 문장</mark>이 있습니다.</p></main></body></html>');

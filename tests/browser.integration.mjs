@@ -1159,6 +1159,63 @@ test('real Chrome: annotation tree keeps the confirmed opening and the deepest k
   }finally{if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
 });
 
+test('real Chrome: whole-book search shows live results and jumps to highlighted keywords in unopened chapters',{timeout:90000},async()=>{
+  await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-book-search-'));await cp(join(root,'public'),folder,{recursive:true});
+  const server=createServer(folder);let chrome;
+  try{
+    await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));chrome=await launchChrome();const page=chrome.page;
+    const url=process.env.HTMLMEMO_SIDEBAR_TEST_URL||`http://127.0.0.1:${server.address().port}/`,source=await readFile(join(root,'tests/fixtures/book-search.html'),'utf8');
+    await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});await page.navigate(url);await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
+    await page.evaluate(`(async()=>{const {putDocumentRevision}=await import('./src/storage.js'),{parseHTML}=await import('./src/document.js');const parsed=parseHTML(${JSON.stringify(source)},{},{allowScripts:true});parsed.metadata.annotations=[{id:'search-note',type:'highlight',color:'#edcf67',width:3,opacity:.35,textAnchor:{section:'v1:one',quote:'멀리 있는 본문의 바람을 찾았습니다.',start:0,end:22}}];await putDocumentRevision({id:'whole-book-search',title:'책 전체 검색 검증',name:'book-search.html',created:Date.now(),modified:Date.now(),html:parsed.html,metadata:parsed.metadata});})()`);
+    await page.navigate(url);await page.waitFor('!!document.querySelector("[data-open=whole-book-search]")');await page.click('[data-open=whole-book-search]');
+    const frame='document.querySelector(".document-host:not([hidden]) iframe")',doc=frame+'.contentDocument';
+    await page.waitFor(`${doc}?.querySelector('[data-sidebar-view=search]')&&!${frame}.hasAttribute('aria-hidden')`);
+    const clickNative=async selector=>{
+      const point=await page.evaluate(`(async()=>{const f=${frame},d=f.contentDocument,el=d.querySelector(${JSON.stringify(selector)});el.scrollIntoView({block:'nearest'});await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));const b=f.getBoundingClientRect(),r=el.getBoundingClientRect(),s=b.width/f.offsetWidth;return {x:b.left+(r.left+r.width/2)*s,y:b.top+(r.top+r.height/2)*s};})()`);
+      await page.send('Input.dispatchMouseEvent',{type:'mousePressed',...point,button:'left',clickCount:1});await page.send('Input.dispatchMouseEvent',{type:'mouseReleased',...point,button:'left',clickCount:1});
+    };
+    const enterQuery=async text=>{await clickNative('#reader-search');await page.evaluate(`${doc}.querySelector('#reader-search').select()`);await page.send('Input.insertText',{text});};
+    const activeHit=()=>page.evaluate(`(()=>{const d=${doc},h=d.defaultView.CSS.highlights.get('htmlmemo-book-search'),range=h&&[...h][0];if(!range)return null;const r=range.getBoundingClientRect(),m=d.querySelector('#reader-main').getBoundingClientRect();return {text:range.toString(),visible:r.top>=m.top&&r.bottom<=m.bottom,top:r.top,scroll:d.querySelector('#reader-main').scrollTop,status:d.querySelector('.sidebar-book-results [role=status]').textContent};})()`);
+    const original=await page.evaluate(`(async()=>{const {getDocument}=await import('./src/storage.js');return (await getDocument('whole-book-search')).metadata.annotations;})()`);
+    await mkdir(join(root,'test-results'),{recursive:true});
+    for(const width of [1280,390]){
+      await page.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
+      await clickNative('[data-sidebar-view=search]');await enterQuery('바람');
+      await page.waitFor(`${doc}.querySelector('#reader-search-status').textContent==='3개 장 검색됨'&&${doc}.querySelectorAll('.sidebar-book-results #reader-tree a').length===3`);
+      assert.equal(await page.evaluate(`${doc}.querySelector('.sidebar-book-results #reader-tree').getBoundingClientRect().height>0`),true);
+      assert.equal(await page.evaluate(`[...${doc}.querySelectorAll('.sidebar-book-results details')].every(d=>d.open)`),true);
+      if(width===1280){assert.deepEqual(await page.evaluate(`${doc}.defaultView.renderedSections`),['v0:opening']);assert.deepEqual(await page.evaluate(`${doc}.defaultView.decodedVolumes`),[0]);}
+      await writeFile(join(root,`test-results/book-search-results-${width}.png`),await page.screenshot());
+      await clickNative('.sidebar-book-results a[href="#v1%3Aone"]');
+      await page.waitFor(`${doc}.querySelector('#reader-content').dataset.section==='v1:one'&&${doc}.querySelector('.sidebar-book-results [role=status]').textContent==='이 장에서 1 / 2'`);
+      let hit=await activeHit();assert.equal(hit.text,'바람');assert.equal(hit.visible,true);assert.ok(hit.scroll>500,'first keyword, not just the chapter heading, is brought into view');
+      assert.equal(await page.evaluate(`!!${doc}.querySelector('[data-htmlmemo-id=search-note]')`),true);
+      await clickNative('[data-book-search-step="1"]');await page.waitFor(`${doc}.querySelector('.sidebar-book-results [role=status]').textContent==='이 장에서 2 / 2'`);const next=await activeHit();assert.equal(next.visible,true);assert.ok(next.scroll>hit.scroll+500);
+      await clickNative('[data-book-search-step="1"]');await page.waitFor(`${doc}.querySelector('.sidebar-book-results [role=status]').textContent==='이 장에서 1 / 2'`);
+      await clickNative('[data-book-search-step="-1"]');await page.waitFor(`${doc}.querySelector('.sidebar-book-results [role=status]').textContent==='이 장에서 2 / 2'`);
+      await clickNative('.sidebar-book-results a[href="#v0%3Aone"]');await page.waitFor(`${doc}.querySelector('#reader-content').dataset.section==='v0:one'&&${doc}.querySelector('.sidebar-book-results [role=status]').textContent==='이 장에서 1 / 2'`);
+      hit=await activeHit();assert.equal(hit.text,'바람');assert.equal(hit.visible,true,'a keyword split across inline nodes is highlighted and centered');
+      await writeFile(join(root,`test-results/book-search-keyword-${width}.png`),await page.screenshot());
+      await clickNative('[data-sidebar-view=annotations]');assert.equal(await page.evaluate(`${doc}.querySelector('#reader-tree').parentElement.id`),'reader-nav');
+      await clickNative('[data-sidebar-view=search]');assert.equal(await page.evaluate(`${doc}.querySelector('#reader-search').value`),'바람');assert.equal(await page.evaluate(`${doc}.querySelectorAll('.sidebar-book-results a').length`),3);
+      await clickNative('.sidebar-book-results a[href="#v0%3Atitle"]');await page.waitFor(`${doc}.querySelector('.sidebar-book-results [role=status]').textContent.includes('본문에서 검색어를 찾지 못했습니다')`);
+      assert.equal(await page.evaluate(`[...${doc}.querySelectorAll('[data-book-search-step]')].every(b=>b.disabled)`),true);
+      await enterQuery('없는키워드');await page.waitFor(`${doc}.querySelector('#reader-search-status').textContent==='0개 장 검색됨'`);assert.equal(await page.evaluate(`${doc}.querySelectorAll('.sidebar-book-results a').length`),0);
+      await enterQuery('바람');await page.waitFor(`${doc}.querySelector('#reader-search-status').textContent==='3개 장 검색됨'`);
+      await page.evaluate(`${doc}.querySelector('#reader-search').focus()`);await page.send('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13,text:'\r',unmodifiedText:'\r'});await page.send('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});await page.waitFor(`${doc}.querySelector('#reader-content').dataset.section==='v0:one'&&${doc}.querySelector('.sidebar-book-results [role=status]').textContent==='이 장에서 1 / 2'`);
+      await clickNative('#reader-search-clear');await page.waitFor(`${doc}.querySelector('#reader-search').value===''&&${doc}.querySelector('.sidebar-book-results').hidden`);assert.equal(await page.evaluate(`${doc}.defaultView.CSS.highlights.has('htmlmemo-book-search')`),false);
+      await clickNative('[data-sidebar-view=outline]');assert.equal(await page.evaluate(`${doc}.querySelector('#reader-tree').parentElement.id`),'reader-nav');assert.equal(await page.evaluate(`[...${doc}.querySelectorAll('#reader-tree details')].every(d=>!d.open)`),true);
+      assert.deepEqual(await page.evaluate(`(async()=>{const {getDocument}=await import('./src/storage.js');return (await getDocument('whole-book-search')).metadata.annotations;})()`),original);
+    }
+    assert.ok(await page.evaluate(`${doc}.defaultView.nativeResultClicks`)>0,'native delegated result handlers are preserved');assert.deepEqual(await page.evaluate(`${doc}.defaultView.decodedVolumes`),[0,1]);
+    await clickNative('[data-sidebar-view=search]');await enterQuery('바람');await page.waitFor(`${doc}.querySelector('#reader-search-status').textContent==='3개 장 검색됨'`);
+    await page.evaluate(`window.showSaveFilePicker=async()=>{const root=await navigator.storage.getDirectory();return root.getFileHandle('book-search-export.html',{create:true});}`);await page.click('#save-page');
+    await page.waitFor(`(async()=>{try{const root=await navigator.storage.getDirectory();return (await(await root.getFileHandle('book-search-export.html')).getFile()).size>0;}catch{return false;}})()`);
+    const exported=await page.evaluate(`(async()=>{const root=await navigator.storage.getDirectory(),html=await(await(await root.getFileHandle('book-search-export.html')).getFile()).text(),d=new DOMParser().parseFromString(html,'text/html');return {runtime:!!d.querySelector('[data-htmlmemo-doc-sidebar-ui],[data-htmlmemo-book-search-part],[data-htmlmemo-book-search-slot],[data-htmlmemo-book-search-open],.sidebar-book-results'),payloads:[0,1].every(i=>!!d.getElementById('book-volume-'+i)),input:!!d.querySelector('#reader-nav>#reader-search'),tree:!!d.querySelector('#reader-nav>#reader-tree'),notes:JSON.parse(d.getElementById('htmlmemo-data').textContent).annotations};})()`);
+    assert.deepEqual(exported,{runtime:false,payloads:true,input:true,tree:true,notes:original});assert.deepEqual(chrome.errors,[]);
+  }finally{if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
+});
+
 test('real Chrome: native sidebar view choices are visible on open and preserve the original book tree and export',{timeout:60000},async()=>{
   await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-native-sidebar-'));await cp(join(root,'public'),folder,{recursive:true});
   const server=createServer(folder);let chrome;
@@ -1228,7 +1285,7 @@ test('real Chrome: native sidebar view choices are visible on open and preserve 
       await page.evaluate(`${doc}.querySelector('#htmlmemo-native-document-search').select()`);
       await page.send('Input.insertText',{text:'Introduction'});await page.waitFor(`${doc}.querySelectorAll('[data-search-index]').length===6`);
       await writeFile(join(root,`test-results/sidebar-views-search-native-${width}.png`),await page.screenshot());
-      assert.equal(await page.evaluate(`${doc}.defaultView.getComputedStyle(${doc}.querySelector('#reader-tree')).display`),'none');
+      assert.equal(await page.evaluate(`${doc}.defaultView.getComputedStyle(${doc}.querySelector('#reader-tree')).display`),'block');
       await chooseNative('annotations');assert.equal(await page.evaluate(`${doc}.querySelector('[data-annotation=native-note] .annotation-main').textContent`),'책의 메모');await revealAnnotation(page,doc,'native-note');await clickNative('[data-annotation=native-note]');
       await chooseNative('search');assert.equal(await page.evaluate(`${doc}.querySelector('#htmlmemo-native-document-search').value`),'Introduction');assert.equal(await page.evaluate(`${doc}.querySelector('#book-search').value`),'용어 전체');
       await clickNative('#book-search-clear');assert.equal(await page.evaluate(`${doc}.querySelector('#book-search').value`),'');
