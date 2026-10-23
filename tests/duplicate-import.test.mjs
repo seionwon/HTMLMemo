@@ -2,27 +2,43 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFile} from 'node:fs/promises';
-import {documentFor} from './dom.mjs';
+import {documentFor,installDOM} from './dom.mjs';
 import {escapeHTML} from '../public/src/utils.js';
-import {findLocalDuplicates} from '../public/src/local-files.js';
+import {findLocalDuplicates,identifyLocalFile} from '../public/src/local-files.js';
+import {parseHTML} from '../public/src/document.js';
+installDOM();
 const source=await readFile(new URL('../public/src/app.js',import.meta.url),'utf8');
 const code=source.slice(source.indexOf('function duplicateImportDialog('),source.indexOf('async function savePage('));
 const identity={version:1,size:100,digest:'a'.repeat(64)};
 const local={name:'book.html',sourceIdentity:identity,snapshot:{html:'<body>Book</body>'},handle:null};
 const record={id:'existing',title:'기존 책',name:local.name,sourceIdentity:identity,modified:1234,metadata:{annotations:[{id:'original'}],bookmarks:[{id:'bookmark'}]}};
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
-function app(rows=[structuredClone(record)]){
+function app(rows=[structuredClone(record)],{cacheError=false}={}){
   const doc=documentFor('<html><head></head><body><span id="status-left"></span><dialog id="dialog"><div id="dialog-content"></div></dialog></body></html>');
-  const dialog=doc.querySelector('#dialog'),created=[],opened=[],reads=[];let restored=0;
+  const dialog=doc.querySelector('#dialog'),created=[],opened=[],reads=[],cached=[],notices=[];let restored=0;
   dialog.close=value=>{dialog.returnValue=value||'';dialog.open=false;dialog.dispatchEvent(new doc.defaultView.Event('close'));};
   const context=vm.createContext({document:doc,$:(s,root=doc)=>root.querySelector(s),esc:escapeHTML,formatDate:()=> '10월 23일',
     modal(html,bind){doc.querySelector('#dialog-content').innerHTML=html;dialog.open=true;dialog.returnValue='';const select=doc.querySelector('select');let value=select.firstElementChild.value;Object.defineProperty(select,'value',{configurable:true,get:()=>value,set:next=>value=next});bind(dialog);},
-    readLocalHTML:async input=>{reads.push(input);if(input.error)throw Error('read failed');return {...input};},findLocalDuplicates,listDocuments:async()=>rows,getDocument:async id=>rows.find(row=>row.id===id),
+    readLocalHTML:async(input,options)=>{assert.equal(options.identify,false);reads.push(input);if(input.error)throw Error('read failed');return {...input};},findLocalDuplicates,identifyLocalFile,listDocuments:async()=>rows,getDocument:async id=>rows.find(row=>row.id===id),
+    putDocumentSourceIdentity:async(id,sourceIdentity)=>{if(cacheError)throw Error('storage full');const row=rows.find(row=>row.id===id);row.sourceIdentity=sourceIdentity;cached.push(id);return row;},toast:message=>notices.push(message),
     openRecord:async item=>{opened.push(item);return item;},createDocument:async(...args)=>{created.push(args);return {id:'new'};},renderLibrary:()=>restored++,updateChrome:()=>restored++,setTimeout:fn=>fn(),
   });
   vm.runInContext('var localImportQueue=Promise.resolve(),activeId="library";'+code,context);
-  return {context,doc,dialog,created,opened,reads,rows,get restored(){return restored;}};
+  return {context,doc,dialog,created,opened,reads,rows,cached,notices,get restored(){return restored;}};
 }
+test('a proven legacy match caches only its source identity and keeps the three-way choice',async()=>{
+  const old={...structuredClone(record),html:parseHTML(local.snapshot.html,{}, {allowScripts:true}).html};delete old.sourceIdentity;
+  const before=structuredClone(old),a=app([old]),pending=a.context.openLocalFile({...local});await tick();
+  assert.deepEqual(a.cached,['existing']);assert.deepEqual(a.rows,[{...before,sourceIdentity:identity}]);assert.equal(a.dialog.open,true);
+  a.dialog.close('cancel');await pending;
+  const again=a.context.openLocalFile({...local});await tick();assert.deepEqual(a.cached,['existing']);a.dialog.close('existing');await again;
+  assert.equal(a.opened.length,1);assert.equal(a.created.length,0);
+});
+test('an optional identity-cache write failure does not block opening the existing annotations',async()=>{
+  const old={...structuredClone(record),html:parseHTML(local.snapshot.html,{}, {allowScripts:true}).html};delete old.sourceIdentity;
+  const a=app([old],{cacheError:true}),pending=a.context.openLocalFile({...local});await tick();assert.equal(a.dialog.open,true);assert.match(a.notices[0],/다음에는 다시 검사/);
+  a.dialog.close('existing');await pending;assert.equal(a.opened.length,1);assert.equal(a.created.length,0);assert.equal(a.rows[0].sourceIdentity,undefined);
+});
 test('duplicate import presents exactly the three requested choices and safely focuses cancel',async()=>{
   const a=app(),pending=a.context.openLocalFile(local);await tick();
   assert.deepEqual([...a.doc.querySelectorAll('button')].map(b=>b.textContent),['취소','새롭게 열기','기존의 주석 파일로 가기']);

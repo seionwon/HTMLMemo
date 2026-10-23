@@ -47,6 +47,21 @@ export const getDocument = async id => withContent(await transaction('documents'
 export const putDocument = record => putDocumentRevision(record);
 export const getSetting = key => transaction('settings', 'readonly', store => store.get(key));
 export const setSetting = (key, value) => transaction('settings', 'readwrite', store => store.put(value, key));
+/** Cache a proven legacy source identity without reading/writing its body or history. */
+export async function putDocumentSourceIdentity(id, sourceIdentity) {
+  const identity=structuredClone(sourceIdentity),connection=await db();
+  return new Promise((resolve,reject)=>{
+    const tx=connection.transaction('documents','readwrite'),store=tx.objectStore('documents');
+    const request=store.get(id);let saved,failure;
+    request.onsuccess=()=>{
+      try{saved=request.result;if(saved){saved.sourceIdentity=identity;store.put(saved);}}
+      catch(error){failure=error;tx.abort();}
+    };
+    tx.oncomplete=()=>resolve(saved);
+    tx.onerror=()=>reject(tx.error);
+    tx.onabort=()=>reject(failure||tx.error||new Error('파일 확인 결과를 보관하지 못했습니다.'));
+  });
+}
 /** View-only saves leave annotations, history, source HTML and the modification date alone. */
 export async function putDocumentView(id, view) {
   const position = structuredClone(view), connection = await db();
@@ -130,6 +145,8 @@ export async function putDocumentRevision(record, {baseline = false, restoredFro
       try {
         const last=latest.result;
         const old=previous.result;
+        // A still-open legacy tab must not erase a later duplicate-check cache.
+        if(!value.sourceIdentity&&old?.sourceIdentity)value.sourceIdentity=old.sourceIdentity;
         if (!last && old && !sameAnnotationState(old.metadata,state)) revisions.add({documentId:record.id,created:Date.now(),kind:'baseline',...annotationState(old.metadata)});
         if (!last || !sameAnnotationState(old?.metadata,state)) revisions.add({documentId:record.id,created:Date.now(),kind:restoredFrom?'restore':baseline?'baseline':'edit',restoredFrom,...state});
         if(!content.result){if(file instanceof Blob)contents.add({documentId:record.id,file});else{const source=old?.html ?? html;if(typeof source!=='string')throw Error('HTML 본문을 보관하지 못했습니다. 문서를 다시 열어주세요.');contents.add({documentId:record.id,html:source});}}

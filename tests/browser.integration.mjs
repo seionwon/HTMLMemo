@@ -73,14 +73,50 @@ test('real Chrome: duplicate HTML import offers cancel, fresh annotations or exi
   }catch(error){if(chrome)console.error('Duplicate import diagnostics:',await chrome.page.evaluate('({status:document.querySelector("#status-left")?.textContent,toast:document.querySelector("#toast")?.textContent,dialog:document.querySelector("#dialog")?.textContent})'));throw error;}
   finally{await chrome?.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
 });
-test('real Chrome: duplicate HTML import clears embedded notes in large streamed books',{timeout:90000},async()=>{
+test('real Chrome: duplicate HTML import preflights sizes and preserves exact v1 identities',{timeout:90000},async()=>{
+  await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-duplicate-speed-'));await cp(join(root,'public'),folder,{recursive:true});const server=createServer(folder);let chrome;
+  try{
+    await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));chrome=await launchChrome();const page=chrome.page,url=process.env.HTMLMEMO_SIDEBAR_TEST_URL||`http://127.0.0.1:${server.address().port}/`;
+    await page.navigate(url);await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
+    const result=await page.evaluate(`(async()=>{
+      const {readLocalHTML,findLocalDuplicates,identifyLocalFile,localFileIdentity}=await import('./src/local-files.js');
+      const raw=new File(['<html><head><title>식별 속도 검증</title></head><body><!--','x'.repeat(32*1024*1024),'--></body></html>'],'speed.html',{type:'text/html',lastModified:1234});
+      const slice=raw.slice.bind(raw);let bytes=0,reads=0,active=0,peak=0;
+      raw.text=raw.arrayBuffer=()=>{throw Error('Whole file read');};
+      raw.slice=(start,end)=>{const part=slice(start,end),read=part.arrayBuffer.bind(part);part.arrayBuffer=async()=>{bytes+=part.size;reads++;peak=Math.max(peak,++active);try{return await read();}finally{active--;}};return part;};
+      const local=await readLocalHTML(raw,{native:true,allowScripts:true,identify:false}),headerBytes=bytes;
+      await findLocalDuplicates(local,[{id:'wrong-size',sourceIdentity:{version:1,size:raw.size+1,digest:'a'.repeat(64)}}],()=>{throw Error('Unexpected body read');});
+      const preflightBytes=bytes,start=performance.now(),identity=await identifyLocalFile(local),parallelMs=performance.now()-start,scanBytes=bytes-headerBytes;
+      const before=reads;await Promise.all([identifyLocalFile(local),localFileIdentity(raw)]);const cachedReads=reads-before;
+      const serialStart=performance.now(),hashes=[];
+      for(let start=0;start<raw.size;start+=1024*1024)hashes.push(new Uint8Array(await crypto.subtle.digest('SHA-256',await slice(start,start+1024*1024).arrayBuffer())));
+      const prefix=new TextEncoder().encode('HTMLMemo local file v1:'+raw.size+':'),joined=new Uint8Array(prefix.length+hashes.length*32);joined.set(prefix);hashes.forEach((hash,index)=>joined.set(hash,prefix.length+index*32));
+      const serialDigest=[...new Uint8Array(await crypto.subtle.digest('SHA-256',joined))].map(byte=>byte.toString(16).padStart(2,'0')).join(''),serialMs=performance.now()-serialStart;
+      const copied=await readLocalHTML(new File([raw],'renamed.html'),{native:true,identify:false});
+      const matches=await findLocalDuplicates(copied,[{id:'original',sourceIdentity:identity}],()=>{throw Error('Unexpected body read');});
+      const changed=new File([slice(0,16*1024*1024),'y',slice(16*1024*1024+1)],raw.name,{lastModified:1234}),different=await readLocalHTML(changed,{native:true,identify:false});
+      const wrong=await findLocalDuplicates(different,[{id:'original',sourceIdentity:identity}],()=>{throw Error('Unexpected body read');});
+      return {size:raw.size,headerBytes,preflightBytes,scanBytes,cachedReads,peak,compatible:identity.digest===serialDigest,matches:matches.map(r=>r.id),wrong:wrong.length,parallelMs,serialMs};
+    })()`);
+    assert.equal(result.headerBytes,65536);assert.equal(result.preflightBytes,65536);assert.equal(result.scanBytes,result.size);assert.equal(result.cachedReads,0);assert.equal(result.peak,4);assert.equal(result.compatible,true);assert.deepEqual(result.matches,['original']);assert.equal(result.wrong,0);
+    console.log('Duplicate import 32 MiB exact-identity benchmark:',JSON.stringify(result));assert.deepEqual(chrome.errors,[]);
+  }finally{await chrome?.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
+});
+test('real Chrome: duplicate HTML import clears embedded notes and upgrades legacy streamed books',{timeout:90000},async()=>{
   await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-duplicate-large-'));await cp(join(root,'public'),folder,{recursive:true});const server=createServer(folder);let chrome;
   try{
     await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));chrome=await launchChrome();const page=chrome.page,url=process.env.HTMLMEMO_SIDEBAR_TEST_URL||`http://127.0.0.1:${server.address().port}/`;
     await page.navigate(url);await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
-    await page.evaluate(`(()=>{const metadata={version:${FORMAT_VERSION},title:'큰 책의 새 주석',annotations:[{id:'large-old',type:'note',text:'기존 큰 책 주석',color:'#334155',width:3,opacity:1,points:[{x:20,y:70}]}],bookmarks:[{id:'large-mark',title:'기존 북마크',top:0,left:0}]};const file=new File(['<html><head><title>큰 책의 새 주석</title><script type="application/json" id="htmlmemo-data">'+JSON.stringify(metadata)+'<'+'/script></head><body><p>원본 본문을 유지합니다.</p><!--'+'x'.repeat(4*1024*1024)+'--></body></html>'],'large-duplicate.html',{type:'text/html'});file.text=file.arrayBuffer=()=>{throw Error('Whole source read is forbidden');};window.importLargeFixture=()=>{const t=new DataTransfer();t.items.add(file);const input=document.querySelector('#file-input');input.files=t.files;input.dispatchEvent(new Event('change',{bubbles:true}));};window.importLargeFixture();})()`);
+    await page.evaluate(`(()=>{const metadata={version:${FORMAT_VERSION},title:'큰 책의 새 주석',annotations:[{id:'large-old',type:'note',text:'기존 큰 책 주석',color:'#334155',width:3,opacity:1,points:[{x:20,y:70}]}],bookmarks:[{id:'large-mark',title:'기존 북마크',top:0,left:0}]};const source=new Blob(['<html><head><title>큰 책의 새 주석</title><script type="application/json" id="htmlmemo-data">'+JSON.stringify(metadata)+'<'+'/script></head><body><p>원본 본문을 유지합니다.</p><!--'+'x'.repeat(4*1024*1024)+'--></body></html>']);window.importLargeFixture=()=>{const file=new File([source],'large-duplicate.html',{type:'text/html'});file.text=file.arrayBuffer=()=>{throw Error('Whole source read is forbidden');};const t=new DataTransfer();t.items.add(file);const input=document.querySelector('#file-input');input.files=t.files;input.dispatchEvent(new Event('change',{bubbles:true}));};window.importLargeFixture();})()`);
     const ready='document.querySelector(".document-host:not([hidden]) iframe")?.style.visibility==="visible"&&!document.querySelector(".tab-dirty:not([hidden])")';await page.waitFor(ready,30000);
     const original=await page.evaluate(`(async()=>{const {listDocuments}=await import('./src/storage.js');return (await listDocuments())[0];})()`);assert.equal(original.metadata.annotations.length,1);
+    assert.equal(original.sourceIdentity.version,1);
+    // Simulate an existing pre-identity library without rewriting its body.
+    await page.evaluate(`new Promise((resolve,reject)=>{const r=indexedDB.open('HTMLMemo-v1',3);r.onsuccess=()=>{const db=r.result,tx=db.transaction('documents','readwrite'),store=tx.objectStore('documents'),get=store.get(${JSON.stringify(original.id)});get.onsuccess=()=>{const row=get.result;delete row.sourceIdentity;store.put(row);};tx.oncomplete=()=>{db.close();resolve();};tx.onerror=()=>reject(tx.error);};})`);
+    await page.evaluate('window.importLargeFixture()');await page.waitFor('document.querySelector("[data-duplicate-import]")');
+    const upgraded=await page.evaluate(`(async()=>{const {listDocuments,listRevisions,putDocumentRevision}=await import('./src/storage.js');const row=(await listDocuments())[0],before=(await listRevisions(row.id)).length,stale=structuredClone(row);delete stale.sourceIdentity;await putDocumentRevision(stale);return {row:(await listDocuments())[0],before,after:(await listRevisions(row.id)).length};})()`);
+    assert.deepEqual(upgraded.row.sourceIdentity,original.sourceIdentity);assert.deepEqual(upgraded.row.metadata.annotations,original.metadata.annotations);assert.deepEqual(upgraded.row.metadata.bookmarks,original.metadata.bookmarks);assert.equal(upgraded.row.modified,original.modified);assert.equal(upgraded.before,upgraded.after);
+    await page.click('[data-duplicate-import] [value=cancel]');await page.waitFor('!document.querySelector("#dialog").open');
     await page.evaluate('window.importLargeFixture()');await page.waitFor('document.querySelector("[data-duplicate-import]")');await page.click('[data-duplicate-import] [value=new]');await page.waitFor('document.querySelectorAll(".tab.document").length===2&&'+ready,30000);
     const states=await page.evaluate(`(async()=>{const {listDocuments}=await import('./src/storage.js');return (await listDocuments()).map(r=>({id:r.id,annotations:r.metadata.annotations.length,bookmarks:r.metadata.bookmarks.length}));})()`);
     assert.deepEqual(states.find(r=>r.id===original.id),{id:original.id,annotations:1,bookmarks:1});const fresh=states.find(r=>r.id!==original.id);assert.equal(fresh.annotations,0);assert.equal(fresh.bookmarks,0);

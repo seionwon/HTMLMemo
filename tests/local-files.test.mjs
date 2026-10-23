@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readLocalHTML, droppedHTMLFiles, localFileIdentity, sameLocalFile, findLocalDuplicates } from '../public/src/local-files.js';
+import { readLocalHTML, droppedHTMLFiles, localFileIdentity, identifyLocalFile, sameLocalFile, findLocalDuplicates } from '../public/src/local-files.js';
 import { parseHTML, serializeHTML, prepareLoadedHTML } from '../public/src/document.js';
 import { documentFor, installDOM } from './dom.mjs';
 import { writeExternalHTML } from '../public/src/storage.js';
@@ -80,6 +80,51 @@ test('identity hashes ordered bounded chunks without calling a large file full-r
   raw.arrayBuffer=raw.text=async()=>{throw Error('Full file read');};raw.slice=(start,end)=>{largest=Math.max(largest,end-start);return originalSlice(start,end);};
   const identity=await localFileIdentity(raw);assert.equal(largest,1024*1024);
   assert.equal(sameLocalFile(identity,await localFileIdentity(file('b'.repeat(1024*1024)+'a'.repeat(1024*1024)+'c'))),false);
+});
+test('parallel identities remain byte-for-byte compatible with serial v1 hashes, including out-of-order reads',async()=>{
+  for(const contents of ['', 'small', 'a'.repeat(1024*1024)+'b'.repeat(1024*1024)+'c'.repeat(1024*1024)+'d'.repeat(1024*1024)+'end']){
+    const raw=file(contents),slice=raw.slice.bind(raw);let active=0,peak=0;
+    raw.slice=(start,end)=>({arrayBuffer:async()=>{peak=Math.max(peak,++active);await new Promise(resolve=>setTimeout(resolve,start===0?8:1));const bytes=await slice(start,end).arrayBuffer();active--;return bytes;}});
+    const hashes=[];for(let start=0;start<raw.size;start+=1024*1024)hashes.push(new Uint8Array(await crypto.subtle.digest('SHA-256',await slice(start,start+1024*1024).arrayBuffer())));
+    const prefix=new TextEncoder().encode('HTMLMemo local file v1:'+raw.size+':'),joined=new Uint8Array(prefix.length+hashes.length*32);joined.set(prefix);hashes.forEach((hash,index)=>joined.set(hash,prefix.length+index*32));
+    const expected=Buffer.from(await crypto.subtle.digest('SHA-256',joined)).toString('hex');
+    assert.equal((await localFileIdentity(raw)).digest,expected);assert.ok(peak<=4);if(raw.size>4*1024*1024)assert.equal(peak,4);
+  }
+});
+test('identity reuses in-flight and completed reads only for the same immutable Blob and retries failures',async()=>{
+  const raw=file('abc'),slice=raw.slice.bind(raw);let reads=0,fail=true;
+  raw.slice=(start,end)=>({arrayBuffer:async()=>{reads++;if(fail)throw Error('temporary read failure');return slice(start,end).arrayBuffer();}});
+  await assert.rejects(localFileIdentity(raw),/temporary/);fail=false;
+  const first=localFileIdentity(raw),second=localFileIdentity(raw);assert.strictEqual(first,second);
+  assert.equal(sameLocalFile(await first,await localFileIdentity(raw)),true);assert.equal(reads,2);
+  assert.equal(sameLocalFile(await first,await localFileIdentity(file('xyz'))),false);
+});
+test('size preflight defers a new large source scan and never loads known document bodies',async()=>{
+  const raw=file('<html><head></head><body><!--'+'x'.repeat(4*1024*1024)+'--></body></html>'),slice=raw.slice.bind(raw);let bytes=0;
+  raw.arrayBuffer=raw.text=async()=>{throw Error('Whole source read');};raw.slice=(start,end)=>{const part=slice(start,end),read=part.arrayBuffer.bind(part);part.arrayBuffer=()=>{bytes+=part.size;return read();};return part;};
+  const local=await readLocalHTML(raw,{native:true,identify:false});assert.equal(bytes,65536);assert.equal(local.sourceIdentity,null);
+  const records=[{id:'larger',sourceIdentity:{version:1,size:raw.size+1,digest:'a'.repeat(64)}}];
+  assert.deepEqual(await findLocalDuplicates(local,records,()=>{throw Error('No body reads');}),[]);assert.equal(bytes,65536);
+  const identity=await identifyLocalFile(local);assert.equal(bytes,65536+raw.size);assert.equal(identity.size,raw.size);
+  await identifyLocalFile(local);assert.equal(bytes,65536+raw.size);
+  assert.equal((await findLocalDuplicates(local,[{id:'renamed',sourceIdentity:identity}],()=>{throw Error('No bodies');}))[0].id,'renamed');
+});
+test('known same-size sources still scan all bytes and reject a changed middle with unchanged filename and timestamps',async()=>{
+  const body='x'.repeat(4*1024*1024),a=file('<body>'+body+'</body>'),b=file('<body>'+body.slice(0,2*1024*1024)+'y'+body.slice(2*1024*1024+1)+'</body>');
+  const local=await readLocalHTML(b,{native:true,identify:false}),identity=await localFileIdentity(a);
+  assert.equal(a.size,b.size);assert.deepEqual(await findLocalDuplicates(local,[{id:'old',name:b.name,sourceIdentity:identity}],()=>{throw Error('No body read');}),[]);
+  assert.ok(local.sourceIdentity);assert.notEqual(local.sourceIdentity.digest,identity.digest);
+});
+test('legacy streamed size and prefix mismatches skip full scans, but matching prefixes still require exact identities',async()=>{
+  const make=body=>file('<html><head><title>Legacy</title></head><body><!--'+body+'--></body></html>');
+  const local=await readLocalHTML(make('x'.repeat(4*1024*1024)),{native:true,identify:false});
+  let loads=0;assert.deepEqual(await findLocalDuplicates(local,[{id:'wrong-size',name:local.name,byteSize:local.snapshot.file.size+1}],()=>{loads++;}),[]);assert.equal(loads,0);
+  const different=await readLocalHTML(make('y'+'x'.repeat(4*1024*1024-1)),{native:true,identify:false});
+  for(const blob of [local.snapshot.file,different.snapshot.file]){const slice=blob.slice.bind(blob);blob.slice=(start,end)=>{assert.ok(end-start<=4096,'prefix mismatch must not hash entire book');return slice(start,end);};}
+  const record={id:'changed',name:local.name,file:different.snapshot.file};assert.deepEqual(await findLocalDuplicates(local,[record],async()=>record),[]);
+  const samePrefix=await readLocalHTML(make('x'.repeat(2*1024*1024)+'y'+'x'.repeat(2*1024*1024-1)),{native:true,identify:false});
+  const fresh=await readLocalHTML(make('x'.repeat(4*1024*1024)),{native:true,identify:false});
+  assert.deepEqual(await findLocalDuplicates(fresh,[{id:'middle',name:fresh.name}],async()=>({file:samePrefix.snapshot.file})),[]);
 });
 test('duplicate matching finds renamed copies and independent annotation records without loading bodies',async()=>{
   const local=await readLocalHTML(file('<body>same</body>'));

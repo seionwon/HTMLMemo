@@ -1,33 +1,63 @@
 import { LOCAL_CSP, SCRIPT_CSP, parseHTML } from './document.js';
 
-// Hash bounded chunks so large books never require a second full-file buffer.
-// The final digest includes their order and the exact source byte count.
-export async function localFileIdentity(file) {
-  const hashes=[],chunkSize=1024*1024;
-  for(let offset=0;offset<file.size;offset+=chunkSize){
-    const bytes=await file.slice(offset,offset+chunkSize).arrayBuffer();
-    hashes.push(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)));
+const identities=new WeakMap(),localSources=new WeakMap();
+// File/Blob objects are immutable. Reuse only that exact object, never a name,
+// timestamp or handle whose on-disk contents could have changed.
+export function localFileIdentity(file) {
+  let pending=identities.get(file);
+  if(!pending){
+    pending=hashLocalFile(file);identities.set(file,pending);
+    pending.catch(()=>{if(identities.get(file)===pending)identities.delete(file);});
   }
+  return pending;
+}
+// Four bounded workers hide file-read/digest round trips without buffering a
+// whole book. Keep the original v1 chunk size/order for existing libraries.
+async function hashLocalFile(file) {
+  const hashes=[],chunkSize=1024*1024,count=Math.ceil(file.size/chunkSize);let next=0;
+  await Promise.all(Array.from({length:Math.min(4,count)},async()=>{
+    for(let index;(index=next++)<count;){
+      const bytes=await file.slice(index*chunkSize,Math.min((index+1)*chunkSize,file.size)).arrayBuffer();
+      hashes[index]=new Uint8Array(await crypto.subtle.digest('SHA-256',bytes));
+    }
+  }));
   const prefix=new TextEncoder().encode('HTMLMemo local file v1:'+file.size+':');
   const joined=new Uint8Array(prefix.length+hashes.length*32);joined.set(prefix);
   hashes.forEach((hash,index)=>joined.set(hash,prefix.length+index*32));
   const digest=new Uint8Array(await crypto.subtle.digest('SHA-256',joined));
   return {version:1,size:file.size,digest:[...digest].map(byte=>byte.toString(16).padStart(2,'0')).join('')};
 }
+export async function identifyLocalFile(local) {
+  if(local.sourceIdentity)return local.sourceIdentity;
+  const file=localSources.get(local);
+  if(!file)return null;
+  return local.sourceIdentity=await localFileIdentity(file);
+}
 export function sameLocalFile(a,b) {
   return a?.version===1&&b?.version===1&&Number.isSafeInteger(a.size)&&a.size>=0&&a.size===b.size&&/^[a-f0-9]{64}$/.test(a.digest)&&a.digest===b.digest;
 }
 export async function findLocalDuplicates(local, records, loadRecord) {
   const matches=[];let preparedHTML,preparedFile;
+  const sourceSize=local.sourceIdentity?.size??localSources.get(local)?.size;
+  // Most first imports cannot match any known source size. Do not scan their
+  // entire contents here; a new document fingerprints while its reader opens.
+  if(records.some(record=>record.sourceIdentity?.version===1&&record.sourceIdentity.size===sourceSize))await identifyLocalFile(local);
   for(const record of records){
     if(sameLocalFile(local.sourceIdentity,record.sourceIdentity)){matches.push(record);continue;}
     // A different known digest is never treated as the same file merely
     // because its filename, size, title or modification date matches.
     if(record.sourceIdentity||record.name!==local.name)continue;
+    if(local.snapshot.file&&Number.isSafeInteger(record.byteSize)&&record.byteSize>0&&record.byteSize!==local.snapshot.file.size)continue;
     const stored=await loadRecord(record.id);
     if(!stored)continue;
     let same=false;
     if(local.snapshot.file&&stored.file instanceof Blob){
+      if(local.snapshot.file.size!==stored.file.size)continue;
+      // Reject changed same-size legacy books using a small prefix before
+      // hashing either full prepared copy. A prefix match alone proves nothing.
+      const [a,b]=await Promise.all([local.snapshot.file,stored.file].map(file=>file.slice(0,4096).arrayBuffer()));
+      const other=new Uint8Array(b);
+      if(new Uint8Array(a).some((byte,index)=>byte!==other[index]))continue;
       preparedFile??=await localFileIdentity(local.snapshot.file);
       same=sameLocalFile(preparedFile,await localFileIdentity(stored.file));
     }else if(typeof local.snapshot.html==='string'&&typeof stored.html==='string'){
@@ -41,11 +71,11 @@ export async function findLocalDuplicates(local, records, loadRecord) {
   return matches;
 }
 
-export async function readLocalHTML(input, {native = false, allowScripts = false} = {}) {
+export async function readLocalHTML(input, {native = false, allowScripts = false, identify = true} = {}) {
   const originalHandle = input?.kind === 'file' && typeof input.getFile === 'function' ? input : null;
   const file = originalHandle ? await originalHandle.getFile() : input;
   if (!file || typeof file.text !== 'function' || !/\.html?$/i.test(file.name || '') && file.type !== 'text/html') throw new Error('HTML 또는 HTM 파일을 선택해주세요.');
-  const sourceIdentity=await localFileIdentity(file);
+  const sourceIdentity=identify?await localFileIdentity(file):null;
   // Inspect only the encoding header. Blob slices retain the original file bytes;
   // the browser streams/parses them without making a giant JS string first.
   let nativeFile = null;
@@ -77,10 +107,12 @@ export async function readLocalHTML(input, {native = false, allowScripts = false
   } else html = await file.text();
   // Annotation availability is independent of file write permission. Read-only
   // files still become local document tabs with a recoverable internal copy.
-  return {
+  const local={
     snapshot:{html,file:nativeFile,title:file.name,allowScripts}, name:file.name, handle:null,
     originalHandle, sourceIdentity, diskStamp:originalHandle ? {modified:file.lastModified,size:file.size} : null,
   };
+  localSources.set(local,file);
+  return local;
 }
 export async function droppedHTMLFiles(dataTransfer) {
   const items = [...(dataTransfer.items || [])].filter(item=>item.kind==='file');

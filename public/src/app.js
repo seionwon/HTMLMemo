@@ -3,9 +3,9 @@ import { parseHTML, SCRIPT_CSP, serializeBookSource } from './document.js';
 import { SaveQueue, ANNOTATION_LABELS } from './model.js';
 import { openEditionProbe, migrateAnnotations } from './migrate.js';
 import { Reader } from './reader.js';
-import { listDocuments, getDocument, deleteDocument, getSetting, setSetting, saveDocumentHTML, listRevisionSummaries, getRevision, putDocumentRevision, putDocumentView, writeExternalHTML } from './storage.js';
+import { listDocuments, getDocument, deleteDocument, getSetting, setSetting, saveDocumentHTML, listRevisionSummaries, getRevision, putDocumentRevision, putDocumentView, putDocumentSourceIdentity, writeExternalHTML } from './storage.js';
 import {readWebPage,pastedPage,PASTE_LIMIT,isWebSearch,BrowserTabs} from './web.js';
-import { readLocalHTML, droppedHTMLFiles, findLocalDuplicates } from './local-files.js';
+import { readLocalHTML, droppedHTMLFiles, findLocalDuplicates, identifyLocalFile } from './local-files.js';
 import { normalizePreferences, loadPreferences, storePreferences, serializeSettings, readSettingsFile, PRESET_COLORS, PRESET_PALETTES, normalizeHexColor, hexToRgb, rgbToHex, hexToHsv, hsvToHex } from './preferences.js';
 import {bundledExample} from './distribution.js';
 import { InstallController, isIOS, installableLocation, installationURL, PUBLIC_APP_URL } from './install.js';
@@ -236,10 +236,10 @@ function updateChrome() {
   document.title=tab?tab.title+' · HTMLMemo':'HTMLMemo · 나만의 웹 서재';
 }
 function createHost(id,type) { const host=document.createElement('div');host.id='workspace-'+id;host.className='workspace-host '+type+'-host';host.hidden=true;$('#workspaces').append(host);return host; }
-async function openRecord(record, prepared = null, {deferReady = false} = {}) {
-  const existing=tabs.find(tab=>tab.record?.id===record.id);if(existing){if(existing.closePromise){await existing.closePromise;return openRecord(record,prepared,{deferReady});}activate(existing.id);return existing;}
+async function openRecord(record, prepared = null, {deferReady = false, sourceIdentity = null} = {}) {
+  const existing=tabs.find(tab=>tab.record?.id===record.id);if(existing){if(existing.closePromise){await existing.closePromise;return openRecord(record,prepared,{deferReady,sourceIdentity});}activate(existing.id);return existing;}
   if(!prepared && typeof record.html!=='string' && !record.file)record=await getDocument(record.id);
-  const opened=tabs.find(tab=>tab.record?.id===record.id);if(opened){if(opened.closePromise){await opened.closePromise;return openRecord(record,prepared,{deferReady});}activate(opened.id);return opened;}
+  const opened=tabs.find(tab=>tab.record?.id===record.id);if(opened){if(opened.closePromise){await opened.closePromise;return openRecord(record,prepared,{deferReady,sourceIdentity});}activate(opened.id);return opened;}
   // The library already holds a prepared, sanitized snapshot. Reopening it
   // should parse it once in the iframe, not clone the entire book in DOMParser first.
   const parsed=prepared || (record.file ? {file:record.file,metadata:structuredClone(record.metadata),nativeScroll:true,savedMetadata:true} : record.metadata ? (() => {
@@ -282,7 +282,10 @@ async function openRecord(record, prepared = null, {deferReady = false} = {}) {
     onSelect:id=>{if(activeId===tab.id)annotationDialog(tab,id);},
   });
   Object.assign(tab.reader,preferences.annotation);
-  try { await tab.reader.ready; } catch(error) {tabs.splice(tabs.indexOf(tab),1);tab.reader.dispose();activate('library');throw error;}
+  try {
+    await tab.reader.ready;
+    if(sourceIdentity){const identity=await sourceIdentity;if(identity)tab.record.sourceIdentity=identity;}
+  } catch(error) {tabs.splice(tabs.indexOf(tab),1);tab.reader.dispose();activate('library');throw error;}
   if(parsed.file){tab.record.file=parsed.file;delete tab.record.html;tab.reader.initialHTML=null;tab.record.metadata=tab.reader.metadata;tab.record.source=tab.reader.metadata.source;tab.title=tab.record.title=tab.reader.metadata.title;}
   renderToolbar();
   updateChrome();
@@ -329,6 +332,9 @@ async function closeTab(id) {
   return tab.closePromise;
 }
 async function createDocument(snapshot, handle = null, name = null, local = {}) {
+  // New, size-unmatched files prepare the reader and fingerprint concurrently.
+  // Attach a rejection handler now; openRecord awaits it before baseline save.
+  const identity=identifyLocalFile(local);identity.catch(()=>{});
   const parsed=snapshot.file ? {...parseHTML('<html><head></head><body></body></html>',{title:snapshot.title,execution:{allowScripts:!!snapshot.allowScripts}}),file:snapshot.file,nativeScroll:true,freshAnnotations:!!local.freshAnnotations} : parseHTML(snapshot.html,{title:snapshot.title,source:snapshot.url,viewport:snapshot.viewport,warnings:snapshot.warnings},{includeMetadata:true,allowScripts:snapshot.allowScripts,freshAnnotations:!!local.freshAnnotations});
   const title=parsed.metadata.title; const record={id:uid(),title,name:name||handle?.name||filename(title),source:parsed.metadata.source,created:Date.now(),modified:Date.now(),fileHandle:handle,originalHandle:local.originalHandle||null,metadata:parsed.metadata};
   if(snapshot.file)record.file=snapshot.file;else record.html=parsed.html;
@@ -336,7 +342,7 @@ async function createDocument(snapshot, handle = null, name = null, local = {}) 
   if(local.diskStamp)record.diskStamp=local.diskStamp;
   else if(handle){const disk=await handle.getFile();record.diskStamp={modified:disk.lastModified,size:disk.size};}
   const {html:body,file:sourceFile,...summary}=record;records=records.filter(r=>r.id!==record.id).concat(summary);let tab;
-  try{tab=await openRecord(record,parsed,{deferReady:true});}catch(error){records=records.filter(r=>r.id!==record.id);renderLibrary();throw error;}
+  try{tab=await openRecord(record,parsed,{deferReady:true,sourceIdentity:identity});}catch(error){records=records.filter(r=>r.id!==record.id);renderLibrary();throw error;}
   if(tab.closing || !tabs.includes(tab)){tab.opening=false;return tab;}
   tab.queue.schedule();
   try { await tab.queue.flush(); } catch(error) { showError(error); }
@@ -403,9 +409,19 @@ function openLocalFile(input) {
 async function importLocalFile(input) {
   try{
     $('#status-left').textContent='로컬 HTML을 읽고 중복을 확인하는 중…';
-    const local=await readLocalHTML(input,{native:true,allowScripts:true});
+    const local=await readLocalHTML(input,{native:true,allowScripts:true,identify:false});
     const matches=await findLocalDuplicates(local,await listDocuments(),getDocument);
     if(matches.length){
+      const legacy=matches.filter(record=>!record.sourceIdentity);
+      if(legacy.length){
+        const identity=await identifyLocalFile(local);
+        for(const record of legacy){
+          try{
+            const saved=await putDocumentSourceIdentity(record.id,identity);
+            if(saved)record.sourceIdentity=saved.sourceIdentity;
+          }catch{toast('파일은 확인했지만 확인 결과를 보관하지 못했습니다. 다음에는 다시 검사합니다.',true);}
+        }
+      }
       const choice=await duplicateImportDialog(local,matches);
       if(choice.action==='cancel')return null;
       if(choice.action==='existing'){
