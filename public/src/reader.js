@@ -969,11 +969,6 @@ export class Reader {
     }
     host.addEventListener('input',event=>{if(event.target===input)this.syncDocumentBookSearchResults();});
     host.addEventListener('click',()=>this.syncDocumentBookSearchResults());
-    input.addEventListener('keydown',event=>{
-      if(event.key!=='Enter'||event.isComposing||!input.value.trim()||!this.documentBookSearchTree)return;
-      const first=[...this.documentBookSearchTree.querySelectorAll('a[href],button[data-section],button[data-key]')].find(node=>this.documentBookSearchSection(node));
-      if(first){event.preventDefault();void this.jumpDocumentBookSearch(this.documentBookSearchSection(first),input.value.trim());}
-    });
   }
   documentBookSearchSection(node) {
     let key=node.dataset.section||node.dataset.key||'',href=node.getAttribute('href')||'';
