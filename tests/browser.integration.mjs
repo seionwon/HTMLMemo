@@ -256,7 +256,7 @@ test('real Chrome: TTS paused resume follows the new reading position without au
     await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));chrome=await launchChrome();const page=chrome.page,url=process.env.HTMLMEMO_SIDEBAR_TEST_URL||`http://127.0.0.1:${server.address().port}/`;
     await page.navigate(url);await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
     // The browser's real DOM/events are used; only outgoing audio is replaced so text is deterministic.
-    await page.evaluate(`(()=>{window.resumeUtterances=[];window.SpeechSynthesisUtterance=class{constructor(text){this.text=text;this.rate=1;}};const engine=new EventTarget();engine.getVoices=()=>[];engine.cancel=()=>{};engine.speak=u=>window.resumeUtterances.push(u);Object.defineProperty(window,'speechSynthesis',{configurable:true,value:engine});})()`);
+    await page.evaluate(`(()=>{window.resumeUtterances=[];window.SpeechSynthesisUtterance=class{constructor(text){this.text=text;this.rate=1;}};const engine=new EventTarget();engine.getVoices=()=>[];engine.cancel=()=>{};engine.speak=u=>{window.resumeUtterances.push(u);u.onstart?.();};Object.defineProperty(window,'speechSynthesis',{configurable:true,value:engine});})()`);
     const frame='document.querySelector(".document-host:not([hidden]) iframe")',doc=frame+'.contentDocument',ready=`${frame}?.style.visibility==='visible'&&!document.querySelector('.tab-dirty:not([hidden])')`;
     const play=()=>page.click('.mstts-player [aria-label="소리내어 읽기"]'),pause=()=>page.click('.mstts-player [aria-label="일시정지"]');
     const count=()=>page.evaluate('window.resumeUtterances.length'),last=()=>page.evaluate('window.resumeUtterances.at(-1)?.text');
@@ -312,6 +312,58 @@ test('real Chrome: TTS paused resume follows the new reading position without au
     await writeFile(join(root,'test-results/tts-resume-results.json'),JSON.stringify(metrics,null,2));assert.deepEqual(chrome.errors,[]);
   }catch(error){
     if(chrome)try{await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/tts-resume-failure.png'),await chrome.page.screenshot());await writeFile(join(root,'test-results/tts-resume-failure.json'),JSON.stringify(await chrome.page.evaluate(`({spoken:window.resumeUtterances?.map(u=>u.text),status:document.querySelector('#status-left')?.textContent,button:document.querySelector('.mstts-player > button')?.outerHTML})`),null,2));}catch{}
+    throw error;
+  }finally{await chrome?.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
+});
+
+test('real Chrome: TTS transport controls remain responsive to rapid pointer, keyboard and touch commands',{timeout:90000},async()=>{
+  await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-tts-controls-'));await cp(join(root,'public'),folder,{recursive:true});
+  const server=createServer(folder);let chrome;
+  try{
+    await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));chrome=await launchChrome();const page=chrome.page,url=process.env.HTMLMEMO_SIDEBAR_TEST_URL||`http://127.0.0.1:${server.address().port}/`;
+    await page.navigate(url);await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
+    // Real browser input/DOM, deterministic audio lifecycle including synchronous cancel errors.
+    await page.evaluate(`(()=>{window.transportUtterances=[];window.SpeechSynthesisUtterance=class{constructor(text){this.text=text;}};const engine=window.transportEngine=new EventTarget();Object.assign(engine,{paused:true,speaking:false,pending:false,resumes:0,active:null,silent:false,fail:false});engine.getVoices=()=>[];engine.cancel=()=>{const old=engine.active;engine.active=null;engine.speaking=engine.pending=false;old?.onerror?.({error:'interrupted'});};engine.resume=()=>{engine.resumes++;engine.paused=false;engine.active?.onresume?.();};engine.speak=u=>{if(engine.fail)throw Error('Audio temporarily unavailable');window.transportUtterances.push(u);engine.active=u;engine.pending=engine.paused;engine.speaking=!engine.paused;if(!engine.silent&&!engine.paused)u.onstart?.();};Object.defineProperty(window,'speechSynthesis',{configurable:true,value:engine});})()`);
+    await page.click('#open-example');await page.waitFor('!document.querySelector("#toolbar").hidden&&document.querySelector("#status-left").textContent.includes("자동 저장됨")');
+    const button='.mstts-player > button:first-of-type',count=()=>page.evaluate('window.transportUtterances.length'),last=()=>page.evaluate('window.transportUtterances.at(-1).text');
+    const state=playing=>page.waitFor(`(()=>{const b=document.querySelector(${JSON.stringify(button)});return b?.getAttribute('aria-label')===${JSON.stringify(playing?'일시정지':'소리내어 읽기')}&&b?.getAttribute('aria-pressed')===${JSON.stringify(String(playing))};})()`);
+    const metrics=[];
+    for(const width of [1280,390,320]){
+      await page.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
+      await page.click('.document-host:not([hidden]) > [data-htmlmemo-reading-controls] [data-action=speak]');await state(false);const initial=await count();
+      await page.evaluate('window.transportEngine.paused=true');await page.click(button);await state(true);assert.equal(await count(),initial+1);assert.equal(await page.evaluate('window.transportEngine.paused'),false);
+      // The same screen position remains clickable as the button changes Play/Pause.
+      const point=await page.evaluate(`(()=>{const r=document.querySelector(${JSON.stringify(button)}).getBoundingClientRect();return{x:r.x+r.width/2,y:r.y+r.height/2};})()`);
+      for(let i=0;i<24;i++){
+        await page.send('Input.dispatchMouseEvent',{type:'mousePressed',...point,button:'left',clickCount:1});await page.send('Input.dispatchMouseEvent',{type:'mouseReleased',...point,button:'left',clickCount:1});await state(i%2===1);
+      }
+      assert.equal(await count(),initial+13);
+      await page.evaluate(`document.querySelector(${JSON.stringify(button)}).focus()`);
+      for(const[index,key]of [' ','Enter',' ','Enter'].entries()){
+        const code=key===' '?'Space':'Enter',windowsVirtualKeyCode=key===' '?32:13;
+        await page.send('Input.dispatchKeyEvent',{type:'keyDown',key,code,windowsVirtualKeyCode});await page.send('Input.dispatchKeyEvent',{type:'keyUp',key,code,windowsVirtualKeyCode});await state(index%2===1);
+      }
+      if(width<600)for(let i=0;i<8;i++){
+        await page.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{...point,id:1}]});await page.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await state(i%2===1);
+      }
+      const n=await count();await page.evaluate(`(()=>{const all=window.transportUtterances;for(const u of all.slice(0,-1)){u.onend();u.onerror({error:'interrupted'});u.onstart();u.onpause();}})()`);assert.equal(await count(),n);await state(true);
+      const beforeEnd=await count();await page.evaluate('window.transportFinished=window.transportUtterances.at(-1);window.transportFinished.onend();window.transportFinished.onend();window.transportFinished.onerror({error:"interrupted"})');assert.equal(await count(),beforeEnd+1);
+      const sentence=await last();await page.evaluate('window.transportUtterances.at(-1).onerror({error:"audio-busy"})');await state(false);assert.equal(await count(),beforeEnd+1);
+      assert.match(await page.evaluate('document.querySelector("#toast").textContent'),/같은 문장/);await page.click(button);await state(true);assert.equal(await last(),sentence);
+      await page.evaluate('window.transportEngine.paused=true;window.transportUtterances.at(-1).onpause()');assert.equal(await page.evaluate('window.transportEngine.paused'),false);await state(true);
+      await page.click(button);await state(false);await page.evaluate('window.transportEngine.fail=true');await page.click(button);await state(false);await page.evaluate('window.transportEngine.fail=false');await page.click(button);await state(true);assert.equal(await last(),sentence);
+      if(width===1280){
+        await page.click(button);await state(false);await page.evaluate('window.transportEngine.silent=true');await page.click(button);await state(true);const stalled=await count();
+        await state(false);assert.equal(await count(),stalled);assert.match(await page.evaluate('document.querySelector("#toast").textContent'),/음성 시작 응답/);
+        await page.evaluate('window.transportUtterances.at(-1).onstart();window.transportEngine.silent=false');await state(false);await page.click(button);await state(true);assert.equal(await last(),sentence);
+      }
+      await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,`test-results/tts-controls-${width}.png`),await page.screenshot());
+      metrics.push({width,rapidPointerCommands:24,keyboardCommands:4,touchCommands:width<600?8:0,latestCommandWins:true,staleCallbacksIgnored:true,duplicateCompletionIgnored:true,errorRetriesSameSentence:true,nativePauseReleased:true,missingStartDetected:width===1280});
+      await page.click('.mstts-player [aria-label="플레이어 닫기"]');assert.equal(await page.evaluate('!!document.querySelector(".mstts-player")'),false);
+    }
+    await writeFile(join(root,'test-results/tts-controls-results.json'),JSON.stringify(metrics,null,2));assert.deepEqual(chrome.errors,[]);
+  }catch(error){
+    if(chrome)try{await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/tts-controls-failure.png'),await chrome.page.screenshot());await writeFile(join(root,'test-results/tts-controls-failure.json'),JSON.stringify(await chrome.page.evaluate(`({count:window.transportUtterances?.length,spoken:window.transportUtterances?.map(u=>u.text),button:document.querySelector('.mstts-player > button')?.outerHTML,toast:document.querySelector('#toast')?.textContent})`),null,2));}catch{}
     throw error;
   }finally{await chrome?.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
 });

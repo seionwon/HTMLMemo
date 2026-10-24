@@ -465,6 +465,7 @@ export function createReadAloud(reader) {
   var state = 'idle';                   // idle | ready | playing | paused
   var run = null;                       // { sents, i, stopped }
   var idx = null;
+  var activeUtterance = null, startTimer = null;
   var pausedAt = null, pausedTarget = null, pausedSelection = null;
   var rate = (function () { var v = Number(ls(RATE_KEY)); return RATES.indexOf(v) >= 0 ? v : 1; })();
   var lang = (function () { var v = ls(LANG_KEY); return v && UTTER_TAG[v] ? v : (UTTER_TAG[BOOK_LANG] ? BOOK_LANG : 'en'); })();
@@ -631,12 +632,35 @@ export function createReadAloud(reader) {
     if (!bar) return;
     btnPlay.textContent = state === 'playing' ? '⏸' : '▶';
     btnPlay.title = state === 'playing' ? lb('pause', 'Pause') : lb('play', 'Read aloud');btnPlay.setAttribute('aria-label',btnPlay.title);
+    btnPlay.setAttribute('aria-pressed',String(state === 'playing'));
     btnRate.textContent = rate + '×';
     cnt.textContent = state !== 'ready' && run && run.sents.length ? (Math.min(run.i + 1, run.sents.length) + '/' + run.sents.length) : '';
   }
 
   // ── Transport ──
-  function cancelSpeech() { try { W.speechSynthesis.cancel(); } catch (e) { /* ignore */ } }
+  function clearStartTimer() {if(startTimer !== null){W.clearTimeout(startTimer);startTimer = null;}}
+  function cancelSpeech() {
+    // Invalidate BEFORE cancel(): some engines report cancellation synchronously.
+    activeUtterance = null;clearStartTimer();
+    try { W.speechSynthesis.cancel(); } catch (e) { /* ignore */ }
+  }
+  function resumeEngine() {
+    // Neither cancel() nor speak() clears the native engine's paused state.
+    // Keep speak() in the user's gesture, but release a stranded native pause first.
+    if (W.speechSynthesis.paused) W.speechSynthesis.resume();
+  }
+  function pauseReading() {
+    if (run) run.stopped = true;
+    state = 'paused';resetPause();render();cancelSpeech();
+    // A transient/detached selection must never leave a canceled run showing Pause.
+    try { pausedAt = readingPosition(); } catch (e) { /* use the current view on Play */ }
+    pausedSelection = selectedPosition();
+  }
+  function failSpeech(message) {
+    if (run && idx && run.sents.length) pauseReading();
+    else {cancelSpeech();state = 'ready';clearPaint();render();}
+    reader.callbacks?.onNotice?.(message || '음성을 재생하지 못했습니다. ▶를 눌러 같은 문장에서 다시 시도하세요.');
+  }
   function cycleRate() {
     closePanel();
     rate = RATES[(RATES.indexOf(rate) + 1) % RATES.length];
@@ -660,11 +684,13 @@ export function createReadAloud(reader) {
     return !!a && !!b && a.root === b.root && Math.abs(a.top-b.top)<1 && Math.abs(a.left-b.left)<1;
   }
   function selectedPosition() {
-    var sel = D.getSelection();
-    if (!sel || sel.isCollapsed || !sel.rangeCount) return null;
-    var r = sel.getRangeAt(0), root = readAloudRoot(D);
-    if (!root.contains(r.startContainer)) return null;
-    return {node:r.startContainer,offset:r.startOffset,endNode:r.endContainer,endOffset:r.endOffset};
+    try {
+      var sel = D.getSelection();
+      if (!sel || sel.isCollapsed || !sel.rangeCount) return null;
+      var r = sel.getRangeAt(0), root = readAloudRoot(D);
+      if (!root.contains(r.startContainer)) return null;
+      return {node:r.startContainer,offset:r.startOffset,endNode:r.endContainer,endOffset:r.endOffset};
+    } catch (e) { return null; }
   }
   function sameSelection(a, b) {
     return a === b || !!a && !!b && a.node === b.node && a.offset === b.offset && a.endNode === b.endNode && a.endOffset === b.endOffset;
@@ -751,14 +777,31 @@ export function createReadAloud(reader) {
     // 읽을 것이 남지 않은 문장(이모지만 있던 줄 등)은 건너뛴다 — 빈 발화는 onend가 오지 않아
     // 재생이 멈춰 서는 엔진이 있다.
     if (!speakText) { if (!ctx.stopped) speakFrom(i + 1); return; }
-    var u = new SpeechSynthesisUtterance(speakText);
-    u.lang = UTTER_TAG[lang] || 'en-US';
-    var v = resolveVoice();
-    if (v) u.voice = v;
-    u.rate = rate;
-    u.onend = function () { if (!ctx.stopped) speakFrom(i + 1); };
-    u.onerror = function () { if (!ctx.stopped) speakFrom(i + 1); };
-    try { W.speechSynthesis.speak(u); } catch (err3) { stop(); }
+    var u;
+    try {
+      u = new SpeechSynthesisUtterance(speakText);
+      u.lang = UTTER_TAG[lang] || 'en-US';
+      var v = resolveVoice();
+      if (v) u.voice = v;
+      u.rate = rate;activeUtterance = u;
+      var current = function () {return state === 'playing' && run === ctx && !ctx.stopped && activeUtterance === u;};
+      u.onstart = u.onresume = function () {if(current())clearStartTimer();};
+      u.onend = function () {
+        if (!current()) return;
+        clearStartTimer();activeUtterance = null;speakFrom(i + 1);
+      };
+      u.onerror = function () {if(current())failSpeech();};
+      u.onpause = function () {
+        if (!current()) return;
+        try {resumeEngine();} catch (e) {failSpeech();}
+      };
+      // A silent/failed native start must not leave a permanently misleading Pause.
+      // Never retry automatically: the next explicit Play retries this sentence.
+      startTimer = W.setTimeout(function () {
+        if(current())failSpeech('음성 시작 응답이 없습니다. 브라우저·기기의 음성 설정을 확인한 뒤 ▶를 눌러 다시 시도하세요.');
+      },8000);
+      resumeEngine();W.speechSynthesis.speak(u);
+    } catch (err3) {if(!u || activeUtterance === u)failSpeech();}
   }
   function jump(to) {
     closePanel();
@@ -788,16 +831,11 @@ export function createReadAloud(reader) {
       if (state === 'ready') startReading();
       // Pause cancels and remembers the view; Play uses a new reading position when it changed.
       // Without navigation the same sentence is repeated. Native pause()/resume() is
-      // unreliable on phones (resume is ignored, or claims success and stays silent), so the engine's
-      // own state is never consulted.
-      else if (state === 'playing') {
-        if (run) run.stopped = true;
-        try { W.speechSynthesis.cancel(); } catch (e) { /* ignore */ }
-        pausedAt = readingPosition();pausedTarget = null;pausedSelection = selectedPosition();
-        state = 'paused'; render();
-      }
+      // unreliable on phones. Button intent belongs to our state; native paused is checked
+      // only to release a stranded engine before a new utterance.
+      else if (state === 'playing') pauseReading();
       else if (state === 'paused') resumeReading();
-    } catch (e) { /* ignore */ }
+    } catch (e) {failSpeech();}
   }
   function stop() {                     // ⏹ stops the voice, keeps the bar (back to 'ready')
     closePanel();
