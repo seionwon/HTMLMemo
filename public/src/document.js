@@ -2,8 +2,10 @@ import { FORMAT_VERSION, validateAnnotations } from './model.js';
 
 export const LAYER_ID = 'htmlmemo-annotation-layer';
 export const DATA_ID = 'htmlmemo-data';
-export const LOCAL_CSP = "default-src 'none'; img-src data: blob:; style-src 'unsafe-inline' data:; font-src data:; media-src data:; script-src 'none'; connect-src 'none'; form-action 'none'; base-uri 'none'";
-export const SCRIPT_CSP = "default-src 'none'; img-src data: blob:; style-src 'unsafe-inline' data:; font-src data:; media-src data: blob:; script-src 'unsafe-inline' 'unsafe-eval' data: blob: https: http:; worker-src data: blob:; connect-src data: blob:; form-action 'none'; base-uri 'none'";
+// Sanitization admits only recursively cleaned srcdoc frames. Permit their
+// inherited origin, not live external websites; keep each frame sandboxed.
+export const LOCAL_CSP = "default-src 'none'; frame-src 'self'; img-src data: blob:; style-src 'unsafe-inline' data:; font-src data:; media-src data:; script-src 'none'; connect-src 'none'; form-action 'none'; base-uri 'none'";
+export const SCRIPT_CSP = "default-src 'none'; frame-src 'self'; img-src data: blob:; style-src 'unsafe-inline' data:; font-src data:; media-src data: blob:; script-src 'unsafe-inline' 'unsafe-eval' data: blob: https: http:; worker-src data: blob:; connect-src data: blob:; form-action 'none'; base-uri 'none'";
 export const BOOK_DATA_MISSING = '이 파일에는 책의 목차 제목만 남아 있고 본문 데이터 또는 실행 코드가 빠져 있습니다. 완전한 원본 HTML 파일을 가져와 주세요. 기존 문서와 주석은 보관함에 유지됩니다.';
 export function inspectBookDocument(doc) {
   const data = doc.getElementById('book-manifest');

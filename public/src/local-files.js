@@ -8,7 +8,7 @@ export function htmlExportName(name, annotations = false) {
   return String(name||'문서.html').replace(/\.(?:html?|mhtml|mht)$/i,'')+(annotations?'-주석':'')+'.html';
 }
 
-const identities=new WeakMap(),localSources=new WeakMap();
+const identities=new WeakMap(),localSources=new WeakMap(),nativeLegacyCopies=new WeakMap();
 // File/Blob objects are immutable. Reuse only that exact object, never a name,
 // timestamp or handle whose on-disk contents could have changed.
 export function localFileIdentity(file) {
@@ -45,7 +45,7 @@ export function sameLocalFile(a,b) {
   return a?.version===1&&b?.version===1&&Number.isSafeInteger(a.size)&&a.size>=0&&a.size===b.size&&/^[a-f0-9]{64}$/.test(a.digest)&&a.digest===b.digest;
 }
 export async function findLocalDuplicates(local, records, loadRecord) {
-  const matches=[];let preparedHTML,preparedFile;
+  const matches=[];let preparedHTML;
   const sourceSize=local.sourceIdentity?.size??localSources.get(local)?.size;
   // Most first imports cannot match any known source size. Do not scan their
   // entire contents here; a new document fingerprints while its reader opens.
@@ -55,19 +55,20 @@ export async function findLocalDuplicates(local, records, loadRecord) {
     // A different known digest is never treated as the same file merely
     // because its filename, size, title or modification date matches.
     if(record.sourceIdentity||record.name!==local.name)continue;
-    if(local.snapshot.file&&Number.isSafeInteger(record.byteSize)&&record.byteSize>0&&record.byteSize!==local.snapshot.file.size)continue;
+    let preparedFile=local.snapshot.file;
+    const versionForSize=size=>[local.snapshot.file,nativeLegacyCopies.get(local)].find(file=>file?.size===size);
+    if(preparedFile&&Number.isSafeInteger(record.byteSize)&&record.byteSize>0){preparedFile=versionForSize(record.byteSize);if(!preparedFile)continue;}
     const stored=await loadRecord(record.id);
     if(!stored)continue;
     let same=false;
-    if(local.snapshot.file&&stored.file instanceof Blob){
-      if(local.snapshot.file.size!==stored.file.size)continue;
+    if(preparedFile&&stored.file instanceof Blob){
+      preparedFile=versionForSize(stored.file.size);if(!preparedFile)continue;
       // Reject changed same-size legacy books using a small prefix before
       // hashing either full prepared copy. A prefix match alone proves nothing.
-      const [a,b]=await Promise.all([local.snapshot.file,stored.file].map(file=>file.slice(0,4096).arrayBuffer()));
+      const [a,b]=await Promise.all([preparedFile,stored.file].map(file=>file.slice(0,4096).arrayBuffer()));
       const other=new Uint8Array(b);
       if(new Uint8Array(a).some((byte,index)=>byte!==other[index]))continue;
-      preparedFile??=await localFileIdentity(local.snapshot.file);
-      same=sameLocalFile(preparedFile,await localFileIdentity(stored.file));
+      same=sameLocalFile(await localFileIdentity(preparedFile),await localFileIdentity(stored.file));
     }else if(typeof local.snapshot.html==='string'&&typeof stored.html==='string'){
       preparedHTML??=parseHTML(local.snapshot.html,{}, {allowScripts:true}).html;
       // Older records have no source digest. Compare their immutable prepared
@@ -91,7 +92,7 @@ export async function readLocalHTML(input, {native = false, allowScripts = false
   }
   // Inspect only the encoding header. Blob slices retain the original file bytes;
   // the browser streams/parses them without making a giant JS string first.
-  let nativeFile = null;
+  let nativeFile = null,legacyNativeFile = null;
   if (native && file.size >= 4 * 1024 * 1024 && typeof file.slice === 'function') {
     const header = new Uint8Array(await file.slice(0, 65536).arrayBuffer());
     const charset = new TextDecoder().decode(header.subarray(0, 4096)).match(/<meta\b[^>]*charset\s*=\s*["']?([\w-]+)/i)?.[1] || 'utf-8';
@@ -107,7 +108,13 @@ export async function readLocalHTML(input, {native = false, allowScripts = false
       }
       // CSP precedes every source byte. The requested local-script policy
       // allows inline JS, eval, data/blob fetches and decompression workers.
-      nativeFile = new Blob(['<!doctype html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="' + (allowScripts ? SCRIPT_CSP : LOCAL_CSP) + '">', ...bodyParts], {type:'text/html;charset=utf-8'});
+      const policy=allowScripts?SCRIPT_CSP:LOCAL_CSP;
+      const withPolicy=csp=>new Blob(['<!doctype html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="'+csp+'">',...bodyParts],{type:'text/html;charset=utf-8'});
+      nativeFile=withPolicy(policy);
+      // Preserve duplicate recognition for older, unidentified streamed copies
+      // made before saved srcdoc frames were permitted. Both share the original
+      // Blob slices; no extra whole-book read or JS string is created.
+      legacyNativeFile=withPolicy(policy.replace(" frame-src 'self';",''));
     }
   }
   let html;
@@ -125,6 +132,7 @@ export async function readLocalHTML(input, {native = false, allowScripts = false
     originalHandle, sourceIdentity, diskStamp:originalHandle ? {modified:file.lastModified,size:file.size} : null,
   };
   localSources.set(local,file);
+  if(legacyNativeFile)nativeLegacyCopies.set(local,legacyNativeFile);
   return local;
 }
 export async function droppedHTMLFiles(dataTransfer) {

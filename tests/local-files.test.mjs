@@ -146,6 +146,15 @@ test('legacy large streamed sources match without full-file or full-text reads',
   const record={id:'legacy-large',name:raw.name,file:b.snapshot.file};
   assert.deepEqual((await findLocalDuplicates(a,[record],async()=>record)).map(record=>record.id),['legacy-large']);
 });
+test('legacy streamed duplicate recognition survives the saved-frame CSP addition without weakening exact matching',async()=>{
+  const make=body=>file('<html><head><title>Old CSP</title></head><body><!--'+body+'--><p>Body</p></body></html>'),body='x'.repeat(4*1024*1024);
+  const a=await readLocalHTML(make(body),{native:true,allowScripts:true,identify:false});
+  const prefix=await a.snapshot.file.slice(0,1024).text(),marker=" frame-src 'self';",offset=prefix.indexOf(marker);assert.ok(offset>=0);
+  const old=new Blob([a.snapshot.file.slice(0,offset),a.snapshot.file.slice(offset+marker.length)],{type:'text/html;charset=utf-8'});
+  const record={id:'old-csp',name:a.name,byteSize:old.size};assert.deepEqual((await findLocalDuplicates(a,[record],async()=>({file:old}))).map(r=>r.id),['old-csp']);
+  const changed=await readLocalHTML(make(body.slice(0,2*1024*1024)+'y'+body.slice(2*1024*1024+1)),{native:true,allowScripts:true,identify:false});
+  assert.deepEqual(await findLocalDuplicates(changed,[record],async()=>({file:old})),[]);
+});
 test('fresh annotations remove imported notes and bookmarks on both parsed and streamed DOM paths',async()=>{
   const parsed=parseHTML('<html><head><title>Saved</title></head><body><p>Original body</p><script>window.sourceKept=true</script></body></html>',{source:'https://example.test/book'}, {allowScripts:true});
   parsed.metadata.annotations=[{id:'old',type:'note',text:'Existing note',color:'#334155',width:3,opacity:1,points:[{x:1,y:2}]}];
