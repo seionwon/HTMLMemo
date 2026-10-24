@@ -177,3 +177,8 @@ test('unresolvable, hidden, stale-chapter or non-readable selections never fall 
 test('an explicitly selected single letter is readable without including its neighbors',()=>{
   const a=fixture(),node=a.doc.querySelector('p').firstChild;assert.equal(a.player.openSelection(a.selectRange(node,0,node,1)),true);a.play();assert.equal(a.spoken.at(-1).text,'첫');const count=a.spoken.length;a.spoken.at(-1).onend();assert.equal(a.spoken.length,count);
 });
+test('an explicit selection can read a document title outside main without reading the surrounding document',()=>{
+  const a=fixture({html:'<html><body><header><h1>문서 제목입니다.</h1></header><main><p>선택하지 않은 본문입니다.</p></main></body></html>'}),node=a.doc.querySelector('h1').firstChild;
+  assert.equal(a.player.openSelection(a.selectRange(node,0)),true);a.play();assert.equal(a.spoken.at(-1).text,'문서 제목입니다.');const count=a.spoken.length;a.spoken.at(-1).onend();assert.equal(a.spoken.length,count);
+  a.player.close();a.player.toggle();a.play();assert.equal(a.spoken.at(-1).text,'선택하지 않은 본문입니다.');
+});

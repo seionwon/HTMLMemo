@@ -376,9 +376,9 @@ export function createReadAloud(reader) {
   // A skipped island may still hold the one thing that IS prose (a widget's finished piece),
   // marked [data-tts-keep]. The NEAREST marker decides — same rule as the in-app player, kept in
   // sync with it.
-  function skipped(el) {
+  function skipped(el, inSelection = false) {
     if (!el || isReadAloudChrome(el) || el.closest('[hidden], [aria-hidden="true"]')) return true;
-    if (ROOT === D.body && el.closest('header, footer')) return true;
+    if (!inSelection && ROOT === D.body && el.closest('header, footer')) return true;
     var sk = el.closest(SKIP);
     if (!sk) return false;
     var keep = el.closest('[data-tts-keep]');
@@ -395,7 +395,7 @@ export function createReadAloud(reader) {
     var walker = D.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
       acceptNode: function (n) {
         var pe = n.parentElement;
-        if (!pe || skipped(pe)) return NodeFilter.FILTER_REJECT;
+        if (!pe || skipped(pe,!!range)) return NodeFilter.FILTER_REJECT;
         if (pe.closest('.katex')) return pe.closest('annotation') ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
         return NodeFilter.FILTER_ACCEPT;
       }
@@ -708,7 +708,7 @@ export function createReadAloud(reader) {
     if (!selectionScope) return true;
     try {
       var scope=selectionScope;
-      return !reader.disposed && !reader.host.hidden && scope.root===readAloudRoot(D) && scope.section===currentSection(D) &&
+      return !reader.disposed && !reader.host.hidden && scope.proseRoot===readAloudRoot(D) && scope.section===currentSection(D) &&
         scope.root.contains(scope.first) && scope.root.contains(scope.last) && scope.range.toString()===scope.raw;
     } catch (e) {return false;}
   }
@@ -717,22 +717,22 @@ export function createReadAloud(reader) {
     reader.callbacks?.onNotice?.('선택한 글이 바뀌었거나 다른 장으로 이동했습니다. 글을 다시 선택해 읽어주세요.');
   }
   function readingIndex() {
-    ROOT=readAloudRoot(D);
+    ROOT=selectionScope?.root||readAloudRoot(D);
     if (!scopeIsCurrent()) {invalidateSelection();return null;}
     return buildIndex(ROOT,selectionScope?.range);
   }
   function openSelection(anchor) {
     if (!anchor?.quote?.trim() || reader.disposed || reader.host.hidden) return false;
     try {
-      var root=readAloudRoot(D),section=currentSection(D),index=textIndex(D),resolved=resolveTextAnchor(index,anchor);
+      var proseRoot=readAloudRoot(D),section=currentSection(D),index=textIndex(D),resolved=resolveTextAnchor(index,anchor);
       var range=resolved && rangeFromOffsets(D,resolved.start,resolved.end,index);
+      var root=range && proseRoot.contains(range.startContainer) && proseRoot.contains(range.endContainer) ? proseRoot : D.body;
       if ((anchor.section||'')!==section || !range || !root.contains(range.startContainer) || !root.contains(range.endContainer)) throw new Error('Missing selection');
-      ROOT=root;
       if (!splitSentences(buildIndex(root,range).text,true).length) {
         reader.callbacks?.onNotice?.('선택한 부분에 읽을 수 있는 본문이 없습니다.');return false;
       }
       stop();run=idx=null;
-      selectionScope={root,section,range,first:range.startContainer,last:range.endContainer,raw:range.toString()};
+      ROOT=root;selectionScope={root,proseRoot,section,range,first:range.startContainer,last:range.endContainer,raw:range.toString()};
       if (!bar) buildBar();
       state='ready';render();return true;
     } catch (e) {
