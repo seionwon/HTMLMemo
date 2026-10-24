@@ -1,4 +1,12 @@
 import { LOCAL_CSP, SCRIPT_CSP, parseHTML } from './document.js';
+import { readMHTML } from './mhtml.js';
+
+const isMHTML = file => /\.(?:mhtml|mht)$/i.test(file.name||'') || /^(?:multipart\/related|application\/x-mimearchive)(?:;|$)/i.test(file.type||'');
+const hasDocumentExtension = file => /\.(?:html?|mhtml|mht)$/i.test(file?.name||'');
+export const isLocalHTMLFile = file => !!file && (hasDocumentExtension(file) || /^(?:text\/html|multipart\/related|application\/x-mimearchive)(?:;|$)/i.test(file.type||''));
+export function htmlExportName(name, annotations = false) {
+  return String(name||'문서.html').replace(/\.(?:html?|mhtml|mht)$/i,'')+(annotations?'-주석':'')+'.html';
+}
 
 const identities=new WeakMap(),localSources=new WeakMap();
 // File/Blob objects are immutable. Reuse only that exact object, never a name,
@@ -74,8 +82,13 @@ export async function findLocalDuplicates(local, records, loadRecord) {
 export async function readLocalHTML(input, {native = false, allowScripts = false, identify = true} = {}) {
   const originalHandle = input?.kind === 'file' && typeof input.getFile === 'function' ? input : null;
   const file = originalHandle ? await originalHandle.getFile() : input;
-  if (!file || typeof file.text !== 'function' || !/\.html?$/i.test(file.name || '') && file.type !== 'text/html') throw new Error('HTML 또는 HTM 파일을 선택해주세요.');
+  if (!isLocalHTMLFile(file) || typeof file.text !== 'function') throw new Error('HTML, HTM, MHTML 또는 MHT 파일을 선택해주세요.');
   const sourceIdentity=identify?await localFileIdentity(file):null;
+  if(isMHTML(file)){
+    const snapshot=await readMHTML(file);
+    const local={snapshot:{...snapshot,file:null,title:file.name},name:file.name,handle:null,originalHandle,sourceIdentity,diskStamp:originalHandle?{modified:file.lastModified,size:file.size}:null};
+    localSources.set(local,file);return local;
+  }
   // Inspect only the encoding header. Blob slices retain the original file bytes;
   // the browser streams/parses them without making a giant JS string first.
   let nativeFile = null;
@@ -116,14 +129,14 @@ export async function readLocalHTML(input, {native = false, allowScripts = false
 }
 export async function droppedHTMLFiles(dataTransfer) {
   const items = [...(dataTransfer.items || [])].filter(item=>item.kind==='file');
-  if(!items.length) return [...(dataTransfer.files || [])].filter(file=>/\.html?$/i.test(file.name));
+  if(!items.length) return [...(dataTransfer.files || [])].filter(hasDocumentExtension);
   // Acquire every handle before the first await, while still in the drop event.
   const pending=items.map(item=>{try{return Promise.resolve(item.getAsFileSystemHandle?.()).catch(()=>null);}catch{return Promise.resolve(null);}});
   const handles=await Promise.all(pending);const files=[];
   for(let i=0;i<items.length;i++) {
     const item=items[i];const handle=handles[i];
     const file=handle?.kind==='file'?handle:item.getAsFile?.();
-    if(file&&/\.html?$/i.test(file.name))files.push(file);
+    if(hasDocumentExtension(file))files.push(file);
   }
   return files;
 }

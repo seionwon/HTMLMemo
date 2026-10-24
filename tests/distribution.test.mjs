@@ -90,6 +90,13 @@ test('execution shares only the canonical URL, with no app package or installati
   assert.deepEqual(copied,[PUBLIC_APP_URL,PUBLIC_APP_URL]);assert.equal(app.blobs.length,0);assert.match(app.doc.querySelector('#share-status').textContent,/이 주소만 보내/);
   assert.equal(app.doc.querySelector('#save-page').textContent,'');assert.equal(app.doc.querySelector('#save-page').title,'URL 복사');assert.equal(app.doc.querySelector('#save-page').getAttribute('aria-label'),'URL 복사');assert.equal(app.doc.querySelector('#save-page').disabled,false);
 });
+test('MHTML import filters, installed file handlers and offline packaging include the archive decoder',async()=>{
+  const app=await fileApp();let options;app.context.window.showOpenFilePicker=async value=>{options=value;return [];};app.doc.querySelector('#import-button').onclick();await new Promise(resolve=>setImmediate(resolve));
+  assert.deepEqual(Array.from(options.types[0].accept['multipart/related']),['.mhtml','.mht']);assert.equal(options.multiple,true);
+  for(const suffix of ['.html','.htm','.mhtml','.mht'])assert.ok(app.doc.querySelector('#file-input').getAttribute('accept').split(',').includes(suffix));
+  const files=webFiles(assets),manifest=JSON.parse(text(files,'manifest.webmanifest'));assert.deepEqual(manifest.file_handlers[0].accept['multipart/related'],['.mhtml','.mht']);assert.ok(files.has('src/mhtml.js'));assert.match(text(files,'sw.js'),/\.\/src\/mhtml\.js/);
+  assert.match(text(files,'src/app.js'),/외부 사이트는 이 앱을 연 브라우저의 일반 탭에서 엽니다\.<br>웹 페이지를 하나의 파일로 저장한 다음, HTMLMemo에서 열면 됩니다\./);assert.doesNotMatch(text(files,'src/app.js'),/HTMLMemo 안에 넣지 않아 연결 거부 화면이 나오지 않습니다\./);
+});
 test('clipboard absence or denial selects the visible URL and restores the share controls',async()=>{
   for(const navigator of [{},{clipboard:{writeText:async()=>{throw new Error('Clipboard denied');}}}]){
     const app=await fileApp({navigator});app.doc.querySelector('#execution-tab').onclick();let selected=0;

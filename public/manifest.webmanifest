@@ -36,6 +36,14 @@
         "text/html": [
           ".html",
           ".htm"
+        ],
+        "multipart/related": [
+          ".mhtml",
+          ".mht"
+        ],
+        "application/x-mimearchive": [
+          ".mhtml",
+          ".mht"
         ]
       }
     }

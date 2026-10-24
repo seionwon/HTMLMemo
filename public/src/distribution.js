@@ -1,6 +1,6 @@
 import {crc32} from './zip.js';
 import { assetBytes, assetText } from './bundler.js';
-export const APP_FILES=['index.html','styles.css','manifest.webmanifest','sw.js','example.html','icons/icon.svg','icons/icon-192.png','icons/icon-512.png','shared/capture.js','src/app.js','src/web.js','src/document.js','src/local-files.js','src/migrate.js','src/model.js','src/reader.js','src/read-aloud.js','src/storage.js','src/utils.js','src/preferences.js','src/zip.js','src/bundler.js','src/distribution.js','src/install.js','src/version.js'];
+export const APP_FILES=['index.html','styles.css','manifest.webmanifest','sw.js','example.html','icons/icon.svg','icons/icon-192.png','icons/icon-512.png','shared/capture.js','src/app.js','src/web.js','src/document.js','src/local-files.js','src/mhtml.js','src/migrate.js','src/model.js','src/reader.js','src/read-aloud.js','src/storage.js','src/utils.js','src/preferences.js','src/zip.js','src/bundler.js','src/distribution.js','src/install.js','src/version.js'];
 export function cleanDistribution(assets){return {app:Object.fromEntries(APP_FILES.map(name=>[name,assets.app?.[name]]))};}
 export function pwaEntries(assets) {
   assets=cleanDistribution(assets);

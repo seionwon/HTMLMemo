@@ -5,7 +5,7 @@ import { openEditionProbe, migrateAnnotations } from './migrate.js';
 import { Reader } from './reader.js';
 import { listDocuments, getDocument, deleteDocument, getSetting, setSetting, saveDocumentHTML, listRevisionSummaries, getRevision, putDocumentRevision, putDocumentView, putDocumentSourceIdentity, writeExternalHTML } from './storage.js';
 import {readWebPage,pastedPage,PASTE_LIMIT,isWebSearch,BrowserTabs} from './web.js';
-import { readLocalHTML, droppedHTMLFiles, findLocalDuplicates, identifyLocalFile } from './local-files.js';
+import { readLocalHTML, droppedHTMLFiles, findLocalDuplicates, identifyLocalFile, htmlExportName } from './local-files.js';
 import { normalizePreferences, loadPreferences, storePreferences, serializeSettings, readSettingsFile, PRESET_COLORS, PRESET_PALETTES, normalizeHexColor, hexToRgb, rgbToHex, hexToHsv, hsvToHex } from './preferences.js';
 import {bundledExample} from './distribution.js';
 import { InstallController, isIOS, installableLocation, installationURL, PUBLIC_APP_URL } from './install.js';
@@ -23,6 +23,7 @@ const reader = () => active()?.reader;
 const savePicker = () => typeof window.showSaveFilePicker === 'function';
 const openPicker = () => typeof window.showOpenFilePicker === 'function';
 const htmlTypes = [{description:'HTML 문서',accept:{'text/html':['.html','.htm']}}];
+const importTypes = [{description:'HTML · MHTML 문서',accept:{'text/html':['.html','.htm'],'multipart/related':['.mhtml','.mht'],'application/x-mimearchive':['.mhtml','.mht']}}];
 const safely = fn => (...args) => { try { Promise.resolve(fn(...args)).catch(showError); } catch(error) { showError(error); } };
 function toast(message, error = false) { const el=$('#toast'); el.textContent=message; el.classList.toggle('error',error); el.hidden=false; clearTimeout(toast.timer); toast.timer=setTimeout(()=>el.hidden=true,error?6500:3500); }
 function showError(error) { if (error?.name !== 'AbortError') toast(error?.message || String(error),true); }
@@ -392,7 +393,7 @@ async function folderFile(title) {
 }
 async function importFiles() {
   if(!openPicker()){$('#file-input').click();return;}
-  let handles;try{handles=await window.showOpenFilePicker({types:htmlTypes,multiple:true});}catch(error){if(['SecurityError','NotSupportedError'].includes(error.name)){$('#file-input').click();return;}throw error;}
+  let handles;try{handles=await window.showOpenFilePicker({types:importTypes,multiple:true});}catch(error){if(['SecurityError','NotSupportedError'].includes(error.name)){$('#file-input').click();return;}throw error;}
   for(const handle of handles)await openLocalFile(handle);
 }
 function duplicateImportDialog(local, matches) {
@@ -473,14 +474,14 @@ async function exportDocument(tab) {
   // Invoke the picker before awaiting persistence, while the click still has user activation.
   let handle;
   if(savePicker()) {
-    try { handle=await window.showSaveFilePicker({suggestedName:tab.record.name.replace(/\.html?$/i,'-주석.html'),types:htmlTypes}); }
+    try { handle=await window.showSaveFilePicker({suggestedName:htmlExportName(tab.record.name,true),types:htmlTypes}); }
     catch(error){if(!['SecurityError','NotSupportedError'].includes(error.name))throw error;}
   }
   await tab.reader.ready;tab.reader.rememberPosition();await tab.queue.flush();
   const source = tab.reader.bookIntegrity?.complete ? await getDocument(tab.record.id) : null;
   const html=source ? await serializeBookSource(source.file || new Blob([source.html], {type:'text/html;charset=utf-8'}), tab.reader.metadata) : tab.reader.html();
   if(handle){const disk=await handle.getFile();await writeExternalHTML({fileHandle:handle,diskStamp:{modified:disk.lastModified,size:disk.size}},html);}
-  else download(html,tab.record.name);
+  else download(html,htmlExportName(tab.record.name));
   toast('현재 주석을 포함한 HTML을 내보냈습니다. 이후 주석은 앱에 자동 저장됩니다.');
 }
 
@@ -497,7 +498,7 @@ function resumeBrowser(){
 }
 function renderExternalTab(tab){
   const search=isWebSearch(tab.url);
-  tab.host.innerHTML=`<div class="browser-handoff"><div class="handoff-heading">${icon('external',32)}<p class="eyebrow">CHROME · HTMLMEMO</p><h2>${search?'검색은 Chrome에서, 메모는 여기서.':'웹 탐색은 Chrome에서, 주석은 여기서.'}</h2><p>외부 사이트는 이 앱을 연 브라우저의 일반 탭에서 엽니다.<br>HTMLMemo 안에 넣지 않아 연결 거부 화면이 나오지 않습니다.</p></div><p class="web-notice" data-web-status role="status"></p><div class="web-actions"><button class="primary-button" data-browser-focus>브라우저로 전환 ${icon('external',15)}</button><button class="secondary-button" data-browser-paste>글 붙여넣고 주석 달기</button><button class="secondary-button" data-browser-import>HTML 파일 가져오기</button></div><p class="handoff-return">Chrome 탭에서 필요한 글을 복사한 뒤 HTMLMemo 탭으로 돌아오세요.<br>읽던 문서와 주석은 그대로 유지됩니다. <kbd>Ctrl/⌘ Shift V</kbd>로 붙여넣기 창을 바로 열 수 있습니다.</p><details class="handoff-details"><summary>보낸 주소 · 직접 가져오기</summary><a data-open-external href="${esc(tab.url)}" target="_blank" rel="noopener noreferrer">${esc(tab.url)} ${icon('external',13)}</a><p>이 주소는 HTMLMemo에서 마지막으로 보낸 주소입니다. Chrome에서 이동한 현재 주소는 읽지 않습니다. 검색 결과의 글을 가져올 때는 붙여넣기 창에 실제 원문 주소를 넣으세요.</p><button class="secondary-button" data-capture${search?' disabled':''}>이 주소에서 직접 저장</button><p>검색 페이지는 직접 저장하지 않습니다. 일반 페이지도 사이트가 읽기를 허용할 때만 저장됩니다.</p></details></div>`;
+  tab.host.innerHTML=`<div class="browser-handoff"><div class="handoff-heading">${icon('external',32)}<p class="eyebrow">CHROME · HTMLMEMO</p><h2>${search?'검색은 Chrome에서, 메모는 여기서.':'웹 탐색은 Chrome에서, 주석은 여기서.'}</h2><p>외부 사이트는 이 앱을 연 브라우저의 일반 탭에서 엽니다.<br>웹 페이지를 하나의 파일로 저장한 다음, HTMLMemo에서 열면 됩니다.</p></div><p class="web-notice" data-web-status role="status"></p><div class="web-actions"><button class="primary-button" data-browser-focus>브라우저로 전환 ${icon('external',15)}</button><button class="secondary-button" data-browser-paste>글 붙여넣고 주석 달기</button><button class="secondary-button" data-browser-import>HTML 파일 가져오기</button></div><p class="handoff-return">Chrome 탭에서 필요한 글을 복사한 뒤 HTMLMemo 탭으로 돌아오세요.<br>읽던 문서와 주석은 그대로 유지됩니다. <kbd>Ctrl/⌘ Shift V</kbd>로 붙여넣기 창을 바로 열 수 있습니다.</p><details class="handoff-details"><summary>보낸 주소 · 직접 가져오기</summary><a data-open-external href="${esc(tab.url)}" target="_blank" rel="noopener noreferrer">${esc(tab.url)} ${icon('external',13)}</a><p>이 주소는 HTMLMemo에서 마지막으로 보낸 주소입니다. Chrome에서 이동한 현재 주소는 읽지 않습니다. 검색 결과의 글을 가져올 때는 붙여넣기 창에 실제 원문 주소를 넣으세요.</p><button class="secondary-button" data-capture${search?' disabled':''}>이 주소에서 직접 저장</button><p>검색 페이지는 직접 저장하지 않습니다. 일반 페이지도 사이트가 읽기를 허용할 때만 저장됩니다.</p></details></div>`;
   $('[data-browser-focus]',tab.host).onclick=()=>focusBrowserTab(tab);
   $('[data-browser-paste]',tab.host).onclick=()=>pasteTextDialog(tab);
   $('[data-browser-import]',tab.host).onclick=safely(importFiles);
@@ -1039,9 +1040,9 @@ function documentInfo(tab) {
   modal(`<div class="dialog-heading"><h2>문서 정보</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><dl class="document-info"><dt>제목</dt><dd>${esc(m.title)}</dd><dt>파일</dt><dd>${esc(tab.record.name)}</dd><dt>원본</dt><dd>${m.source?`<a href="${esc(m.source)}" target="_blank" rel="noopener noreferrer">${esc(m.source)}</a>`:'로컬 HTML 파일'}</dd><dt>저장 위치</dt><dd>앱 보관함 (원본 파일은 변경하지 않음)</dd><dt>주석</dt><dd>${m.annotations.length}개</dd></dl>${m.warnings.length?`<details class="capture-warnings"><summary>보관하지 못한 리소스 ${m.warnings.length}개</summary><ul>${m.warnings.map(w=>`<li>${esc(w)}</li>`).join('')}</ul></details>`:''}<p class="dialog-description small">본문은 보관한 상태로 유지하고 주석과 북마크를 별도로 자동 저장합니다. HTML 내보내기로 현재 주석을 포함한 사본을 만들 수 있어요.</p>`);
 }
 function pickHTMLFile() {
-  if(openPicker())return window.showOpenFilePicker({types:htmlTypes}).then(([handle])=>handle,error=>{if(['SecurityError','NotSupportedError'].includes(error.name))return inputFile();throw error;});
+  if(openPicker())return window.showOpenFilePicker({types:importTypes}).then(([handle])=>handle,error=>{if(['SecurityError','NotSupportedError'].includes(error.name))return inputFile();throw error;});
   return inputFile();
-  function inputFile(){return new Promise(resolve=>{const input=document.createElement('input');input.type='file';input.accept='.html,.htm,text/html';input.onchange=()=>resolve(input.files[0]||null);input.oncancel=()=>resolve(null);input.click();});}
+  function inputFile(){return new Promise(resolve=>{const input=document.createElement('input');input.type='file';input.accept=$('#file-input').getAttribute('accept');input.onchange=()=>resolve(input.files[0]||null);input.oncancel=()=>resolve(null);input.click();});}
 }
 // 「새 판으로 주석 옮기기」: the book was edited and exported again. Find every annotation of this
 // document in the new file and open the new file with them. This document stays as it is.

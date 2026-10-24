@@ -28,6 +28,51 @@ async function verifyLoadedSearchEnds(page,doc,prefix,total,click,screenshotName
   await enter(true);assert.deepEqual(await state(),expected(1));
   await click('[data-search-index="'+(total-1)+'"]');assert.deepEqual(await state(),expected(total));await click('[data-search-index="0"]');assert.deepEqual(await state(),expected(1));
 }
+test('real Chrome: MHTML import restores a Chrome archive, saves notes and exports self-contained HTML',{timeout:90000},async()=>{
+  await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-mhtml-'));await cp(join(root,'public'),folder,{recursive:true});
+  const server=createServer(folder),requests=[];
+  const site=createHTTPServer((request,response)=>{
+    requests.push(request.url);
+    if(request.url==='/assets/main.css'){response.setHeader('Content-Type','text/css');response.end('@import "type.css"; body{margin:0;padding:32px;font:18px/1.6 system-ui} #target{height:160px;color:rgb(22,40,62)} #photo{width:48px;height:48px}');}
+    else if(request.url==='/assets/type.css'){response.setHeader('Content-Type','text/css');response.end('h1{letter-spacing:2px} #target{background-image:url(picture.svg);background-repeat:no-repeat;background-position:right}');}
+    else if(request.url==='/assets/picture.svg'){response.setHeader('Content-Type','image/svg+xml');response.end('<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48"><rect width="48" height="48" fill="#f3c66b"/><path d="M10 24h28M24 10v28" stroke="#334155" stroke-width="3"/></svg>');}
+    else if(request.url==='/child.html'){response.setHeader('Content-Type','text/html; charset=utf-8');response.end('<!doctype html><html><head><title>Child</title></head><body><p id="child">보관된 프레임</p></body></html>');}
+    else {response.setHeader('Content-Type','text/html; charset=utf-8');response.end('<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>MHTML 보관 검증</title><link rel="stylesheet" href="/assets/main.css"><link rel="icon" href="data:,"></head><body><h1>MHTML 보관 검증</h1><p id="target">한글 본문과 그림을 보존하고 주석을 남깁니다.</p><img id="photo" src="/assets/picture.svg"><iframe title="저장된 프레임" src="/child.html"></iframe><a href="#target">본문으로</a></body></html>');}
+  });let chrome;
+  try{
+    await Promise.all([new Promise(resolve=>server.listen(0,'127.0.0.1',resolve)),new Promise(resolve=>site.listen(0,'127.0.0.1',resolve))]);chrome=await launchChrome();const page=chrome.page;
+    await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
+    const sourceURL=`http://127.0.0.1:${site.address().port}/article.html`;
+    await page.navigate(sourceURL);await page.waitFor('document.querySelector("#photo")?.complete&&document.querySelector("#photo").naturalWidth===48&&document.querySelector("iframe")?.contentDocument.querySelector("#child")&&getComputedStyle(document.querySelector("#target")).color==="rgb(22, 40, 62)"');
+    const {data:raw}=await page.send('Page.captureSnapshot',{format:'mhtml'});assert.match(raw,/multipart\/related/);const requestCount=requests.length;
+    const url=process.env.HTMLMEMO_SIDEBAR_TEST_URL||`http://127.0.0.1:${server.address().port}/`;await page.navigate(url);await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
+    await page.evaluate(`(async()=>{const root=await navigator.storage.getDirectory(),handle=await root.getFileHandle('Chrome.mhtml',{create:true}),writer=await handle.createWritable();await writer.write(${JSON.stringify(raw)});await writer.close();window.showOpenFilePicker=async options=>{window.mhtmlPickerOptions=options;return [handle];};})()`);
+    const frame='document.querySelector(".document-host:not([hidden]) iframe")',doc=frame+'.contentDocument',ready=frame+'?.style.visibility==="visible"&&!document.querySelector(".tab-dirty:not([hidden])")';
+    const verify=async()=>{
+      await page.waitFor(ready);await page.waitFor(`${doc}.querySelector('#photo')?.complete&&${doc}.querySelector('#photo').naturalWidth===48`);
+      const state=await page.evaluate(`(()=>{const d=${doc},target=d.querySelector('#target'),child=d.querySelector('iframe');return {title:d.title,text:target.textContent,color:d.defaultView.getComputedStyle(target).color,spacing:d.defaultView.getComputedStyle(d.querySelector('h1')).letterSpacing,background:d.defaultView.getComputedStyle(target).backgroundImage,image:d.querySelector('#photo').getAttribute('src'),frame:child?.getAttribute('srcdoc'),scripts:d.querySelectorAll('script:not([type="application/json"])').length};})()`);
+      assert.equal(state.title,'MHTML 보관 검증');assert.match(state.text,/한글 본문/);assert.equal(state.color,'rgb(22, 40, 62)');assert.equal(state.spacing,'2px');assert.match(state.background,/data:image\/svg\+xml;base64,/);assert.match(state.image,/^data:image\/svg\+xml;base64,/);assert.match(state.frame,/보관된 프레임/);assert.equal(state.scripts,0);assert.equal(requests.length,requestCount,'opening/reopening never fetches the source website');
+    };
+    const rows=()=>page.evaluate(`(async()=>{return (await import('./src/storage.js')).listDocuments();})()`);
+    const input=async(name,contents=raw)=>page.evaluate(`(()=>{const t=new DataTransfer();t.items.add(new File([${JSON.stringify(contents)}],${JSON.stringify(name)},{type:${JSON.stringify(/\.html?$/i.test(name)?'text/html':'multipart/related')}}));const input=document.querySelector('#file-input');input.files=t.files;input.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+    await page.click('#import-button');await verify();const original=(await rows())[0];assert.equal(original.name,'Chrome.mhtml');assert.equal(original.source,sourceURL);assert.equal(original.sourceIdentity.size,Buffer.byteLength(raw));assert.deepEqual(original.metadata.warnings,[]);assert.equal(original.metadata.execution.allowScripts,false);
+    assert.equal(await page.evaluate('window.mhtmlPickerOptions.types[0].accept["multipart/related"].includes(".mhtml")&&window.mhtmlPickerOptions.types[0].accept["multipart/related"].includes(".mht")'),true);
+    await page.click('#toolbar [data-action=note]');const point=await page.evaluate(`(()=>{const f=${frame},r=f.contentDocument.querySelector('#target').getBoundingClientRect(),b=f.getBoundingClientRect(),s=b.width/f.offsetWidth;return {x:b.left+(r.left+80)*s,y:b.top+(r.top+60)*s};})()`);
+    await page.send('Input.dispatchMouseEvent',{type:'mousePressed',...point,button:'left',buttons:1,clickCount:1});await page.send('Input.dispatchMouseEvent',{type:'mouseReleased',...point,button:'left',buttons:0,clickCount:1});await page.waitFor('document.querySelector("#dialog").open&&document.querySelector("#note-text")');await page.evaluate('document.querySelector("#note-text").value="MHTML에 남긴 주석"');await page.click('#dialog button[value=save]');
+    await page.waitFor(`(async()=>{return (await(await import('./src/storage.js')).getDocument(${JSON.stringify(original.id)})).metadata.annotations.some(a=>a.text==='MHTML에 남긴 주석');})()`);await verify();
+    await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/mhtml-import-1280.png'),await page.screenshot());
+    await page.navigate(url);await page.waitFor('document.querySelector("[data-open]")');await page.click('[data-open]');await verify();assert.equal((await rows())[0].metadata.annotations[0].text,'MHTML에 남긴 주석');
+    await input('renamed.MHT');await page.waitFor('document.querySelector("#dialog").open&&document.querySelector("[data-duplicate-import]")');await page.click('[data-duplicate-import] [value=existing]');await verify();assert.equal((await rows()).length,1);
+    await page.evaluate(`(()=>{const t=new DataTransfer();t.items.add(new File([${JSON.stringify(raw)}],'dropped.mht'));window.dispatchEvent(new DragEvent('drop',{dataTransfer:t,cancelable:true}));})()`);await page.waitFor('document.querySelector("#dialog").open&&document.querySelector("[data-duplicate-import]")');await page.click('[data-duplicate-import] [value=cancel]');await page.waitFor('!document.querySelector("#dialog").open');
+    await page.evaluate(`(async()=>{const root=await navigator.storage.getDirectory(),handle=await root.getFileHandle('exported.html',{create:true});window.showSaveFilePicker=async options=>{window.mhtmlExportOptions=options;return handle;};})()`);await page.click('#save-page');await page.waitFor('document.querySelector("#toast").textContent.includes("현재 주석을 포함한 HTML")');
+    const exported=await page.evaluate(`(async()=>{return (await(await(await navigator.storage.getDirectory()).getFileHandle('exported.html')).getFile()).text();})()`);assert.match(exported,/MHTML에 남긴 주석/);assert.match(exported,/data:image\/svg\+xml;base64,/);assert.doesNotMatch(exported,/multipart\/related/);assert.equal(await page.evaluate('window.mhtmlExportOptions.suggestedName'),'Chrome-주석.html');assert.deepEqual(await page.evaluate('Object.keys(window.mhtmlExportOptions.types[0].accept)'),['text/html']);
+    await input('roundtrip.html',exported);await page.waitFor('document.querySelectorAll(".tab.document").length===2&&'+ready);await verify();assert.equal((await rows()).length,2);assert.equal((await rows()).find(r=>r.name==='roundtrip.html').metadata.annotations[0].text,'MHTML에 남긴 주석');
+    assert.equal(await page.evaluate(`(async()=>{return (await(await(await navigator.storage.getDirectory()).getFileHandle('Chrome.mhtml')).getFile()).text();})()`),raw);
+    await page.send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await verify();await writeFile(join(root,'test-results/mhtml-import-390.png'),await page.screenshot());
+    await input('broken.mhtml','not a MIME archive');await page.waitFor('document.querySelector("#toast").classList.contains("error")&&document.querySelector("#toast").textContent.includes("MHTML")');assert.equal((await rows()).length,2);assert.deepEqual(chrome.errors,[]);
+  }catch(error){if(chrome)console.error('MHTML import diagnostics:',await chrome.page.evaluate('({status:document.querySelector("#status-left")?.textContent,toast:document.querySelector("#toast")?.textContent,dialog:document.querySelector("#dialog")?.textContent,frame:document.querySelector(".document-host:not([hidden]) iframe")?.contentDocument?.body?.innerText})'));throw error;}
+  finally{await chrome?.close();await Promise.all([new Promise(resolve=>server.close(resolve)),new Promise(resolve=>site.close(resolve))]);await rm(folder,{recursive:true,force:true});}
+});
 test('real Chrome: duplicate HTML import offers cancel, fresh annotations or existing notes',{timeout:90000},async()=>{
   await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-duplicate-import-'));await cp(join(root,'public'),folder,{recursive:true});
   const server=createServer(folder);let chrome;
@@ -444,6 +489,8 @@ test('real Chrome: Chrome companion search has no iframe, preserves the reader a
     await page.waitFor('document.querySelector("#dialog").open&&!!document.querySelector("#paste-source")');assert.equal(await page.evaluate('document.querySelector("#paste-source").value'),'');
     await page.click('#dialog [data-dialog-close]');
     await page.click('.tab.browser .tab-select');await page.send('Page.bringToFront');await page.waitFor('!document.querySelector(".browser-host").hidden');
+    assert.equal(await page.evaluate('document.querySelector(".handoff-heading > p:last-child").innerText'),'외부 사이트는 이 앱을 연 브라우저의 일반 탭에서 엽니다.\n웹 페이지를 하나의 파일로 저장한 다음, HTMLMemo에서 열면 됩니다.');
+    assert.equal(await page.evaluate('document.querySelector(".browser-host").textContent.includes("HTMLMemo 안에 넣지 않아 연결 거부 화면이 나오지 않습니다.")'),false);
     assert.equal(await page.evaluate('["#back","#forward","#reload"].every(s=>document.querySelector(s).disabled)'),true);
     assert.equal(await page.evaluate('document.querySelector("#save-page").getAttribute("aria-label")'),'Chrome에서 가져오기');
     await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/chrome-companion-desktop.png'),await page.screenshot());
