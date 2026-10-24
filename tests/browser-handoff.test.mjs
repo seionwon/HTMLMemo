@@ -37,6 +37,14 @@ test('same URL and web tab selection focus an existing browser tab without reloa
  const link=tab.host.querySelector('[data-open-external]');assert.equal(link.getAttribute('rel'),'noopener noreferrer');
  assert.doesNotMatch(source,/bridgeAvailable|discoverBridge|chrome\.runtime|chromeId|htmlmemo-extension/);
 });
+test('browser handoff status omits the redundant return guidance without changing return or blocked states',async()=>{
+ const a=app(),tab=await a.context.openBrowser('https://source.example/'),status=tab.host.querySelector('[data-web-status]');
+ assert.equal(status.textContent,'브라우저 탭으로 보냈습니다.');
+ assert.doesNotMatch(tab.host.textContent,/돌아오면 읽던 문서에서 계속 작업할 수 있습니다\./);
+ tab.returned=true;a.context.renderBrowserState(tab);
+ assert.equal(status.textContent,'HTMLMemo로 돌아왔습니다. 복사한 글을 붙여넣거나 저장한 HTML을 가져오세요.');
+ for(const state of ['blocked','unavailable']){tab.browserState=state;a.context.renderBrowserState(tab);assert.equal(status.textContent,'탭 열기 또는 전환이 제한됐습니다. 아래 「보낸 주소」의 링크를 눌러 직접 여세요.');}
+});
 test('blocked browser opening retains actionable fallback, text import and original URL without repeated automatic attempts',async()=>{
  const a=app();let calls=0;a.window.open=()=>{calls++;return null;};const tab=await a.context.openBrowser('https://source.example/');
  assert.match(tab.host.querySelector('[data-web-status]').textContent,/제한/);assert.equal(tab.host.querySelector('[data-open-external]').href,'https://source.example/');assert.ok(tab.host.querySelector('[data-browser-paste]'));

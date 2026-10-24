@@ -509,6 +509,7 @@ test('real Chrome: Chrome companion search has no iframe, preserves the reader a
     await page.click('.tab.browser .tab-select');await page.send('Page.bringToFront');await page.waitFor('!document.querySelector(".browser-host").hidden');
     assert.equal(await page.evaluate('document.querySelector(".handoff-heading > p:last-child").innerText'),'외부 사이트는 이 앱을 연 브라우저의 일반 탭에서 엽니다.\n웹 페이지를 하나의 파일로 저장한 다음, HTMLMemo에서 열면 됩니다.');
     assert.equal(await page.evaluate('document.querySelector(".browser-host").textContent.includes("HTMLMemo 안에 넣지 않아 연결 거부 화면이 나오지 않습니다.")'),false);
+    assert.equal(await page.evaluate('document.querySelector(".browser-host").textContent.includes("돌아오면 읽던 문서에서 계속 작업할 수 있습니다.")'),false);
     assert.equal(await page.evaluate('["#back","#forward","#reload"].every(s=>document.querySelector(s).disabled)'),true);
     assert.equal(await page.evaluate('document.querySelector("#save-page").getAttribute("aria-label")'),'Chrome에서 가져오기');
     await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/chrome-companion-desktop.png'),await page.screenshot());
