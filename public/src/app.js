@@ -548,7 +548,7 @@ function renderBrowserState(tab){
   const status=$('[data-web-status]',tab.host),capture=$('[data-capture]',tab.host);if(!status)return;
   if(tab.external){
     const unavailable=tab.browserState==='blocked'||tab.browserState==='unavailable';
-    status.textContent=unavailable?'탭 열기 또는 전환이 제한됐습니다. 아래 「보낸 주소」의 링크를 눌러 직접 여세요.':tab.returned?'HTMLMemo로 돌아왔습니다. 복사한 글을 붙여넣거나 저장한 HTML을 가져오세요.':'브라우저 탭으로 보냈습니다.';
+    status.textContent=unavailable?'탭 열기 또는 전환이 제한됐습니다. 아래 「보낸 주소」의 링크를 눌러 직접 여세요.':tab.returned?'복사한 글을 붙여넣거나 저장한 HTML을 가져오세요.':'브라우저 탭으로 보냈습니다.';
     $('[data-browser-focus]',tab.host).textContent=browserTabs.available(tab.id)?'브라우저로 전환':'브라우저에서 다시 열기';
     capture.disabled=!!tab.capturing||isWebSearch(tab.url);
     return;
