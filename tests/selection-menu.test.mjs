@@ -28,7 +28,7 @@ test('the remaining selection menu buttons preserve the selection on pointer act
   assert.equal(prevented,2);assert.strictEqual(a.r.selection,anchor);
 });
 
-test('Read aloud uses the captured quote and only dismisses the menu when reading starts',async()=>{
+test('Read aloud uses the captured quote and only dismisses the menu when the player accepts it',async()=>{
   for(const speech of [true,false]){const a=fixture({speech}),quote=a.r.selection.quote;a.show();a.r.selection={quote:'다른 선택'};await a.pop.querySelector('[data-selection=speak]').onclick();assert.deepEqual(a.spoken,[quote]);assert.deepEqual(a.urls,[]);assert.equal(a.pop.hidden,speech);}
 });
 

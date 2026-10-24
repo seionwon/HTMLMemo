@@ -43,6 +43,7 @@ jobs:
             test-results/tab-sizing-failure.json
             test-results/tts-resume-*.json
             test-results/tts-controls-*.json
+            test-results/tts-selection-*.json
             test-results/sidebar-views-collapse-*.json
             test-results/toolbar-modes-selection-note-*.json
             test-results/*.png
@@ -96,7 +97,7 @@ jobs:
           console.log('Published app, reader and model match this commit.');
           NODE
           mkdir -p test-results
-          node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/published-browser-results.xml --test-name-pattern='MHTML import|compact library|whole-book search|long-document search|duplicate HTML import|reading controls|palette controls|toolbar mode groups|sidebar view choices|annotation tree|font-scaled pen|Pages-only|Chrome companion|adaptive file tabs|TTS paused resume|TTS transport controls' tests/browser.integration.mjs
+          node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/published-browser-results.xml --test-name-pattern='MHTML import|compact library|whole-book search|long-document search|duplicate HTML import|reading controls|palette controls|toolbar mode groups|sidebar view choices|annotation tree|font-scaled pen|Pages-only|Chrome companion|adaptive file tabs|TTS paused resume|TTS transport controls|TTS selection' tests/browser.integration.mjs
       - name: Keep published desktop and mobile verification screenshots
         if: always()
         uses: actions/upload-artifact@v4
@@ -113,6 +114,8 @@ jobs:
             test-results/tts-resume-*.png
             test-results/tts-controls-*.json
             test-results/tts-controls-*.png
+            test-results/tts-selection-*.json
+            test-results/tts-selection-*.png
             test-results/tab-sizing-*.png
             test-results/search-index-*.png
             test-results/mhtml-import-*.png

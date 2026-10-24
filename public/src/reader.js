@@ -2346,25 +2346,17 @@ export class Reader {
   }
   outline() { return [...this.doc.querySelectorAll('h1,h2,h3,h4,h5,h6')].filter(n=>n.textContent.trim()&&!n.closest('[data-htmlmemo-ui]')).map(node=>({node,level:Number(node.localName[1]),title:node.textContent.trim()})); }
   addBookmark(title) { this.metadata.bookmarks.push({id:uid(),title,top:this.scrollTop/this.zoom,left:this.scrollLeft/this.zoom}); this.callbacks.onChange?.(); }
-  speakSelection() {
-    const anchor = this.selection || (() => {
-      const selection = this.doc.getSelection();
-      return selection?.rangeCount && !selection.isCollapsed ? selectionAnchor(this.doc, selection.getRangeAt(0)) : null;
-    })();
-    if (!anchor) return false;
-    // HTMLMemoEx tab.js/content.js selectionAction('speak'), with the host window
-    // supplying the browser API because the document lives inside our reader iframe.
-    const window = this.host.ownerDocument.defaultView, document = this.doc;
-    const { speechSynthesis, SpeechSynthesisUtterance } = window;
-    if (!window.speechSynthesis) { this.callbacks.onError?.(new Error('기기의 음성 읽기를 지원하지 않습니다.')); return false; }
-    this.readAloud?.close();
-    speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(anchor.quote); u.lang = /[가-힣]/.test(anchor.quote) ? 'ko-KR' : (document.documentElement.lang || 'en-US'); speechSynthesis.speak(u);
-    return true;
+  readAloudPlayer() {
+    if(this.disposed||this.host.hidden)return null;
+    if(!this.host.ownerDocument.defaultView.speechSynthesis){this.callbacks.onError?.(new Error('기기의 음성 읽기를 지원하지 않습니다.'));return null;}
+    return this.readAloud ||= createReadAloud(this);
+  }
+  speakSelection(anchor=this.selection||this.captureTextSelection()) {
+    if(!anchor?.quote?.trim())return false;
+    return this.readAloudPlayer()?.openSelection(anchor)||false;
   }
   toggleReadAloud() {
-    if (!this.host.ownerDocument.defaultView.speechSynthesis) { this.callbacks.onError?.(new Error('기기의 음성 읽기를 지원하지 않습니다.'));return; }
-    this.readAloud ||= createReadAloud(this);
-    this.readAloud?.toggle();
+    this.readAloudPlayer()?.toggle();
   }
   stopSpeech() { this.readAloud?.close(); this.host?.ownerDocument?.defaultView?.speechSynthesis?.cancel(); }
   dispose() {

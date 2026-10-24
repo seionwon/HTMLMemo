@@ -1,5 +1,6 @@
 // Ported from MemoSuite MemoReadAloud.tsx (UI) and readAloudRuntime.ts (browser engine).
 // See docs/tts-source.md for provenance and the iframe/lifecycle adapters.
+import {currentSection,textIndex,resolveTextAnchor,rangeFromOffsets} from './document.js';
 const PLAYER_CSS = String.raw`
 .mstts-player {
   position: fixed; z-index: 9000;
@@ -389,7 +390,7 @@ export function createReadAloud(reader) {
   // to the top of that range before the next sentence brings it back.
   var BLOCK = 'p, li, h1, h2, h3, h4, h5, h6, blockquote, pre, td, th, dt, dd, figcaption, section, article, div, nav, aside, header, footer, main, details, summary, table, tr';
   function blockOf(n) { var e = n.parentElement; return e ? e.closest(BLOCK) : null; }
-  function buildIndex(root) {
+  function buildIndex(root, range = null) {
     var parts = [], mathRanges = [], text = '', prevBlock = null;
     var walker = D.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
       acceptNode: function (n) {
@@ -401,12 +402,16 @@ export function createReadAloud(reader) {
     });
     var n;
     while ((n = walker.nextNode())) {
-      var data = n.data, pe2 = n.parentElement;
+      if (range && !range.intersectsNode(n)) continue;
+      var from = range && range.startContainer === n ? range.startOffset : 0;
+      var to = range && range.endContainer === n ? range.endOffset : n.data.length;
+      if (to <= from) continue;
+      var data = n.data.slice(from,to), pe2 = n.parentElement;
       var blk = blockOf(n);
       if (prevBlock && blk !== prevBlock) text += '\n';   // block boundary = sentence boundary
       prevBlock = blk;
       if (pe2 && pe2.closest('annotation')) mathRanges.push({ start: text.length, end: text.length + data.length, tex: data });
-      parts.push({ node: n, start: text.length });
+      parts.push({ node: n, start: text.length, offset:from, length:to-from });
       text += data;
     }
     return { text: text, parts: parts, mathRanges: mathRanges };
@@ -418,16 +423,16 @@ export function createReadAloud(reader) {
     for (var i = parts.length - 1; i >= 0; i--) {
       var pt = parts[i];
       if (isEnd ? offset > pt.start : offset >= pt.start) {
-        return { node: pt.node, offset: Math.max(0, Math.min(offset - pt.start, pt.node.data.length)) };
+        return { node: pt.node, offset: pt.offset + Math.max(0, Math.min(offset - pt.start, pt.length)) };
       }
     }
-    return parts.length ? { node: parts[0].node, offset: 0 } : null;
+    return parts.length ? { node: parts[0].node, offset: parts[0].offset } : null;
   }
-  function splitSentences(text) {
+  function splitSentences(text, allowShort = false) {
     var seg = [], re = /[^.!?…。\n]+[.!?…。]*\s*/g, m;
     while ((m = re.exec(text))) {
       var raw = m[0], t = raw.trim();
-      if (t.length >= 2 && /[\p{L}\p{N}]/u.test(t)) {
+      if (t.length >= (allowShort ? 1 : 2) && /[\p{L}\p{N}]/u.test(t)) {
         seg.push({ start: m.index + (raw.length - raw.replace(/^\s+/, '').length), end: m.index + raw.replace(/\s+$/, '').length });
       }
       if (seg.length > 6000) break;
@@ -467,6 +472,7 @@ export function createReadAloud(reader) {
   var idx = null;
   var activeUtterance = null, startTimer = null;
   var pausedAt = null, pausedTarget = null, pausedSelection = null;
+  var selectionScope = null;             // pinned DOM range; never expands to the document
   var rate = (function () { var v = Number(ls(RATE_KEY)); return RATES.indexOf(v) >= 0 ? v : 1; })();
   var lang = (function () { var v = ls(LANG_KEY); return v && UTTER_TAG[v] ? v : (UTTER_TAG[BOOK_LANG] ? BOOK_LANG : 'en'); })();
   var languageChoice = ls(LANG_KEY) || 'auto';
@@ -630,6 +636,8 @@ export function createReadAloud(reader) {
   function closePanel() { if (panel) { panel.remove(); panel = null; } }
   function render() {
     if (!bar) return;
+    bar.dataset.ttsScope = selectionScope ? 'selection' : 'document';
+    bar.setAttribute('aria-label',selectionScope ? '선택한 텍스트 낭독' : '낭독');
     btnPlay.textContent = state === 'playing' ? '⏸' : '▶';
     btnPlay.title = state === 'playing' ? lb('pause', 'Pause') : lb('play', 'Read aloud');btnPlay.setAttribute('aria-label',btnPlay.title);
     btnPlay.setAttribute('aria-pressed',String(state === 'playing'));
@@ -696,6 +704,41 @@ export function createReadAloud(reader) {
     return a === b || !!a && !!b && a.node === b.node && a.offset === b.offset && a.endNode === b.endNode && a.endOffset === b.endOffset;
   }
   function resetPause() { pausedAt = pausedTarget = pausedSelection = null; }
+  function scopeIsCurrent() {
+    if (!selectionScope) return true;
+    try {
+      var scope=selectionScope;
+      return !reader.disposed && !reader.host.hidden && scope.root===readAloudRoot(D) && scope.section===currentSection(D) &&
+        scope.root.contains(scope.first) && scope.root.contains(scope.last) && scope.range.toString()===scope.raw;
+    } catch (e) {return false;}
+  }
+  function invalidateSelection() {
+    stop();run=idx=null;
+    reader.callbacks?.onNotice?.('선택한 글이 바뀌었거나 다른 장으로 이동했습니다. 글을 다시 선택해 읽어주세요.');
+  }
+  function readingIndex() {
+    ROOT=readAloudRoot(D);
+    if (!scopeIsCurrent()) {invalidateSelection();return null;}
+    return buildIndex(ROOT,selectionScope?.range);
+  }
+  function openSelection(anchor) {
+    if (!anchor?.quote?.trim() || reader.disposed || reader.host.hidden) return false;
+    try {
+      var root=readAloudRoot(D),section=currentSection(D),index=textIndex(D),resolved=resolveTextAnchor(index,anchor);
+      var range=resolved && rangeFromOffsets(D,resolved.start,resolved.end,index);
+      if ((anchor.section||'')!==section || !range || !root.contains(range.startContainer) || !root.contains(range.endContainer)) throw new Error('Missing selection');
+      ROOT=root;
+      if (!splitSentences(buildIndex(root,range).text,true).length) {
+        reader.callbacks?.onNotice?.('선택한 부분에 읽을 수 있는 본문이 없습니다.');return false;
+      }
+      stop();run=idx=null;
+      selectionScope={root,section,range,first:range.startContainer,last:range.endContainer,raw:range.toString()};
+      if (!bar) buildBar();
+      state='ready';render();return true;
+    } catch (e) {
+      reader.callbacks?.onNotice?.('선택한 글의 위치를 찾지 못했습니다. 글을 다시 선택해 주세요.');return false;
+    }
+  }
   function beginReading(index, sents, at) {
     if (run) run.stopped = true;
     cancelSpeech();idx = index;resetPause();
@@ -704,24 +747,24 @@ export function createReadAloud(reader) {
     state = 'playing';render();speakFrom(at);
   }
   function startReading() {
-    ROOT = readAloudRoot(D);
-    var index = buildIndex(ROOT);
-    var sents = splitSentences(index.text);
-    beginReading(index, sents, firstVisibleSentence(sents, index));
+    var index = readingIndex();if(!index)return;
+    var sents = splitSentences(index.text,!!selectionScope);
+    beginReading(index, sents, selectionScope ? 0 : firstVisibleSentence(sents, index));
   }
   function resumeReading() {
     var position = readingPosition();
     ROOT = position.root;
     // Rebuild on an explicit Play so a new/lazy chapter never uses old text or DOM ranges.
-    var index = buildIndex(ROOT), sents = splitSentences(index.text);
-    var unchanged = run && idx && samePosition(pausedAt, position) && idx.text === index.text;
-    var at = unchanged ? Math.min(run.i, sents.length-1) : firstVisibleSentence(sents, index);
+    var index = readingIndex();if(!index)return;
+    var sents = splitSentences(index.text,!!selectionScope);
+    var unchanged = run && idx && (selectionScope || samePosition(pausedAt, position)) && idx.text === index.text;
+    var at = unchanged ? Math.min(run.i, sents.length-1) : selectionScope ? 0 : firstVisibleSentence(sents, index);
     if (pausedTarget && samePosition(pausedTarget.position, position)) {
       var target = pausedTarget.point, textTarget = target.node.nodeType === 3;
       var child = !textTarget && target.node.childNodes[target.offset];
       var part = index.parts.find(function (p) {return textTarget ? p.node === target.node : child && (child === p.node || child.contains(p.node));});
       if (part) {
-        var flat = part.start + (textTarget ? Math.min(target.offset, part.node.data.length) : 0);
+        var flat = part.start + (textTarget ? Math.max(0,Math.min(target.offset-part.offset,part.length)) : 0);
         var selected = sents.findIndex(function (sent) {return flat < sent.end;});
         if (selected >= 0) at = selected;
       }
@@ -731,12 +774,14 @@ export function createReadAloud(reader) {
   function speakFrom(i) {
     var ctx = run;
     if (!ctx || ctx.stopped) return;
+    if (!scopeIsCurrent()) {invalidateSelection();return;}
     if (i >= ctx.sents.length) { stop(); return; }
     ctx.i = i; render();
     var sent = ctx.sents[i];
     // Paint the sentence + follow it without bobbing (twin of the in-app band rule).
     try {
-      if (!idx) idx = buildIndex(ROOT);
+      if (!idx) idx = readingIndex();
+      if (!idx) return;
       // The sentence carries its own offsets into idx.text. Searching by TEXT (indexOf) matched the
       // FIRST occurrence, so a repeated sentence sent the highlight back up the page and the next
       // one brought it down again.
@@ -806,6 +851,7 @@ export function createReadAloud(reader) {
   function jump(to) {
     closePanel();
     if (!run) return;
+    if (!scopeIsCurrent()) {invalidateSelection();return;}
     resetPause();
     var target = Math.min(Math.max(0, to), run.sents.length - 1);
     run.stopped = true;                 // silence the old run FIRST so its onend can't advance
@@ -816,12 +862,11 @@ export function createReadAloud(reader) {
   }
   function jumpBy(delta) {
     if (run) { jump(run.i + delta); return; }
-    ROOT = readAloudRoot(D);
-    var index = buildIndex(ROOT);
-    var sents = splitSentences(index.text);
+    var index = readingIndex();if(!index)return;
+    var sents = splitSentences(index.text,!!selectionScope);
     if (!sents.length) return;
     idx = index;
-    var at = firstVisibleSentence(sents, index);
+    var at = selectionScope ? 0 : firstVisibleSentence(sents, index);
     run = { sents: sents, i: at, stopped: true };
     jump(at + delta);
   }
@@ -849,13 +894,13 @@ export function createReadAloud(reader) {
     resetPause();
     if (run) run.stopped = true;
     cancelSpeech(); clearPaint();
-    run = null; state = 'idle';
+    run = idx = selectionScope = null; state = 'idle';
     if (bar) { bar.remove(); bar = null; }
     render();
   }
 
   listen(D,'selectionchange',function () {
-    if (state !== 'paused') return;
+    if (state !== 'paused' || selectionScope) return;
     var target = selectedPosition();
     if (sameSelection(target, pausedSelection)) return;
     pausedSelection = target;
@@ -875,12 +920,13 @@ export function createReadAloud(reader) {
     if (sel && !sel.isCollapsed) return;
     var pt = caretAt(e.clientX, e.clientY);
     if (!pt || pt.node.nodeType !== 3) return;
+    if (selectionScope && (!scopeIsCurrent() || !idx?.parts.some(part=>part.node===pt.node && pt.offset>=part.offset && pt.offset<=part.offset+part.length))) return;
     if (state === 'paused') {pausedTarget = {point:pt,position:readingPosition(),selection:false};clearPaint();return;}
     if (!run || !idx) return;
     var part = null;
     for (var i = 0; i < idx.parts.length; i++) if (idx.parts[i].node === pt.node) { part = idx.parts[i]; break; }
     if (!part) return;
-    var flat = part.start + pt.offset;
+    var flat = part.start + pt.offset - part.offset;
     for (var k = 0; k < run.sents.length; k++) if (flat <= run.sents[k].end) { jump(k); return; }
   }, true);
 
@@ -891,6 +937,7 @@ export function createReadAloud(reader) {
   listen(W,'resize',()=>{if(!bar)return;const r=bar.getBoundingClientRect();bar.style.left=Math.max(4,Math.min(r.left,W.innerWidth-r.width-4))+'px';bar.style.top=Math.max(4,Math.min(r.top,W.innerHeight-r.height-4))+'px';bar.style.bottom='auto';if(panel)placePanel();});
   return {
     toggle() { if(state !== 'idle') {close();return;} buildBar();state='ready';render(); },
+    openSelection,
     close,
     escape() {if(state==='idle')return false;if(panel)closePanel();else close();return true;},
     dispose() {close();events.abort();if(highlightSheet)D.adoptedStyleSheets=D.adoptedStyleSheets.filter(s=>s!==highlightSheet);},

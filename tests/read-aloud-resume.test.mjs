@@ -1,19 +1,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createReadAloud} from '../public/src/read-aloud.js';
-import {documentFor,NodeFilter} from './dom.mjs';
+import {documentFor,NodeFilter,installDOM} from './dom.mjs';
+import {textIndex,selectionAnchor,currentSection} from '../public/src/document.js';
 
-function fixture({gap=500}={}){
+function fixture({gap=500,html,stored=[],voices=[],paint=false}={}){
+  installDOM();
   const ui=documentFor('<html lang="ko"><head></head><body><div id="app"><div id="host"></div></div></body></html>');
-  const doc=documentFor('<html><head></head><body><main><p>첫 번째 문장입니다.</p><p>두 번째 문장입니다.</p><p>세 번째 문장입니다.</p><p>네 번째 문장입니다.</p></main></body></html>');
-  const DomEvent=doc.defaultView.Event,spoken=[],settings=new Map(),timers=new Map(),notices=[];let selection={isCollapsed:true,rangeCount:0},point=null,cancels=0,resumes=0,time=0,timerId=0;
-  const engine={paused:false,getVoices:()=>[],speak:utterance=>spoken.push(utterance),cancel:()=>{cancels++;},resume:()=>{resumes++;engine.paused=false;}};
+  const doc=documentFor(html||'<html><head></head><body><main><p>첫 번째 문장입니다.</p><p>두 번째 문장입니다.</p><p>세 번째 문장입니다.</p><p>네 번째 문장입니다.</p></main></body></html>');
+  const DomEvent=doc.defaultView.Event,spoken=[],settings=new Map(stored),timers=new Map(),notices=[];let selection={isCollapsed:true,rangeCount:0},point=null,cancels=0,resumes=0,time=0,timerId=0;
+  const engine={paused:false,getVoices:()=>voices,speak:utterance=>spoken.push(utterance),cancel:()=>{cancels++;},resume:()=>{resumes++;engine.paused=false;}};
   const win=new EventTarget();Object.assign(win,{AbortController,SpeechSynthesisUtterance:class{constructor(text){if(win.failUtterance)throw Error('Unavailable utterance');this.text=text;}},speechSynthesis:engine,setTimeout:(fn,ms)=>{const id=++timerId;timers.set(id,{fn,at:time+ms});return id;},clearTimeout:id=>timers.delete(id),localStorage:{getItem:key=>settings.get(key)||null,setItem:(key,value)=>settings.set(key,value)},innerWidth:1000,innerHeight:700});
-  Object.defineProperty(ui,'defaultView',{value:win});Object.defineProperty(doc,'defaultView',{value:{NodeFilter}});
+  const paints=new Map();Object.defineProperty(ui,'defaultView',{value:win});Object.defineProperty(doc,'defaultView',{value:{NodeFilter,...(paint?{CSS:{highlights:paints},Highlight:class{constructor(range){this.range=range;}}}:{})}});
   const reader={host:ui.querySelector('#host'),doc,metadata:{id:'resume-test'},callbacks:{onNotice:message=>notices.push(message)},zoom:1,scrollTop:0,scrollLeft:0,frame:{getBoundingClientRect:()=>({top:0})},viewport:{getBoundingClientRect:()=>({top:0,bottom:600,height:600})}};
   // The shared DOM adapter yields a boolean; TTS uses the browser's returned text node.
-  const createWalker=doc.createTreeWalker.bind(doc);doc.createTreeWalker=(...args)=>{const walker=createWalker(...args);return {nextNode:()=>walker.nextNode()?walker.currentNode:null};};
+  const createWalker=doc.createTreeWalker.bind(doc);doc.createTreeWalker=(...args)=>{const walker=createWalker(...args);return {get currentNode(){return walker.currentNode;},nextNode:()=>walker.nextNode()?walker.currentNode:null};};
   doc.getSelection=()=>selection;doc.caretPositionFromPoint=()=>point;
+  doc.createRange=()=>({setStart(node,offset){this.startContainer=node;this.startOffset=offset;},setEnd(node,offset){this.endContainer=node;this.endOffset=offset;},offsets(){const index=textIndex(doc),start=index.nodes.find(n=>n.node===this.startContainer),end=index.nodes.find(n=>n.node===this.endContainer);return {index,start:start?.start+this.startOffset,end:end?.start+this.endOffset};},toString(){const {index,start,end}=this.offsets();return index.text.slice(start,end);},intersectsNode(node){const {index,start,end}=this.offsets(),entry=index.nodes.find(n=>n.node===node);return !!entry&&entry.end>start&&entry.start<end;},getClientRects:()=>[],getBoundingClientRect:()=>({height:0})});
   function geometry(){[...doc.querySelectorAll('main p')].forEach((p,i)=>p.getBoundingClientRect=()=>({top:100+i*gap-reader.scrollTop,bottom:160+i*gap-reader.scrollTop,height:60}));}
   geometry();const player=createReadAloud(reader);player.toggle();
   const button=label=>ui.querySelector(`[aria-label="${label}"]`);
@@ -28,8 +31,12 @@ function fixture({gap=500}={}){
     selection={isCollapsed:true,rangeCount:0};const p=doc.querySelectorAll('main p')[index];point={offsetNode:p.firstChild,offset:0};
     const event=new DomEvent('click',{bubbles:true});Object.assign(event,{clientX:20,clientY:120});p.dispatchEvent(event);doc.dispatchEvent(new DomEvent('selectionchange'));
   }
+  function selectRange(startNode,startOffset,endNode=startNode,endOffset=endNode.data.length){
+    const range=doc.createRange();range.setStart(startNode,startOffset);range.setEnd(endNode,endOffset);selection={isCollapsed:false,rangeCount:1,getRangeAt:()=>range};
+    doc.dispatchEvent(new DomEvent('selectionchange'));const anchor=selectionAnchor(doc,range),section=currentSection(doc);return section?{...anchor,section}:anchor;
+  }
   function advance(ms){time+=ms;for(const[id,timer]of [...timers])if(timer.at<=time){timers.delete(id);timer.fn();}}
-  return {doc,ui,win,engine,reader,player,spoken,notices,play,pause,select,clickText,geometry,button,clickButton,advance,get cancels(){return cancels;},get resumes(){return resumes;},get timers(){return timers.size;}};
+  return {doc,ui,win,engine,reader,player,spoken,notices,settings,paints,play,pause,select,selectRange,clickText,geometry,button,clickButton,advance,get cancels(){return cancels;},get resumes(){return resumes;},get timers(){return timers.size;}};
 }
 test('paused Play repeats the current sentence when the reading position has not changed',()=>{
   const a=fixture();a.play();a.clickButton('다음 문장');assert.equal(a.spoken.at(-1).text,'두 번째 문장입니다.');a.pause();
@@ -118,4 +125,55 @@ test('unexpected native pauses recover only while the user still wants playback'
 test('failed reading preparation resets the button and reports a retryable failure',()=>{
   const a=fixture(),walker=a.doc.createTreeWalker;a.doc.createTreeWalker=()=>{throw Error('Reader temporarily unavailable');};a.play();assert.ok(a.button('소리내어 읽기'));assert.equal(a.notices.length,1);
   a.doc.createTreeWalker=walker;a.play();assert.equal(a.spoken.length,1);assert.ok(a.button('일시정지'));
+});
+
+test('selection reading reuses the existing ready player, saved voice and speed without autoplay',()=>{
+  const voice={voiceURI:'english-test',lang:'en-US',name:'Google English'},a=fixture({voices:[voice],stored:[['msuite_tts_rate','1.5'],['htmlmemo_tts_lang_resume-test','en'],['msuite_tts_voice_en','english-test']]}),bar=a.ui.querySelector('.mstts-player');
+  a.play();const old=a.spoken.at(-1),before=a.spoken.length,node=a.doc.querySelectorAll('p')[1].firstChild,anchor=a.selectRange(node,0);
+  assert.equal(a.player.openSelection(anchor),true);assert.strictEqual(a.ui.querySelector('.mstts-player'),bar);assert.equal(a.ui.querySelectorAll('.mstts-player').length,1);assert.equal(bar.dataset.ttsScope,'selection');assert.equal(a.spoken.length,before);assert.ok(a.button('소리내어 읽기'));
+  old.onend();old.onerror();assert.equal(a.spoken.length,before);a.play();assert.equal(a.spoken.at(-1).text,'두 번째 문장입니다.');assert.equal(a.spoken.at(-1).rate,1.5);assert.strictEqual(a.spoken.at(-1).voice,voice);
+});
+test('selection reading clips partial inline text at both ends and highlights only those offsets',()=>{
+  const a=fixture({paint:true,html:'<html><body><main><p>Outside. <em>selected one.</em></p><p><strong>selected two</strong> outside.</p><p>Untouched sentence.</p></main></body></html>'}),start=a.doc.querySelector('em').firstChild,end=a.doc.querySelector('strong').firstChild,paint=a.paints;
+  assert.equal(a.player.openSelection(a.selectRange(start,3,end,8)),true);a.play();assert.equal(a.spoken.at(-1).text,'ected one.');assert.equal(paint.get('mstts').range.startOffset,3);
+  a.spoken.at(-1).onend();assert.equal(a.spoken.at(-1).text,'selected');assert.strictEqual(paint.get('mstts').range.endContainer,end);assert.equal(paint.get('mstts').range.endOffset,8);
+  const count=a.spoken.length;a.spoken.at(-1).onend();assert.equal(a.spoken.length,count);assert.ok(a.button('소리내어 읽기'));assert.equal(paint.has('mstts'),false);
+});
+test('selection Pause and Play keep the pinned range despite scrolling or selecting outside it',()=>{
+  const a=fixture(),nodes=[...a.doc.querySelectorAll('p')].map(p=>p.firstChild);a.player.openSelection(a.selectRange(nodes[1],0,nodes[2],nodes[2].data.length));a.play();a.clickButton('다음 문장');a.pause();
+  a.selectRange(nodes[3],0);a.reader.scrollTop=1500;const count=a.spoken.length;a.play();assert.equal(a.spoken.length,count+1);assert.equal(a.spoken.at(-1).text,'세 번째 문장입니다.');
+  a.pause();a.clickText(0);a.play();assert.equal(a.spoken.at(-1).text,'세 번째 문장입니다.');assert.equal(a.spoken.some(u=>/첫 번째|네 번째/.test(u.text)),false);
+});
+test('selection sentence navigation and Stop never escape the selected bounds',()=>{
+  const a=fixture(),nodes=[...a.doc.querySelectorAll('p')].map(p=>p.firstChild);a.player.openSelection(a.selectRange(nodes[1],0,nodes[2],nodes[2].data.length));a.play();a.clickButton('이전 문장');assert.equal(a.spoken.at(-1).text,'두 번째 문장입니다.');
+  a.clickButton('다음 문장');a.clickButton('다음 문장');assert.equal(a.spoken.at(-1).text,'세 번째 문장입니다.');a.clickButton('정지');a.play();assert.equal(a.spoken.at(-1).text,'두 번째 문장입니다.');assert.equal(a.spoken.some(u=>/첫 번째|네 번째/.test(u.text)),false);
+});
+test('a new selection replaces the old scope without another player or stale speech callbacks',()=>{
+  const a=fixture(),nodes=[...a.doc.querySelectorAll('p')].map(p=>p.firstChild),bar=a.ui.querySelector('.mstts-player');a.player.openSelection(a.selectRange(nodes[0],0));a.play();const old=a.spoken.at(-1);
+  a.player.openSelection(a.selectRange(nodes[2],0));const count=a.spoken.length;old.onend();old.onerror();assert.equal(a.spoken.length,count);assert.strictEqual(a.ui.querySelector('.mstts-player'),bar);a.play();assert.equal(a.spoken.at(-1).text,'세 번째 문장입니다.');
+});
+test('selection text replacement and chapter changes stop safely instead of reading other content',()=>{
+  for(const change of ['text','chapter']){
+    const a=fixture({html:'<html><body><main><article id="reader-content" data-section="one"><p>선택한 문장입니다.</p><p>선택한 문장입니다.</p></article></main></body></html>'}),node=a.doc.querySelector('p').firstChild;a.player.openSelection(a.selectRange(node,0));a.play();a.pause();
+    if(change==='text')node.data='다른 문장으로 바뀌었습니다.';else {a.doc.querySelector('article').dataset.section='two';a.doc.querySelector('article').innerHTML='<p>선택한 문장입니다.</p>';}
+    const count=a.spoken.length;a.play();assert.equal(a.spoken.length,count);assert.ok(a.button('소리내어 읽기'));assert.equal(a.notices.length,1);
+  }
+});
+test('selection callbacks cannot advance after the selected DOM is replaced during playback',()=>{
+  const a=fixture(),nodes=[...a.doc.querySelectorAll('p')].map(p=>p.firstChild);a.player.openSelection(a.selectRange(nodes[1],0,nodes[2],nodes[2].data.length));a.play();const old=a.spoken.at(-1);a.doc.querySelector('main').innerHTML='<p>다른 내용입니다.</p>';
+  const count=a.spoken.length;old.onend();assert.equal(a.spoken.length,count);assert.ok(a.button('소리내어 읽기'));assert.equal(a.notices.length,1);
+});
+test('closing selection mode restores ordinary document reading and retains shared speed settings',()=>{
+  const a=fixture(),node=a.doc.querySelectorAll('p')[2].firstChild;a.player.openSelection(a.selectRange(node,0));a.clickButton('읽는 속도');a.play();assert.equal(a.spoken.at(-1).rate,1.25);a.player.close();a.player.toggle();
+  assert.equal(a.ui.querySelector('.mstts-player').dataset.ttsScope,'document');a.reader.scrollTop=0;a.play();assert.equal(a.spoken.at(-1).text,'첫 번째 문장입니다.');assert.equal(a.spoken.at(-1).rate,1.25);
+});
+test('unresolvable, hidden, stale-chapter or non-readable selections never fall back to full document speech',()=>{
+  for(const kind of ['missing','hidden','chapter','skipped']){
+    const a=fixture({html:'<html><body><main><article id="reader-content" data-section="one"><p>읽을 본문입니다.</p><pre>읽지 않는 코드입니다.</pre></article></main></body></html>'}),node=a.doc.querySelector(kind==='skipped'?'pre':'p').firstChild,anchor=a.selectRange(node,0);
+    if(kind==='missing')anchor.quote='없는 글입니다.';else if(kind==='hidden')a.reader.host.hidden=true;else if(kind==='chapter')anchor.section='other';
+    assert.equal(a.player.openSelection(anchor),false,kind);assert.equal(a.spoken.length,0);
+  }
+});
+test('an explicitly selected single letter is readable without including its neighbors',()=>{
+  const a=fixture(),node=a.doc.querySelector('p').firstChild;assert.equal(a.player.openSelection(a.selectRange(node,0,node,1)),true);a.play();assert.equal(a.spoken.at(-1).text,'첫');const count=a.spoken.length;a.spoken.at(-1).onend();assert.equal(a.spoken.length,count);
 });
