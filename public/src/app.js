@@ -610,13 +610,13 @@ function renderToolbar() {
   $('#toolbar').innerHTML=`<button class="toolbar-grip" aria-label="툴바 이동">${icon('grip',14)}</button><span class="tool-group">${toolbarButton('select','select','선택 / 읽기 (V)')}${toolbarButton('pen','pen','펜 (P)')}${toolbarButton('highlight','highlight','형광펜 (H)')}${toolbarButton('underline','underline','밑줄 (U)')}${toolbarButton('eraser','eraser','지우개 (E)')}${toolbarButton('note','note','메모 (N)')}</span><span class="toolbar-divider"></span>${toolbarButton('palette','palette','색상 · 굵기 · 투명도 설정','class="tool-button palette-button"')}<span class="tool-group toolbar-history">${toolbarButton('undo','undo','실행 취소 (Ctrl/⌘ Z)')}${toolbarButton('redo','redo','다시 실행 (Ctrl/⌘ Shift Z)')}</span><span class="toolbar-divider"></span>${toolbarButton('more','more','더 많은 도구')}`;
   $$('[data-action]',$('#toolbar')).forEach(button=>{
     const action=button.dataset.action,modes=annotationToolModes(action);
-    button.onpointerdown=e=>{if(e.pointerType==='mouse')e.preventDefault();};
+    button.onpointerdown=e=>{if(e.pointerType==='mouse'||(action==='note'&&r.selection?.quote?.trim()))e.preventDefault();};
     button.onclick=()=>{
       // A fresh text selection must still be annotated on every click, even when
       // this tool (or its area variant) was already selected. Options remain on ↓.
-      if(['highlight','underline'].includes(action)&&r.selection?.quote?.trim()){toolAction(action);return;}
-      if(modes&&annotationToolFamily(r.tool)===action)showAnnotationToolModes(action);
-      else toolAction(modes?(r.toolChoices?.[action]||action):action);
+      if(['highlight','underline','note'].includes(action)&&r.selection?.quote?.trim())return toolAction(action);
+      if(modes&&annotationToolFamily(r.tool)===action)return showAnnotationToolModes(action);
+      return toolAction(modes?(r.toolChoices?.[action]||action):action);
     };
     if(modes){
       button.classList.add('tool-has-modes');button.setAttribute('aria-haspopup','menu');button.setAttribute('aria-expanded','false');
@@ -869,10 +869,7 @@ function showSelectionMenu(r) {
       button.onclick=safely(async()=>{
         const action=button.dataset.selection;
         if(['highlight','underline'].includes(action))r.addText(action,anchor);
-        else if(action==='note'){
-          const text=await promptText('메모','');
-          if(text?.trim())r.addText('note',anchor,text.trim());
-        }
+        else if(action==='note')await r.addSelectionNote(anchor);
         else if(action==='copy'){try{await navigator.clipboard.writeText(anchor.quote);toast('텍스트를 복사했습니다.');}catch{toast('글자를 다시 선택한 뒤 Ctrl/⌘+C로 복사하세요.');}}
         else if(action==='speak'){r.selection=anchor;if(!r.speakSelection())return;}
         else if(action==='webSearch')await openBrowser('https://www.google.com/search?q='+encodeURIComponent(anchor.quote.slice(0,2000)));
@@ -884,6 +881,7 @@ function showSelectionMenu(r) {
 function toolAction(action,button=null) {
   const r=reader();if(!r)return;
   if(action==='speak'){closePopover();r.toggleReadAloud();return;}
+  if(action==='note'&&r.selection?.quote?.trim()){closePopover();return safely(()=>r.addSelectionNote())();}
   if(['select','pen','highlight','underline','eraser','note','text','rect','ellipse','arrow','area','area-underline','strike'].includes(action)){
     if(['highlight','area','underline','area-underline','note','text'].includes(action)){r.toolChoices||={};r.toolChoices[annotationToolFamily(action)]=action;}
     closePopover();r.setTool(action);updateToolbarState();return;

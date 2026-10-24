@@ -438,6 +438,53 @@ test('real Chrome: palette controls stay above palettes and retain their setting
     await page.click('[data-popover-close]');assert.equal(await page.evaluate('document.querySelector("#tool-popover").hidden'),true);assert.deepEqual(chrome.errors,[]);
   }finally{if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
 });
+test('real Chrome: toolbar mode groups preserve selected text when creating notes from the floating toolbar',{timeout:120000},async()=>{
+  await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-selection-note-'));await cp(join(root,'public'),folder,{recursive:true});
+  const server=createServer(folder);let chrome;
+  try{
+    await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));chrome=await launchChrome();const page=chrome.page,url=process.env.HTMLMEMO_SIDEBAR_TEST_URL||`http://127.0.0.1:${server.address().port}/`;
+    await page.navigate(url);await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
+    const quote='A selected text with inline formatting deserves its own note.',prose='<h1>Selected text notes</h1>'+[1280,390,320].map(width=>`<p id="target-${width}" style="min-height:180px">Before ${width}. A <em>selected text</em> with <strong>inline formatting</strong> deserves its own note. After ${width}.</p>`).join('');
+    const frame='document.querySelector(".document-host:not([hidden]) iframe")',doc=frame+'.contentDocument',ready=`${frame}?.style.visibility==='visible'&&!document.querySelector('.tab-dirty:not([hidden])')`,metrics=[];
+    const select=async width=>{
+      await page.click('#toolbar [data-action=select]');
+      const point=await page.evaluate(`(async()=>{const f=${frame},d=f.contentDocument,e=d.querySelector(${JSON.stringify('#target-'+width+' em')});e.scrollIntoView({block:'center'});await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));const range=d.createRange();range.setStart(e.firstChild,0);range.setEnd(e.firstChild,8);const r=range.getClientRects()[0],b=f.getBoundingClientRect(),scale=b.width/f.offsetWidth;return{x:b.left+(r.left+r.width/2)*scale,y:b.top+(r.top+r.height/2)*scale};})()`);
+      for(let clickCount=1;clickCount<=3;clickCount++){await page.send('Input.dispatchMouseEvent',{type:'mousePressed',...point,button:'left',clickCount});await page.send('Input.dispatchMouseEvent',{type:'mouseReleased',...point,button:'left',clickCount});}
+      await page.waitFor(`${doc}.getSelection().toString()===${JSON.stringify(quote)}`);
+    };
+    const open=async width=>{
+      const selector='#toolbar [data-action=note]';
+      if(width===390){const point=await page.evaluate(`(()=>{const r=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();return{x:r.x+r.width/2,y:r.y+r.height/2};})()`);await page.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{...point,id:1}]});await page.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});}
+      else if(width===320){await page.evaluate(`document.querySelector(${JSON.stringify(selector)}).focus()`);await page.send('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13,text:'\r',unmodifiedText:'\r'});await page.send('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});}
+      else await page.click(selector);
+      await page.waitFor('document.querySelector("#dialog").open&&document.querySelector("#note-text")');assert.equal(await page.evaluate(`${doc}.getSelection().toString()`),quote);assert.equal(await page.evaluate(`${doc}.documentElement.hasAttribute('data-htmlmemo-drawing')`),false);
+    };
+    for(const mode of ['body','book']){
+      await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});await page.send('Emulation.setTouchEmulationEnabled',{enabled:false,maxTouchPoints:1});
+      const css='html,body{margin:0;font:18px/1.8 system-ui}main{padding:40px}p{max-width:650px}';
+      const html=mode==='book'?editionHTML('Selection note book',[{key:'v0:one',id:'one',title:'Selected text notes',markdown:'# Selected text notes\n'+quote,html:prose},{key:'v0:two',id:'two',title:'Another chapter',markdown:'# Another chapter\nOther text.',html:'<h1>Another chapter</h1><p>Other text.</p>'}],[]).replace('<nav id="reader-nav">','<div class="layout"><nav id="reader-nav">').replace('</main>','</main></div>').replace('</style>',css+'html,body{height:100%;overflow:hidden}.layout{height:100%;display:grid;grid-template-columns:200px minmax(0,1fr)}nav,main{overflow:auto}nav{padding:12px}</style>').replace('"autoFit":false','"autoFit":true'):`<!doctype html><html lang="en"><head><title>Selection note body</title><style>${css}</style></head><body><main>${prose}</main></body></html>`;
+      await page.evaluate(`(()=>{const files=new DataTransfer();files.items.add(new File([${JSON.stringify(html)}],${JSON.stringify('selection-note-'+mode+'.html')},{type:'text/html'}));const input=document.querySelector('#file-input');input.files=files.files;input.dispatchEvent(new Event('change',{bubbles:true}));})()`);await page.waitFor(`${ready}&&${doc}.querySelector('#target-1280 em')`);
+      if(await page.evaluate('!document.querySelector("#sidebar").hidden'))await page.click('#close-sidebar');
+      const savedState=`(async()=>{const{listDocuments,getDocument}=await import('./src/storage.js'),row=(await listDocuments()).find(r=>r.name===${JSON.stringify('selection-note-'+mode+'.html')});return row?await getDocument(row.id):null;})()`;await page.waitFor(savedState);const original=await page.evaluate(savedState);
+      for(const width of [1280,390,320]){
+        await page.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});await page.send('Emulation.setTouchEmulationEnabled',{enabled:width===390,maxTouchPoints:1});
+        const before=(await page.evaluate(savedState)).metadata.annotations.length;await select(width);await open(width);await page.click('#dialog .dialog-actions [value=cancel]');await page.waitFor('!document.querySelector("#dialog").open');await page.waitFor(`${doc}.getSelection().toString()===${JSON.stringify(quote)}`);assert.equal((await page.evaluate(savedState)).metadata.annotations.length,before);
+        await open(width);await page.click('#note-text');await page.send('Input.insertText',{text:`메모 ${mode} ${width}`});await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,`test-results/toolbar-modes-selection-note-${mode}-${width}-dialog.png`),await page.screenshot());await page.click('#dialog [value=save]');
+        await page.waitFor(`!document.querySelector('#dialog').open&&${ready}&&(async()=>{const r=await ${savedState};return r.metadata.annotations.length===${before+1};})()`);await page.waitFor(`${doc}.getSelection().toString()===${JSON.stringify(quote)}`);
+        const saved=await page.evaluate(savedState),note=saved.metadata.annotations.at(-1);assert.equal(note.type,'note');assert.equal(note.text,`메모 ${mode} ${width}`);assert.equal(note.textAnchor.quote,quote);assert.equal(note.textAnchor.section,mode==='book'?'v0:one':undefined);assert.equal(note.anchorTarget.id,'target-'+width);assert.deepEqual(saved.metadata.bookmarks,original.metadata.bookmarks);
+        await writeFile(join(root,`test-results/toolbar-modes-selection-note-${mode}-${width}-saved.png`),await page.screenshot());
+        await open(width);await page.click('#dialog .dialog-actions [value=cancel]');await page.waitFor('!document.querySelector("#dialog").open');await page.waitFor(`${doc}.getSelection().toString()===${JSON.stringify(quote)}`);
+        metrics.push({mode,width,input:width===390?'touch':width===320?'keyboard':'mouse',selectionKeptInDialog:true,selectionKeptAfterSaveAndCancel:true,noteReferencesExactInlineText:true,chapterAndParagraphPreserved:true,repeatClickCreatesNoteNotModePicker:true,cancelCreatesNoNote:true});
+      }
+      const expected=(await page.evaluate(savedState)).metadata.annotations;await page.navigate(url);await page.waitFor(`document.querySelector('[data-open="${original.id}"]')`);await page.click(`[data-open="${original.id}"]`);await page.waitFor(`${ready}&&${doc}.querySelectorAll('[data-htmlmemo-id]').length===3`);assert.deepEqual((await page.evaluate(savedState)).metadata.annotations,expected);
+    }
+    await writeFile(join(root,'test-results/toolbar-modes-selection-note-results.json'),JSON.stringify(metrics,null,2));assert.deepEqual(chrome.errors,[]);
+  }catch(error){
+    if(chrome)try{await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/toolbar-modes-selection-note-failure.png'),await chrome.page.screenshot());await writeFile(join(root,'test-results/toolbar-modes-selection-note-failure.json'),JSON.stringify(await chrome.page.evaluate(`({selected:document.querySelector('.document-host:not([hidden]) iframe')?.contentDocument?.getSelection()?.toString(),dialog:document.querySelector('#dialog')?.open,toast:document.querySelector('#toast')?.textContent})`),null,2));}catch{}
+    throw error;
+  }finally{await chrome?.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
+});
+
 test('real Chrome: toolbar mode groups remove semantic duplicates and keep area, underline and text annotations usable',{timeout:90000},async()=>{
   await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-tool-modes-'));await cp(join(root,'public'),folder,{recursive:true});
   const server=createServer(folder);let chrome;

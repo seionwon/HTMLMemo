@@ -44,6 +44,7 @@ jobs:
             test-results/tts-resume-*.json
             test-results/tts-controls-*.json
             test-results/sidebar-views-collapse-*.json
+            test-results/toolbar-modes-selection-note-*.json
             test-results/*.png
           if-no-files-found: ignore
       - run: npm run build
@@ -119,6 +120,7 @@ jobs:
             test-results/palette-controls-*.png
             test-results/palette-drag-*.png
             test-results/toolbar-modes-*.png
+            test-results/toolbar-modes-selection-note-*.json
             test-results/reading-controls-*.png
             test-results/duplicate-import-*.png
             test-results/sidebar-views-*.png
