@@ -330,6 +330,7 @@ test('real Chrome: TTS transport controls remain responsive to rapid pointer, ke
     const metrics=[];
     for(const width of [1280,390,320]){
       await page.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
+      await page.send('Emulation.setTouchEmulationEnabled',{enabled:width<600,maxTouchPoints:1});
       await page.click('.document-host:not([hidden]) > [data-htmlmemo-reading-controls] [data-action=speak]');await state(false);const initial=await count();
       await page.evaluate('window.transportEngine.paused=true');await page.click(button);await state(true);assert.equal(await count(),initial+1);assert.equal(await page.evaluate('window.transportEngine.paused'),false);
       // The same screen position remains clickable as the button changes Play/Pause.
@@ -341,9 +342,11 @@ test('real Chrome: TTS transport controls remain responsive to rapid pointer, ke
       await page.evaluate(`document.querySelector(${JSON.stringify(button)}).focus()`);
       for(const[index,key]of [' ','Enter',' ','Enter'].entries()){
         const code=key===' '?'Space':'Enter',windowsVirtualKeyCode=key===' '?32:13;
-        await page.send('Input.dispatchKeyEvent',{type:'keyDown',key,code,windowsVirtualKeyCode});await page.send('Input.dispatchKeyEvent',{type:'keyUp',key,code,windowsVirtualKeyCode});await state(index%2===1);
+        await page.evaluate(`window.transportPhase=${JSON.stringify({width,input:'keyboard',index,key})}`);
+        await page.send('Input.dispatchKeyEvent',{type:'keyDown',key,code,windowsVirtualKeyCode,text:key==='Enter'?'\r':' ',unmodifiedText:key==='Enter'?'\r':' '});await page.send('Input.dispatchKeyEvent',{type:'keyUp',key,code,windowsVirtualKeyCode});await state(index%2===1);
       }
       if(width<600)for(let i=0;i<8;i++){
+        await page.evaluate(`window.transportPhase=${JSON.stringify({width,input:'touch',index:i})}`);
         await page.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{...point,id:1}]});await page.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await state(i%2===1);
       }
       const n=await count();await page.evaluate(`(()=>{const all=window.transportUtterances;for(const u of all.slice(0,-1)){u.onend();u.onerror({error:'interrupted'});u.onstart();u.onpause();}})()`);assert.equal(await count(),n);await state(true);
@@ -363,7 +366,7 @@ test('real Chrome: TTS transport controls remain responsive to rapid pointer, ke
     }
     await writeFile(join(root,'test-results/tts-controls-results.json'),JSON.stringify(metrics,null,2));assert.deepEqual(chrome.errors,[]);
   }catch(error){
-    if(chrome)try{await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/tts-controls-failure.png'),await chrome.page.screenshot());await writeFile(join(root,'test-results/tts-controls-failure.json'),JSON.stringify(await chrome.page.evaluate(`({count:window.transportUtterances?.length,spoken:window.transportUtterances?.map(u=>u.text),button:document.querySelector('.mstts-player > button')?.outerHTML,toast:document.querySelector('#toast')?.textContent})`),null,2));}catch{}
+    if(chrome)try{await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/tts-controls-failure.png'),await chrome.page.screenshot());await writeFile(join(root,'test-results/tts-controls-failure.json'),JSON.stringify(await chrome.page.evaluate(`({phase:window.transportPhase,count:window.transportUtterances?.length,spoken:window.transportUtterances?.map(u=>u.text),button:document.querySelector('.mstts-player > button')?.outerHTML,focused:document.activeElement?.outerHTML.slice(0,600),toast:document.querySelector('#toast')?.textContent})`),null,2));}catch{}
     throw error;
   }finally{await chrome?.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
 });
