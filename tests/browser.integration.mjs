@@ -284,6 +284,10 @@ test('real Chrome: TTS paused resume follows the new reading position without au
       await page.evaluate(`(()=>{const t=new DataTransfer();t.items.add(new File([${JSON.stringify(html)}],${JSON.stringify('tts-resume-'+mode+'.html')},{type:'text/html'}));const input=document.querySelector('#file-input');input.files=t.files;input.dispatchEvent(new Event('change',{bubbles:true}));})()`);
       await page.waitFor(`${ready}&&${doc}.title===${JSON.stringify('TTS 이동 '+mode)}`);
       if(await page.evaluate('!document.querySelector("#sidebar").hidden'))await page.click('#close-sidebar');
+      // Import intentionally prepares the saved HTML (CSP, anchors, metadata).
+      // Compare that stored baseline before/after TTS, not the unprepared input file.
+      const savedState=`(async()=>{const {listDocuments,getDocument}=await import('./src/storage.js'),row=(await listDocuments()).find(r=>r.name===${JSON.stringify('tts-resume-'+mode+'.html')});if(!row)return null;const record=await getDocument(row.id);return {html:record.file?await record.file.text():record.html,annotations:record.metadata.annotations,bookmarks:record.metadata.bookmarks};})()`;
+      await page.waitFor(savedState);const storedBefore=await page.evaluate(savedState);assert.deepEqual(storedBefore.annotations,[]);assert.deepEqual(storedBefore.bookmarks,[]);
       for(const width of [1280,390,320]){
         await page.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});await settle();await open();
         await play();const initial=await last();await pause();const paused=await count();
@@ -303,8 +307,7 @@ test('real Chrome: TTS paused resume follows the new reading position without au
       await play();assert.match(await last(),/^새 장 문장 /);const newChapter=await last(),afterChapter=await count();await page.evaluate('window.resumeUtterances[window.resumeUtterances.length-2].onend()');assert.equal(await count(),afterChapter);
       await pause();await page.evaluate(`${doc}.querySelector('main').replaceChildren()`);await settle();await play();assert.equal(await count(),afterChapter);assert.equal(await page.evaluate('document.querySelector(".mstts-player > button").textContent'),'▶');
       await page.click('.mstts-player [aria-label="플레이어 닫기"]');
-      const stored=await page.evaluate(`(async()=>{const {listDocuments,getDocument}=await import('./src/storage.js'),row=(await listDocuments()).find(r=>r.name===${JSON.stringify('tts-resume-'+mode+'.html')}),record=await getDocument(row.id);return {html:record.file?await record.file.text():record.html,annotations:record.metadata.annotations.length,bookmarks:record.metadata.bookmarks.length};})()`);
-      assert.equal(stored.html,html);assert.equal(stored.annotations,0);assert.equal(stored.bookmarks,0);metrics.push({mode,newChapter,sourcePreserved:true,emptyChapterSilent:true});
+      assert.deepEqual(await page.evaluate(savedState),storedBefore);metrics.push({mode,newChapter,sourcePreserved:true,emptyChapterSilent:true});
     }
     await writeFile(join(root,'test-results/tts-resume-results.json'),JSON.stringify(metrics,null,2));assert.deepEqual(chrome.errors,[]);
   }catch(error){
