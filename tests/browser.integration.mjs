@@ -449,6 +449,7 @@ test('real Chrome: toolbar mode groups preserve selected text when creating note
     const selectedTarget=`(()=>{const s=${doc}.getSelection();return s?.rangeCount?s.getRangeAt(0).startContainer.parentElement.closest('p')?.id:'';})()`,selectionAt=width=>`${doc}.getSelection().toString()===${JSON.stringify(quote)}&&${selectedTarget}===${JSON.stringify('target-'+width)}`;
     const select=async width=>{
       await page.click('#toolbar [data-action=select]');
+      if(await page.evaluate('!document.querySelector("#sidebar").hidden'))await page.click('#close-sidebar');
       const point=await page.evaluate(`(async()=>{const f=${frame},d=f.contentDocument,e=d.querySelector(${JSON.stringify('#target-'+width+' em')});e.scrollIntoView({block:'center'});await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));const range=d.createRange();range.setStart(e.firstChild,0);range.setEnd(e.firstChild,8);const r=range.getClientRects()[0],b=f.getBoundingClientRect(),scale=b.width/f.offsetWidth;return{x:b.left+(r.left+r.width/2)*scale,y:b.top+(r.top+r.height/2)*scale};})()`);
       for(let clickCount=1;clickCount<=3;clickCount++){await page.send('Input.dispatchMouseEvent',{type:'mousePressed',...point,button:'left',clickCount});await page.send('Input.dispatchMouseEvent',{type:'mouseReleased',...point,button:'left',clickCount});}
       await page.waitFor(selectionAt(width));
