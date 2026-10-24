@@ -141,7 +141,7 @@ function renderLibrary() {
   const grid=$('#document-grid');grid.dataset.view=preferences.libraryView;
   $$('[data-library-view]').forEach(button=>{const active=button.dataset.libraryView===preferences.libraryView;button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active));});
   $('#document-count').textContent=records.length; $('#empty-library').hidden=shown.length>0;
-  $('#empty-library h3').textContent=records.length?'검색 결과가 없습니다.':'첫 페이지를 보관해보세요.';
+  $('#empty-library h3').textContent=records.length?'검색 결과가 없습니다.':'첫 HTML 문서를 보관해보세요.';
   $('#empty-library p').innerHTML=records.length?'다른 제목이나 주소로 찾아보세요.':'웹에서 저장하거나, 가지고 있는 HTML 파일을 열면<br>이곳에서 계속 읽고 메모할 수 있어요.';
   $('#open-example').hidden=!!records.length;
   grid.innerHTML=shown.map(record=>{

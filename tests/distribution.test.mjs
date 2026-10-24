@@ -116,6 +116,16 @@ test('settings can be saved and reloaded through file input when native pickers 
 
 test('library switches between persistent card and one-line list views',async()=>{const app=await fileApp(),grid=app.doc.querySelector('#document-grid'),card=app.doc.querySelector('#library-card-view'),list=app.doc.querySelector('#library-list-view');assert.equal(grid.dataset.view,'card');assert.equal(card.getAttribute('aria-pressed'),'true');list.onclick();assert.equal(grid.dataset.view,'list');assert.equal(list.getAttribute('aria-pressed'),'true');assert.equal(card.getAttribute('aria-pressed'),'false');assert.equal(JSON.parse(app.local.get(PREFERENCES_KEY)).libraryView,'list');card.onclick();assert.equal(grid.dataset.view,'card');assert.equal(JSON.parse(app.local.get(PREFERENCES_KEY)).libraryView,'card');});
 
+test('empty library asks for the first HTML document in initial HTML and after rendering without changing search messages',async()=>{
+  const heading='첫 HTML 문서를 보관해보세요.';
+  const initial=new DOMParser().parseFromString(assets.app['index.html'].text,'text/html');assert.equal(initial.querySelector('#empty-library h3').textContent,heading);
+  const empty=await fileApp();assert.equal(empty.doc.querySelector('#empty-library h3').textContent,heading);
+  empty.doc.querySelector('#library-list-view').onclick();assert.equal(empty.doc.querySelector('#empty-library h3').textContent,heading);
+  const app=await fileApp({documents:[{id:'kept',title:'Kept document',name:'kept.html',source:'',created:1234,modified:5678,metadata:{annotations:[]}}]}),filter=app.doc.querySelector('#library-filter');
+  filter.value='no match';filter.oninput();assert.equal(app.doc.querySelector('#empty-library h3').textContent,'검색 결과가 없습니다.');assert.equal(app.doc.querySelector('#empty-library').hidden,false);
+  filter.value='';filter.oninput();assert.equal(app.doc.querySelector('#empty-library').hidden,true);assert.equal(app.doc.querySelectorAll('.document-card').length,1);
+});
+
 test('compact cards and lists share exactly one title and source without touching stored notes',async()=>{
   const record={id:'compact',title:'로컬 LLM 학습 노트',name:'notes.html',source:'',byteSize:2048,created:1234,modified:5678,metadata:{annotations:[{id:'kept',text:'Keep this note'}],bookmarks:[{id:'mark'}],view:{scrollTop:80}}},before=structuredClone(record);
   const app=await fileApp({documents:[record]});
