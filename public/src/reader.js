@@ -1,4 +1,5 @@
 import { createReadAloud } from './read-aloud.js';
+import { SearchIndexCache } from './search-index.js';
 import { clamp, uid, icon } from './utils.js';
 import { History, TEXT_TOOLS, DRAW_TOOLS } from './model.js';
 import { LAYER_ID, prepareLoadedHTML, cleanAnnotations, textIndex, selectionAnchor, resolveTextAnchor, wrapOffsets, rangeFromOffsets, sentenceOffsets, serializeHTML, inspectBookDocument, drawingTargetQuote, describeDrawingTarget, currentSection } from './document.js';
@@ -998,22 +999,26 @@ export class Reader {
   }
   clearDocumentBookSearchHighlight() {
     this.doc.defaultView.CSS?.highlights?.delete('htmlmemo-book-search');
-    for(const mark of [...this.doc.querySelectorAll('[data-htmlmemo-book-search-hit]')].reverse())mark.replaceWith(...mark.childNodes);
+    const clear=()=>{
+      this.bookSearchMarks ||= [...this.doc.querySelectorAll('[data-htmlmemo-book-search-hit]')];
+      for(const mark of this.bookSearchMarks)if(mark.isConnected)mark.replaceWith(...mark.childNodes);
+      this.bookSearchMarks=[];
+    };
+    if(this.searchIndexCache)this.searchIndexCache.mutate(null,clear,false);else clear();
   }
   stepDocumentBookSearch(direction=0,{move=true}={}) {
     this.clearDocumentBookSearchHighlight();
     const hit=this.bookSearchHit,content=this.doc.getElementById('reader-content');
     if(!hit||hit.query!==this.documentBookSearchInput?.value.trim()||!content)return false;
     if(hit.section!==currentSection(this.doc)){this.documentBookSearchStatus.textContent='다른 검색 결과를 선택하세요.';this.syncDocumentBookSearchResults();return false;}
-    const index=textIndex(this.doc,content),pattern=new RegExp(hit.query.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'giu'),matches=[];
-    for(const match of index.text.matchAll(pattern)){matches.push({start:match.index,end:match.index+match[0].length});if(matches.length===3000)break;}
+    const {index,results:matches}=this.searchCache().query(hit.query,content);
     hit.count=matches.length;
     if(!matches.length){this.documentBookSearchStatus.textContent='이 장의 제목·검색 정보는 일치하지만 본문에서 검색어를 찾지 못했습니다.';for(const button of this.documentBookSearchResults.querySelectorAll('[data-book-search-step]'))button.disabled=true;return false;}
     hit.position=(hit.position+direction+matches.length)%matches.length;
     const match=matches[hit.position],range=rangeFromOffsets(this.doc,match.start,match.end,index);if(!range)return false;
     const win=this.doc.defaultView;
     if(win.CSS?.highlights&&win.Highlight)win.CSS.highlights.set('htmlmemo-book-search',new win.Highlight(range));
-    else wrapOffsets(this.doc,match.start,match.end,{'data-htmlmemo-search':'','data-htmlmemo-book-search-hit':''},'background:#f0a85b80;outline:2px solid #df9057;border-radius:2px;color:inherit',index);
+    else this.bookSearchMarks=this.searchCache().mutate(index,()=>wrapOffsets(this.doc,match.start,match.end,{'data-htmlmemo-search':'','data-htmlmemo-book-search-hit':''},'background:#f0a85b80;outline:2px solid #df9057;border-radius:2px;color:inherit',index));
     if(move){const rect=range.getBoundingClientRect(),origin=this.layerOrigin();this.scrollTop=Math.max(0,(rect.top-origin.top+rect.height/2)*this.zoom-this.viewport.clientHeight/2);this.scrollLeft=Math.max(0,(rect.left-origin.left+rect.width/2)*this.zoom-this.viewport.clientWidth/2);}
     this.documentBookSearchStatus.textContent=`이 장에서 ${hit.position+1} / ${matches.length}${matches.length===3000?'+':''}`;
     for(const button of this.documentBookSearchResults.querySelectorAll('[data-book-search-step]'))button.disabled=matches.length<2;
@@ -1913,6 +1918,7 @@ export class Reader {
   }
   render() {
     this.dynamicObserver?.disconnect();
+    this.searchIndexCache?.invalidate();this.searchMarks=[];this.bookSearchMarks=[];
     cleanAnnotations(this.doc); this.selectedId = null;
     const style = this.doc.createElement('style'); style.id = 'htmlmemo-annotation-style';
     style.textContent = '[data-htmlmemo-mark]{border-radius:2px;box-decoration-break:clone;-webkit-box-decoration-break:clone}'; this.doc.head.append(style);
@@ -1925,6 +1931,9 @@ export class Reader {
       const style = annotation.type === 'highlight' ? `background:${annotation.color}${Math.round(annotation.opacity * 255).toString(16).padStart(2,'0')};color:inherit` : `text-decoration-line:${annotation.type === 'underline' ? 'underline' : 'line-through'};text-decoration-color:${annotation.color};text-decoration-thickness:${annotation.width}px;text-underline-offset:3px`;
       wrapOffsets(this.doc, resolved.start, resolved.end, {'data-htmlmemo-mark':'','data-htmlmemo-id':annotation.id}, style,index);
     }
+    // Annotation restoration already made a current index. Adopt it instead
+    // of walking the book again on the first search.
+    if(index)this.searchCache().seed(this.doc.body,index);
     this.renderDrawingLayer();
     if (this.searchQuery) this.search(this.searchQuery, false);
     if (this.bookSearchHit) this.stepDocumentBookSearch(0,{move:false});
@@ -2256,28 +2265,40 @@ export class Reader {
     }
     return result;
   }
+  searchCache(){return this.searchIndexCache ||= new SearchIndexCache(this.doc);}
+  clearSearchHighlight() {
+    this.searchMarks ||= [...this.doc.querySelectorAll('[data-htmlmemo-search]')].filter(mark=>!mark.hasAttribute('data-htmlmemo-book-search-hit'));
+    for(const mark of this.searchMarks)if(mark.isConnected)mark.replaceWith(...mark.childNodes);
+    this.searchMarks=[];
+  }
+  async searchAsync(query,move=true,isCurrent=()=>true) {
+    const generation=this.searchGeneration=(this.searchGeneration||0)+1;
+    if(query.trim())await this.searchCache().prepare();
+    if(this.disposed||generation!==this.searchGeneration||!isCurrent())return null;
+    return this.search(query,move);
+  }
   search(query, move = true) {
+    this.searchGeneration=(this.searchGeneration||0)+1;
     this.searchQuery = query;
-    for (const mark of [...this.doc.querySelectorAll('[data-htmlmemo-search]')].reverse()) mark.replaceWith(...mark.childNodes);
-    this.doc.body.normalize(); this.searchResults = []; this.searchPosition = -1;
+    const cache=this.searchCache();cache.mutate(null,()=>this.clearSearchHighlight(),false);
+    this.searchResults = []; this.searchPosition = -1;
     if (!query.trim()) { this.callbacks?.onSearchChange?.(this); return []; }
-    const index = textIndex(this.doc); const haystack=index.text.toLocaleLowerCase(); const needle=query.toLocaleLowerCase(); let found=haystack.indexOf(needle);
-    const sourceSearchText=index.nodes.filter(item=>item.node.parentElement?.closest('[data-htmlmemo-book-search-slot]'));
-    while (found !== -1 && this.searchResults.length < 3000) { if(!sourceSearchText.some(item=>found<item.end&&found+query.length>item.start))this.searchResults.push({start:found,end:found+query.length,quote:index.text.slice(Math.max(0,found-35),found+query.length+45)}); found=haystack.indexOf(needle,found+Math.max(needle.length,1)); }
+    const {index,results}=cache.query(query);this.searchTextIndex=index;this.searchResults=results;
     // Only the active hit is marked, keeping long documents responsive.
     if (move && this.searchResults.length) this.nextSearch(1); else this.callbacks?.onSearchChange?.(this); return this.searchResults;
   }
   nextSearch(direction) {
+    const cache=this.searchCache(),index=cache.get();
+    if(this.searchTextIndex!==index&&this.searchQuery)this.search(this.searchQuery,false);
     if (!this.searchResults.length) return false;
     const position=clamp(this.searchPosition+direction,0,this.searchResults.length-1);
     if(position===this.searchPosition)return false;
     this.searchPosition=position;
-    for (const mark of [...this.doc.querySelectorAll('[data-htmlmemo-search]')].reverse()) mark.replaceWith(...mark.childNodes);
-    this.doc.body.normalize(); const result=this.searchResults[this.searchPosition];
-    const range=rangeFromOffsets(this.doc,result.start,result.end); if (!range) { this.callbacks?.onSearchChange?.(this); return false; }
+    cache.mutate(null,()=>this.clearSearchHighlight(),false);const result=this.searchResults[this.searchPosition];
+    const range=rangeFromOffsets(this.doc,result.start,result.end,index); if (!range) { this.callbacks?.onSearchChange?.(this); return false; }
     const rect=range.getBoundingClientRect(), origin=this.layerOrigin(); this.scrollTop=Math.max(0,(rect.top-origin.top+rect.height/2)*this.zoom-this.viewport.clientHeight/2);
     this.scrollLeft=Math.max(0,(rect.left-origin.left+rect.width/2)*this.zoom-this.viewport.clientWidth/2);
-    wrapOffsets(this.doc,result.start,result.end,{'data-htmlmemo-search':''},'background:#f0a85b80;outline:2px solid #df9057;border-radius:2px;color:inherit');
+    this.searchMarks=cache.mutate(index,()=>wrapOffsets(this.doc,result.start,result.end,{'data-htmlmemo-search':''},'background:#f0a85b80;outline:2px solid #df9057;border-radius:2px;color:inherit',index));
     this.callbacks?.onSearchChange?.(this);return true;
   }
   outline() { return [...this.doc.querySelectorAll('h1,h2,h3,h4,h5,h6')].filter(n=>n.textContent.trim()&&!n.closest('[data-htmlmemo-ui]')).map(node=>({node,level:Number(node.localName[1]),title:node.textContent.trim()})); }
@@ -2304,6 +2325,7 @@ export class Reader {
   }
   stopSpeech() { this.readAloud?.close(); this.host?.ownerDocument?.defaultView?.speechSynthesis?.cancel(); }
   dispose() {
+    this.searchGeneration=(this.searchGeneration||0)+1;this.searchIndexCache?.dispose();
     this.cancelBookSearchJump?.();this.documentBookSearchObserver?.disconnect();if(this.documentBookSearchResults)this.clearDocumentBookSearchHighlight();
     this.stopMiddleScroll();this.readAloud?.dispose();this.readAloud=null;this.stopSpeech(); this.disposed=true;this.cancelOpeningWait?.();this.cancelAnnotationJump?.(); clearTimeout(this.positionTimer);clearTimeout(this.dynamicTimer);clearTimeout(this.documentSidebarUI?.sidebarSearchTimer);this.dynamicObserver?.disconnect();this.fontObserver?.disconnect();if(this.fontFrame)this.doc.defaultView?.cancelAnimationFrame(this.fontFrame); this.resizeObserver?.disconnect(); this.hostObserver?.disconnect(); this.frame.srcdoc=''; if(this.documentURL){URL.revokeObjectURL(this.documentURL);this.documentURL=null;} this.host.remove();
   }

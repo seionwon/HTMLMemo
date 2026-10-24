@@ -247,19 +247,33 @@ export function serializeHTML(doc, metadata) {
   clone.querySelector('head').append(metadataElement(doc, metadata));
   return '<!doctype html>\n' + clone.outerHTML;
 }
-export function textIndex(doc,root=doc.body) {
-  const nodes = []; let text = '';
-  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+function textWalker(doc,root) {
+  return doc.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
       if (!node.textContent || node.parentElement?.closest('script,style,noscript,svg,textarea,template,[data-htmlmemo-ui]')) return NodeFilter.FILTER_REJECT;
       return NodeFilter.FILTER_ACCEPT;
     },
   });
-  while (walker.nextNode()) { const node = walker.currentNode; nodes.push({node, start: text.length, end: text.length + node.textContent.length}); text += node.textContent; }
-  return {nodes, text};
+}
+export function textIndex(doc,root=doc.body) {
+  const nodes=[],parts=[],walker=textWalker(doc,root);let length=0;
+  while(walker.nextNode()){const node=walker.currentNode,value=node.textContent;nodes.push({node,start:length,end:length+value.length});parts.push(value);length+=value.length;}
+  return {nodes,text:parts.join('')};
+}
+export async function textIndexAsync(doc,root=doc.body,cancelled=()=>false) {
+  const nodes=[],parts=[],walker=textWalker(doc,root);let length=0,count=0,start=performance.now();
+  while(walker.nextNode()){
+    const node=walker.currentNode,value=node.textContent;nodes.push({node,start:length,end:length+value.length});parts.push(value);length+=value.length;
+    if((++count&255)===0&&performance.now()-start>=8){await new Promise(resolve=>setTimeout(resolve,0));if(cancelled())return null;start=performance.now();}
+  }
+  return cancelled()?null:{nodes,text:parts.join('')};
 }
 export function rangeFromOffsets(doc, start, end, index = textIndex(doc)) {
-  const first = index.nodes.find(n => n.end > start); const last = [...index.nodes].reverse().find(n => n.start < end);
+  let lo=0,hi=index.nodes.length;
+  while(lo<hi){const mid=(lo+hi)>>>1;if(index.nodes[mid].end<=start)lo=mid+1;else hi=mid;}
+  const first=index.nodes[lo];lo=0;hi=index.nodes.length;
+  while(lo<hi){const mid=(lo+hi)>>>1;if(index.nodes[mid].start<end)lo=mid+1;else hi=mid;}
+  const last=index.nodes[lo-1];
   if (!first || !last || start < 0 || end > index.text.length || end <= start) return null;
   const range = doc.createRange(); range.setStart(first.node, start - first.start); range.setEnd(last.node, end - last.start); return range;
 }
@@ -327,7 +341,7 @@ export function wrapOffsets(doc, start, end, attributes, style = '', index = tex
   // must not walk and concatenate the entire book twice for every highlight.
   let lo=0,hi=index.nodes.length;
   while(lo<hi){const mid=(lo+hi)>>>1;if(index.nodes[mid].end<=start)lo=mid+1;else hi=mid;}
-  const matches=[];
+  const matches=[],marks=[];
   for(let i=lo;i<index.nodes.length && index.nodes[i].start<end;i++)matches.push({item:index.nodes[i],i});
   for(const {item,i} of matches.reverse()){
     const from=Math.max(0,start-item.start),to=Math.min(item.node.length,end-item.start);
@@ -335,10 +349,12 @@ export function wrapOffsets(doc, start, end, attributes, style = '', index = tex
     const selected=from>0?item.node.splitText(from):item.node;
     const mark=doc.createElement('span');for(const [name,value] of Object.entries(attributes))mark.setAttribute(name,value);
     mark.style.cssText=style;selected.replaceWith(mark);mark.append(selected);
+    marks.push(mark);
     const parts=[];
     if(from>0)parts.push({node:item.node,start:item.start,end:item.start+from});
     parts.push({node:selected,start:item.start+from,end:item.start+to});
     if(suffix)parts.push({node:suffix,start:item.start+to,end:item.end});
     index.nodes.splice(i,1,...parts);
   }
+  return marks;
 }

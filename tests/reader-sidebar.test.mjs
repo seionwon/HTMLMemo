@@ -120,6 +120,15 @@ test('reader loaded-part search stops at both ends without replacing the active 
   r.search('없음');assert.equal(r.nextSearch(1),false);assert.equal(r.searchPosition,-1);r.search('');assert.equal(doc.querySelector('[data-htmlmemo-search]'),null);
 });
 
+test('asynchronous sidebar search cannot overwrite another view or a newer query and reports failures',async()=>{
+  const a=sidebar(),pending=[],errors=[];a.r.callbacks={onError:error=>errors.push(error.message)};
+  a.r.searchAsync=(query,move,current)=>new Promise((resolve,reject)=>pending.push({query,current,resolve,reject}));a.open('search');
+  let input=a.doc.querySelector('#document-search');input.value='old';input.oninput();a.flush();assert.equal(a.doc.querySelector('#search-count').textContent,'검색 준비 중…');
+  a.choose('annotations');assert.equal(pending[0].current(),false);pending[0].resolve([{quote:'stale'}]);await Promise.resolve();assert.ok(a.doc.querySelector('[data-annotation]'));
+  a.choose('search');input=a.doc.querySelector('#document-search');const resumed=pending.at(-1);input.value='new';input.oninput();a.flush();assert.equal(resumed.current(),false);resumed.resolve([{quote:'stale draft'}]);await Promise.resolve();assert.equal(a.doc.querySelector('[data-search-index]'),null);
+  pending.at(-1).reject(new Error('index failed'));await Promise.resolve();await Promise.resolve();assert.match(a.doc.querySelector('#search-count').textContent,/검색을 준비하지 못했습니다/);assert.deepEqual(errors,['index failed']);
+});
+
 test('icon totals include all annotations and bookmarks, update in place and show zero',()=>{
   const a=sidebar();a.open('search');const input=a.doc.querySelector('#document-search'),button=a.doc.querySelector('[data-sidebar-view=annotations]');
   a.r.metadata.annotations.push({id:'unloaded',type:'note',anchorTarget:{section:'not-loaded'}});a.r.metadata.bookmarks=[];
