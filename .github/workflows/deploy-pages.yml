@@ -43,6 +43,7 @@ jobs:
             test-results/tab-sizing-failure.json
             test-results/tts-resume-*.json
             test-results/tts-controls-*.json
+            test-results/sidebar-views-collapse-*.json
             test-results/*.png
           if-no-files-found: ignore
       - run: npm run build
@@ -121,6 +122,7 @@ jobs:
             test-results/reading-controls-*.png
             test-results/duplicate-import-*.png
             test-results/sidebar-views-*.png
+            test-results/sidebar-views-collapse-*.json
             test-results/book-search-*.png
             test-results/font-scaled-pen-*.png
             test-results/annotation-tree-*.png

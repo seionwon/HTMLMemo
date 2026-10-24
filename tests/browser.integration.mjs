@@ -1552,6 +1552,54 @@ test('real Chrome: whole-book search shows live results and jumps to highlighted
   }finally{if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
 });
 
+test('real Chrome: sidebar view choices collapse the TOC only when reselecting the active outline',{timeout:90000},async()=>{
+  await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-toc-reclick-'));await cp(join(root,'public'),folder,{recursive:true});
+  const server=createServer(folder);let chrome;
+  try{
+    await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));chrome=await launchChrome();const page=chrome.page,url=process.env.HTMLMEMO_SIDEBAR_TEST_URL||`http://127.0.0.1:${server.address().port}/`;
+    const book=await readFile(join(root,'tests/fixtures/book-search.html'),'utf8'),source=book.replace('group.append(heading);','group.open=true;group.append(heading);')
+      .replace('group.append(a);count++;',"const nested=document.createElement('details'),label=document.createElement('summary');nested.open=true;label.textContent=section.title+' 하위';nested.append(label,a);group.append(nested);count++;")
+      .replace('</nav>','<div class="toc-group"><button id="custom-toggle" class="toc-toggle" aria-controls="custom-items" aria-expanded="true">▼ 부록</button><ul id="custom-items"><li><a href="#v0%3Aone">부록 링크</a></li></ul></div></nav>')
+      .replace('<div id="reader-status">','<details id="body-disclosure" open><summary>본문 설명</summary><p>본문 설명은 접지 않습니다.</p></details><div id="reader-status">');
+    await page.navigate(url);await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
+    await page.evaluate(`(()=>{const files=new DataTransfer();files.items.add(new File([${JSON.stringify(source)}],'toc-reclick.html',{type:'text/html'}));const input=document.querySelector('#file-input');input.files=files.files;input.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+    const frame='document.querySelector(".document-host:not([hidden]) iframe")',doc=frame+'.contentDocument',tree=doc+`.querySelector('#reader-tree')`;
+    await page.waitFor(`${frame}?.style.visibility==='visible'&&${doc}.querySelector('[data-sidebar-view=outline]')&&${tree}.querySelectorAll('details').length===6&&!document.querySelector('.tab-dirty:not([hidden])')`);
+    const savedState=`(async()=>{const {listDocuments,getDocument}=await import('./src/storage.js'),row=(await listDocuments()).find(r=>r.name==='toc-reclick.html');if(!row)return null;const r=await getDocument(row.id);return {html:r.file?await r.file.text():r.html,annotations:r.metadata.annotations,bookmarks:r.metadata.bookmarks};})()`;
+    await page.waitFor(savedState);const before=await page.evaluate(savedState);await page.evaluate(`window.tocReselectTree=${tree}`);
+    const click=async selector=>{
+      const point=await page.evaluate(`(async()=>{const f=${frame},el=f.contentDocument.querySelector(${JSON.stringify(selector)});el.scrollIntoView({block:'nearest'});await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));const b=f.getBoundingClientRect(),r=el.getBoundingClientRect(),scale=b.width/f.offsetWidth;return{x:b.left+(r.left+r.width/2)*scale,y:b.top+(r.top+r.height/2)*scale};})()`);
+      await page.send('Input.dispatchMouseEvent',{type:'mousePressed',...point,button:'left',clickCount:1});await page.send('Input.dispatchMouseEvent',{type:'mouseReleased',...point,button:'left',clickCount:1});
+    };
+    const choose=async mode=>{await click(`[data-sidebar-view=${mode}]`);await page.waitFor(`${doc}.querySelector('#reader-nav').dataset.htmlmemoSidebarView===${JSON.stringify(mode)}`);};
+    const expansion=()=>page.evaluate(`[...${tree}.querySelectorAll('details')].map(g=>g.open)`),metrics=[];
+    for(const width of [1280,390,320]){
+      await page.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
+      if(await page.evaluate(`${doc}.querySelector('#reader-search').value!==''`)){
+        await page.evaluate(`${doc}.querySelector('#reader-search').value='';${doc}.querySelector('#reader-search').dispatchEvent(new Event('input',{bubbles:true}))`);await page.waitFor(`${doc}.querySelector('#reader-search-status').textContent===''&&${tree}.querySelectorAll('details').length===6`);
+      }
+      await page.evaluate(`[...${tree}.querySelectorAll('details')].forEach(g=>g.open=true)`);if(await page.evaluate(`${doc}.querySelector('#custom-items').hidden`))await click('#custom-toggle');
+      assert.ok((await expansion()).every(Boolean));await choose('search');assert.ok((await expansion()).every(Boolean));
+      await click('#reader-search');await page.send('Input.insertText',{text:'바람'});await page.waitFor(`${doc}.querySelector('#reader-search-status').textContent==='3개 장 검색됨'`);
+      await choose('outline');assert.ok((await expansion()).every(Boolean));assert.equal(await page.evaluate(`${tree}.parentElement.id`),'reader-nav');
+      for(const mode of ['annotations','bookmarks']){await choose(mode);await choose('outline');assert.ok((await expansion()).every(Boolean),mode);}
+      await choose('outline');assert.ok((await expansion()).every(open=>!open));assert.equal(await page.evaluate(`${doc}.querySelector('#custom-items').hidden`),true);assert.equal(await page.evaluate(`${doc}.querySelector('#body-disclosure').open`),true);
+      assert.equal(await page.evaluate(`${tree}===window.tocReselectTree`),true);assert.equal(await page.evaluate(`${doc}.querySelector('#reader-search').value`),'바람');
+      await choose('outline');assert.ok((await expansion()).every(open=>!open));
+      await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,`test-results/sidebar-views-collapse-${width}.png`),await page.screenshot());
+      await click('#reader-tree > details:first-child > summary');assert.equal(await page.evaluate(`${tree}.querySelector('details').open`),true);assert.equal(await page.evaluate(`${tree}.querySelector('details details').open`),false);
+      await click('#custom-toggle');assert.equal(await page.evaluate(`${doc}.querySelector('#custom-items').hidden`),false);assert.equal(await page.evaluate(`${doc}.querySelector('#custom-toggle').getAttribute('aria-expanded')`),'true');
+      await click('#reader-tree > details:first-child details > summary');const section=await page.evaluate(`${tree}.querySelector('a').getAttribute('href').slice(1)`);await click('#reader-tree a');await page.waitFor(`${doc}.querySelector('#reader-content').dataset.section===decodeURIComponent(${JSON.stringify(section)})`);
+      assert.equal(await page.evaluate(`${tree}.querySelector('details').open`),true);assert.deepEqual(await page.evaluate(savedState),before);
+      metrics.push({width,otherViewsPreserveExpansion:true,activeOutlineCollapsesAllLevels:true,repeatedCollapseIsIdempotent:true,customGroupsCollapsedAndReopen:true,bodyDisclosureUnchanged:true,sourceTreeAndSearchDraftPreserved:true,chapterLinksStillWork:true,savedHTMLAndNotesUnchanged:true});
+    }
+    await writeFile(join(root,'test-results/sidebar-views-collapse-results.json'),JSON.stringify(metrics,null,2));assert.deepEqual(chrome.errors,[]);
+  }catch(error){
+    if(chrome)try{await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/sidebar-views-collapse-failure.png'),await chrome.page.screenshot());}catch{}
+    throw error;
+  }finally{await chrome?.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
+});
+
 test('real Chrome: native sidebar view choices are visible on open and preserve the original book tree and export',{timeout:60000},async()=>{
   await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-native-sidebar-'));await cp(join(root,'public'),folder,{recursive:true});
   const server=createServer(folder);let chrome;

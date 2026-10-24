@@ -976,7 +976,12 @@ function renderSidebar(mode,{panel=$('#sidebar'),embedded=false,documentReader=r
     const views=[['outline','list','목차'],['search','search','검색'],['annotations','note','주석'],['bookmarks','bookmark','북마크']];
     panel.innerHTML=`<h2 id="${id('sidebar-title')}" hidden></h2><div class="sidebar-views" role="group" aria-label="사이드바 보기">${views.map(([view,name,label])=>`<button type="button" data-sidebar-view="${view}" title="${label}" aria-label="${label}" aria-pressed="false" aria-controls="${id('sidebar-content')}">${icon(name,14)}${['annotations','bookmarks'].includes(view)?`<span class="sidebar-nav-count" data-sidebar-count="${view}" aria-hidden="true"></span>`:''}</button>`).join('')}${embedded?'':`<button type="button" class="icon-button" id="close-sidebar" title="패널 닫기" aria-label="패널 닫기">${icon('close',14)}</button>`}</div><div id="${id('sidebar-content')}" class="sidebar-content" role="region" aria-labelledby="${id('sidebar-title')}"></div>`;
     if(!embedded)q('close-sidebar').onclick=()=>closeSidebar();
-    $$('[data-sidebar-view]',panel).forEach(button=>button.onclick=()=>embedded?r.showDocumentSidebarView(button.dataset.sidebarView):renderSidebar(button.dataset.sidebarView));
+    $$('[data-sidebar-view]',panel).forEach(button=>button.onclick=()=>{
+      const view=button.dataset.sidebarView;
+      // Only an explicit re-click collapses the TOC, never a view change or restore.
+      if(view==='outline'&&panel.sidebarMode==='outline'){panel.annotationReader?.collapseDocumentToc?.();return;}
+      return embedded?panel.annotationReader.showDocumentSidebarView(view):renderSidebar(view);
+    });
   }
   q('sidebar-title').textContent=embedded&&mode==='outline'?'목차':title;panel.setAttribute('aria-labelledby',id('sidebar-title'));
   $('[data-sidebar-view="outline"]',panel).hidden=!embedded&&!outline.length;

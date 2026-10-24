@@ -919,6 +919,21 @@ export class Reader {
     this.callbacks.onSidebarCounts?.(this.documentSidebarUI,this);
     if(['annotations','bookmarks'].includes(this.documentSidebarMode))this.showDocumentSidebarView(this.documentSidebarMode);
   }
+  collapseDocumentToc() {
+    const sidebar=this.tocResize?.sidebar;
+    if(this.preparing||this.disposed||!sidebar?.isConnected)return;
+    // Keep source nodes/listeners and the app panel; only fold source TOC branches.
+    for(const group of sidebar.querySelectorAll('details')){
+      if(group.closest('[data-htmlmemo-ui]'))continue;
+      group.open=false;group.removeAttribute('open');
+    }
+    const folded=new Set();
+    for(const trigger of sidebar.querySelectorAll('[aria-expanded],[aria-controls],[data-target],[data-controls],[data-toggle],.toc-header,.toc-title,.toc-toggle,.toc-cat,.group-header,.section-header,.folder')){
+      let container;try{container=this.findTocSubContainer(trigger);}catch{continue;}
+      if(!container||container===sidebar||container.closest('[data-htmlmemo-ui]')||(this.documentSidebarUI&&container.contains(this.documentSidebarUI))||folded.has(container))continue;
+      folded.add(container);this.toggleTocSubContainer(trigger,container,false);
+    }
+  }
   setupDocumentBookSearch() {
     const sidebar=this.tocResize?.sidebar;if(this.documentBookSearchHost||!sidebar)return;
     const input=[...sidebar.querySelectorAll('input')].find(node=>!node.closest('[data-htmlmemo-ui]')&&/책\s*전체\s*검색/.test((node.getAttribute('placeholder')||'')+' '+(node.getAttribute('aria-label')||'')));

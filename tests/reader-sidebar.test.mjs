@@ -50,6 +50,46 @@ test('sidebar switches four icon-only views with tooltip labels and total counts
   assert.strictEqual(a.doc.querySelector('[data-sidebar-view=search]'),button);
 });
 
+function collapsibleSidebar(){
+  installDOM();const a=sidebar(),doc=documentFor('<html><head></head><body><nav id="reader-nav"><h2>목차</h2><div id="reader-tree"><details id="part" open><summary>1부</summary><details id="chapter" open><summary>1.1장</summary><a href="#body">첫 절</a></details></details><details id="other"><summary>2부</summary><a href="#body">다른 절</a></details></div></nav><main><h1 id="body">본문</h1><details id="body-detail" open><summary>본문 설명</summary><p>본문은 그대로 둡니다.</p></details></main></body></html>');
+  Object.setPrototypeOf(a.r,Reader.prototype);a.r.doc=doc;a.r.tocResize={sidebar:doc.querySelector('nav')};a.r.callbacks={onSidebarView:(mode,panel,documentReader)=>a.context.renderSidebar(mode,{panel,embedded:true,documentReader})};a.r.setupDocumentSidebar();
+  return {...a,doc,tree:doc.querySelector('#reader-tree'),choose:mode=>a.r.documentSidebarUI.querySelector(`[data-sidebar-view="${mode}"]`).onclick()};
+}
+
+test('reselecting the active outline collapses every source TOC level but not body or annotation disclosures',()=>{
+  const a=collapsibleSidebar(),before=structuredClone(a.r.metadata),tree=a.tree,link=tree.querySelector('a');let clicked=0;link.onclick=()=>clicked++;
+  const ui=a.doc.createElement('details');ui.setAttribute('open','');ui.innerHTML='<summary>앱 주석 그룹</summary>';a.r.documentSidebarUI.append(ui);
+  a.choose('outline');assert.equal(tree.querySelectorAll('details[open]').length,0);assert.equal(a.doc.querySelector('#body-detail').hasAttribute('open'),true);assert.equal(ui.hasAttribute('open'),true);
+  assert.strictEqual(a.doc.querySelector('#reader-tree'),tree);link.onclick();assert.equal(clicked,1);assert.deepEqual(a.r.metadata,before);
+  a.choose('outline');assert.equal(tree.querySelectorAll('details[open]').length,0);assert.equal(a.r.documentSidebarMode,'outline');
+});
+
+test('returning from search, annotations or bookmarks preserves TOC expansion until outline is clicked again',()=>{
+  const a=collapsibleSidebar();
+  for(const mode of ['search','annotations','bookmarks']){
+    for(const group of a.tree.querySelectorAll('details'))group.setAttribute('open','');a.r.tocResize.sidebar.scrollTop=37;
+    a.choose(mode);a.choose('outline');assert.equal(a.tree.querySelectorAll('details[open]').length,3,mode);assert.equal(a.r.tocResize.sidebar.scrollTop,37);
+    a.choose('outline');assert.equal(a.tree.querySelectorAll('details[open]').length,0,mode);
+  }
+});
+
+test('initial setup, automatic render and native sidebar restore never collapse an expanded TOC',()=>{
+  const a=collapsibleSidebar();assert.equal(a.tree.querySelectorAll('details[open]').length,2);
+  a.r.setupDocumentSidebar();a.r.showDocumentSidebarView('outline');a.r.refreshDocumentSidebar();assert.equal(a.tree.querySelectorAll('details[open]').length,2);
+});
+
+test('outline reselection uses the current shared-panel document, not the first renderer closure',()=>{
+  const a=sidebar();let first=0,second=0;a.r.collapseDocumentToc=()=>first++;a.open('outline');a.choose('search');a.choose('outline');assert.equal(first,0);a.choose('outline');assert.equal(first,1);
+  const other={...a.r,collapseDocumentToc:()=>second++};a.setReader(other);a.open('outline');a.choose('outline');assert.equal(first,1);assert.equal(second,1);
+});
+
+test('active outline collapse supports nested custom controlled groups without hiding the sidebar or breaking reopening',()=>{
+  const a=collapsibleSidebar(),nav=a.doc.querySelector('nav');a.tree.innerHTML='<div class="toc-group"><button class="toc-toggle" aria-controls="part-items" aria-expanded="true">▼ 1부</button><ul id="part-items"><li><button class="toc-toggle" aria-controls="chapter-items" aria-expanded="true">▼ 1.1장</button><ul id="chapter-items"><li><a href="#body">첫 절</a></li></ul></li></ul></div>';
+  const part=a.doc.querySelector('#part-items'),chapter=a.doc.querySelector('#chapter-items'),trigger=a.tree.querySelector('button');a.choose('outline');
+  assert.equal(part.hidden,true);assert.equal(chapter.hidden,true);assert.equal(trigger.getAttribute('aria-expanded'),'false');assert.equal(nav.hidden,false);assert.equal(a.r.documentSidebarUI.hidden,false);assert.equal(a.tree.hidden,false);
+  a.r.toggleTocSubContainer(trigger,part,true);assert.equal(part.hidden,false);assert.equal(trigger.getAttribute('aria-expanded'),'true');assert.equal(chapter.hidden,true);
+});
+
 test('TOC-less HTML automatically exposes search, annotations and bookmarks, including empty totals',()=>{
   const a=sidebar();a.r.doc={};a.r.outline=()=>[];a.r.metadata={annotations:[],bookmarks:[]};const before=structuredClone(a.r.metadata);
   a.context.restoreSidebar();const panel=a.doc.querySelector('#sidebar');assert.equal(panel.hidden,false);assert.equal(panel.sidebarMode,'search');assert.equal(a.doc.querySelector('#workspace').hasAttribute('data-app-sidebar'),true);
@@ -195,6 +235,13 @@ function searchableBook(){
   const query=value=>{input.value=value;input.dispatchEvent(new doc.defaultView.Event('input',{bubbles:true}));};
   return {...a,doc,input,tree,query};
 }
+
+test('whole-book search restores pre-search expansion and only a second outline click collapses it',()=>{
+  const {r,doc,tree,query}=searchableBook(),group=tree.querySelector('details');group.setAttribute('open','');r.showDocumentSidebarView('search');query('기억');
+  const choose=()=>r.documentSidebarUI.querySelector('[data-sidebar-view=outline]').onclick();choose();assert.equal(group.hasAttribute('open'),true);assert.equal(tree.parentElement.id,'reader-nav');
+  choose();assert.equal(group.hasAttribute('open'),false);r.showDocumentSidebarView('search');assert.equal(group.hasAttribute('open'),true);choose();assert.equal(group.hasAttribute('open'),false);
+  assert.equal(doc.querySelector('#q').value,'기억');r.documentBookSearchObserver.disconnect();
+});
 
 test('whole-book search exposes its live filtered result tree, preserves offsets and returns it to the outline and export',()=>{
   const {r,doc,tree,query}=searchableBook(),originalText=textIndex(doc).text,group=tree.querySelector('details');let nativeClicks=0;
