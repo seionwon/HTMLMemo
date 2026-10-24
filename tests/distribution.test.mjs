@@ -116,6 +116,28 @@ test('settings can be saved and reloaded through file input when native pickers 
 
 test('library switches between persistent card and one-line list views',async()=>{const app=await fileApp(),grid=app.doc.querySelector('#document-grid'),card=app.doc.querySelector('#library-card-view'),list=app.doc.querySelector('#library-list-view');assert.equal(grid.dataset.view,'card');assert.equal(card.getAttribute('aria-pressed'),'true');list.onclick();assert.equal(grid.dataset.view,'list');assert.equal(list.getAttribute('aria-pressed'),'true');assert.equal(card.getAttribute('aria-pressed'),'false');assert.equal(JSON.parse(app.local.get(PREFERENCES_KEY)).libraryView,'list');card.onclick();assert.equal(grid.dataset.view,'card');assert.equal(JSON.parse(app.local.get(PREFERENCES_KEY)).libraryView,'card');});
 
+test('compact cards and lists share exactly one title and source without touching stored notes',async()=>{
+  const record={id:'compact',title:'로컬 LLM 학습 노트',name:'notes.html',source:'',byteSize:2048,created:1234,modified:5678,metadata:{annotations:[{id:'kept',text:'Keep this note'}],bookmarks:[{id:'mark'}],view:{scrollTop:80}}},before=structuredClone(record);
+  const app=await fileApp({documents:[record]});
+  for(const view of ['card','list','card']){
+    app.doc.querySelector('#library-'+view+'-view').onclick();const card=app.doc.querySelector('.document-card');
+    assert.equal(card.querySelectorAll('h3').length,1);assert.equal(card.querySelector('.list-title').textContent,record.title);assert.equal(card.querySelector('.list-title').title,record.title);
+    assert.equal(card.querySelectorAll('.list-host').length,1);assert.equal(card.querySelector('.list-host').textContent,'로컬 HTML');assert.equal(card.textContent.split(record.title).length-1,1);assert.equal(card.textContent.split('로컬 HTML').length-1,1);
+    assert.equal(card.querySelector('.card-preview, .list-details'),null);assert.equal(card.querySelector('.list-annotations').getAttribute('aria-label'),'주석 1개');
+    assert.equal(card.querySelector('.list-size').textContent,'2 KB');assert.match(card.querySelector('.list-progress').textContent,/이어서 읽기/);
+    assert.equal(card.querySelectorAll('[data-open]').length,1);assert.equal(card.querySelectorAll('[data-card-menu]').length,1);
+  }
+  assert.deepEqual(record,before);
+});
+test('compact library escapes full titles and sources and keeps unknown sizes and zero-note states meaningful',async()=>{
+  const title='<img src=x onerror="bad()"> 아주 긴 제목 & "메모"',record={id:'escaped',title,name:'escaped.html',source:'https://www.example.test/book',created:1234,modified:5678,metadata:{annotations:[]}};
+  const app=await fileApp({documents:[record]}),card=app.doc.querySelector('.document-card');
+  assert.equal(card.querySelector('img'),null);assert.equal(card.querySelector('.list-title').textContent,title);assert.equal(card.querySelector('.list-title').title,title);
+  assert.equal(card.querySelector('.list-host').textContent,'example.test');assert.equal(card.querySelector('.list-host').title,'example.test');
+  assert.equal(card.querySelector('.list-annotations').getAttribute('aria-label'),'주석 0개');assert.equal(card.querySelector('.list-size').textContent,'HTML');assert.match(card.querySelector('.list-progress').textContent,/새 문서/);
+  assert.equal(card.querySelector('[data-card-menu]').getAttribute('aria-label'),title+' 문서 메뉴');
+});
+
 
 test('the single header menu preserves library, web opening, HTML import, app delivery and offline About',async()=>{
   const {doc}=await fileApp();

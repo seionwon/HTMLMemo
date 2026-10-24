@@ -831,6 +831,41 @@ test('real Chrome: self-observing HTML settles without overlay resize feedback o
   }finally{if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
 });
 
+test('real Chrome: compact library shares titles and sources, keeps dense views usable and preserves notes',{timeout:90000},async()=>{
+  await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-compact-library-'));await cp(join(root,'public'),folder,{recursive:true});
+  const server=createServer(folder);let chrome;
+  try{
+    await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));chrome=await launchChrome();const page=chrome.page,url=process.env.HTMLMEMO_SIDEBAR_TEST_URL||`http://127.0.0.1:${server.address().port}/`;
+    await page.navigate(url);await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
+    await page.evaluate(`(async()=>{const {putDocumentRevision}=await import('./src/storage.js'),{parseHTML}=await import('./src/document.js');for(let i=0;i<8;i++){const title=i===0?'로컬 LLM 학습 노트':i===1?'아주긴제목'.repeat(12)+' & <정리>':'Compact book '+i,source=i%2?'https://very-long-library-source.example.test/book/'+i:'',html='<html><head><title>Compact library</title></head><body><h1 id="compact-target">Document '+i+'</h1><p>Keep the original source and annotation records.</p></body></html>',parsed=parseHTML(html,{title,source},{allowScripts:true});parsed.metadata.title=title;if(i===0){parsed.metadata.annotations=[{id:'kept-note',type:'note',text:'기존 주석 보존',color:'#334155',width:3,opacity:1,points:[{x:20,y:30}]}];parsed.metadata.bookmarks=[{id:'kept-mark',title:'기존 북마크',top:0,left:0}];}await putDocumentRevision({id:'compact-'+i,title,name:'compact-'+i+'.html',source,created:1000+i,modified:2000+i,html:parsed.html,metadata:parsed.metadata});}})()`);
+    const state=()=>page.evaluate(`(async()=>{const {listDocuments,listRevisions}=await import('./src/storage.js');return Promise.all((await listDocuments()).map(async r=>({id:r.id,title:r.title,modified:r.modified,annotations:r.metadata.annotations,bookmarks:r.metadata.bookmarks,revisions:(await listRevisions(r.id)).length})));})()`);
+    const before=await state();await page.navigate(url);await page.waitFor('document.querySelectorAll(".document-card").length===8');
+    for(const width of [1280,800,600,390,320]){
+      await page.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
+      for(const view of ['card','list']){
+        await page.click('#library-'+view+'-view');
+        const metrics=await page.evaluate(`(()=>{const grid=document.querySelector('#document-grid'),cards=[...grid.querySelectorAll('.document-card')],rect=node=>{const r=node.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width,height:r.height};};return {view:grid.dataset.view,overflow:document.querySelector('#library').scrollWidth>innerWidth,hero:rect(document.querySelector('.hero')).height,cards:cards.map(card=>{const r=rect(card),open=card.querySelector('.card-open'),menu=card.querySelector('.card-menu'),m=rect(menu);return {height:r.height,top:r.top,titleCount:card.querySelectorAll('h3').length,sourceCount:card.querySelectorAll('.list-host').length,preview:!!card.querySelector('.card-preview,.list-details'),title:card.querySelector('.list-title').textContent,fullTitle:card.querySelector('.list-title').title,menuWidth:m.width,menuHeight:m.height,menuHit:menu.contains(document.elementFromPoint(m.left+m.width/2,m.top+m.height/2)),inside:[...open.querySelectorAll('.list-title,.list-host,.list-date,.list-annotations,.list-size,.list-progress')].every(node=>{const b=rect(node);return !b.width||b.left>=r.left&&b.right<=r.right&&b.top>=r.top&&b.bottom<=r.bottom;})};})};})()`);
+        assert.equal(metrics.view,view);assert.equal(metrics.overflow,false);assert.ok(metrics.hero<=90,JSON.stringify({width,view,hero:metrics.hero}));
+        assert.ok(metrics.cards.every(card=>card.titleCount===1&&card.sourceCount===1&&!card.preview&&card.title===card.fullTitle&&card.inside&&card.menuWidth>=24&&card.menuHeight>=24),JSON.stringify({width,view,metrics}));
+        assert.ok(metrics.cards.every(card=>card.height<=(view==='card'?100:width<=600?34:30)),JSON.stringify({width,view,heights:metrics.cards.map(card=>card.height)}));
+        if(view==='card'){const columns=metrics.cards.filter(card=>Math.abs(card.top-metrics.cards[0].top)<1).length;assert.ok(columns>=(width===1280?5:2),JSON.stringify({width,columns}));}
+        // The first document and every menu in the first row remain reachable.
+        assert.equal(metrics.cards[0].menuHit,true);
+        if([1280,390,320].includes(width)){await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/library-compact-'+view+'-'+width+'.png'),await page.screenshot());}
+      }
+    }
+    const filter=async value=>page.evaluate(`(()=>{const input=document.querySelector('#library-filter');input.value=${JSON.stringify(value)};input.dispatchEvent(new Event('input'));return document.querySelectorAll('.document-card').length;})()`);
+    assert.equal(await filter('로컬 LLM'),1);assert.equal(await filter('no-such-document'),0);assert.equal(await page.evaluate('getComputedStyle(document.querySelector("#document-grid")).display'),'none');assert.equal(await filter(''),8);
+    await page.click('[data-card-menu="compact-0"]');await page.waitFor('document.querySelector("#dialog").open');
+    assert.equal(await page.evaluate('["menu-open","menu-export","menu-history","menu-migrate","menu-remove"].every(id=>!!document.getElementById(id))'),true);await page.click('#dialog [data-dialog-close]');
+    await page.navigate(url);await page.waitFor('document.querySelectorAll(".document-card").length===8');assert.equal(await page.evaluate('document.querySelector("#document-grid").dataset.view'),'list');
+    await page.send('Input.dispatchKeyEvent',{type:'keyDown',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});await page.send('Input.dispatchKeyEvent',{type:'keyUp',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});await page.evaluate('document.querySelector("[data-open=compact-1]").focus()');
+    assert.equal(await page.evaluate('getComputedStyle(document.activeElement).outlineOffset'),'-2px');
+    await page.send('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});await page.send('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
+    await page.waitFor('document.querySelector(".document-host:not([hidden]) iframe")?.contentDocument?.querySelector("#compact-target")&&document.querySelector("#status-left").textContent.includes("자동 저장됨")');
+    assert.deepEqual(await state(),before);assert.deepEqual(chrome.errors,[]);
+  }finally{await chrome?.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
+});
 test('real Chrome: large library and annotation autosave never deserialize book bodies',{timeout:60000},async()=>{
  await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-library-test-'));await cp(join(root,'public'),folder,{recursive:true});
  const server=createServer(folder);let chrome;

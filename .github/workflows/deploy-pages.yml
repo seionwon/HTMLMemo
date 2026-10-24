@@ -88,7 +88,7 @@ jobs:
           console.log('Published app, reader and model match this commit.');
           NODE
           mkdir -p test-results
-          node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/published-browser-results.xml --test-name-pattern='whole-book search|duplicate HTML import|reading controls|palette controls|toolbar mode groups|sidebar view choices|annotation tree|font-scaled pen|Pages-only|Chrome companion' tests/browser.integration.mjs
+          node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/published-browser-results.xml --test-name-pattern='compact library|whole-book search|duplicate HTML import|reading controls|palette controls|toolbar mode groups|sidebar view choices|annotation tree|font-scaled pen|Pages-only|Chrome companion' tests/browser.integration.mjs
       - name: Keep published desktop and mobile verification screenshots
         if: always()
         uses: actions/upload-artifact@v4
@@ -97,6 +97,7 @@ jobs:
           path: |
             test-results/published-browser-results.xml
             test-results/duplicate-import-performance.json
+            test-results/library-compact-*.png
             test-results/palette-controls-*.png
             test-results/palette-drag-*.png
             test-results/toolbar-modes-*.png
