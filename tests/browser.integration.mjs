@@ -447,12 +447,16 @@ test('real Chrome: toolbar mode groups preserve selected text when creating note
     const quote='A selected text with inline formatting deserves its own note.',prose='<h1>Selected text notes</h1>'+[1280,390,320].map(width=>`<p id="target-${width}" style="min-height:180px">Before ${width}. A <em>selected text</em> with <strong>inline formatting</strong> deserves its own note. After ${width}.</p>`).join('');
     const frame='document.querySelector(".document-host:not([hidden]) iframe")',doc=frame+'.contentDocument',ready=`${frame}?.style.visibility==='visible'&&!document.querySelector('.tab-dirty:not([hidden])')`,metrics=[];
     const selectedTarget=`(()=>{const s=${doc}.getSelection();return s?.rangeCount?s.getRangeAt(0).startContainer.parentElement.closest('p')?.id:'';})()`,selectionAt=width=>`${doc}.getSelection().toString()===${JSON.stringify(quote)}&&${selectedTarget}===${JSON.stringify('target-'+width)}`;
-    const select=async width=>{
+    const select=async(width,mode)=>{
       await page.click('#toolbar [data-action=select]');
       if(await page.evaluate('!document.querySelector("#sidebar").hidden'))await page.click('#close-sidebar');
       const point=await page.evaluate(`(async()=>{const f=${frame},d=f.contentDocument,e=d.querySelector(${JSON.stringify('#target-'+width+' em')});e.scrollIntoView({block:'center'});await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));const range=d.createRange();range.setStart(e.firstChild,0);range.setEnd(e.firstChild,8);const r=range.getClientRects()[0],b=f.getBoundingClientRect(),scale=b.width/f.offsetWidth;return{x:b.left+(r.left+r.width/2)*scale,y:b.top+(r.top+r.height/2)*scale};})()`);
       for(let clickCount=1;clickCount<=3;clickCount++){await page.send('Input.dispatchMouseEvent',{type:'mousePressed',...point,button:'left',clickCount});await page.send('Input.dispatchMouseEvent',{type:'mouseReleased',...point,button:'left',clickCount});}
       await page.waitFor(selectionAt(width));
+      await page.waitFor('!document.querySelector("#tool-popover").hidden&&document.querySelector("#tool-popover").classList.contains("selection")');
+      assert.deepEqual(await page.evaluate('[...document.querySelectorAll("#tool-popover [data-selection]")].map(b=>[b.dataset.selection,b.textContent])'),[['speak','읽어주기'],['webSearch','웹 검색']]);
+      assert.equal(await page.evaluate('(()=>{const r=document.querySelector("#tool-popover").getBoundingClientRect();return r.width<220&&r.left>=8&&r.right<=innerWidth-8&&r.top>=8&&r.bottom<=innerHeight-8;})()'),true);
+      await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,`test-results/toolbar-modes-selection-menu-${mode}-${width}.png`),await page.screenshot());
     };
     const open=async width=>{
       const selector='#toolbar [data-action=note]';
@@ -470,13 +474,13 @@ test('real Chrome: toolbar mode groups preserve selected text when creating note
       const savedState=`(async()=>{const{listDocuments,getDocument}=await import('./src/storage.js'),row=(await listDocuments()).find(r=>r.name===${JSON.stringify('selection-note-'+mode+'.html')});return row?await getDocument(row.id):null;})()`;await page.waitFor(savedState);const original=await page.evaluate(savedState);
       for(const width of [1280,390,320]){
         await page.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});await page.send('Emulation.setTouchEmulationEnabled',{enabled:width===390,maxTouchPoints:1});
-        const before=(await page.evaluate(savedState)).metadata.annotations.length;await select(width);await open(width);await page.click('#dialog .dialog-actions [value=cancel]');await page.waitFor('!document.querySelector("#dialog").open');await page.waitFor(selectionAt(width));assert.equal((await page.evaluate(savedState)).metadata.annotations.length,before);
+        const before=(await page.evaluate(savedState)).metadata.annotations.length;await select(width,mode);await open(width);await page.click('#dialog .dialog-actions [value=cancel]');await page.waitFor('!document.querySelector("#dialog").open');await page.waitFor(selectionAt(width));assert.equal((await page.evaluate(savedState)).metadata.annotations.length,before);
         await open(width);await page.click('#note-text');await page.send('Input.insertText',{text:`메모 ${mode} ${width}`});await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,`test-results/toolbar-modes-selection-note-${mode}-${width}-dialog.png`),await page.screenshot());await page.click('#dialog [value=save]');
         await page.waitFor(`!document.querySelector('#dialog').open&&${ready}&&(async()=>{const r=await ${savedState};return r.metadata.annotations.length===${before+1};})()`);await page.waitFor(selectionAt(width));
         const saved=await page.evaluate(savedState),note=saved.metadata.annotations.at(-1);assert.equal(note.type,'note');assert.equal(note.text,`메모 ${mode} ${width}`);assert.equal(note.textAnchor.quote,quote);assert.equal(note.textAnchor.section,mode==='book'?'v0:one':undefined);assert.equal(note.anchorTarget.id,'target-'+width);assert.deepEqual(saved.metadata.bookmarks,original.metadata.bookmarks);
         await writeFile(join(root,`test-results/toolbar-modes-selection-note-${mode}-${width}-saved.png`),await page.screenshot());
         await open(width);await page.click('#dialog .dialog-actions [value=cancel]');await page.waitFor('!document.querySelector("#dialog").open');await page.waitFor(selectionAt(width));
-        metrics.push({mode,width,input:width===390?'touch':width===320?'keyboard':'mouse',selectionKeptInDialog:true,selectionKeptAfterSaveAndCancel:true,noteReferencesExactInlineText:true,chapterAndParagraphPreserved:true,repeatClickCreatesNoteNotModePicker:true,cancelCreatesNoNote:true});
+        metrics.push({mode,width,input:width===390?'touch':width===320?'keyboard':'mouse',selectionMenuOnlyReadAndWebSearch:true,selectionMenuFitsItsTwoActions:true,selectionKeptInDialog:true,selectionKeptAfterSaveAndCancel:true,noteReferencesExactInlineText:true,chapterAndParagraphPreserved:true,repeatClickCreatesNoteNotModePicker:true,cancelCreatesNoNote:true});
       }
       const expected=(await page.evaluate(savedState)).metadata.annotations;await page.navigate(url);await page.waitFor(`document.querySelector('[data-open="${original.id}"]')`);await page.click(`[data-open="${original.id}"]`);await page.waitFor(`${ready}&&${doc}.querySelectorAll('[data-htmlmemo-id]').length===3`);assert.deepEqual((await page.evaluate(savedState)).metadata.annotations,expected);
     }

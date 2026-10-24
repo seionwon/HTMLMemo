@@ -864,16 +864,13 @@ function renderPalettePopoverContent(r) {
 function showSelectionMenu(r) {
   const anchor=r.selection;if(!anchor)return;
   if(popoverName==='selection')closePopover();
-  showPopover('selection',`${[['copy','복사'],['highlight','형광펜'],['underline','밑줄'],['note','메모'],['speak','읽어주기'],['webSearch','웹 검색']].map(([a,l]) => `<button data-selection="${a}">${l}</button>`).join('')}`,()=>{
+  showPopover('selection',`${[['speak','읽어주기'],['webSearch','웹 검색']].map(([a,l]) => `<button data-selection="${a}">${l}</button>`).join('')}`,()=>{
     const pop=$('#tool-popover');pop.setAttribute('role','dialog');pop.setAttribute('aria-label','선택한 텍스트');
     $$('[data-selection]',pop).forEach(button=>{
       button.onpointerdown=e=>e.preventDefault();
       button.onclick=safely(async()=>{
         const action=button.dataset.selection;
-        if(['highlight','underline'].includes(action))r.addText(action,anchor);
-        else if(action==='note')await r.addSelectionNote(anchor);
-        else if(action==='copy'){try{await navigator.clipboard.writeText(anchor.quote);toast('텍스트를 복사했습니다.');}catch{toast('글자를 다시 선택한 뒤 Ctrl/⌘+C로 복사하세요.');}}
-        else if(action==='speak'){r.selection=anchor;if(!r.speakSelection())return;}
+        if(action==='speak'){r.selection=anchor;if(!r.speakSelection())return;}
         else if(action==='webSearch')await openBrowser('https://www.google.com/search?q='+encodeURIComponent(anchor.quote.slice(0,2000)));
         closePopover();
       });

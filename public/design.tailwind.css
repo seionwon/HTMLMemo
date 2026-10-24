@@ -85,7 +85,7 @@ body[data-codememo-design]{margin:0;font-family:var(--app-font);background:var(-
 .tool-popover .popover-close{flex:0 0 auto;width:28px;height:28px;padding:4px}
 
 /* HTMLMemoEx tab.css: text-selection menu. */
-#tool-popover.selection { display:flex;gap:3px;flex-wrap:wrap;width:310px;max-width:calc(100vw - 20px);padding:6px; }
+#tool-popover.selection { display:flex;gap:3px;flex-wrap:wrap;width:max-content;max-width:calc(100vw - 20px);padding:6px; }
 #tool-popover.selection[hidden] { display:none; }
 #tool-popover.selection button { font-size:11px;padding:4px 9px; }
 
