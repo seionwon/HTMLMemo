@@ -97,6 +97,10 @@ test('reader navigation performs no full text walks or body normalization after 
   r.search('마지막',false);assert.strictEqual(r.searchTextIndex,first);assert.equal(f.walks(),1);assert.equal(r.searchResults.length,1);r.search('');assert.equal(f.doc.querySelector('[data-htmlmemo-search]'),null);r.searchCache().dispose();
 });
 
+test('empty-search Enter or navigation never builds an otherwise unused index',()=>{
+  const f=fixture(),r=reader(f.doc);assert.equal(r.nextSearch(1),false);r.search('');assert.equal(r.nextSearch(1),false);r.search('   ');assert.equal(r.nextSearch(-1),false);assert.equal(f.walks(),0);assert.equal(r.searchCache().entries.size,0);r.searchCache().dispose();
+});
+
 test('reader render seeds the index used to restore existing text annotations',()=>{
   const f=fixture('<p>existing annotation and keyword</p>'),r=reader(f.doc);r.metadata.annotations=[{id:'existing',type:'highlight',textAnchor:{start:0,end:8,quote:'existing'},color:'#edcf67',opacity:.35}];r.annotationInSection=()=>true;r.renderDrawingLayer=()=>{};r.observeDynamicDocument=()=>{};
   r.render();assert.equal(f.walks(),1);r.search('keyword',false);assert.equal(f.walks(),1);assert.equal(r.searchResults.length,1);r.searchCache().dispose();

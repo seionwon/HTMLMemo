@@ -2288,6 +2288,7 @@ export class Reader {
     if (move && this.searchResults.length) this.nextSearch(1); else this.callbacks?.onSearchChange?.(this); return this.searchResults;
   }
   nextSearch(direction) {
+    if(!this.searchQuery?.trim())return false;
     const cache=this.searchCache(),index=cache.get();
     if(this.searchTextIndex!==index&&this.searchQuery)this.search(this.searchQuery,false);
     if (!this.searchResults.length) return false;
