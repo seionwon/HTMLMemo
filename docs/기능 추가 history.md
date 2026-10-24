@@ -1916,12 +1916,14 @@ Pages 게시 완료는 **22:48:17**, 공개 Chrome 완료는 **22:49:34 +09:00**
 Pages 게시 완료는 **10:42:55**, 공개 Chrome 완료는 **10:44:00 +09:00**입니다. 공개 앱 파일 **26개** 모두 HTTP 200이며 해당 Pages 아티팩트와 바이트·SHA-256이 일치했습니다. 공개 화면은 test-results/library-compact-2026-10-24/published/library-compact-card-1280.png·library-compact-card-390.png·library-compact-list-320.png 등 6개에서 확인했습니다. Linux CI에 한국어 글꼴이 없어 문구는 DOM으로 검사하며 글꼴 모양 자체의 CI 검증에는 한계가 있습니다. 한국어 렌더링은 위 CodeMemo의 1280/320px 예제 화면으로 보완했습니다. 시험 문서·화면 파일·개인 설정/프로필은 공개 앱에 포함하지 않았고 사용자용 로컬 서버·확장·추가 설치는 필요하지 않습니다.
 
 <a id="hist-20261024-002"></a>
-### 2026-10-24 11:35:08 +09:00 — 빈 서재의 HTML 문서 안내 문구
+### 2026-10-24 11:40:34 +09:00 — 빈 서재의 HTML 문서 안내 문구
 
 | ID | change-kind | status |
 |---|---|---|
-| hist-20261024-002 | 빈 서재 안내 문구 변경 | 구현·로컬 검사 완료 · 실제 Chrome 및 Pages 게시 확인 중 |
+| hist-20261024-002 | 빈 서재 안내 문구 변경 | 구현·로컬/실제 Chrome 검사·GitHub Pages 게시·공개 파일/화면 검증 완료 |
 
 **목적·사용법:** 내 서재에 문서가 없을 때 보이는 제목을 **첫 HTML 문서를 보관해보세요.**로 변경했습니다. 초기 HTML과 화면 갱신 코드 양쪽에 적용해 카드/목록 전환 후에도 새 문구를 유지합니다. 보관 문서는 있지만 검색에 일치하는 항목이 없을 때의 **검색 결과가 없습니다.** 안내는 바꾸지 않았습니다. 문서·주석·북마크·디자인·색상·아이콘은 변경하지 않습니다.
 
 **검증·게시 상태:** npm test **263개**, npm run check JavaScript·JSON **77개**, npm run build 및 git diff --check를 통과했습니다. 초기 HTML·실행 후 안내·보기 전환·검색 0건 안내를 단위 검사로 확인했고, CodeMemo 임시 브라우저의 1280px/320px 화면에서 새 문구를 HTTP 200·브라우저 예외 없이 확인했습니다. 화면은 test-results/empty-heading-2026-10-24/desktop.json.png·mobile.json.png에 보관했습니다. 검증용 4173 서버는 종료했고 데스크톱 Chrome·개인 프로필을 실행하지 않았습니다. 실제 Chrome과 공개 주소 검사에도 문구 확인을 추가했습니다. Pages 게시와 공개 검증 결과는 같은 항목에 보충하며 아직 배포 완료로 기록하지 않습니다. 사용 주소는 https://seionwon.github.io/HTMLMemo/ 하나를 유지합니다.
+
+**게시·공개 검증 완료 (2026-10-24 11:40:34 +09:00):** 커밋 `27942e99d35c8700052ee73c70742813ec7d7274`의 [Actions 40054850475](https://github.com/seionwon/HTMLMemo/actions/runs/40054850475)는 단위 **263개**, 소스 **77개**, 전체 실제 Chrome **42개**, 빌드·Pages 게시 및 공개 Chrome **16개**를 모두 통과했습니다. 전체/공개 XML에 실패·건너뛰기는 없고, 공개 앱의 빈 서재 제목도 새 문구와 일치했습니다. Pages 게시 완료는 **11:38:50**, 공개 검증 완료는 **11:40:04 +09:00**입니다. 공개 앱 파일 **26개** 모두 HTTP 200이며 Pages 아티팩트와 바이트·SHA-256이 일치했고, 공개 index.html과 src/app.js에 새 문구가 있으며 이전 문구가 없음을 확인했습니다. 공개 Chrome 결과는 test-results/empty-heading-2026-10-24/published/published-browser-results.xml에 보관했습니다. 검증 파일·문서·개인 설정은 배포하지 않았습니다.
