@@ -358,7 +358,7 @@ export class Reader {
     this.doc.addEventListener('pointerup', event => { if(this.tocDrag)return; if(this.endMiddleScroll(event))return;this.pointerUp(event); }, true);
     this.doc.addEventListener('pointercancel', () => { this.stopMiddleScroll();this.gesture = null; this.preview?.remove(); this.preview = null; });
     this.doc.addEventListener('auxclick', event => {if(event.button===1&&!event.target.closest?.('a,button,input,textarea,select,[contenteditable]'))event.preventDefault();}, true);
-    this.doc.addEventListener('selectionchange', () => {const s=this.doc.getSelection(),anchor=s?.rangeCount&&!s.isCollapsed?selectionAnchor(this.doc,s.getRangeAt(0)):null;this.selection=anchor?this.sectionAnchor(anchor):null;});
+    this.doc.addEventListener('selectionchange', () => this.captureTextSelection());
     this.doc.addEventListener('keydown', event => {if(this.handleTocKeydown(event))return; if(event.key==='Escape'&&this.middleScroll){this.stopMiddleScroll();event.preventDefault();return;}this.callbacks.onKey?.(event);}, true);
     this.doc.addEventListener('dblclick', event => {if(this.handleTocDblClick(event))return; this.focusDocument(event);}, true);
     this.viewport.addEventListener('dblclick', event => this.focusDocument(event));
@@ -1716,6 +1716,10 @@ export class Reader {
     if (TEXT_TOOLS.includes(tool) && this.selection) this.addText(tool, this.selection);
     this.callbacks.onView?.();
   }
+  captureTextSelection() {
+    const selection=this.doc.getSelection(),anchor=selection?.rangeCount&&!selection.isCollapsed?selectionAnchor(this.doc,selection.getRangeAt(0)):null;
+    this.selection=anchor?this.sectionAnchor(anchor):null;return this.selection;
+  }
   restoreTextSelection(anchor) {
     if(!anchor?.quote?.trim()||this.disposed||this.host?.hidden||(anchor.section||'')!==currentSection(this.doc))return false;
     const index=textIndex(this.doc),resolved=resolveTextAnchor(index,anchor),selection=this.doc.getSelection();
@@ -1723,7 +1727,7 @@ export class Reader {
     if(!selection||!range)return false;
     selection.removeAllRanges();selection.addRange(range);this.selection=this.sectionAnchor({...anchor,...resolved});return true;
   }
-  async addSelectionNote(anchor=this.selection) {
+  async addSelectionNote(anchor=this.captureTextSelection()) {
     if(!anchor?.quote?.trim()||this.selectionNotePending||this.disposed||this.host?.hidden)return false;
     // Pin the quote and chapter before modal focus can change the live selection.
     const target=this.sectionAnchor({...anchor}),section=currentSection(this.doc);
@@ -1946,9 +1950,7 @@ export class Reader {
     }
     if (this.tool === 'select') setTimeout(() => {
       if (this.disposed || this.tool !== 'select') return;
-      const selection = this.doc.getSelection();
-      if (!selection?.rangeCount || selection.isCollapsed) {this.selection=null;return;}
-      const anchor=selectionAnchor(this.doc,selection.getRangeAt(0));this.selection=anchor?this.sectionAnchor(anchor):null;
+      this.captureTextSelection();
       if (this.selection) this.callbacks.onTextSelection?.(this.selection);
     }, 0);
     if (TEXT_TOOLS.includes(this.tool)) setTimeout(() => {

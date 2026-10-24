@@ -32,8 +32,17 @@ test('floating Note opens a selected-text note instead of switching to a drawing
 });
 
 test('Note pointer activation preserves a pending selection for mouse, touch and pen without changing other touch controls',()=>{
-  const a=fixture();for(const pointerType of ['mouse','touch','pen']){let prevented=0;a.button.onpointerdown({pointerType,preventDefault(){prevented++;}});assert.equal(prevented,1,pointerType);}
+  const a=fixture();a.r.selection=null;for(const pointerType of ['mouse','touch','pen']){let prevented=0;a.button.onpointerdown({pointerType,preventDefault(){prevented++;}});assert.equal(prevented,1,pointerType);}
   let prevented=0;a.ui.querySelector('[data-action=palette]').onpointerdown({pointerType:'touch',preventDefault(){prevented++;}});assert.equal(prevented,0);
+});
+
+test('Note activation captures the live range even before selectionchange updates a missing or stale cached quote',async()=>{
+  for(const cache of ['stale','missing']){
+    const a=fixture({section:'v0:one'}),p=a.doc.createElement('p');p.id='new-target';p.textContent='다른 문단의 대상 글에 새 메모를 남깁니다.';a.doc.querySelector('#reader-content').append(p);
+    const index=textIndex(a.doc),start=index.text.lastIndexOf('대상 글'),range=rangeFromOffsets(a.doc,start,start+4,index);a.selection.removeAllRanges();a.selection.addRange(range);if(cache==='missing')a.r.selection=null;
+    a.r.tool='text';a.r.toolChoices={note:'text'};const pending=a.button.onclick();assert.equal(a.requests,1,cache);a.answer('새로 선택한 글의 메모');await pending;
+    const note=a.r.metadata.annotations[0];assert.equal(note.textAnchor.start,start,cache);assert.equal(note.textAnchor.quote,'대상 글');assert.equal(note.textAnchor.section,'v0:one');assert.equal(a.selection.getRangeAt(0).startContainer.parentElement.closest('p').id,'new-target');assert.deepEqual(a.tools,[]);
+  }
 });
 
 test('canceling or saving whitespace preserves the selected text and does not create a note',async()=>{
@@ -41,7 +50,7 @@ test('canceling or saving whitespace preserves the selected text and does not cr
 });
 
 test('without selected text the existing note placement and repeat-click mode picker remain available',()=>{
-  const a=fixture();a.selection.removeAllRanges();a.r.selection=null;a.button.onclick();assert.deepEqual(a.tools,['note']);assert.equal(a.requests,0);a.button.onclick();assert.equal(a.ui.querySelector('#tool-popover').hidden,false);assert.equal(a.requests,0);
+  const a=fixture();a.selection.removeAllRanges();a.button.onclick();assert.deepEqual(a.tools,['note']);assert.equal(a.r.selection,null);assert.equal(a.requests,0);a.button.onclick();assert.equal(a.ui.querySelector('#tool-popover').hidden,false);assert.equal(a.requests,0);
 });
 
 test('one pending selected-text note cannot open duplicate prompts or create duplicate annotations',async()=>{
