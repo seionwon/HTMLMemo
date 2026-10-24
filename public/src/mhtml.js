@@ -22,7 +22,7 @@ function parsePart(raw,parts,depth=0) {
   for(const line of raw.slice(0,separator.index).replace(/\r?\n[\t ]+/g,' ').split(/\r?\n/)){
     const colon=line.indexOf(':');if(colon>0)headers[line.slice(0,colon).trim().toLowerCase()]=line.slice(colon+1).trim();
   }
-  const part={headers,...contentType(headers['content-type']),body:raw.slice(separator.index+separator[0].length),children:[]};
+  const part={index:parts.length,headers,...contentType(headers['content-type']),body:raw.slice(separator.index+separator[0].length),children:[]};
   parts.push(part);
   if(part.type.startsWith('multipart/')){
     const boundary=part.params.boundary;
@@ -102,6 +102,9 @@ export async function readMHTML(file) {
     if(!part.children.length){
       if(location)for(const base of [parentBase,rootBase,original]){const url=withoutHash(resolve(location,base));if(url&&!locations.has(url))locations.set(url,part);}
       const id=contentID(part.headers['content-id']);if(id&&!ids.has(id))ids.set(id,part);
+      // Blink stores extracted inline styles with a cid: Content-Location,
+      // without necessarily supplying a separate Content-ID header.
+      if(/^cid:/i.test(location||'')){const id=contentID(location);if(!ids.has(id))ids.set(id,part);}
     }
     for(const child of part.children)indexParts(child,part.location);
   };
@@ -113,13 +116,17 @@ export async function readMHTML(file) {
     const part=find(value,base);
     if(!part||part.children.length||HTML_TYPES.has(part.type)||ancestors.has(part)||ancestors.size>12){warn(value);return '';}
     try{
-      if(!cache.has(part)){
-        const bytes=part.type==='text/css'?new TextEncoder().encode(rewriteCSS(partText(part).replace(/^\s*@charset\s+["'][^"']*["']\s*;/i,''),part.location,new Set([...ancestors,part]))):partBytes(part);
+      // A CID-only stylesheet has no hierarchical URL of its own. Relative
+      // resources use its referring document/stylesheet, including saved frames.
+      const inheritedBase=part.type==='text/css'&&(!part.headers['content-location']||/^cid:/i.test(part.location));
+      const key=inheritedBase?part.index+'@'+base:part;
+      if(!cache.has(key)){
+        const bytes=part.type==='text/css'?new TextEncoder().encode(rewriteCSS(partText(part).replace(/^\s*@charset\s+["'][^"']*["']\s*;/i,''),inheritedBase?base:part.location,new Set([...ancestors,part]))):partBytes(part);
         const type=/^[\w!#$&^_.+-]+\/[\w!#$&^_.+-]+$/.test(part.type)?part.type:'application/octet-stream';
-        cache.set(part,dataURL(bytes,type+(type==='text/css'?';charset=utf-8':'')));
+        cache.set(key,dataURL(bytes,type+(type==='text/css'?';charset=utf-8':'')));
       }
       const hash=value.includes('#')?value.slice(value.indexOf('#')):'';
-      return cache.get(part)+hash;
+      return cache.get(key)+hash;
     }catch{warn(value);return '';}
   }
   function rewriteCSS(css,base,ancestors=new Set()) {
