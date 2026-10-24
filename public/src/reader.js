@@ -76,8 +76,7 @@ export class Reader {
           this.preparing = false; this.measure(); this.render();
           await new Promise(done => requestAnimationFrame(done));
           if (this.disposed) { resolve(this); return; }
-          this.scrollTop = this.openingScroll?.top ? this.openingScroll.top*this.zoom : Number(this.metadata.view.scrollTop) || 0;
-          this.scrollLeft = this.openingScroll?.left ? this.openingScroll.left*this.zoom : Number(this.metadata.view.scrollLeft) || 0;
+          this.restoreOpeningPosition();
           this.measure(); this.renderDrawingLayer();
           // Scroll restoration and source ResizeObservers settle before the
           // first visible frame, so annotations do not flash at the page top.
@@ -489,8 +488,7 @@ export class Reader {
         const size=[this.viewport.clientWidth,this.viewport.clientHeight].join(':');
         if(size===this.hostSize)return;
         this.hostSize=size;
-        if(this.autoFit)this.zoom=this.fitZoom();
-        if(this.nativeScroll || this.autoFit)this.applyZoom();
+        this.resizeViewport();
       });
       if (this.viewport instanceof Element) this.hostObserver.observe(this.viewport);
     }
@@ -1536,6 +1534,19 @@ export class Reader {
       this.setZoom(previous.zoom,previous.autoFit);
     }
     this.measure();
+  }
+  restoreOpeningPosition() {
+    // Saved offsets include the old display zoom. A sidebar or a different
+    // window width must not turn them into a different place in the document.
+    const view=this.metadata.view,savedZoom=Number(view.zoom)>0?Number(view.zoom):this.zoom;
+    this.scrollTop=(this.openingScroll?.top || (Number(view.scrollTop)||0)/savedZoom)*this.zoom;
+    this.scrollLeft=(this.openingScroll?.left || (Number(view.scrollLeft)||0)/savedZoom)*this.zoom;
+  }
+  resizeViewport() {
+    const top=this.scrollTop/this.zoom,left=this.scrollLeft/this.zoom;
+    if(this.autoFit)this.zoom=this.fitZoom();
+    if(this.nativeScroll || this.autoFit)this.applyZoom();
+    this.scrollTop=top*this.zoom;this.scrollLeft=left*this.zoom;
   }
   fitZoom() { const focused=!!this.host.closest('.reader-focus'); return clamp(this.viewport.clientWidth / this.naturalWidth, .2, focused ? 8 : 2); }
   applyZoom() {

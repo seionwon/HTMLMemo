@@ -235,6 +235,24 @@ test('unchanged reading positions do not schedule another save',()=>{
  assert.equal(r.rememberPosition(),false);assert.equal(changes,3);assert.equal(r.metadata.view.tocWidth,300);
 });
 
+test('reopening at a different sidebar width restores the same document coordinates',()=>{
+ const r=Object.create(Reader.prototype);r.metadata={view:{scrollTop:490,scrollLeft:49,zoom:.98}};r.zoom=1.28;
+ Object.defineProperties(r,{scrollTop:{value:0,writable:true},scrollLeft:{value:0,writable:true}});
+ const before=structuredClone(r.metadata);r.restoreOpeningPosition();
+ assert.equal(r.scrollTop,640);assert.equal(r.scrollLeft,64);assert.deepEqual(r.metadata,before);
+ r.openingScroll={top:125,left:25};r.restoreOpeningPosition();assert.equal(r.scrollTop,160);assert.equal(r.scrollLeft,32);
+ r.openingScroll=null;delete r.metadata.view.zoom;r.restoreOpeningPosition();assert.equal(r.scrollTop,490);assert.equal(r.scrollLeft,49);
+});
+
+test('sidebar width changes preserve reading coordinates for native and outer scrolling',()=>{
+ for(const nativeScroll of [false,true]){
+  const r=Object.create(Reader.prototype);Object.defineProperties(r,{scrollTop:{value:640,writable:true},scrollLeft:{value:64,writable:true}});
+  r.zoom=1.28;r.autoFit=true;r.nativeScroll=nativeScroll;r.fitZoom=()=>.98;let applied=0;r.applyZoom=()=>applied++;
+  r.resizeViewport();assert.equal(r.zoom,.98);assert.equal(r.scrollTop,490);assert.equal(r.scrollLeft,49);assert.equal(applied,1);
+  r.autoFit=false;r.resizeViewport();assert.equal(r.zoom,.98);assert.equal(r.scrollTop,490);assert.equal(applied,nativeScroll?2:1);
+ }
+});
+
 
 test('rapid reentry waits for browser fullscreen exit to settle',async()=>{
  const a=app({native:true,exitDeferred:true});await a.context.toggleReaderFocus();

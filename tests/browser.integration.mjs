@@ -353,6 +353,9 @@ test('real Chrome: toolbar mode groups remove semantic duplicates and keep area,
       await writeFile(join(root,`test-results/toolbar-modes-more-${width}.png`),await page.screenshot());await page.click('[data-popover-close]');
       assert.equal((await saved()).length,0,'choosing modes alone does not create annotations');
     }
+    // On a narrow screen the visible sidebar is an overlay. Close it through
+    // its real control before drawing on the underlying document.
+    await page.click('#close-sidebar');
     await page.evaluate('document.querySelector("[data-action=underline]").focus()');
     const key=async(key,code,number)=>{await page.send('Input.dispatchKeyEvent',{type:'keyDown',key,code,windowsVirtualKeyCode:number});await page.send('Input.dispatchKeyEvent',{type:'keyUp',key,code,windowsVirtualKeyCode:number});};
     await key('ArrowDown','ArrowDown',40);await page.waitFor('document.activeElement?.matches("[data-tool-mode]")');
