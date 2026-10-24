@@ -42,3 +42,8 @@ export async function clickAppMenu(page,selector){
   if(await page.evaluate('document.querySelector("#app-menu").hidden'))await page.click('#app-menu-button');
   await page.click(selector);
 }
+
+export async function clickLibraryImport(page){
+  await page.click('#library-tab');
+  await page.click('#hero-import');
+}

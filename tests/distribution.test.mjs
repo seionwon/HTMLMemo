@@ -91,7 +91,7 @@ test('execution shares only the canonical URL, with no app package or installati
   assert.equal(app.doc.querySelector('#save-page').textContent,'');assert.equal(app.doc.querySelector('#save-page').title,'URL 복사');assert.equal(app.doc.querySelector('#save-page').getAttribute('aria-label'),'URL 복사');assert.equal(app.doc.querySelector('#save-page').disabled,false);
 });
 test('MHTML import filters, installed file handlers and offline packaging include the archive decoder',async()=>{
-  const app=await fileApp();let options;app.context.window.showOpenFilePicker=async value=>{options=value;return [];};app.doc.querySelector('#import-button').onclick();await new Promise(resolve=>setImmediate(resolve));
+  const app=await fileApp();let options;app.context.window.showOpenFilePicker=async value=>{options=value;return [];};app.doc.querySelector('#hero-import').onclick();await new Promise(resolve=>setImmediate(resolve));
   assert.deepEqual(Array.from(options.types[0].accept['multipart/related']),['.mhtml','.mht']);assert.equal(options.multiple,true);
   for(const suffix of ['.html','.htm','.mhtml','.mht'])assert.ok(app.doc.querySelector('#file-input').getAttribute('accept').split(',').includes(suffix));
   const files=webFiles(assets),manifest=JSON.parse(text(files,'manifest.webmanifest'));assert.deepEqual(manifest.file_handlers[0].accept['multipart/related'],['.mhtml','.mht']);assert.ok(files.has('src/mhtml.js'));assert.match(text(files,'sw.js'),/\.\/src\/mhtml\.js/);
@@ -166,9 +166,12 @@ test('the single header menu preserves library, web opening, HTML import, app de
   assert.equal(doc.querySelector('#tabs').closest('#app-menu'),null);
   assert.equal(doc.querySelector('#open-tabs-menu'),null);
   for(const id of ['#execution-tab','#new-tab','#install-button','#web-help-button','#paste-button','#settings-button','#about-button'])assert.ok(doc.querySelector(id).closest('#app-menu'));
-  assert.equal(doc.querySelector('#import-button').previousElementSibling.id,'library-tab');
+  assert.equal(doc.querySelector('#import-button'),null);
+  assert.equal(doc.querySelector('#save-page').previousElementSibling.id,'library-tab');
   assert.equal(doc.querySelector('#library-tab').textContent,'');assert.equal(doc.querySelector('#library-tab').title,'내 서재');
-  for(const id of ['#library-tab','#execution-tab','#new-tab','#import-button'])assert.ok(doc.querySelector(id).closest('header'));
+  for(const id of ['#library-tab','#execution-tab','#new-tab','#save-page'])assert.ok(doc.querySelector(id).closest('header'));
+  assert.ok(doc.querySelector('#hero-import').closest('#library'));assert.equal(doc.querySelector('#hero-import').textContent,'HTML 파일 가져오기');
+  assert.ok(doc.querySelector('#choose-folder'));assert.ok(doc.querySelector('#menu-folder'));
   assert.equal(doc.querySelector('#library-tab').getAttribute('aria-current'),'page');
   click('#execution-tab');
   assert.equal(doc.querySelector('#execution').hidden,false);
@@ -183,8 +186,7 @@ test('the single header menu preserves library, web opening, HTML import, app de
   assert.equal(doc.querySelector('#library').hidden,false);
   assert.equal(doc.querySelector('#library-tab').getAttribute('aria-current'),'page');
   let picked=false;doc.querySelector('#file-input').click=()=>picked=true;
-  await click('#import-button');assert.equal(picked,true);
-  assert.equal(doc.querySelector('#import-button').textContent,'');assert.equal(doc.querySelector('#import-button').title,'HTML 파일 가져오기');
+  await click('#hero-import');assert.equal(picked,true);
   assert.equal(doc.querySelector('#save-page').textContent,'');assert.equal(doc.querySelector('#save-page').title,'페이지 저장');
   click('#about-button');assert.equal(doc.querySelector('#dialog').open,true);
   assert.equal(doc.querySelector('.about-brand h3').textContent,'HTMLMemo');

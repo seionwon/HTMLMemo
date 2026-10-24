@@ -58,3 +58,16 @@ test('changed selection is revealed at either edge without scrolling a hidden or
   tab.getBoundingClientRect=()=>({left:20,right:116});a.context.revealActiveTab();assert.equal(a.strip.scrollLeft,266);
   a.strip.hidden=true;tab.getBoundingClientRect=()=>({left:600,right:696});a.context.revealActiveTab();assert.equal(a.strip.scrollLeft,266);
 });
+test('Delete focuses the remaining document or the library button after closing the final tab',async()=>{
+  for(const count of [2,1]){
+    const a=app();for(let i=0;i<count;i++)a.add('doc-'+i);a.context.activeId='doc-0';a.context.renderTabs();
+    Object.defineProperty(a.doc,'activeElement',{value:a.doc.body,writable:true,configurable:true});
+    a.doc.defaultView.HTMLElement.prototype.focus=function(){this.ownerDocument.activeElement=this;};
+    a.context.closeTab=async id=>{a.context.tabs.splice(a.context.tabs.findIndex(tab=>tab.id===id),1);a.context.activeId=a.context.tabs[0]?.id||'library';a.context.renderTabs();};
+    const event=new a.doc.defaultView.Event('keydown',{bubbles:true,cancelable:true});event.key='Delete';
+    a.strip.querySelector('.tab.active .tab-select').dispatchEvent(event);await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(event.defaultPrevented,true);
+    assert.equal(a.doc.activeElement,count===1?a.doc.querySelector('#library-tab'):a.strip.querySelector('.tab.active .tab-select'));
+    assert.equal(a.strip.children.length,count-1);
+  }
+});

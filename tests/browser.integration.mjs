@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { root, prepareAssets } from '../scripts/assets.mjs';
 import { createServer } from '../scripts/server.mjs';
-import { launchChrome, clickAppMenu } from './chrome.mjs';
+import { launchChrome, clickAppMenu, clickLibraryImport } from './chrome.mjs';
 import { FORMAT_VERSION } from '../public/src/model.js';
 import { deflateRawSync } from 'node:zlib';
 const appVersion=JSON.parse(await readFile(new URL('../package.json',import.meta.url),'utf8')).version;
@@ -67,7 +67,7 @@ test('real Chrome: MHTML import restores a Chrome archive, saves notes and expor
     };
     const rows=()=>page.evaluate(`(async()=>{return (await import('./src/storage.js')).listDocuments();})()`);
     const input=async(name,contents=raw)=>page.evaluate(`(()=>{const t=new DataTransfer();t.items.add(new File([${JSON.stringify(contents)}],${JSON.stringify(name)},{type:${JSON.stringify(/\.html?$/i.test(name)?'text/html':'multipart/related')}}));const input=document.querySelector('#file-input');input.files=t.files;input.dispatchEvent(new Event('change',{bubbles:true}));})()`);
-    await page.click('#import-button');await verify();const original=(await rows())[0];assert.equal(original.name,'Chrome.mhtml');assert.equal(original.source,sourceURL);assert.equal(original.sourceIdentity.size,Buffer.byteLength(raw));assert.deepEqual(original.metadata.warnings,[]);assert.equal(original.metadata.execution.allowScripts,false);
+    await clickLibraryImport(page);await verify();const original=(await rows())[0];assert.equal(original.name,'Chrome.mhtml');assert.equal(original.source,sourceURL);assert.equal(original.sourceIdentity.size,Buffer.byteLength(raw));assert.deepEqual(original.metadata.warnings,[]);assert.equal(original.metadata.execution.allowScripts,false);
     assert.equal(await page.evaluate('window.mhtmlPickerOptions.types[0].accept["multipart/related"].includes(".mhtml")&&window.mhtmlPickerOptions.types[0].accept["multipart/related"].includes(".mht")'),true);
     await page.click('#toolbar [data-action=note]');const point=await page.evaluate(`(()=>{const f=${frame},r=f.contentDocument.querySelector('#target').getBoundingClientRect(),b=f.getBoundingClientRect(),s=b.width/f.offsetWidth;return {x:b.left+(r.left+80)*s,y:b.top+(r.top+60)*s};})()`);
     await page.send('Input.dispatchMouseEvent',{type:'mousePressed',...point,button:'left',buttons:1,clickCount:1});await page.send('Input.dispatchMouseEvent',{type:'mouseReleased',...point,button:'left',buttons:0,clickCount:1});await page.waitFor('document.querySelector("#dialog").open&&document.querySelector("#note-text")');await page.evaluate('document.querySelector("#note-text").value="MHTML에 남긴 주석"');await page.click('#dialog button[value=save]');
@@ -100,10 +100,10 @@ test('real Chrome: duplicate HTML import offers cancel, fresh annotations or exi
     const state=()=>page.evaluate(`(async()=>{const {listDocuments,listRevisions}=await import('./src/storage.js');return Promise.all((await listDocuments()).map(async r=>({id:r.id,name:r.name,annotations:r.metadata.annotations,bookmarks:r.metadata.bookmarks,revisions:(await listRevisions(r.id)).length})));})()`);
     const input=async(name='duplicate.html',html=raw)=>page.evaluate(`(()=>{const transfer=new DataTransfer();transfer.items.add(new File([${JSON.stringify(html)}],${JSON.stringify(name)},{type:'text/html',lastModified:1234}));const input=document.querySelector('#file-input');input.files=transfer.files;input.dispatchEvent(new Event('change',{bubbles:true}));})()`);
     const dialog='document.querySelector("#dialog").open&&document.querySelector("[data-duplicate-import]")';
-    await page.click('#import-button');await page.waitFor(ready);
+    await clickLibraryImport(page);await page.waitFor(ready);
     const original=(await state())[0],originalTab=await page.evaluate('document.querySelector(".tab.document.active").dataset.tab');assert.equal(original.annotations.length,1);assert.equal(original.bookmarks.length,1);
     const originalReady='!document.querySelector("#dialog").open&&document.querySelector(".tab.document.active")?.dataset.tab==='+JSON.stringify(originalTab)+'&&'+ready;
-    await page.click('#import-button');await page.waitFor(dialog);
+    await clickLibraryImport(page);await page.waitFor(dialog);
     assert.deepEqual(await page.evaluate('[...document.querySelectorAll("[data-duplicate-import] button")].map(b=>b.textContent)'),['취소','새롭게 열기','기존의 주석 파일로 가기']);assert.equal(await page.evaluate('document.activeElement.value'),'cancel');
     await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/duplicate-import-1280.png'),await page.screenshot());
     await page.click('[data-duplicate-import] [value=cancel]');await page.waitFor('!document.querySelector("#dialog").open');assert.deepEqual(await state(),[original]);
@@ -832,10 +832,10 @@ test('real Chrome: browsing, capture, local annotation, file writes, reopen and 
       await page.evaluate('window.importCalls=0;window.showOpenFilePicker=async()=>{window.importCalls++;return [];};');
       for(const width of [1280,800,390,320]){
         await page.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
-        const layout=await page.evaluate(`(()=>{const main=document.querySelector('#main').getBoundingClientRect(),header=document.querySelector('.chrome').getBoundingClientRect(),row=document.querySelector('.addressbar').getBoundingClientRect();return {left:main.left,width:main.width,viewport:innerWidth,oldNavigation:!!document.querySelector('.chrome-topline,.desk-nav,#desk-resizer'),rows:header.height-row.height,controls:['#library-tab','#import-button','#save-page','#app-menu-button'].map(id=>{const element=document.querySelector(id),r=element.getBoundingClientRect(),hit=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);return {id,visible:r.width>0&&r.height>0&&r.left>=0&&r.right<=innerWidth&&element.contains(hit)};})};})()`);
+        const layout=await page.evaluate(`(()=>{const main=document.querySelector('#main').getBoundingClientRect(),header=document.querySelector('.chrome').getBoundingClientRect(),row=document.querySelector('.addressbar').getBoundingClientRect();return {left:main.left,width:main.width,viewport:innerWidth,oldNavigation:!!document.querySelector('.chrome-topline,.desk-nav,#desk-resizer'),rows:header.height-row.height,controls:['#library-tab','#save-page','#app-menu-button'].map(id=>{const element=document.querySelector(id),r=element.getBoundingClientRect(),hit=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);return {id,visible:r.width>0&&r.height>0&&r.left>=0&&r.right<=innerWidth&&element.contains(hit)};})};})()`);
         assert.equal(layout.oldNavigation,false);assert.equal(layout.left,0);assert.equal(layout.width,layout.viewport);assert.equal(layout.rows,1);
         assert.ok(layout.controls.every(control=>control.visible),JSON.stringify({width,...layout}));
-        assert.deepEqual(await page.evaluate(`['#library-tab','#import-button','#save-page'].map(id=>{const element=document.querySelector(id);return {text:element.textContent,title:element.title,label:element.getAttribute('aria-label'),width:element.getBoundingClientRect().width,icon:!!element.querySelector('svg')};})`),[{text:'',title:'내 서재',label:'내 서재',width:26,icon:true},{text:'',title:'HTML 파일 가져오기',label:'HTML 파일 가져오기',width:26,icon:true},{text:'',title:'페이지 저장',label:'페이지 저장',width:26,icon:true}]);
+        assert.deepEqual(await page.evaluate(`['#library-tab','#save-page'].map(id=>{const element=document.querySelector(id);return {text:element.textContent,title:element.title,label:element.getAttribute('aria-label'),width:element.getBoundingClientRect().width,icon:!!element.querySelector('svg')};})`),[{text:'',title:'내 서재',label:'내 서재',width:26,icon:true},{text:'',title:'페이지 저장',label:'페이지 저장',width:26,icon:true}]);
         await page.click('#app-menu-button');
         const dropdown=await page.evaluate(`(()=>{const menu=document.querySelector('#app-menu'),m=menu.getBoundingClientRect(),header=document.querySelector('.chrome').getBoundingClientRect();return {anchored:m.top>=header.bottom&&m.left>=0&&m.right<=innerWidth,modal:document.querySelector('#dialog').open,items:[...menu.querySelectorAll('button')].filter(e=>!e.hidden).map(element=>{const r=element.getBoundingClientRect(),hit=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);return element.contains(hit);})};})()`);
         assert.equal(dropdown.anchored,true);assert.equal(dropdown.modal,false);assert.ok(dropdown.items.every(Boolean));
@@ -845,7 +845,7 @@ test('real Chrome: browsing, capture, local annotation, file writes, reopen and 
         await clickAppMenu(page,'#execution-tab');await page.waitFor('!document.querySelector("#execution").hidden');
         await clickAppMenu(page,'#new-tab');await page.waitFor('!document.querySelector("#library").hidden && document.activeElement.id==="address"');
         await clickAppMenu(page,'#execution-tab');await page.click('#library-tab');await page.waitFor('!document.querySelector("#library").hidden');
-        await page.click('#import-button');
+        await clickLibraryImport(page);
       }
       assert.equal(await page.evaluate('window.importCalls'),4);
       await page.evaluate('delete window.showOpenFilePicker;');
@@ -869,7 +869,7 @@ test('real Chrome: browsing, capture, local annotation, file writes, reopen and 
       const annotation=await page.evaluate(`(async()=>{const root=await navigator.storage.getDirectory();const html=await (await (await root.getFileHandle('picked-document.html')).getFile()).text();return JSON.parse(new DOMParser().parseFromString(html,'text/html').getElementById('htmlmemo-data').textContent).annotations[0];})()`);assert.equal(annotation.type,'highlight');assert.ok(annotation.textAnchor.quote.length);
     });
     await t.test('local file import activates annotation independent of original website URL',async()=>{
-      await page.evaluate(`window.showOpenFilePicker=async()=>{const root=await navigator.storage.getDirectory();return [await root.getFileHandle('picked-document.html')];};`);await page.click('#import-button');await page.waitFor('document.querySelectorAll(".tab.document").length === 2 && !document.querySelector("#toolbar").hidden');assert.equal(await page.evaluate('document.querySelector("#local-label").hidden'),false);assert.equal(await page.evaluate('document.querySelector(".document-host:not([hidden]) iframe").contentDocument.querySelectorAll("[data-htmlmemo-mark]").length > 0'),true);
+      await page.evaluate(`window.showOpenFilePicker=async()=>{const root=await navigator.storage.getDirectory();return [await root.getFileHandle('picked-document.html')];};`);await clickLibraryImport(page);await page.waitFor('document.querySelectorAll(".tab.document").length === 2 && !document.querySelector("#toolbar").hidden');assert.equal(await page.evaluate('document.querySelector("#local-label").hidden'),false);assert.equal(await page.evaluate('document.querySelector(".document-host:not([hidden]) iframe").contentDocument.querySelectorAll("[data-htmlmemo-mark]").length > 0'),true);
     });
     await t.test('opened documents have visible tabs that switch without adding a header row',async()=>{
       assert.deepEqual(await page.evaluate(`(()=>{const button=document.querySelector('#save-page');return {text:button.textContent,title:button.title,label:button.getAttribute('aria-label')};})()`),{text:'',title:'HTML 내보내기',label:'HTML 내보내기'});
@@ -973,7 +973,7 @@ test('real Chrome: separate annotations, immutable source, durable history, rest
       FileSystemHandle.prototype.queryPermission=async function(options){if(this.name==='source.html'){window.permissionRequests++;return 'prompt';}return query.call(this,options);};
       FileSystemHandle.prototype.requestPermission=async function(){window.permissionRequests++;return 'denied';};
     })()`);
-    await page.click('#import-button');await page.waitFor('document.querySelector("#status-left").textContent.includes("주석이 앱에 자동 저장됨")');
+    await clickLibraryImport(page);await page.waitFor('document.querySelector("#status-left").textContent.includes("주석이 앱에 자동 저장됨")');
     const state=()=>page.evaluate(`(async()=>{const {listDocuments,listRevisions,getDocument}=await import('./src/storage.js');const record=await getDocument((await listDocuments())[0].id);return {id:record.id,html:record.html,metadata:record.metadata,revisions:await listRevisions(record.id),pending:record.diskPending,error:record.diskError};})()`);
     const first=await state();assert.equal(first.revisions.length,1);assert.equal(first.revisions[0].annotations.length,0);
     const highlight=async()=>{
@@ -1243,10 +1243,21 @@ test('real Chrome: adaptive file tabs shrink evenly before scrolling and preserv
       await page.evaluate(`(()=>{const transfer=new DataTransfer();for(let i=${previous};i<${count};i++){const title='문서 '+String(i+1).padStart(2,'0')+' — 긴 제목도 같은 너비로 줄어드는 HTML 문서 탭',html='<html><head><title>'+title+'</title></head><body><h1>'+title+'</h1><p>Unique adaptive document '+i+'</p></body></html>';transfer.items.add(new File([html],'adaptive-'+i+'.html',{type:'text/html'}));}const input=document.querySelector('#file-input');input.files=transfer.files;input.dispatchEvent(new Event('change',{bubbles:true}));})()`);
       await page.waitFor(`document.querySelectorAll('#tabs .tab.document').length===${count}&&${ready}`,60000);
     };
-    const measure=()=>page.evaluate(`(()=>{const strip=document.querySelector('#tabs'),r=strip.getBoundingClientRect(),active=strip.querySelector('.tab.active').getBoundingClientRect();return {count:strip.children.length,viewport:innerWidth,stripWidth:strip.clientWidth,contentWidth:strip.scrollWidth,scrollLeft:strip.scrollLeft,widths:[...strip.children].map(el=>el.getBoundingClientRect().width),activeVisible:active.left>=r.left-1&&active.right<=r.right+1,headerHeight:document.querySelector('.chrome').offsetHeight,pageOverflow:document.documentElement.scrollWidth>innerWidth,controls:['#library-tab','#import-button','#save-page','#app-menu-button'].every(selector=>{const el=document.querySelector(selector),b=el.getBoundingClientRect();return b.width>0&&b.left>=0&&b.right<=innerWidth&&el.contains(document.elementFromPoint(b.left+b.width/2,b.top+b.height/2));})};})()`);
+    const measure=()=>page.evaluate(`(()=>{const strip=document.querySelector('#tabs'),r=strip.getBoundingClientRect(),active=strip.querySelector('.tab.active').getBoundingClientRect();return {count:strip.children.length,viewport:innerWidth,stripWidth:strip.clientWidth,contentWidth:strip.scrollWidth,scrollLeft:strip.scrollLeft,widths:[...strip.children].map(el=>el.getBoundingClientRect().width),activeVisible:active.left>=r.left-1&&active.right<=r.right+1,headerHeight:document.querySelector('.chrome').offsetHeight,pageOverflow:document.documentElement.scrollWidth>innerWidth,controls:['#library-tab','#save-page','#app-menu-button'].every(selector=>{const el=document.querySelector(selector),b=el.getBoundingClientRect();return b.width>0&&b.left>=0&&b.right<=innerWidth&&el.contains(document.elementFromPoint(b.left+b.width/2,b.top+b.height/2));})};})()`);
     const visible=()=>page.waitFor(`(()=>{const strip=document.querySelector('#tabs').getBoundingClientRect(),tab=document.querySelector('#tabs .tab.active').getBoundingClientRect();return tab.left>=strip.left-1&&tab.right<=strip.right+1;})()`);
     const screen=async name=>{await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,`test-results/tab-sizing-${name}.png`),await page.screenshot());};
     const metrics=[];
+    assert.equal(await page.evaluate('!!document.querySelector("#import-button")'),false);
+    await page.evaluate('window.libraryImportCalls=0;window.showOpenFilePicker=async()=>{window.libraryImportCalls++;return [];};');
+    for(const width of [1280,390,320]){
+      await page.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
+      await clickLibraryImport(page);
+      assert.equal(await page.evaluate('document.querySelector("#hero-import").textContent'),'HTML 파일 가져오기');
+      await screen('library-import-'+width);
+    }
+    assert.equal(await page.evaluate('window.libraryImportCalls'),3);
+    await page.evaluate('delete window.showOpenFilePicker;');
+    await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
     await importTo(2,0);await visible();const few=await measure();metrics.push(few);
     assert.ok(few.widths.every(width=>Math.abs(width-220)<1));assert.equal(few.contentWidth,few.stripWidth);await screen('two-1280');
     await page.evaluate(`window.adaptiveFrames=[...document.querySelectorAll('#tabs [role=tab]')].map(button=>document.getElementById(button.getAttribute('aria-controls')).querySelector('iframe'));`);
@@ -1302,7 +1313,7 @@ test('real Chrome: visible file tabs keep one header row and preserve documents 
     await clickAppMenu(page,'#settings-button');await page.evaluate(`(()=>{const appearance=document.querySelector('#appearance');appearance.value='dark';appearance.dispatchEvent(new Event('change'));document.querySelector('#dialog').close();})()`);
     // The native picker is simulated; actual OPFS handles exercise multi-file reading.
     await page.evaluate(`(async()=>{const root=await navigator.storage.getDirectory(),handles=[];for(const [index,title] of ['입문','실전','개발 용어','긴 이름의 문서도 탭으로 전환하고 파일 이름을 확인합니다'].entries()){const handle=await root.getFileHandle('book-'+index+'.html',{create:true}),writer=await handle.createWritable();await writer.write('<html><head><title>'+title+'</title></head><body><h1>'+title+'</h1><p id="selection">Annotations belong to this document when switching between tabs.</p><main style="height:4000px">Reading content for '+title+'</main></body></html>');await writer.close();handles.push(handle);}window.showOpenFilePicker=async options=>{window.pickerAllowsMultiple=options.multiple;return handles;};})()`);
-    await page.click('#import-button');await page.waitFor('document.querySelectorAll("#tabs .tab.document").length===4&&document.querySelector("#status-left").textContent.includes("자동 저장됨")');
+    await clickLibraryImport(page);await page.waitFor('document.querySelectorAll("#tabs .tab.document").length===4&&document.querySelector("#status-left").textContent.includes("자동 저장됨")');
     assert.equal(await page.evaluate('window.pickerAllowsMultiple'),true);
     assert.equal(await page.evaluate('!!document.querySelector("#app-menu #tabs")'),false);
     assert.equal(await page.evaluate('document.querySelector("#tabs").hidden'),false);
@@ -1317,7 +1328,7 @@ test('real Chrome: visible file tabs keep one header row and preserve documents 
         await key(value);await page.waitFor(`document.querySelector('#tabs .tab.active').dataset.tab===${JSON.stringify(id)}`);
         await page.waitFor(`(()=>{const strip=document.querySelector('#tabs').getBoundingClientRect(),active=document.querySelector('#tabs .tab.active').getBoundingClientRect();return active.left>=strip.left-1&&active.right<=strip.right+1;})()`);
       }
-      const layout=await page.evaluate(`(()=>{const header=document.querySelector('.chrome').getBoundingClientRect(),strip=document.querySelector('#tabs').getBoundingClientRect();return {height:header.height,stripVisible:strip.width>0&&strip.left>=0&&strip.right<=innerWidth,selected:document.querySelectorAll('#tabs [aria-selected=true]').length,panels:document.querySelectorAll('.workspace-host:not([hidden])').length,controls:['#library-tab','#import-button','#save-page','#app-menu-button'].every(selector=>{const element=document.querySelector(selector),r=element.getBoundingClientRect();return r.width>0&&r.right<=innerWidth&&element.contains(document.elementFromPoint(r.left+r.width/2,r.top+r.height/2));})};})()`);
+      const layout=await page.evaluate(`(()=>{const header=document.querySelector('.chrome').getBoundingClientRect(),strip=document.querySelector('#tabs').getBoundingClientRect();return {height:header.height,stripVisible:strip.width>0&&strip.left>=0&&strip.right<=innerWidth,selected:document.querySelectorAll('#tabs [aria-selected=true]').length,panels:document.querySelectorAll('.workspace-host:not([hidden])').length,controls:['#library-tab','#save-page','#app-menu-button'].every(selector=>{const element=document.querySelector(selector),r=element.getBoundingClientRect();return r.width>0&&r.right<=innerWidth&&element.contains(document.elementFromPoint(r.left+r.width/2,r.top+r.height/2));})};})()`);
       assert.deepEqual(layout,{height:25,stripVisible:true,selected:1,panels:1,controls:true});
       assert.equal(await page.evaluate(`document.querySelector('#tabs .tab.active').title.includes('book-3.html')`),true);
       if(width===1280||width===320){await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,`test-results/visible-tabs-${width}.png`),await page.screenshot());}
@@ -1346,7 +1357,9 @@ test('real Chrome: visible file tabs keep one header row and preserve documents 
     await page.waitFor(`${frame}?.contentDocument?.querySelector('[data-htmlmemo-mark]')&&${frame}.contentWindow.scrollY>=499`);
     await page.evaluate('document.querySelector("#tabs .tab.active .tab-select").focus()');await key('Delete');await page.waitFor('document.querySelectorAll("#tabs .tab.document").length===2');
     assert.equal(await page.evaluate('document.querySelector("#app-menu").hidden'),true);
-    for(const remaining of [1,0]){await page.click('#tabs .tab.active .tab-close');await page.waitFor(`document.querySelectorAll('#tabs .tab').length===${remaining}`);}
+    await page.click('#tabs .tab.active .tab-close');await page.waitFor('document.querySelectorAll("#tabs .tab").length===1');
+    await page.evaluate('document.querySelector("#tabs .tab.active .tab-select").focus()');await key('Delete');
+    await page.waitFor('document.querySelectorAll("#tabs .tab").length===0&&document.activeElement.id==="library-tab"');
     assert.equal(await page.evaluate('document.querySelector("#tabs").hidden'),true);
     assert.equal(await page.evaluate('document.querySelector("#library").hidden'),false);assert.deepEqual(chrome.errors,[]);
   }finally{if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
@@ -1487,7 +1500,7 @@ test('real Chrome: font-scaled pen glyph alignment, padding, wrapping, thickness
     const exported=await page.evaluate(`(async()=>{const root=await navigator.storage.getDirectory(),html=await (await (await root.getFileHandle('font-scaled-pen.html')).getFile()).text();return JSON.parse(new DOMParser().parseFromString(html,'text/html').getElementById('htmlmemo-data').textContent).annotations;})()`);
     assert.deepEqual(exported,before);
     await page.evaluate(`window.showOpenFilePicker=async()=>{const root=await navigator.storage.getDirectory();return [await root.getFileHandle('font-scaled-pen.html')];};`);
-    await clickAppMenu(page,'#import-button');
+    await clickLibraryImport(page);
     await page.waitFor(`document.querySelectorAll('.tab.document').length===2 && ${frame}?.style.visibility==='visible' && ${doc}?.querySelector('[data-htmlmemo-id="legacy-font-pen"]')?.getAttribute('stroke-width')==='6'`);
     scaled(await snapshot(pen18.id,'#flow',pin18),smallPen,2);scaled(await snapshot(pen36.id,'#flow',pin36),largePen,1);
     await page.send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
@@ -2091,7 +2104,7 @@ test('real Chrome: annotations move to a new edition of a book, and annotations 
     await page.evaluate(`(async()=>{const root=await navigator.storage.getDirectory();for(const [name,html] of Object.entries(${JSON.stringify({'edition-1.html':oldEdition,'edition-2.html':newEdition})})){const handle=await root.getFileHandle(name,{create:true});const writer=await handle.createWritable();await writer.write(html);await writer.close();}
       window.pick=name=>{window.showOpenFilePicker=async()=>[await root.getFileHandle(name)];};})()`);
     const frame='document.querySelector(".document-host:not([hidden]) iframe")';
-    await page.evaluate('window.pick("edition-1.html")');await page.click('#import-button');
+    await page.evaluate('window.pick("edition-1.html")');await clickLibraryImport(page);
     await page.waitFor(`${frame}?.contentDocument?.querySelectorAll('[data-htmlmemo-mark]').length >= 2 && !document.querySelector('#toolbar').hidden && document.querySelector("#status-left").textContent.includes("자동 저장됨")`,20000);
     await page.evaluate('window.pick("edition-2.html")');
     await page.click('[data-action=more]');{const reach=await page.evaluate('(()=>{const b=document.querySelector("[data-more=migrate]");b.scrollIntoView({block:"center"});const r=b.getBoundingClientRect(),hit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);return {ok:b.contains(hit),rect:[r.x,r.y,r.width,r.height].map(Math.round),view:[innerWidth,innerHeight],hit:hit&&(hit.id||hit.className||hit.localName),popover:(()=>{const p=document.querySelector("#tool-popover").getBoundingClientRect();return [p.x,p.y,p.width,p.height].map(Math.round);})()};})()');assert.ok(reach.ok,'the menu item is reachable: '+JSON.stringify(reach));}await page.click('[data-more=migrate]');
