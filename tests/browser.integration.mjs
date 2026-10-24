@@ -546,7 +546,7 @@ test('real Chrome: cross-origin CORS capture and blocked-site fallback use only 
     await page.evaluate('document.cookie="htmlmemo_cors_test=not_sent;path=/";window.pickerCalls=0;window.showSaveFilePicker=async()=>{pickerCalls++;throw Error("Library saving must not open a picker");};');
     const open=async address=>{await page.send('Page.bringToFront');await page.click('#library-tab');await page.evaluate(`document.querySelector('#address').value=${JSON.stringify(address)};document.querySelector('#address-form').requestSubmit();`);await page.send('Page.bringToFront');await page.waitFor('!!document.querySelector(".browser-host:not([hidden]) [data-capture]")');await page.evaluate('document.querySelector(".browser-host:not([hidden]) details").open=true');};
     await open(origin+'/allowed.html');
-    await page.waitFor(`document.querySelector('.browser-handoff [data-web-status]').textContent.includes('보냈습니다')||document.querySelector('.browser-handoff [data-web-status]').textContent.includes('돌아왔습니다')`);
+    await page.waitFor(`["브라우저 탭으로 보냈습니다.","복사한 글을 붙여넣거나 저장한 HTML을 가져오세요."].includes(document.querySelector('.browser-handoff [data-web-status]').textContent)`);
     assert.equal(await page.evaluate('document.querySelectorAll(".browser-frame").length'),0);
     for(let attempt=0;attempt<100&&!requests.some(r=>r.path==='/opened?has-opener=false');attempt++)await new Promise(resolve=>setTimeout(resolve,50));
     assert.ok(requests.some(r=>r.path==='/opened?has-opener=false'),'the real browser tab loaded with no reverse opener access');
