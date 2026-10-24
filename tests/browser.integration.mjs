@@ -249,6 +249,70 @@ test('real Chrome: reading controls provide one app TTS, wait for Play and keep 
     assert.deepEqual(chrome.errors,[]);
   }finally{await chrome?.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
 });
+test('real Chrome: TTS paused resume follows the new reading position without autoplay or stale chapter speech',{timeout:120000},async()=>{
+  await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-tts-resume-'));await cp(join(root,'public'),folder,{recursive:true});
+  const server=createServer(folder);let chrome;
+  try{
+    await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));chrome=await launchChrome();const page=chrome.page,url=process.env.HTMLMEMO_SIDEBAR_TEST_URL||`http://127.0.0.1:${server.address().port}/`;
+    await page.navigate(url);await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
+    // The browser's real DOM/events are used; only outgoing audio is replaced so text is deterministic.
+    await page.evaluate(`(()=>{window.resumeUtterances=[];window.SpeechSynthesisUtterance=class{constructor(text){this.text=text;this.rate=1;}};const engine=new EventTarget();engine.getVoices=()=>[];engine.cancel=()=>{};engine.speak=u=>window.resumeUtterances.push(u);Object.defineProperty(window,'speechSynthesis',{configurable:true,value:engine});})()`);
+    const frame='document.querySelector(".document-host:not([hidden]) iframe")',doc=frame+'.contentDocument',ready=`${frame}?.style.visibility==='visible'&&!document.querySelector('.tab-dirty:not([hidden])')`;
+    const play=()=>page.click('.mstts-player [aria-label="소리내어 읽기"]'),pause=()=>page.click('.mstts-player [aria-label="일시정지"]');
+    const count=()=>page.evaluate('window.resumeUtterances.length'),last=()=>page.evaluate('window.resumeUtterances.at(-1)?.text');
+    const settle=()=>page.evaluate('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
+    const nativeClick=async(expression,text=false)=>{
+      const p=await page.evaluate(`(()=>{const f=${frame},el=${expression};let r=el.getBoundingClientRect();if(${text}){const range=el.ownerDocument.createRange();range.setStart(el.firstChild,0);range.setEnd(el.firstChild,Math.min(3,el.firstChild.length));r=range.getBoundingClientRect();}const b=f.getBoundingClientRect(),scale=b.width/f.offsetWidth;return {x:b.left+(r.left+Math.min(r.width/2,${text}?5:r.width))*scale,y:b.top+(r.top+r.height/2)*scale};})()`);
+      await page.send('Input.dispatchMouseEvent',{type:'mousePressed',...p,button:'left',clickCount:1});await page.send('Input.dispatchMouseEvent',{type:'mouseReleased',...p,button:'left',clickCount:1});
+    };
+    const open=async()=>{
+      const before=await count();
+      if(await page.evaluate(`!!${doc}.querySelector('[data-htmlmemo-reading-controls] [data-action=speak]')`))await nativeClick(`${doc}.querySelector('[data-htmlmemo-reading-controls] [data-action=speak]')`);
+      else await page.click('.document-host:not([hidden]) > [data-htmlmemo-reading-controls] [data-action=speak]');
+      await page.waitFor('document.querySelector(".mstts-player > button")?.textContent==="▶"');assert.equal(await count(),before);
+    };
+    const select=async id=>{await page.evaluate(`(()=>{const d=${doc},range=d.createRange();range.selectNodeContents(d.getElementById(${JSON.stringify(id)}));const s=d.getSelection();s.removeAllRanges();s.addRange(range);d.dispatchEvent(new Event('selectionchange'));})()`);await settle();};
+    const move=async(mode,id)=>{
+      await page.evaluate(`(()=>{const f=${frame},d=f.contentDocument,v=document.querySelector('.document-host:not([hidden]) .reader-viewport'),r=d.getElementById(${JSON.stringify(id)}).getBoundingClientRect(),b=f.getBoundingClientRect(),scale=b.width/f.offsetWidth,delta=(b.top+r.top*scale-v.getBoundingClientRect().top-100)/scale;if(${JSON.stringify(mode)}==='inner')d.querySelector('main').scrollTop+=delta;else d.defaultView.scrollBy(0,delta);})()`);await settle();
+    };
+    const metrics=[];
+    for(const mode of ['body','inner']){
+      await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
+      const prose=Array.from({length:30},(_,i)=>`<p><span class="line" id="s${i}a">첫 문장 ${i}입니다.</span><span class="line" id="s${i}b">둘째 문장 ${i}입니다.</span></p>`).join('');
+      const chapter=Array.from({length:30},(_,i)=>`<p id="chapter-${i}">새 장 문장 ${i}입니다.</p>`).join('');
+      const html=`<!doctype html><html lang="ko"><head><title>TTS 이동 ${mode}</title><style>html,body{margin:0;font:18px/1.6 system-ui}nav{height:36px;padding:0 12px;background:#e2e8f0;color:#1e293b;z-index:5}nav button{height:32px}main{padding:80px 24px 600px}p{min-height:100px;margin:0 0 260px}.line{display:block}${mode==='inner'?'html,body{height:100%;overflow:hidden}body{display:flex;flex-direction:column}nav{flex:none}main{flex:1;min-height:0;overflow:auto;padding-top:44px}':'nav{position:fixed;top:0;left:0;right:0}'}</style></head><body><nav><button id="change-chapter" onclick="nextChapter()">다른 장으로 이동</button></nav><main id="prose" data-tts-root>${prose}</main><script>function nextChapter(){const p=document.getElementById('prose');p.innerHTML=${JSON.stringify(chapter)};p.scrollTop=0;window.scrollTo(0,0);}</script></body></html>`;
+      await page.evaluate(`(()=>{const t=new DataTransfer();t.items.add(new File([${JSON.stringify(html)}],${JSON.stringify('tts-resume-'+mode+'.html')},{type:'text/html'}));const input=document.querySelector('#file-input');input.files=t.files;input.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+      await page.waitFor(`${ready}&&${doc}.title===${JSON.stringify('TTS 이동 '+mode)}`);
+      if(await page.evaluate('!document.querySelector("#sidebar").hidden'))await page.click('#close-sidebar');
+      for(const width of [1280,390,320]){
+        await page.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});await settle();await open();
+        await play();const initial=await last();await pause();const paused=await count();
+        await page.evaluate('window.resumeUtterances.at(-1).onend();window.resumeUtterances.at(-1).onerror()');assert.equal(await count(),paused);await play();assert.equal(await last(),initial);
+        await pause();await move(mode,'s5a');assert.equal(await count(),paused+1);await play();assert.equal(await last(),'첫 문장 5입니다.');
+        await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,`test-results/tts-resume-${mode}-${width}.png`),await page.screenshot());
+        await pause();const beforeClick=await count();await page.evaluate(`${doc}.getSelection().removeAllRanges()`);await nativeClick(`${doc}.getElementById('s5b')`,true);await settle();
+        assert.equal(await count(),beforeClick);assert.equal(await page.evaluate('document.querySelector(".mstts-player > button").textContent'),'▶');await play();assert.equal(await last(),'둘째 문장 5입니다.');
+        await pause();await select('s5a');const beforeSelection=await count();await play();assert.equal(await count(),beforeSelection+1);assert.equal(await last(),'첫 문장 5입니다.');
+        await pause();await select('s5b');await move(mode,'s8a');await play();assert.equal(await last(),'첫 문장 8입니다.');
+        await pause();await move(mode,'s2a');await play();assert.equal(await last(),'첫 문장 2입니다.');
+        metrics.push({mode,width,unchanged:initial,afterScroll:'첫 문장 5입니다.',afterClick:'둘째 문장 5입니다.',afterSelection:'첫 문장 5입니다.',afterStaleSelection:'첫 문장 8입니다.',afterScrollUp:await last()});
+        await page.click('.mstts-player [aria-label="플레이어 닫기"]');
+      }
+      await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});await settle();await open();await play();await pause();
+      const beforeChapter=await count();await nativeClick(`${doc}.querySelector('#change-chapter')`);await page.waitFor(`${doc}.querySelector('#chapter-0')`);await settle();assert.equal(await count(),beforeChapter);
+      await play();assert.match(await last(),/^새 장 문장 /);const newChapter=await last(),afterChapter=await count();await page.evaluate('window.resumeUtterances[window.resumeUtterances.length-2].onend()');assert.equal(await count(),afterChapter);
+      await pause();await page.evaluate(`${doc}.querySelector('main').replaceChildren()`);await settle();await play();assert.equal(await count(),afterChapter);assert.equal(await page.evaluate('document.querySelector(".mstts-player > button").textContent'),'▶');
+      await page.click('.mstts-player [aria-label="플레이어 닫기"]');
+      const stored=await page.evaluate(`(async()=>{const {listDocuments,getDocument}=await import('./src/storage.js'),row=(await listDocuments()).find(r=>r.name===${JSON.stringify('tts-resume-'+mode+'.html')}),record=await getDocument(row.id);return {html:record.file?await record.file.text():record.html,annotations:record.metadata.annotations.length,bookmarks:record.metadata.bookmarks.length};})()`);
+      assert.equal(stored.html,html);assert.equal(stored.annotations,0);assert.equal(stored.bookmarks,0);metrics.push({mode,newChapter,sourcePreserved:true,emptyChapterSilent:true});
+    }
+    await writeFile(join(root,'test-results/tts-resume-results.json'),JSON.stringify(metrics,null,2));assert.deepEqual(chrome.errors,[]);
+  }catch(error){
+    if(chrome)try{await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/tts-resume-failure.png'),await chrome.page.screenshot());await writeFile(join(root,'test-results/tts-resume-failure.json'),JSON.stringify(await chrome.page.evaluate(`({spoken:window.resumeUtterances?.map(u=>u.text),status:document.querySelector('#status-left')?.textContent,button:document.querySelector('.mstts-player > button')?.outerHTML})`),null,2));}catch{}
+    throw error;
+  }finally{await chrome?.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
+});
+
 test('real Chrome: palette controls stay above palettes and retain their settings and title-drag position',{timeout:60000},async()=>{
   await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-palette-order-'));await cp(join(root,'public'),folder,{recursive:true});
   const server=createServer(folder);let chrome;

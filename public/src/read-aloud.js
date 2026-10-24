@@ -465,6 +465,7 @@ export function createReadAloud(reader) {
   var state = 'idle';                   // idle | ready | playing | paused
   var run = null;                       // { sents, i, stopped }
   var idx = null;
+  var pausedAt = null, pausedTarget = null, pausedSelection = null;
   var rate = (function () { var v = Number(ls(RATE_KEY)); return RATES.indexOf(v) >= 0 ? v : 1; })();
   var lang = (function () { var v = ls(LANG_KEY); return v && UTTER_TAG[v] ? v : (UTTER_TAG[BOOK_LANG] ? BOOK_LANG : 'en'); })();
   var languageChoice = ls(LANG_KEY) || 'auto';
@@ -652,18 +653,54 @@ export function createReadAloud(reader) {
     }
     return 0;
   }
+  function readingPosition() {
+    return {root:readAloudRoot(D),top:Number(reader.scrollTop)||0,left:Number(reader.scrollLeft)||0};
+  }
+  function samePosition(a, b) {
+    return !!a && !!b && a.root === b.root && Math.abs(a.top-b.top)<1 && Math.abs(a.left-b.left)<1;
+  }
+  function selectedPosition() {
+    var sel = D.getSelection();
+    if (!sel || sel.isCollapsed || !sel.rangeCount) return null;
+    var r = sel.getRangeAt(0), root = readAloudRoot(D);
+    if (!root.contains(r.startContainer)) return null;
+    return {node:r.startContainer,offset:r.startOffset,endNode:r.endContainer,endOffset:r.endOffset};
+  }
+  function sameSelection(a, b) {
+    return a === b || !!a && !!b && a.node === b.node && a.offset === b.offset && a.endNode === b.endNode && a.endOffset === b.endOffset;
+  }
+  function resetPause() { pausedAt = pausedTarget = pausedSelection = null; }
+  function beginReading(index, sents, at) {
+    if (run) run.stopped = true;
+    cancelSpeech();idx = index;resetPause();
+    if (!sents.length) {run = null;clearPaint();state = 'ready';render();return;}
+    run = {sents:sents,i:at,stopped:false};
+    state = 'playing';render();speakFrom(at);
+  }
   function startReading() {
     ROOT = readAloudRoot(D);
     var index = buildIndex(ROOT);
     var sents = splitSentences(index.text);
-    if (!sents.length) return;
-    idx = index;
-    if (run) run.stopped=true;
-    cancelSpeech();
-    var at = firstVisibleSentence(sents, index);
-    run = { sents: sents, i: at, stopped: false };
-    state = 'playing'; render();
-    speakFrom(at);
+    beginReading(index, sents, firstVisibleSentence(sents, index));
+  }
+  function resumeReading() {
+    var position = readingPosition();
+    ROOT = position.root;
+    // Rebuild on an explicit Play so a new/lazy chapter never uses old text or DOM ranges.
+    var index = buildIndex(ROOT), sents = splitSentences(index.text);
+    var unchanged = run && idx && samePosition(pausedAt, position) && idx.text === index.text;
+    var at = unchanged ? Math.min(run.i, sents.length-1) : firstVisibleSentence(sents, index);
+    if (pausedTarget && samePosition(pausedTarget.position, position)) {
+      var target = pausedTarget.point, textTarget = target.node.nodeType === 3;
+      var child = !textTarget && target.node.childNodes[target.offset];
+      var part = index.parts.find(function (p) {return textTarget ? p.node === target.node : child && (child === p.node || child.contains(p.node));});
+      if (part) {
+        var flat = part.start + (textTarget ? Math.min(target.offset, part.node.data.length) : 0);
+        var selected = sents.findIndex(function (sent) {return flat < sent.end;});
+        if (selected >= 0) at = selected;
+      }
+    }
+    beginReading(index, sents, at);
   }
   function speakFrom(i) {
     var ctx = run;
@@ -726,6 +763,7 @@ export function createReadAloud(reader) {
   function jump(to) {
     closePanel();
     if (!run) return;
+    resetPause();
     var target = Math.min(Math.max(0, to), run.sents.length - 1);
     run.stopped = true;                 // silence the old run FIRST so its onend can't advance
     cancelSpeech();
@@ -748,34 +786,29 @@ export function createReadAloud(reader) {
     closePanel();
     try {
       if (state === 'ready') startReading();
-      // Pause = CANCEL and remember the sentence; resume = speak it again. pause()/resume() is
+      // Pause cancels and remembers the view; Play uses a new reading position when it changed.
+      // Without navigation the same sentence is repeated. Native pause()/resume() is
       // unreliable on phones (resume is ignored, or claims success and stays silent), so the engine's
-      // own state is never consulted. Twin of pauseSpeech/resumeSpeech in MemoReadAloud.tsx.
+      // own state is never consulted.
       else if (state === 'playing') {
         if (run) run.stopped = true;
         try { W.speechSynthesis.cancel(); } catch (e) { /* ignore */ }
+        pausedAt = readingPosition();pausedTarget = null;pausedSelection = selectedPosition();
         state = 'paused'; render();
       }
-      else if (state === 'paused') {
-        state = 'playing'; render();
-        if (run) {
-          var at = run.i, sents = run.sents;
-          run.stopped = true;
-          try { W.speechSynthesis.cancel(); } catch (e) { /* ignore */ }
-          run = { sents: sents, i: at, stopped: false };
-          speakFrom(at);
-        }
-      }
+      else if (state === 'paused') resumeReading();
     } catch (e) { /* ignore */ }
   }
   function stop() {                     // ⏹ stops the voice, keeps the bar (back to 'ready')
     closePanel();
+    resetPause();
     if (run) run.stopped = true;
     cancelSpeech(); clearPaint();
     state = 'ready'; render();
   }
   function close() {                    // ✕ puts the player away
     closePanel();
+    resetPause();
     if (run) run.stopped = true;
     cancelSpeech(); clearPaint();
     run = null; state = 'idle';
@@ -783,18 +816,29 @@ export function createReadAloud(reader) {
     render();
   }
 
-  // Click-to-jump: while reading (or paused) a click on plain prose reads from that sentence.
+  listen(D,'selectionchange',function () {
+    if (state !== 'paused') return;
+    var target = selectedPosition();
+    if (sameSelection(target, pausedSelection)) return;
+    pausedSelection = target;
+    if (target) {pausedTarget = {point:target,position:readingPosition(),selection:true};clearPaint();}
+    else if (pausedTarget && pausedTarget.selection) pausedTarget = null;
+  });
+
+  // Playing clicks jump immediately; paused clicks only choose the next Play's sentence.
   listen(D,'click', function (e) {
     if (state !== 'playing' && state !== 'paused') return;
     var t = e.target;
-    if (!t || !ROOT.contains(t)) return;
+    var root = state === 'paused' ? readAloudRoot(D) : ROOT;
+    if (!t || !root.contains(t)) return;
     if (t.closest('a, button, input, textarea, select, summary, .mstts-player, .mstts-panel')) return;
     if (skipped(t)) return;
     var sel = D.getSelection();
     if (sel && !sel.isCollapsed) return;
-    if (!run || !idx) return;
     var pt = caretAt(e.clientX, e.clientY);
     if (!pt || pt.node.nodeType !== 3) return;
+    if (state === 'paused') {pausedTarget = {point:pt,position:readingPosition(),selection:false};clearPaint();return;}
+    if (!run || !idx) return;
     var part = null;
     for (var i = 0; i < idx.parts.length; i++) if (idx.parts[i].node === pt.node) { part = idx.parts[i]; break; }
     if (!part) return;
