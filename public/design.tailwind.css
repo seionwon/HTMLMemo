@@ -117,7 +117,7 @@ body[data-codememo-design]{margin:0;font-family:var(--app-font);background:var(-
 .chrome:not([data-page=document]) #tabs{flex:0 1 40%}
 .chrome[data-page=document]:not(.address-editing) #address-form{display:none}
 .chrome.address-editing #tabs{display:none}
-.addressbar .tab{display:flex;flex:0 0 auto;max-width:min(220px,100%);min-width:0;height:24px;padding:0;gap:0;border:1px solid var(--line);border-radius:5px;color:var(--muted)}
+.addressbar .tab{display:flex;flex:1 1 220px;max-width:min(220px,100%);min-width:min(96px,100%);height:24px;padding:0;gap:0;border:1px solid var(--line);border-radius:5px;color:var(--muted)}
 .addressbar .tab.active{background:var(--green-light);color:var(--green);border-bottom-color:var(--green)}
 .addressbar .tab-select{display:flex;align-items:center;gap:5px;flex:1;min-width:0;padding:0 6px;height:22px;font-size:11px;text-align:left;color:inherit;border-radius:4px}
 .addressbar .tab-icon{display:flex}

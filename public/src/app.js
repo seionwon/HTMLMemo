@@ -199,7 +199,14 @@ function focusAddress() {
   $('.chrome').classList.add('address-editing');$('#address').focus();$('#address').select?.();
 }
 function bindTabs() {
-  $('#tabs').addEventListener('keydown',safely(async event=>{
+  const container=$('#tabs');
+  container.addEventListener('wheel',event=>{
+    if(event.ctrlKey||event.metaKey||container.scrollWidth<=container.clientWidth||Math.abs(event.deltaX)>=Math.abs(event.deltaY))return;
+    const unit=event.deltaMode===1?16:event.deltaMode===2?container.clientWidth:1,before=container.scrollLeft;
+    container.scrollLeft+=event.deltaY*unit;
+    if(container.scrollLeft!==before)event.preventDefault();
+  },{passive:false});
+  container.addEventListener('keydown',safely(async event=>{
     if(!event.target.matches('.tab-select'))return;
     const buttons=$$('.tab-select',$('#tabs')),index=buttons.indexOf(event.target);
     if(event.key==='Delete'){

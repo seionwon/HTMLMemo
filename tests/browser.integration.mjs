@@ -989,6 +989,66 @@ test('real Chrome: saved date, modified date and title sort in both directions a
   }finally{if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
 });
 
+test('real Chrome: adaptive file tabs shrink evenly before scrolling and preserve controls and document instances',{timeout:90000},async()=>{
+  await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-adaptive-tabs-'));await cp(join(root,'public'),folder,{recursive:true});
+  const server=createServer(folder);let chrome;
+  try{
+    await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));chrome=await launchChrome();const page=chrome.page,url=process.env.HTMLMEMO_TABS_TEST_URL||process.env.HTMLMEMO_SIDEBAR_TEST_URL||`http://127.0.0.1:${server.address().port}/`;
+    await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});await page.navigate(url);
+    await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
+    const ready='document.querySelector(".document-host:not([hidden]) iframe")?.style.visibility==="visible"&&!document.querySelector(".tab-dirty:not([hidden])")';
+    const importTo=async(count,previous)=>{
+      await page.evaluate(`(()=>{const transfer=new DataTransfer();for(let i=${previous};i<${count};i++){const title='문서 '+String(i+1).padStart(2,'0')+' — 긴 제목도 같은 너비로 줄어드는 HTML 문서 탭',html='<html><head><title>'+title+'</title></head><body><h1>'+title+'</h1><p>Unique adaptive document '+i+'</p></body></html>';transfer.items.add(new File([html],'adaptive-'+i+'.html',{type:'text/html'}));}const input=document.querySelector('#file-input');input.files=transfer.files;input.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+      await page.waitFor(`document.querySelectorAll('#tabs .tab.document').length===${count}&&${ready}`,60000);
+    };
+    const measure=()=>page.evaluate(`(()=>{const strip=document.querySelector('#tabs'),r=strip.getBoundingClientRect(),active=strip.querySelector('.tab.active').getBoundingClientRect();return {count:strip.children.length,viewport:innerWidth,stripWidth:strip.clientWidth,contentWidth:strip.scrollWidth,scrollLeft:strip.scrollLeft,widths:[...strip.children].map(el=>el.getBoundingClientRect().width),activeVisible:active.left>=r.left-1&&active.right<=r.right+1,headerHeight:document.querySelector('.chrome').offsetHeight,pageOverflow:document.documentElement.scrollWidth>innerWidth,controls:['#library-tab','#import-button','#save-page','#app-menu-button'].every(selector=>{const el=document.querySelector(selector),b=el.getBoundingClientRect();return b.width>0&&b.left>=0&&b.right<=innerWidth&&el.contains(document.elementFromPoint(b.left+b.width/2,b.top+b.height/2));})};})()`);
+    const visible=()=>page.waitFor(`(()=>{const strip=document.querySelector('#tabs').getBoundingClientRect(),tab=document.querySelector('#tabs .tab.active').getBoundingClientRect();return tab.left>=strip.left-1&&tab.right<=strip.right+1;})()`);
+    const screen=async name=>{await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,`test-results/tab-sizing-${name}.png`),await page.screenshot());};
+    const metrics=[];
+    await importTo(2,0);await visible();const few=await measure();metrics.push(few);
+    assert.ok(few.widths.every(width=>Math.abs(width-220)<1));assert.equal(few.contentWidth,few.stripWidth);await screen('two-1280');
+    await page.evaluate(`window.adaptiveFrames=[...document.querySelectorAll('#tabs [role=tab]')].map(button=>document.getElementById(button.getAttribute('aria-controls')).querySelector('iframe'));`);
+    await importTo(6,2);await visible();const medium=await measure();metrics.push(medium);
+    assert.ok(medium.widths.every(width=>width>96&&width<219));assert.ok(Math.max(...medium.widths)-Math.min(...medium.widths)<1);assert.equal(medium.contentWidth,medium.stripWidth);await screen('six-1280');
+    await importTo(18,6);await visible();const many=await measure();metrics.push(many);
+    assert.ok(many.widths.every(width=>Math.abs(width-96)<1));assert.ok(many.contentWidth>many.stripWidth);assert.ok(many.scrollLeft>0);await screen('eighteen-1280');
+    assert.equal(await page.evaluate(`window.adaptiveFrames.every((frame,i)=>frame===document.getElementById(document.querySelectorAll('#tabs [role=tab]')[i].getAttribute('aria-controls')).querySelector('iframe'))`),true);
+    assert.equal(await page.evaluate('document.querySelectorAll("#tabs .tab")[0].title.includes("adaptive-0.html")'),true);
+    assert.equal(await page.evaluate('document.querySelectorAll("#tabs .tab")[0].querySelector(".tab-title").scrollWidth>document.querySelectorAll("#tabs .tab")[0].querySelector(".tab-title").clientWidth'),true);
+    await page.evaluate('document.querySelector("#tabs").scrollLeft=0');
+    const wheel=async(deltaX,deltaY)=>{const p=await page.evaluate('(()=>{const r=document.querySelector("#tabs").getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};})()');await page.send('Input.dispatchMouseEvent',{type:'mouseWheel',...p,deltaX,deltaY});};
+    await wheel(0,240);await page.waitFor('document.querySelector("#tabs").scrollLeft>0');
+    await wheel(0,10000);await page.waitFor('document.querySelector("#tabs").scrollLeft>=document.querySelector("#tabs").scrollWidth-document.querySelector("#tabs").clientWidth-1');
+    await wheel(-240,0);await page.waitFor('document.querySelector("#tabs").scrollLeft<document.querySelector("#tabs").scrollWidth-document.querySelector("#tabs").clientWidth-20');
+    await wheel(0,-10000);await page.waitFor('document.querySelector("#tabs").scrollLeft===0');
+    await page.evaluate('new Promise(resolve=>setTimeout(resolve,400))');assert.equal(await page.evaluate('document.querySelector("#tabs").scrollLeft'),0,'saving may not snap a manually scrolled strip back to the active tab');
+    const key=async key=>{const code=key==='Home'?36:35;await page.send('Input.dispatchKeyEvent',{type:'keyDown',key,code:key,windowsVirtualKeyCode:code});await page.send('Input.dispatchKeyEvent',{type:'keyUp',key,code:key,windowsVirtualKeyCode:code});};
+    for(const width of [800,390,320]){
+      await page.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});await visible();
+      const state=await measure();metrics.push(state);assert.equal(state.headerHeight,25);assert.equal(state.pageOverflow,false);assert.equal(state.controls,true);assert.equal(state.activeVisible,true);
+      assert.ok(state.contentWidth>state.stripWidth);assert.ok(state.widths.every(value=>Math.abs(value-Math.min(96,state.stripWidth))<1));
+      await page.evaluate('document.querySelector("#tabs .tab.active .tab-select").focus()');
+      await key('Home');await page.waitFor('document.querySelector("#tabs .tab.active")===document.querySelector("#tabs .tab:first-child")');await visible();
+      await key('End');await page.waitFor('document.querySelector("#tabs .tab.active")===document.querySelector("#tabs .tab:last-child")');await visible();await screen('eighteen-'+width);
+      const close=await page.evaluate('(()=>{const el=document.querySelector("#tabs .tab.active .tab-close"),r=el.getBoundingClientRect();return {width:r.width,reachable:el.contains(document.elementFromPoint(r.left+r.width/2,r.top+r.height/2))};})()');assert.equal(close.width,20);assert.equal(close.reachable,true);
+    }
+    await page.click('#tabs .tab.active .tab-close');await page.waitFor(`document.querySelectorAll('#tabs .tab').length===17&&${ready}`);await visible();
+    await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
+    const remove=await page.evaluate('[...document.querySelectorAll("#tabs .tab")].slice(2).map(el=>el.dataset.tab)');
+    for(const id of remove)await page.click(`[data-tab="${id}"] .tab-close`);
+    await page.waitFor(`document.querySelectorAll('#tabs .tab').length===2&&${ready}`);await visible();const expanded=await measure();metrics.push(expanded);assert.ok(expanded.widths.every(width=>Math.abs(width-220)<1));assert.equal(expanded.contentWidth,expanded.stripWidth);
+    assert.equal(await page.evaluate(`(async()=>{const {listDocuments}=await import('./src/storage.js');return (await listDocuments()).filter(r=>r.name.startsWith('adaptive-')).length;})()`),18,'closing tabs must retain all saved documents');
+    await writeFile(join(root,'test-results/tab-sizing-metrics.json'),JSON.stringify(metrics,null,2));assert.deepEqual(chrome.errors,[]);
+  }catch(error){
+    if(chrome)try{
+      await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/tab-sizing-failure.png'),await chrome.page.screenshot());
+      const state=await chrome.page.evaluate(`(()=>{const s=document.querySelector('#tabs');return {viewport:innerWidth,status:document.querySelector('#status-left')?.textContent,strip:s&&{width:s.clientWidth,content:s.scrollWidth,left:s.scrollLeft},tabs:[...s?.children||[]].map(el=>({width:el.getBoundingClientRect().width,flex:getComputedStyle(el).flex,min:getComputedStyle(el).minWidth,active:el.classList.contains('active')}))};})()`);
+      await writeFile(join(root,'test-results/tab-sizing-failure.json'),JSON.stringify(state,null,2));
+    }catch(diagnostic){console.error('Tab sizing diagnostics failed:',diagnostic.message);}
+    throw error;
+  }finally{if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
+});
+
 test('real Chrome: visible file tabs keep one header row and preserve documents through switching and closing',{timeout:60000},async()=>{
   await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-visible-tabs-'));await cp(join(root,'public'),folder,{recursive:true});
   const server=createServer(folder);let chrome;
