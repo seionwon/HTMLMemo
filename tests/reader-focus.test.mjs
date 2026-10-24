@@ -17,7 +17,7 @@ function app({native=false,rejected=false,deferred=false,exitDeferred=false}={})
  let finish,finishExit;
  doc.exitFullscreen=async()=>{calls.exited++;if(exitDeferred)await new Promise(resolve=>finishExit=resolve);doc.fullscreenElement=null;doc.dispatchEvent(new doc.defaultView.Event('fullscreenchange'));};
  if(native)root.requestFullscreen=async()=>{calls.requested++;if(rejected)throw Error('Permission denied');if(deferred)await new Promise(resolve=>finish=resolve);doc.fullscreenElement=root;doc.dispatchEvent(new doc.defaultView.Event('fullscreenchange'));};
- const context=vm.createContext({document:doc,$:selector=>doc.querySelector(selector),reader:()=>r,requestAnimationFrame:fn=>fn(),applyToolbarPosition(){},closePopover(){doc.querySelector('#tool-popover').hidden=true;},closeSidebar(){doc.querySelector('#sidebar').hidden=true;},renderSidebar:value=>calls.search.push(value)});
+ const context=vm.createContext({document:doc,$:selector=>doc.querySelector(selector),reader:()=>r,requestAnimationFrame:fn=>fn(),applyToolbarPosition(){},closePopover(){doc.querySelector('#tool-popover').hidden=true;},closeSidebar(){doc.querySelector('#sidebar').hidden=true;},restoreSidebar(){},renderSidebar:value=>calls.search.push(value)});
  new vm.Script('var readerFocused=false,nativeReaderFullscreen=false,focusBusy=false;'+functions+'\n'+listener).runInContext(context);
  return {context,doc,root,r,calls,finish:()=>finish(),finishExit:()=>finishExit()};
 }
@@ -89,7 +89,7 @@ test('more tools contain no duplicated toolbar, sidebar, bookmark or export acti
  assert.deepEqual(ids(),['sidebar',...expected]);assert.equal(new Set(ids()).size,ids().length);
  for(const removed of ['search','outline','annotations','undo','redo','bookmark','connect','area','area-underline','text','clear'])assert.equal(a.doc.querySelector(`[data-more=${removed}]`),null);
  a.doc.querySelector('[data-more=rect]').onclick();assert.deepEqual(selected,['rect']);assert.equal(a.doc.querySelector('#tool-popover').hidden,true);
- a.context.toolAction('more');a.doc.querySelector('[data-more=sidebar]').onclick();assert.deepEqual(a.calls.search,['outline']);
+ a.context.toolAction('more');a.doc.querySelector('[data-more=sidebar]').onclick();assert.deepEqual(a.calls.search,['search']);
  a.doc.querySelector('#sidebar').hidden=false;a.context.toolAction('more');assert.deepEqual(ids(),expected,'an already open panel needs no duplicate entry');
  a.doc.querySelector('#sidebar').hidden=true;a.r.documentSidebarUI=a.doc.createElement('section');a.doc.body.append(a.r.documentSidebarUI);a.context.toolAction('more');assert.deepEqual(ids(),expected,'native books use their own sidebar');
  assert.ok(a.doc.querySelector('#save-page'));assert.ok(a.doc.querySelector('#app-menu #settings-button'));

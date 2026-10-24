@@ -214,9 +214,9 @@ function bindTabs() {
 function activate(id) {
   if(id!==activeId)reader()?.stopSpeech();
   if(readerFocused && id!==activeId)void leaveReaderFocus();
-  closeAppMenu(true); closePopover(); closeSidebar();$('.chrome').classList.remove('address-editing');activeId=id; $('#library').hidden=id!=='library';$('#execution').hidden=id!=='execution';$('#workspace').hidden=id==='library'||id==='execution';
+  closeAppMenu(true); closePopover(); closeSidebar({remember:false,clearSearch:false});$('.chrome').classList.remove('address-editing');activeId=id; $('#library').hidden=id!=='library';$('#execution').hidden=id!=='execution';$('#workspace').hidden=id==='library'||id==='execution';
   tabs.forEach(tab=>tab.host.hidden=tab.id!==id);renderTabs();updateChrome();
-  if(reader()){renderToolbar();if(reader().dynamicDirty)reader().scheduleDynamicRefresh();}else $('#toolbar').hidden=true;
+  if(reader()){renderToolbar();restoreSidebar();if(reader().dynamicDirty)reader().scheduleDynamicRefresh();}else $('#toolbar').hidden=true;
   if(id==='library')renderLibrary();
   if(id==='execution'){$('#status-left').textContent='앱 설치 · URL 공유 · 모든 데이터는 이 기기에 저장';document.title='앱 설치 · URL 공유 · HTMLMemo';}
 }
@@ -294,6 +294,7 @@ async function openRecord(record, prepared = null, {deferReady = false, sourceId
     if(sourceIdentity){const identity=await sourceIdentity;if(identity)tab.record.sourceIdentity=identity;}
   } catch(error) {tabs.splice(tabs.indexOf(tab),1);tab.reader.dispose();activate('library');throw error;}
   if(parsed.file){tab.record.file=parsed.file;delete tab.record.html;tab.reader.initialHTML=null;tab.record.metadata=tab.reader.metadata;tab.record.source=tab.reader.metadata.source;tab.title=tab.record.title=tab.reader.metadata.title;}
+  if(activeId===tab.id)restoreSidebar();
   renderToolbar();
   updateChrome();
   // Preserve the imported/current annotation baseline before the first new edit.
@@ -898,7 +899,7 @@ function toolAction(action,button=null) {
       $$('[data-more]',$('#tool-popover')).forEach(button=>button.onclick=safely(()=>{const id=button.dataset.more;closePopover();return toolAction(id);}));
     });return;
   }
-  if(action==='sidebar'){closePopover();if(r.documentSidebarUI?.isConnected)r.showDocumentSidebarView('outline');else renderSidebar(sidebarMode||'outline');return;}
+  if(action==='sidebar'){closePopover();if(r.documentSidebarUI?.isConnected)r.showDocumentSidebarView('outline');else renderSidebar(r.appSidebarMode||'search');return;}
   if(['search','outline','annotations','bookmarks'].includes(action)){closePopover();if(r.documentSidebarUI?.isConnected)r.showDocumentSidebarView(action);else renderSidebar(action);return;}
   if(action==='connect')return safely(()=>exportDocument(active()))();
   if(action==='history')return safely(()=>annotationHistory(active()))();
@@ -915,7 +916,16 @@ function bindToolbarDrag() {
     const end=()=>{grip.removeEventListener('pointermove',move);grip.removeEventListener('pointerup',end);grip.removeEventListener('pointercancel',end);const rect=bar.getBoundingClientRect();safely(()=>changePreferences({toolbarPosition:{x:Math.max(0,Math.min(1,(rect.left-8)/Math.max(1,innerWidth-rect.width-16))),y:Math.max(0,Math.min(1,(rect.top-8)/Math.max(1,innerHeight-rect.height-42)))}}))();};grip.addEventListener('pointermove',move);grip.addEventListener('pointerup',end);grip.addEventListener('pointercancel',end);
   };
 }
-function closeSidebar() {const panel=$('#sidebar'),wasOpen=!panel.hidden;clearTimeout(panel.sidebarSearchTimer);panel.sidebarMode='';sidebarMode='';panel.hidden=true;const r=reader();if(wasOpen&&r&&r.documentSidebarMode!=='search'){r.sidebarSearchQuery='';r.search('');}}
+function closeSidebar({remember=true,clearSearch=true}={}) {
+  const panel=$('#sidebar'),wasOpen=!panel.hidden,r=panel.annotationReader;
+  clearTimeout(panel.sidebarSearchTimer);panel.sidebarMode='';sidebarMode='';panel.hidden=true;$('#workspace')?.removeAttribute('data-app-sidebar');
+  if(wasOpen&&r){if(remember)r.appSidebarClosed=true;if(clearSearch&&r.documentSidebarMode!=='search'){r.sidebarSearchQuery='';r.search('');}}
+}
+function restoreSidebar() {
+  const r=reader();
+  if(!r?.doc||r.preparing||r.disposed||readerFocused||r.documentSidebarUI?.isConnected||r.appSidebarClosed)return;
+  renderSidebar(r.appSidebarMode||'search',{focusSearch:false});
+}
 function updateSearchNavigation(r) {
   for(const panel of [$('#sidebar'),r.documentSidebarUI]){
     if(!panel?.isConnected||panel.annotationReader!==r||panel.sidebarMode!=='search')continue;
@@ -944,33 +954,36 @@ function styleNativeSidebar(panel) {
   const theme=getComputedStyle(document.documentElement);
   for(const name of ['--bg','--surface','--surface-muted','--text','--muted','--line','--green','--green-light','--app-font'])panel.style.setProperty(name,theme.getPropertyValue(name));
 }
-function renderSidebar(mode,{panel=$('#sidebar'),embedded=false,documentReader=reader()}={}) {
+function renderSidebar(mode,{panel=$('#sidebar'),embedded=false,documentReader=reader(),focusSearch=true}={}) {
   const r=documentReader;if(!r)return;
+  const outline=embedded?[]:r.outline();
+  if(!embedded&&mode==='outline'&&!outline.length)mode='search';
+  if(embedded&&$('#sidebar').annotationReader===r)closeSidebar({remember:false,clearSearch:false});
   r.annotationTreeOpen ||= new Map();
   if(panel.annotationReader===r)$$('[data-annotation-group]',panel).forEach(group=>r.annotationTreeOpen.set(group.dataset.annotationGroup,!!(group.open||group.hasAttribute('open'))));
   panel.annotationReader=r;
-  clearTimeout(panel.sidebarSearchTimer);panel.sidebarMode=mode;if(!embedded){sidebarMode=mode;closePopover();}else styleNativeSidebar(panel);panel.hidden=false;
+  clearTimeout(panel.sidebarSearchTimer);panel.sidebarMode=mode;if(!embedded){sidebarMode=mode;r.appSidebarMode=mode;r.appSidebarClosed=false;$('#workspace')?.setAttribute('data-app-sidebar','');closePopover();}else styleNativeSidebar(panel);panel.hidden=false;
   const id=name=>(embedded?'htmlmemo-native-':'')+name,q=name=>$('#'+id(name),panel);
   const title={search:'검색',outline:'목차',annotations:'주석',bookmarks:'북마크'}[mode];
   if(!$('.sidebar-views',panel)){
     const views=[['outline','list','목차'],['search','search','검색'],['annotations','note','주석'],['bookmarks','bookmark','북마크']];
     panel.innerHTML=`<h2 id="${id('sidebar-title')}" hidden></h2><div class="sidebar-views" role="group" aria-label="사이드바 보기">${views.map(([view,name,label])=>`<button type="button" data-sidebar-view="${view}" title="${label}" aria-label="${label}" aria-pressed="false" aria-controls="${id('sidebar-content')}">${icon(name,14)}${['annotations','bookmarks'].includes(view)?`<span class="sidebar-nav-count" data-sidebar-count="${view}" aria-hidden="true"></span>`:''}</button>`).join('')}${embedded?'':`<button type="button" class="icon-button" id="close-sidebar" title="패널 닫기" aria-label="패널 닫기">${icon('close',14)}</button>`}</div><div id="${id('sidebar-content')}" class="sidebar-content" role="region" aria-labelledby="${id('sidebar-title')}"></div>`;
-    if(!embedded)q('close-sidebar').onclick=closeSidebar;
+    if(!embedded)q('close-sidebar').onclick=()=>closeSidebar();
     $$('[data-sidebar-view]',panel).forEach(button=>button.onclick=()=>embedded?r.showDocumentSidebarView(button.dataset.sidebarView):renderSidebar(button.dataset.sidebarView));
   }
   q('sidebar-title').textContent=embedded&&mode==='outline'?'목차':title;panel.setAttribute('aria-labelledby',id('sidebar-title'));
+  $('[data-sidebar-view="outline"]',panel).hidden=!embedded&&!outline.length;
   $$('[data-sidebar-view]',panel).forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.sidebarView===mode)));
   updateSidebarCounts(panel,r);
   const content=$('.sidebar-content',panel);content.hidden=false;
   if(mode==='search'){
     content.innerHTML=`<div class="search-field"><input id="${id('document-search')}" aria-label="불러온 부분 검색어" placeholder="불러온 부분에서 찾기" autocomplete="off"></div><div class="search-navigation loaded-search-navigation"><span id="${id('search-count')}" role="status" aria-live="polite">검색어를 입력하세요.</span><button id="${id('search-prev')}" class="icon-button" aria-label="이전 검색 결과" disabled>${icon('back')}</button><button id="${id('search-next')}" class="icon-button" aria-label="다음 검색 결과" disabled>${icon('forward')}</button></div><div id="${id('search-results')}"></div>`;
     const input=q('document-search');input.value=r.sidebarSearchQuery??r.searchQuery??'';
-    const run=()=>{if(panel.sidebarMode!=='search'||reader()!==r||!input.isConnected)return;const results=r.search(input.value);updateSearchNavigation(r);q('search-results').innerHTML=results.slice(0,150).map((result,index)=>`<button class="search-result" data-search-index="${index}">${esc(result.quote)}</button>`).join('');$$('[data-search-index]',panel).forEach(button=>button.onclick=()=>{r.searchPosition=Number(button.dataset.searchIndex)-1;r.nextSearch(1);updateSearchNavigation(r);});};
+    const run=(resume=false)=>{if(panel.sidebarMode!=='search'||reader()!==r||!input.isConnected)return;const results=resume&&r.searchQuery===input.value?r.searchResults:r.search(input.value,!resume);updateSearchNavigation(r);q('search-results').innerHTML=results.slice(0,150).map((result,index)=>`<button class="search-result" data-search-index="${index}">${esc(result.quote)}</button>`).join('');$$('[data-search-index]',panel).forEach(button=>button.onclick=()=>{r.searchPosition=Number(button.dataset.searchIndex)-1;r.nextSearch(1);updateSearchNavigation(r);});};
     const advance=direction=>{clearTimeout(panel.sidebarSearchTimer);if(r.searchQuery!==input.value){run();return;}r.nextSearch(direction);updateSearchNavigation(r);};
     input.oninput=()=>{r.sidebarSearchQuery=input.value;clearTimeout(panel.sidebarSearchTimer);panel.sidebarSearchTimer=setTimeout(run,120);};input.onkeydown=e=>{if(e.key==='Enter'&&!e.isComposing){e.preventDefault();advance(e.shiftKey?-1:1);}};
-    q('search-prev').onclick=()=>advance(-1);q('search-next').onclick=()=>advance(1);input.focus();if(input.value)run();
+    q('search-prev').onclick=()=>advance(-1);q('search-next').onclick=()=>advance(1);if(focusSearch)input.focus();if(input.value)run(!focusSearch);
   }else if(mode==='outline'){
-    const outline=embedded?[]:r.outline();
     // Native books keep their original TOC nodes below this editor-owned panel.
     content.innerHTML=embedded?'':outline.length?outline.map((item,index)=>`<button class="outline-item" style="padding-left:${12+(item.level-1)*12}px" data-heading="${index}">${esc(item.title)}</button>`).join(''):'<p class="panel-empty">이 문서에 제목 목차가 없습니다.</p>';
     $$('[data-heading]',panel).forEach(button=>button.onclick=()=>r.jump(outline[Number(button.dataset.heading)].node));
@@ -1106,7 +1119,7 @@ function handleKey(event) {
 function setReaderFocus(value) {
   readerFocused=value;$('#app').classList.toggle('reader-focus',value);
   const focusedReader=reader();
-  closePopover();closeSidebar();requestAnimationFrame(()=>{applyToolbarPosition();focusedReader?.setFocusLayout?.(value);focusedReader?.measure();});
+  closePopover();closeSidebar({remember:false,clearSearch:false});requestAnimationFrame(()=>{if(!value)restoreSidebar();applyToolbarPosition();focusedReader?.setFocusLayout?.(value);focusedReader?.measure();});
 }
 async function leaveReaderFocus() {
   const entering=focusBusy;focusBusy=true;

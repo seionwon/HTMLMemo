@@ -13,7 +13,7 @@ const source=await readFile(new URL('../public/src/app.js',import.meta.url),'utf
 const sidebarCode=source.slice(source.indexOf('function closeSidebar('),source.indexOf('function annotationDialog('));
 
 function sidebar() {
-  const doc=new DOMParser().parseFromString('<html><body><aside id="sidebar" hidden></aside></body></html>','text/html');
+  const doc=new DOMParser().parseFromString('<html><body><section id="workspace"></section><aside id="sidebar" hidden></aside></body></html>','text/html');
   const calls={search:[],next:[],headings:[],annotations:[],saved:0},timers=new Map();let timerId=0;
   const r={zoom:2,metadata:{bookmarks:[{id:'b1',title:'읽던 곳',top:240,left:12}],annotations:[{id:'a1',type:'note',color:'#334155',text:'남겨 둔 메모'}]},
     outline:()=>[{node:'heading-1',level:1,title:'첫 번째 절'}],jump:node=>calls.headings.push(node),jumpAnnotation:id=>calls.annotations.push(id),
@@ -24,7 +24,7 @@ function sidebar() {
     getComputedStyle:()=>({getPropertyValue:()=>''}),
     setTimeout(fn){const id=++timerId;timers.set(id,fn);return id;},clearTimeout(id){timers.delete(id);}});
   // All sidebar interactions use the app's real renderer and handlers.
-  vm.runInContext('var sidebarMode="";\n'+sidebarCode,context);
+  vm.runInContext('var sidebarMode="",readerFocused=false;\n'+sidebarCode,context);
   return {doc,r,calls,timers,context,open:mode=>context.renderSidebar(mode),
     choose:mode=>doc.querySelector(`[data-sidebar-view="${mode}"]`).onclick(),
     flush(){for(const [id,fn] of [...timers]){timers.delete(id);fn();}},setReader:reader=>current=reader};
@@ -48,6 +48,39 @@ test('sidebar switches four icon-only views with tooltip labels and total counts
   assert.equal(a.r.scrollTop,480);assert.equal(a.r.scrollLeft,24);
   assert.deepEqual(a.r.metadata,before);assert.equal(a.calls.saved,0);
   assert.strictEqual(a.doc.querySelector('[data-sidebar-view=search]'),button);
+});
+
+test('TOC-less HTML automatically exposes search, annotations and bookmarks, including empty totals',()=>{
+  const a=sidebar();a.r.doc={};a.r.outline=()=>[];a.r.metadata={annotations:[],bookmarks:[]};const before=structuredClone(a.r.metadata);
+  a.context.restoreSidebar();const panel=a.doc.querySelector('#sidebar');assert.equal(panel.hidden,false);assert.equal(panel.sidebarMode,'search');assert.equal(a.doc.querySelector('#workspace').hasAttribute('data-app-sidebar'),true);
+  assert.deepEqual([...panel.querySelectorAll('[data-sidebar-view]')].filter(button=>!button.hidden).map(button=>button.dataset.sidebarView),['search','annotations','bookmarks']);
+  assert.equal(a.doc.querySelector('#document-search').getAttribute('placeholder'),'불러온 부분에서 찾기');assert.equal(a.doc.querySelector('[data-sidebar-count=annotations]').textContent,'0');assert.equal(a.doc.querySelector('[data-sidebar-count=bookmarks]').textContent,'0');
+  a.choose('annotations');assert.match(a.doc.querySelector('.panel-empty').textContent,/아직 주석/);a.choose('bookmarks');assert.match(a.doc.querySelector('.panel-empty').textContent,/저장한 북마크/);assert.ok(a.doc.querySelector('#add-bookmark'));assert.deepEqual(a.r.metadata,before);assert.equal(a.calls.saved,0);
+});
+
+test('automatic sidebar restore never focuses a search field or restarts an existing hit',()=>{
+  const a=sidebar();a.r.doc={};a.r.outline=()=>[];a.open('search');let input=a.doc.querySelector('#document-search');input.value='기억';input.oninput();a.flush();
+  const searchCalls=[...a.calls.search],results=a.r.searchResults,position=a.r.searchPosition;
+  a.context.closeSidebar({remember:false,clearSearch:false});const prototype=a.doc.defaultView.HTMLElement.prototype,focus=prototype.focus;let focused=0;prototype.focus=()=>focused++;
+  try{a.context.restoreSidebar();}finally{prototype.focus=focus;}
+  input=a.doc.querySelector('#document-search');assert.equal(input.value,'기억');assert.equal(focused,0);assert.deepEqual(a.calls.search,searchCalls);assert.strictEqual(a.r.searchResults,results);assert.equal(a.r.searchPosition,position);assert.equal(a.doc.querySelector('#search-count').textContent,'1 / 1개 결과');
+});
+
+test('explicit close remains closed on tab return, and manual reopen restores the selected view',()=>{
+  const a=sidebar();a.r.doc={};a.r.outline=()=>[];a.open('bookmarks');a.doc.querySelector('#close-sidebar').onclick();assert.equal(a.r.appSidebarClosed,true);assert.equal(a.doc.querySelector('#workspace').hasAttribute('data-app-sidebar'),false);
+  a.context.restoreSidebar();assert.equal(a.doc.querySelector('#sidebar').hidden,true);assert.equal(a.r.appSidebarMode,'bookmarks');a.open(a.r.appSidebarMode);assert.equal(a.doc.querySelector('#sidebar').hidden,false);assert.equal(a.r.appSidebarClosed,false);
+  a.context.closeSidebar({remember:false,clearSearch:false});a.context.restoreSidebar();assert.equal(a.doc.querySelector('#sidebar').sidebarMode,'bookmarks');
+});
+
+test('shared sidebar hides or restores only the available outline when switching documents',()=>{
+  const a=sidebar();a.r.doc={};a.r.outline=()=>[];a.open('outline');assert.equal(a.doc.querySelector('#sidebar').sidebarMode,'search');assert.equal(a.doc.querySelector('[data-sidebar-view=outline]').hidden,true);
+  const other={...a.r,outline:()=>[{node:'new-heading',level:1,title:'새 제목'}],metadata:{annotations:[],bookmarks:[]}};a.setReader(other);a.open('outline');assert.equal(a.doc.querySelector('[data-sidebar-view=outline]').hidden,false);assert.equal(a.doc.querySelector('#sidebar-title').textContent,'목차');assert.equal(a.doc.querySelector('[data-sidebar-count=annotations]').textContent,'0');
+  a.setReader(a.r);a.context.restoreSidebar();assert.equal(a.doc.querySelector('[data-sidebar-view=outline]').hidden,true);assert.equal(a.doc.querySelector('[data-sidebar-count=annotations]').textContent,'1');
+});
+
+test('native TOC, preparing/disposed documents and fullscreen never gain a duplicate automatic sidebar',()=>{
+  for(const state of [{preparing:true},{disposed:true},{documentSidebarUI:{isConnected:true}}]){const a=sidebar();Object.assign(a.r,{doc:{}},state);a.context.restoreSidebar();assert.equal(a.doc.querySelector('#sidebar').hidden,true);}
+  const a=sidebar();a.r.doc={};a.context.readerFocused=true;a.context.restoreSidebar();assert.equal(a.doc.querySelector('#sidebar').hidden,true);
 });
 
 test('sidebar cancels pending searches on view changes, close and document switches while keeping the search draft',()=>{

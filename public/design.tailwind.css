@@ -140,6 +140,10 @@ body[data-codememo-design]{margin:0;font-family:var(--app-font);background:var(-
 .sidebar-views button[aria-pressed=true]{background:var(--green-light);color:var(--green);font-weight:600}
 .sidebar-views button:focus-visible{outline-offset:-2px}
 .sidebar-content{min-height:0}
+/* A document need not supply its own TOC to expose reading tools. */
+@media(min-width:721px){#workspace[data-app-sidebar] #workspaces{width:calc(100% - 300px)}}
+@media(min-width:721px) and (max-width:1000px){#workspace[data-app-sidebar] #workspaces{width:calc(100% - 280px)}}
+@media(max-width:720px){.sidebar{top:calc(var(--chrome-height,25px) + 24px)}}
 .floating-toolbar .tool-has-modes{position:relative}
 .floating-toolbar .tool-has-modes::after{content:'';position:absolute;right:1px;bottom:1px;width:0;height:0;border-left:3px solid transparent;border-top:3px solid transparent;border-bottom:3px solid currentColor;opacity:.65;pointer-events:none}
 .annotation-tool-modes .menu-button{gap:9px;align-items:center}

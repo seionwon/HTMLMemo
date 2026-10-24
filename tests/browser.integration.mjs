@@ -348,7 +348,7 @@ test('real Chrome: toolbar mode groups remove semantic duplicates and keep area,
       await page.waitFor('document.querySelectorAll("[data-tool-mode]").length===2');
       assert.deepEqual(await page.evaluate('[...document.querySelectorAll("[data-tool-mode]")].map(b=>b.dataset.toolMode)'),['highlight','area']);
       await writeFile(join(root,`test-results/toolbar-modes-choice-${width}.png`),await page.screenshot());await page.click('[data-popover-close]');
-      await page.click('[data-action=more]');assert.deepEqual(await page.evaluate('[...document.querySelectorAll("[data-more]")].map(b=>b.dataset.more)'),['sidebar','rect','ellipse','arrow','strike','history','migrate','info']);
+      await page.click('[data-action=more]');assert.deepEqual(await page.evaluate('[...document.querySelectorAll("[data-more]")].map(b=>b.dataset.more)'),['rect','ellipse','arrow','strike','history','migrate','info']);
       assert.equal(await page.evaluate('document.querySelector("[data-more=history] svg").innerHTML===document.querySelector("[data-action=undo] svg").innerHTML'),false);
       await writeFile(join(root,`test-results/toolbar-modes-more-${width}.png`),await page.screenshot());await page.click('[data-popover-close]');
       assert.equal((await saved()).length,0,'choosing modes alone does not create annotations');
@@ -1484,6 +1484,42 @@ test('real Chrome: native sidebar view choices are visible on open and preserve 
   }finally{if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
 });
 
+test('real Chrome: sidebar view choices stay available for HTML without a TOC or headings',{timeout:90000},async()=>{
+  await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-no-toc-'));await cp(join(root,'public'),folder,{recursive:true});const server=createServer(folder);let chrome;
+  try{
+    await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));chrome=await launchChrome();const page=chrome.page,url=process.env.HTMLMEMO_SIDEBAR_TEST_URL||`http://127.0.0.1:${server.address().port}/`;
+    await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});await page.navigate(url);await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
+    const raw=await page.evaluate(`(async()=>{const {parseHTML,serializeHTML}=await import('./src/document.js'),p=parseHTML('<html lang="ko"><head><title>목차 없는 HTML</title><style>body{margin:0;padding:32px;font:18px/1.8 system-ui}p{max-width:700px}#bottom{margin-top:1400px}</style></head><body><p id="target">목차 없이도 검색어를 찾고 주석과 북마크를 확인합니다.</p><p id="bottom">다음 검색어도 찾습니다.</p></body></html>');p.metadata.annotations=[{id:'no-toc-note',type:'note',text:'목차가 없어도 남아 있는 메모',color:'#334155',width:3,opacity:1,points:[{x:40,y:100}]}];p.metadata.bookmarks=[{id:'no-toc-mark',title:'읽던 위치',top:350,left:0}];return serializeHTML(new DOMParser().parseFromString(p.html,'text/html'),p.metadata);})()`);
+    const input=async(contents=raw,name='no-toc.html')=>page.evaluate(`(()=>{const t=new DataTransfer();t.items.add(new File([${JSON.stringify(contents)}],${JSON.stringify(name)},{type:'text/html'}));const input=document.querySelector('#file-input');input.files=t.files;input.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+    const frame='document.querySelector(".document-host:not([hidden]) iframe")',doc=frame+'.contentDocument',ready=frame+'?.style.visibility==="visible"&&!document.querySelector(".tab-dirty:not([hidden])")';
+    await input();await page.waitFor(ready+'&&!document.querySelector("#sidebar").hidden');
+    const tabId=await page.evaluate('document.querySelector(".tab.document.active").dataset.tab'),record=await page.evaluate(`(async()=>{return (await(await import('./src/storage.js')).listDocuments())[0];})()`);
+    assert.equal(await page.evaluate(`${doc}.querySelectorAll('h1,h2,h3,h4,h5,h6,nav,aside').length`),0);assert.equal(await page.evaluate(`${doc}.querySelector('[data-htmlmemo-doc-sidebar-ui]')`),null);assert.equal(await page.evaluate('document.activeElement.id==="document-search"'),false);
+    const original=await page.evaluate(`(async()=>{const r=await(await import('./src/storage.js')).getDocument(${JSON.stringify(record.id)});return {html:r.html,annotations:r.metadata.annotations,bookmarks:r.metadata.bookmarks};})()`);
+    await mkdir(join(root,'test-results'),{recursive:true});
+    for(const width of [1280,390,320]){
+      await page.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
+      assert.deepEqual(await page.evaluate('[...document.querySelectorAll("#sidebar [data-sidebar-view]")].filter(b=>getComputedStyle(b).display!=="none").map(b=>b.dataset.sidebarView)'),['search','annotations','bookmarks']);
+      assert.equal(await page.evaluate('document.querySelector("#sidebar [data-sidebar-count=annotations]").textContent'),'1');assert.equal(await page.evaluate('document.querySelector("#sidebar [data-sidebar-count=bookmarks]").textContent'),'1');
+      assert.equal(await page.evaluate('[...document.querySelectorAll("#sidebar [data-sidebar-view]:not([hidden])")].every(b=>{const r=b.getBoundingClientRect();return r.width>0&&r.left>=0&&r.right<=innerWidth&&b.contains(document.elementFromPoint(r.left+r.width/2,r.top+r.height/2));})'),true);
+      if(width===1280)assert.equal(await page.evaluate('document.querySelector("#workspaces").getBoundingClientRect().right<=document.querySelector("#sidebar").getBoundingClientRect().left+1'),true);
+      await page.click('#sidebar [data-sidebar-view=search]');await page.evaluate('(()=>{const i=document.querySelector("#document-search");i.value="검색어";i.dispatchEvent(new Event("input"));})()');await page.waitFor('document.querySelectorAll("#sidebar [data-search-index]").length===2');await verifyLoadedSearchEnds(page,'document','',2,selector=>page.click(selector),'no-toc-'+width);
+      await page.click('#sidebar [data-sidebar-view=annotations]');await revealAnnotation(page,'document','no-toc-note');await page.click('[data-annotation=no-toc-note]');assert.equal(await page.evaluate('document.querySelector("[data-annotation=no-toc-note] .annotation-main").textContent'),'목차가 없어도 남아 있는 메모');
+      await writeFile(join(root,`test-results/sidebar-views-no-toc-${width}.png`),await page.screenshot());await page.click('#sidebar [data-sidebar-view=bookmarks]');assert.ok(await page.evaluate('document.querySelector("[data-bookmark=no-toc-mark]")'));await page.click('[data-bookmark=no-toc-mark]');
+    }
+    const unchanged=await page.evaluate(`(async()=>{const r=await(await import('./src/storage.js')).getDocument(${JSON.stringify(record.id)});return {html:r.html,annotations:r.metadata.annotations,bookmarks:r.metadata.bookmarks};})()`);assert.deepEqual(unchanged,original);
+    await page.click('#close-sidebar');await input('<html><head><title>다른 문서</title></head><body><h1>다른 문서의 제목</h1><p>본문</p></body></html>','with-heading.html');await page.waitFor('document.querySelectorAll(".tab.document").length===2&&'+ready+'&&!document.querySelector("#sidebar").hidden');
+    const otherTab=await page.evaluate('document.querySelector(".tab.document.active").dataset.tab');assert.equal(await page.evaluate('document.querySelector("#sidebar [data-sidebar-view=outline]").hidden'),false);assert.equal(await page.evaluate('document.querySelector("#sidebar [data-sidebar-count=annotations]").textContent'),'0');
+    await page.click(`.tab[data-tab="${tabId}"] .tab-select`);assert.equal(await page.evaluate('document.querySelector("#sidebar").hidden'),true);await page.click('[data-action=more]');await page.click('[data-more=sidebar]');assert.equal(await page.evaluate('document.querySelector("#sidebar [data-sidebar-view=bookmarks]").getAttribute("aria-pressed")'),'true');assert.equal(await page.evaluate('document.querySelector("#sidebar [data-sidebar-view=outline]").hidden'),true);
+    await page.click(`.tab[data-tab="${otherTab}"] .tab-select`);await page.click('#sidebar [data-sidebar-view=bookmarks]');await page.click('#add-bookmark');await page.waitFor('document.querySelector("#note-text")');await page.evaluate('document.querySelector("#note-text").value="다른 문서의 북마크"');await page.click('#dialog button[value=save]');await page.waitFor('document.querySelector("#sidebar [data-sidebar-count=bookmarks]").textContent==="1"&&'+ready);
+    await page.click(`.tab[data-tab="${tabId}"] .tab-select`);assert.equal(await page.evaluate('document.querySelector("#sidebar [data-sidebar-count=bookmarks]").textContent'),'1');assert.equal(await page.evaluate('document.querySelectorAll("#sidebar [data-bookmark]").length'),1);
+    await page.click('.tab.document.active .tab-close');await page.click('#library-tab');await page.click(`[data-open="${record.id}"]`);await page.waitFor(ready+'&&!document.querySelector("#sidebar").hidden');assert.equal(await page.evaluate('document.querySelector("#sidebar [data-sidebar-view=outline]").hidden'),true);assert.equal(await page.evaluate('document.querySelector("#sidebar [data-sidebar-count=annotations]").textContent'),'1');
+    await page.evaluate(`(async()=>{const root=await navigator.storage.getDirectory(),handle=await root.getFileHandle('no-toc-export.html',{create:true});window.showSaveFilePicker=async()=>handle;})()`);await page.click('#save-page');await page.waitFor('document.querySelector("#toast").textContent.includes("현재 주석을 포함한 HTML")');
+    const exported=await page.evaluate(`(async()=>{const root=await navigator.storage.getDirectory(),file=await(await root.getFileHandle('no-toc-export.html')).getFile(),{parseHTML}=await import('./src/document.js'),html=await file.text(),p=parseHTML(html);return {notes:p.metadata.annotations.length,bookmarks:p.metadata.bookmarks.length,ui:html.includes('data-app-sidebar')||html.includes('data-sidebar-view')};})()`);assert.deepEqual(exported,{notes:1,bookmarks:1,ui:false});assert.deepEqual(chrome.errors,[]);
+  }catch(error){if(chrome){await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/sidebar-views-no-toc-failure.png'),await chrome.page.screenshot());console.error('TOC-less sidebar diagnostics:',await chrome.page.evaluate('({status:document.querySelector("#status-left")?.textContent,toast:document.querySelector("#toast")?.textContent,sidebar:document.querySelector("#sidebar")?.innerText,dialog:document.querySelector("#dialog")?.innerText})'));}throw error;}
+  finally{await chrome?.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
+});
+
 test('real Chrome: sidebar view choices preserve search drafts, navigate saved notes and keep bookmarks editable',{timeout:60000},async()=>{
   await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-sidebar-'));await cp(join(root,'public'),folder,{recursive:true});
   const server=createServer(folder);let chrome;
@@ -1501,9 +1537,10 @@ test('real Chrome: sidebar view choices preserve search drafts, navigate saved n
     await page.waitFor('!document.querySelector("#toolbar").hidden&&document.querySelector("#status-left").textContent.includes("자동 저장됨")');
     const original=await page.evaluate(`(async()=>{const {getDocument}=await import('./src/storage.js');const record=await getDocument('sidebar-document');return {html:record.html,annotations:record.metadata.annotations,bookmarks:record.metadata.bookmarks};})()`);
     await page.evaluate('window.sidebarFrame=document.querySelector(".document-host:not([hidden]) iframe")');
-    await page.click('[data-action=more]');assert.ok(await page.evaluate('document.querySelector("[data-more=sidebar]")'));
+    assert.equal(await page.evaluate('document.querySelector("#sidebar").hidden'),false);
+    await page.click('[data-action=more]');assert.equal(await page.evaluate('!!document.querySelector("[data-more=sidebar]")'),false);
     for(const removed of ['search','outline','annotations','undo','redo','bookmark','connect','area','area-underline','text','clear'])assert.equal(await page.evaluate(`!!document.querySelector('[data-more=${removed}]')`),false);
-    await page.click('[data-more=sidebar]');
+    await page.click('[data-popover-close]');
     assert.deepEqual(await page.evaluate('[...document.querySelectorAll("[data-sidebar-view]")].map(button=>button.textContent)'),['','','1','1']);
     for(const width of [1280,390,320]){
       await page.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
