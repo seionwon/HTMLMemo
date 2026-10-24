@@ -1034,8 +1034,8 @@ test('real Chrome: adaptive file tabs shrink evenly before scrolling and preserv
     }
     await page.click('#tabs .tab.active .tab-close');await page.waitFor(`document.querySelectorAll('#tabs .tab').length===17&&${ready}`);await visible();
     await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
-    const remove=await page.evaluate('[...document.querySelectorAll("#tabs .tab")].slice(2).map(el=>el.dataset.tab)');
-    for(const id of remove)await page.click(`[data-tab="${id}"] .tab-close`);
+    await visible();
+    for(let count=17;count>2;count--){await page.click('#tabs .tab.active .tab-close');await page.waitFor(`document.querySelectorAll('#tabs .tab').length===${count-1}&&${ready}`);await visible();}
     await page.waitFor(`document.querySelectorAll('#tabs .tab').length===2&&${ready}`);await visible();const expanded=await measure();metrics.push(expanded);assert.ok(expanded.widths.every(width=>Math.abs(width-220)<1));assert.equal(expanded.contentWidth,expanded.stripWidth);
     assert.equal(await page.evaluate(`(async()=>{const {listDocuments}=await import('./src/storage.js');return (await listDocuments()).filter(r=>r.name.startsWith('adaptive-')).length;})()`),18,'closing tabs must retain all saved documents');
     await writeFile(join(root,'test-results/tab-sizing-metrics.json'),JSON.stringify(metrics,null,2));assert.deepEqual(chrome.errors,[]);
