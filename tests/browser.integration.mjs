@@ -54,12 +54,16 @@ test('real Chrome: MHTML import restores a Chrome archive, saves notes and expor
       assert.equal(state.title,'MHTML 보관 검증');assert.match(state.text,/한글 본문/);assert.equal(state.color,'rgb(22, 40, 62)');assert.equal(state.spacing,'2px');assert.match(state.background,/data:image\/svg\+xml;base64,/);assert.match(state.image,/^data:image\/svg\+xml;base64,/);assert.match(state.frame,/보관된 프레임/);assert.equal(state.scripts,0);assert.equal(requests.length,requestCount,'opening/reopening never fetches the source website');
       // Inspect the actual sandboxed child browsing context, not just srcdoc
       // text: a CSP-blocked iframe used to retain that text but render blank.
-      const {frameTree}=await page.send('Page.getFrameTree');
-      const findChild=node=>node.frame.name==='archived-child'?node.frame:(node.childFrames||[]).map(findChild).find(Boolean);
-      const child=findChild(frameTree);assert.ok(child,'the archived child frame must exist');
-      const {executionContextId}=await page.send('Page.createIsolatedWorld',{frameId:child.id,worldName:'htmlmemo-mhtml-verification'});
-      const {result,exceptionDetails}=await page.send('Runtime.evaluate',{contextId:executionContextId,expression:'({text:document.body.innerText,color:getComputedStyle(document.querySelector("#child")).color,image:document.querySelector("img").naturalWidth,isolated:(()=>{try{return !parent.document}catch{return true}})()})',returnByValue:true});
-      assert.equal(exceptionDetails,undefined);assert.match(result.value.text,/Saved frame/);assert.equal(result.value.color,'rgb(22, 40, 62)');assert.equal(result.value.image,48);assert.equal(result.value.isolated,true);
+      const {result:owner}=await page.send('Runtime.evaluate',{expression:`${doc}.querySelector('iframe')`});
+      const {node}=await page.send('DOM.describeNode',{objectId:owner.objectId});
+      assert.ok(node.frameId,'the archived iframe owner must have a browsing context: '+JSON.stringify(node));
+      const {targetInfos}=await page.send('Target.getTargets'),outOfProcess=targetInfos.some(target=>target.type==='iframe'&&target.targetId===node.frameId);
+      const sessionId=outOfProcess?(await page.send('Target.attachToTarget',{targetId:node.frameId,flatten:true})).sessionId:undefined;
+      try{
+        const {executionContextId}=await page.send('Page.createIsolatedWorld',{frameId:node.frameId,worldName:'htmlmemo-mhtml-verification'},sessionId);
+        const {result,exceptionDetails}=await page.send('Runtime.evaluate',{contextId:executionContextId,expression:'({text:document.body.innerText,color:getComputedStyle(document.querySelector("#child")).color,image:document.querySelector("img").naturalWidth,isolated:(()=>{try{return !parent.document}catch{return true}})()})',returnByValue:true},sessionId);
+        assert.equal(exceptionDetails,undefined);assert.match(result.value.text,/Saved frame/);assert.equal(result.value.color,'rgb(22, 40, 62)');assert.equal(result.value.image,48);assert.equal(result.value.isolated,true);
+      }finally{if(sessionId)await page.send('Target.detachFromTarget',{sessionId});}
     };
     const rows=()=>page.evaluate(`(async()=>{return (await import('./src/storage.js')).listDocuments();})()`);
     const input=async(name,contents=raw)=>page.evaluate(`(()=>{const t=new DataTransfer();t.items.add(new File([${JSON.stringify(contents)}],${JSON.stringify(name)},{type:${JSON.stringify(/\.html?$/i.test(name)?'text/html':'multipart/related')}}));const input=document.querySelector('#file-input');input.files=t.files;input.dispatchEvent(new Event('change',{bubbles:true}));})()`);
@@ -78,7 +82,10 @@ test('real Chrome: MHTML import restores a Chrome archive, saves notes and expor
     assert.equal(await page.evaluate(`(async()=>{return (await(await(await navigator.storage.getDirectory()).getFileHandle('Chrome.mhtml')).getFile()).text();})()`),raw);
     await page.send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await verify();await writeFile(join(root,'test-results/mhtml-import-390.png'),await page.screenshot());
     await input('broken.mhtml','not a MIME archive');await page.waitFor('document.querySelector("#toast").classList.contains("error")&&document.querySelector("#toast").textContent.includes("MHTML")');assert.equal((await rows()).length,2);assert.deepEqual(chrome.errors,[]);
-  }catch(error){if(chrome)console.error('MHTML import diagnostics:',await chrome.page.evaluate('({status:document.querySelector("#status-left")?.textContent,toast:document.querySelector("#toast")?.textContent,dialog:document.querySelector("#dialog")?.textContent,frame:document.querySelector(".document-host:not([hidden]) iframe")?.contentDocument?.body?.innerText})'));throw error;}
+  }catch(error){if(chrome){
+    const diagnostics={message:error.message,frames:await chrome.page.send('Page.getFrameTree'),app:await chrome.page.evaluate('({status:document.querySelector("#status-left")?.textContent,toast:document.querySelector("#toast")?.textContent,dialog:document.querySelector("#dialog")?.textContent,child:document.querySelector(".document-host:not([hidden]) iframe")?.contentDocument?.querySelector("iframe")?.outerHTML})')};
+    await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/mhtml-import-diagnostics.json'),JSON.stringify(diagnostics,null,2));await writeFile(join(root,'test-results/mhtml-import-failure.png'),await chrome.page.screenshot());console.error('MHTML import diagnostics:',JSON.stringify(diagnostics));
+  }throw error;}
   finally{await chrome?.close();await Promise.all([new Promise(resolve=>server.close(resolve)),new Promise(resolve=>site.close(resolve))]);await rm(folder,{recursive:true,force:true});}
 });
 test('real Chrome: duplicate HTML import offers cancel, fresh annotations or existing notes',{timeout:90000},async()=>{

@@ -37,6 +37,7 @@ jobs:
           path: |
             test-results/browser-results.xml
             test-results/duplicate-import-performance.json
+            test-results/mhtml-import-diagnostics.json
             test-results/*.png
           if-no-files-found: ignore
       - run: npm run build
@@ -97,6 +98,7 @@ jobs:
           path: |
             test-results/published-browser-results.xml
             test-results/duplicate-import-performance.json
+            test-results/mhtml-import-diagnostics.json
             test-results/mhtml-import-*.png
             test-results/library-compact-*.png
             test-results/palette-controls-*.png
