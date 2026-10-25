@@ -380,11 +380,11 @@ test('the introduction opening fallback is not a global rename for other books o
 test('opening text marks are not repeated on later chapters, and approximate jumps report their precision without changing metadata',async()=>{
   const {r,doc}=partialBook(),quote='첫머리 공통 문장입니다.';
   r.metadata.annotations=[{id:'old-mark',type:'highlight',color:'#edcf67',width:3,opacity:.35,textAnchor:{start:0,end:quote.length,quote}}];
-  r.renderDrawingLayer=()=>{};r.observeDynamicDocument=()=>{};r.render();assert.ok(doc.querySelector('[data-htmlmemo-id="old-mark"]'));
+  r.renderDrawingLayer=()=>{};r.observeDynamicDocument=()=>{};r.measure=()=>{};r.render();assert.ok(doc.querySelector('[data-htmlmemo-id="old-mark"]'));
   doc.getElementById('reader-content').dataset.section='v0:one';r.render();assert.equal(doc.querySelector('[data-htmlmemo-id="old-mark"]'),null);
   doc.getElementById('reader-content').dataset.section='v0:opening';const before=structuredClone(r.metadata),notices=[],errors=[];let jumped;
   r.callbacks={onNotice:message=>notices.push(message),onError:error=>errors.push(error.message)};r.jump=element=>jumped=element;
-  assert.equal(await r.jumpAnnotation('old-mark'),true);assert.equal(jumped.localName,'h1');assert.match(notices[0],/1부 앞부분/);assert.match(notices[0],/확정/);assert.deepEqual(errors,[]);assert.deepEqual(r.metadata,before);
+  assert.equal(await r.jumpAnnotation('old-mark'),true);assert.equal(jumped.getAttribute('data-htmlmemo-id'),'old-mark');assert.match(notices[0],/1부 앞부분/);assert.match(notices[0],/확정/);assert.deepEqual(errors,[]);assert.deepEqual(r.metadata,before);
 });
 
 test('annotation disclosure state survives view changes and deletion without saving UI state or showing empty groups',()=>{
@@ -421,13 +421,13 @@ test('annotation navigation loads only the requested section before rendering an
 test('cancelled and timed-out annotation navigation never deletes annotations or jumps to stale content',async t=>{
   t.mock.timers.enable({apis:['setTimeout']});installDOM();
   const doc=documentFor('<html><body><article id="reader-content" data-section="local"><span data-htmlmemo-id="here">Here</span></article></body></html>');
-  let disconnected=0,jumps=0;const errors=[];
-  Object.defineProperty(doc,'defaultView',{value:{MutationObserver:class{observe(){}disconnect(){disconnected++;}},location:{hash:''}}});
+  let jumps=0;const errors=[],observers=[];
+  Object.defineProperty(doc,'defaultView',{value:{MutationObserver:class{constructor(){observers.push(this);}observe(){this.connected=true;}disconnect(){this.connected=false;}},location:{hash:''}}});
   const r=Object.create(Reader.prototype);r.doc=doc;r.metadata={annotations:[{id:'there',textAnchor:{section:'remote'}},{id:'here',textAnchor:{section:'local'}}]};
   r.annotationBookPaths=()=>new Map([['remote',[]]]);r.callbacks={onError:error=>errors.push(error.message)};r.jump=()=>jumps++;
   const cancelled=r.jumpAnnotation('there');assert.equal(await r.jumpAnnotation('here'),true);assert.equal(await cancelled,false);assert.equal(errors.length,0);assert.equal(jumps,1);
   const timedOut=r.jumpAnnotation('there');t.mock.timers.tick(15000);assert.equal(await timedOut,false);assert.match(errors[0],/불러오지 못했습니다/);
-  assert.equal(disconnected,2);assert.equal(r.metadata.annotations.length,2);assert.equal(jumps,1);assert.equal(r.cancelAnnotationJump,null);
+  assert.ok(observers.every(observer=>!observer.connected));assert.equal(r.metadata.annotations.length,2);assert.equal(jumps,1);assert.equal(r.cancelAnnotationJump,null);
 });
 
 test('the visible source TOC gets inline choices without moving its tree, listeners or text anchors',()=>{

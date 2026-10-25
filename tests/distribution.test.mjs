@@ -75,7 +75,7 @@ async function fileApp({address='file:///Users/beginner/HTMLMemo.html',navigator
   Object.defineProperty(doc,'activeElement',{value:doc.body,writable:true,configurable:true});doc.defaultView.HTMLElement.prototype.focus=function(){this.ownerDocument.activeElement=this;};
   const dialog=doc.querySelector('#dialog');dialog.showModal=()=>dialog.open=true;dialog.close=()=>dialog.open=false;
   const stores=new Map([['documents',new Map(documents.map(record=>[record.id,record]))],['settings',new Map(settings)]]);
-  const database={objectStoreNames:{contains:name=>stores.has(name)},createObjectStore:name=>{if(!stores.has(name))stores.set(name,new Map());return {createIndex(){}};},transaction:name=>{const tx={};tx.objectStore=()=>{const store=stores.get(name);return {getAll:()=>({result:[...store.values()]}),get:key=>({result:store.get(key)}),put:(value,key)=>{store.set(key??value.id,value);return {result:key??value.id};},delete:key=>{store.delete(key);return {};}};};queueMicrotask(()=>tx.oncomplete?.());return tx;}};
+  const database={objectStoreNames:{contains:name=>stores.has(name)},createObjectStore:name=>{if(!stores.has(name))stores.set(name,new Map());return {createIndex(){}};},transaction:names=>{const tx={};tx.objectStore=name=>{const store=stores.get(name||names);return {getAll:()=>({result:[...store.values()]}),get:key=>({result:store.get(key)}),put:(value,key)=>{store.set(key??value.id,value);return {result:key??value.id};},delete:key=>{store.delete(key);return {};}};};queueMicrotask(()=>tx.oncomplete?.());return tx;}};
   const indexedDB={open:()=>{const request={result:database};queueMicrotask(()=>{request.onupgradeneeded?.();request.onsuccess?.();});return request;}};
   class LocalURL extends URL{static createObjectURL(blob){blobs.push(blob);return 'blob:local-test';}static revokeObjectURL(){}}
   const events=new Map();const window={addEventListener(name,fn){if(!events.has(name))events.set(name,[]);events.get(name).push(fn);},postMessage(){},dispatchEvent(){}};
@@ -209,6 +209,19 @@ test('legacy records without a filename never show undefined, null or a fabricat
 });
 
 
+test('cards and lists expose folders, full breadcrumbs and a collapsible hierarchy without losing filenames',async()=>{
+  const folders=[{id:'books',parentId:'',name:'책 & 자료'},{id:'part',parentId:'books',name:'1부'},{id:'empty',parentId:'',name:'빈 폴더'}],record={id:'nested',title:'안쪽 문서',name:'받은 파일.mhtml',folderId:'part',source:'',created:100,modified:200,metadata:{annotations:[{id:'keep'}]}},app=await fileApp({documents:[record],settings:[['library-folders-v1',folders]]}),doc=app.doc;
+  assert.equal(doc.querySelectorAll('.document-card').length,0);assert.equal(doc.querySelectorAll('.library-folder-card').length,2);assert.equal(doc.querySelector('#library-folder-tree').hidden,false);assert.match(doc.querySelector('#library-folder-tree').textContent,/전용 폴더.*root.*책 & 자료.*1부/);
+  doc.querySelector('[data-folder-toggle="books"]').onclick();assert.equal(doc.querySelector('#library-folder-tree [data-library-folder="part"]'),null);doc.querySelector('[data-folder-toggle="books"]').onclick();doc.querySelector('#library-folder-tree [data-library-folder="part"]').onclick();
+  for(const view of ['card','list']){doc.querySelector('#library-'+view+'-view').onclick();assert.equal(doc.querySelector('.list-filename').textContent,'받은 파일.mhtml');assert.equal(doc.querySelectorAll('.document-card').length,1);assert.match(doc.querySelector('#library-breadcrumbs').textContent,/전용 폴더.*책 & 자료.*1부/);}
+  doc.querySelector('#library-folder-up').onclick();assert.equal(doc.querySelectorAll('.document-card').length,0);assert.equal(doc.querySelector('.library-folder-card strong').textContent,'1부');assert.deepEqual(record.metadata.annotations,[{id:'keep'}]);
+  const filter=doc.querySelector('#library-filter');filter.value='받은 파일';filter.oninput();assert.equal(doc.querySelectorAll('.document-card').length,1);assert.match(doc.querySelector('.list-progress').title,/책 & 자료 \/ 1부/);assert.equal(doc.querySelector('#library-search-scope').hidden,false);
+});
+test('nonempty folder deletion is disabled and move destinations exclude self and descendants',async()=>{
+  const folders=[{id:'books',parentId:'',name:'책'},{id:'part',parentId:'books',name:'1부'}],app=await fileApp({settings:[['library-folders-v1',folders]]}),doc=app.doc;
+  doc.querySelector('[data-folder-menu="books"]').onclick();assert.equal(doc.querySelector('#folder-menu-delete').hasAttribute('disabled'),true);doc.querySelector('#folder-menu-move').onclick();assert.deepEqual([...doc.querySelectorAll('#library-folder-destination option')].map(o=>o.value),['']);assert.equal(doc.querySelector('#library-move-save').hasAttribute('disabled'),true);
+  doc.querySelector('#dialog').close();doc.querySelector('#library-new-folder').onclick();assert.equal(doc.querySelector('#library-folder-name').getAttribute('maxlength'),'100');assert.equal(doc.querySelector('#library-folder-form').querySelector('h2').textContent,'새 폴더');
+});
 test('the settings icon preserves library, web opening, HTML import, app delivery and offline About without a menu',async()=>{
   const {doc}=await fileApp();
   const click=id=>doc.querySelector(id).onclick(new Event('click'));

@@ -67,6 +67,24 @@ export const getDocument = async id => withContent(await transaction('documents'
 export const putDocument = record => putDocumentRevision(record);
 export const getSetting = key => transaction('settings', 'readonly', store => store.get(key));
 export const setSetting = (key, value) => transaction('settings', 'readwrite', store => store.put(value, key));
+/** One coherent header/tree snapshot even when another window moves a folder. */
+export async function readLibrary() {
+  const connection=await db();return new Promise((resolve,reject)=>{
+    const tx=connection.transaction(['settings','documents'],'readonly'),folders=tx.objectStore('settings').get('library-folders-v1'),documents=tx.objectStore('documents').getAll();
+    tx.oncomplete=()=>resolve({folders:folders.result||[],documents:documents.result});tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||new Error('서재 폴더와 문서 목록을 읽지 못했습니다.'));
+  });
+}
+/** Serialize folder edits with all document headers, across tabs. Never read HTML or history. */
+export async function updateLibraryFolders(edit) {
+  const connection=await db();
+  return new Promise((resolve,reject)=>{
+    const tx=connection.transaction(['settings','documents'],'readwrite'),settings=tx.objectStore('settings'),documents=tx.objectStore('documents');
+    const tree=settings.get('library-folders-v1'),rows=documents.getAll();let result,failure,ready=0;
+    const apply=()=>{if(++ready!==2)return;try{result=edit(tree.result||[],rows.result);settings.put(result.folders,'library-folders-v1');for(const record of result.documents)documents.put(record);}catch(error){failure=error;tx.abort();}};
+    tree.onsuccess=apply;rows.onsuccess=apply;
+    tx.oncomplete=()=>{changed(null);resolve(result);};tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(failure||tx.error||new Error('서재 폴더 변경을 저장하지 못했습니다. 기존 폴더와 문서는 유지됩니다.'));
+  });
+}
 /** Cache a proven legacy source identity without reading/writing its body or history. */
 export async function putDocumentSourceIdentity(id, sourceIdentity) {
   const identity=structuredClone(sourceIdentity),connection=await db();
@@ -215,10 +233,10 @@ export async function putDocumentRevision(record, {baseline = false, restoredFro
   const {html,file,originalFile,...value}=record;value.diskPending=false;value.diskError=null;
   if(!value.byteSize)value.byteSize=file?.size || (typeof html==='string'?new Blob([html]).size:0);
   return new Promise((resolve,reject)=>{
-    const tx=connection.transaction(['documents','contents','revisions','revisionHeaders'],'readwrite');
+    const tx=connection.transaction(['documents','contents','revisions','revisionHeaders','settings'],'readwrite');
     let failure;
     const documents=tx.objectStore('documents'),revisions=tx.objectStore('revisions'),contents=tx.objectStore('contents');
-    const previous=documents.get(record.id),content=contents.getKey(record.id);
+    const previous=documents.get(record.id),content=contents.getKey(record.id),folders=tx.objectStore('settings').get('library-folders-v1');
     const index=revisions.index('documentId'),latest=checkpoint?index.openCursor(IDBKeyRange.only(record.id),'prev'):index.openKeyCursor(IDBKeyRange.only(record.id),'prev');
     // Queue reads before any awaits so the transaction stays active.
     latest.onsuccess=()=>{
@@ -227,6 +245,9 @@ export async function putDocumentRevision(record, {baseline = false, restoredFro
         const old=previous.result;
         // A still-open legacy tab must not erase a later duplicate-check cache.
         if(!value.sourceIdentity&&old?.sourceIdentity)value.sourceIdentity=old.sourceIdentity;
+        // Moving a document is independent of an open reader's annotation saves.
+        if(old)value.folderId=old.folderId||'';
+        else if(value.folderId&&(!Array.isArray(folders.result)||!folders.result.some(f=>f.id===value.folderId)))value.folderId='';
         value.historyVersion=Number.isSafeInteger(old?.historyVersion)?old.historyVersion:0;
         let previousState=last?.value;
         const add=(metadata,kind)=>{addRevision(tx,{documentId:record.id,created:Date.now(),kind,restoredFrom:kind==='restore'?restoredFrom:null,...annotationState(metadata)});previousState=metadata;value.historyVersion++;};
@@ -262,21 +283,27 @@ export async function checkpointAnnotations(id) {
 }
 
 /** Import an already validated folder snapshot without replacing any existing document. */
-export async function restoreFolderDocuments(entries) {
-  if(!entries.length)return;
+export async function restoreFolderDocuments(entries, folders = null, expectedFolders = null) {
+  if(!entries.length&&folders===null)return;
   const connection=await db();
   await new Promise((resolve,reject)=>{
-    const tx=connection.transaction(['documents','contents','revisions','revisionHeaders'],'readwrite');let failure;
-    try {
+    const tx=connection.transaction(['documents','contents','revisions','revisionHeaders',...(folders===null?[]:['settings'])],'readwrite');let failure;
+    const apply=()=>{try {
       for(const {record,content,revisions} of entries){
         tx.objectStore('documents').add({...record,historyVersion:revisions.length});
         tx.objectStore('contents').add({documentId:record.id,...content});
         for(const revision of revisions){const {id:oldId,...value}=revision;addRevision(tx,{...value,documentId:record.id});}
       }
-    }catch(error){failure=error;tx.abort();}
+      if(folders!==null)tx.objectStore('settings').put(folders,'library-folders-v1');
+    }catch(error){failure=error;tx.abort();}};
+    if(folders===null)apply();else{
+      const current=tx.objectStore('settings').get('library-folders-v1');
+      current.onsuccess=()=>{if(expectedFolders!==null&&JSON.stringify(current.result||[])!==JSON.stringify(expectedFolders)){failure=new Error('복원 중 다른 창에서 폴더가 바뀌었습니다. 다시 연결해주세요.');tx.abort();}else apply();};
+    }
     tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(failure||tx.error||new Error('폴더의 데이터를 복원하지 못했습니다. 기존 보관함은 유지됩니다.'));
   });
   for(const entry of entries)changed(entry.record.id);
+  if(folders!==null)changed(null);
 }
 
 /** Autosave never writes the imported file. HTML is retained once; edits are separate metadata. */
@@ -285,5 +312,6 @@ export async function saveDocumentHTML(record, html, operations = {}) {
   const put=operations.put || putDocumentRevision;
   const saved=await put(record,operations.revision);
   if(saved?.byteSize)record.byteSize=saved.byteSize;
+  if(saved?.folderId!==undefined)record.folderId=saved.folderId;
   return record;
 }

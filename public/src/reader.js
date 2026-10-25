@@ -101,8 +101,10 @@ export class Reader {
     if (!this.bookIntegrity?.complete) return Promise.resolve();
     const content = this.doc.getElementById('reader-content');
     if (!content) return Promise.resolve();
-    const ready = () => this.doc.documentElement.dataset.readerReady === 'true' ||
-      (content.childElementCount > 0 && !this.doc.getElementById('reader-status')?.textContent.trim());
+    // An exported "ready" flag can outlive the DOM that a book script is
+    // rebuilding. It is not proof that the first section actually exists.
+    const ready = () => content.childElementCount > 0 &&
+      this.doc.documentElement.dataset.readerReady !== 'false' && !this.doc.getElementById('reader-status')?.textContent.trim();
     if (ready()) return Promise.resolve();
     // Packed books finish their first section after the iframe load event.
     // Assigning anchors before that point makes IDs depend on decode timing.
@@ -1424,6 +1426,13 @@ export class Reader {
     this.dynamicTimer = setTimeout(() => this.refreshDynamicDocument().catch(error=>this.callbacks.onError?.(error)),400);
   }
   async refreshDynamicDocument() {
+    // Navigation must await an existing restoration job, not mistake "already
+    // running" for "finished" on the first import of a large exported book.
+    if(this.dynamicTask)return this.dynamicTask;
+    this.dynamicTask=this.refreshDynamicDocumentNow();
+    try{return await this.dynamicTask;}finally{this.dynamicTask=null;}
+  }
+  async refreshDynamicDocumentNow() {
     if (this.disposed || this.host?.hidden || this.dynamicRunning) return;
     if (this.tocDrag) { this.scheduleDynamicRefresh(); return; }
     this.dynamicRunning = true;this.dynamicDirty = false;
@@ -2126,28 +2135,19 @@ export class Reader {
     this.cancelAnnotationJump?.();
     const generation=this.annotationJumpGeneration=(this.annotationJumpGeneration||0)+1;
     const annotation=this.metadata.annotations.find(a=>a.id===id);if(!annotation)return false;
-    const location=this.annotationLocation(annotation);
-    const section=location?.section||location?.startSection||annotation.textAnchor?.section||annotation.anchorTarget?.section;
     try{
-      if(section&&currentSection(this.doc)!==section){
+      if(this.preparing&&this.ready)await this.ready;
+      if(this.disposed||generation!==this.annotationJumpGeneration)return false;
+      const location=this.annotationLocation(annotation),section=location?.section||location?.startSection||annotation.textAnchor?.section||annotation.anchorTarget?.section;
+      const navigate=!!section&&currentSection(this.doc)!==section;
+      if(navigate){
         if(!this.annotationBookPaths().has(section))throw new Error('이 주석의 장을 현재 책 목차에서 찾지 못했습니다. 주석은 보관됩니다.');
-        const loaded=await new Promise(resolve=>{
-          let settled=false;
-          const finish=value=>{if(settled)return;settled=true;observer.disconnect();clearTimeout(timer);this.cancelAnnotationJump=null;resolve(value);};
-          const ready=()=>currentSection(this.doc)===section&&!this.doc.getElementById('reader-status')?.textContent.trim();
-          const observer=new this.doc.defaultView.MutationObserver(()=>{if(ready())finish(true);});
-          const timer=setTimeout(()=>finish(false),15000);this.cancelAnnotationJump=()=>finish(false);
-          observer.observe(this.doc.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['data-section']});
-          try{this.doc.defaultView.location.hash=encodeURIComponent(section);if(ready())finish(true);}catch{finish(false);}
-        });
-        if(this.disposed||generation!==this.annotationJumpGeneration)return false;
-        if(!loaded)throw new Error('주석이 있는 장을 불러오지 못했습니다. 원본 책 목차에서 다시 열어 주세요. 주석은 보관됩니다.');
-        this.dynamicRoots?.add(this.doc.getElementById('reader-content'));
-        await this.refreshDynamicDocument();
-        if(this.disposed||generation!==this.annotationJumpGeneration)return false;
-        this.render();this.measure();
       }
-      const element=this.doc.querySelector(`[data-htmlmemo-id="${id}"]`);
+      const result=await this.waitForAnnotationTarget(annotation,{section,location,navigate,generation});
+      if(this.disposed||generation!==this.annotationJumpGeneration||result.cancelled)return false;
+      if(result.error)throw result.error;
+      if(!result.ready)throw new Error(result.sectionReady?'이 주석의 원문 위치를 찾지 못했습니다. 주석은 보관됩니다.':'주석이 있는 장을 불러오지 못했습니다. 원본 책 목차에서 다시 열어 주세요. 주석은 보관됩니다.');
+      const element=result.element;
       if(location?.approximate){
         const content=this.doc.getElementById('reader-content');
         const target=element||content?.querySelector('h1,h2,h3')||content;
@@ -2155,9 +2155,43 @@ export class Reader {
         this.selectedId=id;this.callbacks.onView?.();
         this.callbacks.onNotice?.(`${location.label}으로 이동했습니다. 정확한 주석 위치는 남아 있는 정보만으로 확정하기 어렵습니다.`);return true;
       }
-      if(!element)throw new Error('이 주석의 원문 위치를 찾지 못했습니다. 주석은 보관됩니다.');
-      this.jump(element);this.selectedId=id;this.callbacks.onView?.();return true;
+      this.jump(element);this.selectedId=id;this.callbacks.onView?.();if(result.noticeShown)this.callbacks.onNotice?.('주석 위치로 이동했습니다.');return true;
     }catch(error){if(!this.disposed&&generation===this.annotationJumpGeneration)this.callbacks.onError?.(error);return false;}
+  }
+  waitForAnnotationTarget(annotation,{section,location,navigate,generation}) {
+    return new Promise(resolve=>{
+      let settled=false,busy=false,scheduled=null,timer=null,notice=null,noticeShown=false,refresh=navigate;
+      const cancelled=()=>this.disposed||generation!==this.annotationJumpGeneration;
+      const sectionReady=()=> (!section||currentSection(this.doc)===section)&&!this.doc.getElementById('reader-status')?.textContent.trim()&&this.doc.documentElement.dataset.readerReady!=='false';
+      const finish=result=>{if(settled)return;settled=true;observer?.disconnect();clearTimeout(timer);clearTimeout(notice);clearTimeout(scheduled);if(this.cancelAnnotationJump===cancel)this.cancelAnnotationJump=null;resolve({...result,noticeShown});};
+      const cancel=()=>finish({cancelled:true});
+      const schedule=()=>{if(!settled&&!busy&&scheduled===null)scheduled=setTimeout(()=>{scheduled=null;void attempt();},40);};
+      const MO=this.doc.defaultView?.MutationObserver,observer=MO?new MO(schedule):null;
+      const observe=()=>{if(!settled)observer?.observe(this.doc.documentElement,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['data-section','data-reader-ready']});};
+      const attempt=async()=>{
+        if(settled||busy)return;if(cancelled()){cancel();return;}if(!sectionReady())return;
+        busy=true;observer?.disconnect();
+        try{
+          if(refresh||this.dynamicTask||this.dynamicRunning||this.dynamicDirty||this.dynamicRoots?.size){
+            this.dynamicRoots?.add(this.doc.getElementById('reader-content')||this.doc.body);
+            await this.refreshDynamicDocument();refresh=false;
+          }
+          if(settled||cancelled()){cancel();return;}if(!sectionReady())return;
+          // Exact IDs can contain quotes in legacy imports; compare attributes,
+          // not an interpolated selector. Never guess another matching sentence.
+          const find=()=>[...this.doc.querySelectorAll('[data-htmlmemo-id]')].find(node=>node.getAttribute('data-htmlmemo-id')===annotation.id);
+          let element=find();
+          if(!element){this.render();this.measure();element=find();}
+          if(element||location?.approximate&&this.doc.getElementById('reader-content')){finish({ready:true,element});return;}
+          if(!this.metadata.execution?.allowScripts&&!this.bookIntegrity?.complete)finish({ready:false,sectionReady:true});
+        }catch(error){finish({error});}
+        finally{busy=false;observe();}
+      };
+      this.cancelAnnotationJump=cancel;observe();
+      timer=setTimeout(()=>finish({ready:false,sectionReady:sectionReady()}),15000);
+      notice=setTimeout(()=>{if(!settled){noticeShown=true;this.callbacks.onNotice?.('주석이 있는 본문과 위치를 준비하는 중…');}},250);
+      try{if(navigate)this.doc.defaultView.location.hash=encodeURIComponent(section);void attempt();}catch(error){finish({error});}
+    });
   }
   // Read only the small, complete TOC manifest. Never decode unopened book bodies
   // or expand the source reader's lazy tree just to list annotations.

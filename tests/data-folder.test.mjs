@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {DataFolder,FOLDER_MANIFEST,FOLDER_PREVIOUS,FOLDER_DATA,FOLDER_GUIDE,folderSettings,applyFolderSettings,portableRecord} from '../public/src/data-folder.js';
 import {PREFERENCES_KEY,normalizePreferences} from '../public/src/preferences.js';
 import {memoryFolder,memoryLocal,settleUntil} from './folder-fixture.mjs';
+import {LIBRARY_FOLDERS_KEY,editLibraryFolders} from '../public/src/library-folders.js';
 
 function document(id='doc') {
   const note={id:'note',type:'note',color:'#edcf67',width:3,opacity:1,points:[{x:20,y:30}],text:'Separate annotation'};
@@ -10,7 +11,7 @@ function document(id='doc') {
 }
 function library(documents=[document()]) {
   const records=new Map(documents.map(r=>[r.id,structuredClone(r)])),contents=new Map(documents.map(r=>[r.id,{html:'<!doctype html><body>Original content</body>',originalFile:new File(['<!doctype html><body>Raw received bytes</body>'],r.name)}])),histories=new Map(documents.map(r=>[r.id,[{id:1,documentId:r.id,created:1000,kind:'baseline',annotations:[],bookmarks:[]},{id:2,documentId:r.id,created:2000,kind:'edit',annotations:r.metadata.annotations,bookmarks:r.metadata.bookmarks}]])),settings=new Map();let reads=0;
-  const operations={listDocuments:async()=>[...records.values()].map(r=>structuredClone(r)),getDocument:async id=>{reads++;return {...structuredClone(records.get(id)),...contents.get(id)};},listRevisions:async id=>structuredClone(histories.get(id)||[]),getSetting:async key=>settings.get(key),setSetting:async(key,value)=>settings.set(key,value),restoreFolderDocuments:async entries=>{for(const e of entries){assert.ok(!records.has(e.record.id));records.set(e.record.id,structuredClone(e.record));contents.set(e.record.id,e.content);histories.set(e.record.id,structuredClone(e.revisions));}}};
+  const operations={listDocuments:async()=>[...records.values()].map(r=>structuredClone(r)),getDocument:async id=>{reads++;return {...structuredClone(records.get(id)),...contents.get(id)};},listRevisions:async id=>structuredClone(histories.get(id)||[]),getSetting:async key=>settings.get(key),setSetting:async(key,value)=>settings.set(key,value),restoreFolderDocuments:async(entries,folders)=>{for(const e of entries){assert.ok(!records.has(e.record.id));records.set(e.record.id,structuredClone(e.record));contents.set(e.record.id,e.content);histories.set(e.record.id,structuredClone(e.revisions));}if(folders)settings.set(LIBRARY_FOLDERS_KEY,structuredClone(folders));}};
   return {operations,records,contents,histories,settings,get reads(){return reads;}};
 }
 function manager(t,lib,storage=memoryLocal(),extra={}) { const backup=new DataFolder({storage,operations:lib.operations,lock:fn=>fn(),delay:100000,...extra});t.after(()=>backup.dispose());return backup; }
@@ -102,4 +103,37 @@ test('an interrupted very first manifest leaves no empty root file and reconnect
   const lib=library(),control={failClose:FOLDER_MANIFEST},disk=memoryFolder('HTMLMemo',control),backup=manager(t,lib);
   await assert.rejects(backup.connect(disk),/Interrupted/);await assert.rejects(disk.getFileHandle(FOLDER_MANIFEST),{name:'NotFoundError'});assert.equal(lib.records.size,1);
   control.failClose=null;await backup.connect(disk);assert.equal(backup.state,'saved');assert.equal((await manifest(disk)).documents.length,1);
+});
+const hierarchy=()=>[{id:'books',parentId:'',name:'책'},{id:'part',parentId:'books',name:'1부'},{id:'archive',parentId:'',name:'보관'}];
+async function copyFile(disk,head,id='doc') {const entry=head.documents.find(e=>e.id===id);let directory=disk;const folders=new Map(head.folders.map(f=>[f.id,f])),path=[];for(let node=folders.get(entry.copy.folderId);node;node=folders.get(node.parentId))path.unshift(node.name);for(const name of path)directory=await directory.getDirectoryHandle(name);return (await directory.getFileHandle(entry.copy.name)).getFile();}
+test('nested library folders are real directories and a fresh device restores the hierarchy, raw copies and notes',async t=>{
+  const lib=library(),disk=memoryFolder();lib.settings.set(LIBRARY_FOLDERS_KEY,hierarchy());lib.records.get('doc').folderId='part';await manager(t,lib).connect(disk);const head=await manifest(disk);
+  assert.equal(head.version,2);assert.deepEqual(head.folders,hierarchy());assert.match(await(await copyFile(disk,head)).text(),/Raw received bytes/);assert.ok((await disk.getDirectoryHandle('책')).children.has('1부'));assert.equal(disk.children.has('보관'),true);
+  const other=library([]);await manager(t,other).connect(disk);assert.deepEqual(other.settings.get(LIBRARY_FOLDERS_KEY),hierarchy());assert.equal(other.records.get('doc').folderId,'part');assert.equal(other.records.get('doc').metadata.annotations[0].text,'Separate annotation');assert.equal(other.histories.get('doc').length,2);
+});
+test('moving a folder moves its nested raw copies without reading source bodies or rewriting annotation history',async t=>{
+  const lib=library(),control={writes:[]},disk=memoryFolder('HTMLMemo',control);lib.settings.set(LIBRARY_FOLDERS_KEY,hierarchy());lib.records.get('doc').folderId='part';const backup=manager(t,lib);await backup.connect(disk);const before=await manifest(disk),reads=lib.reads;control.writes.length=0;
+  lib.settings.set(LIBRARY_FOLDERS_KEY,editLibraryFolders(hierarchy(),[...lib.records.values()],{type:'move',id:'books',parentId:'archive'}).folders);backup.schedule();await backup.flush();const after=await manifest(disk);
+  assert.equal(disk.children.has('책'),false);assert.ok((await(await disk.getDirectoryHandle('보관')).getDirectoryHandle('책')).children.has('1부'));assert.match(await(await copyFile(disk,after)).text(),/Raw received bytes/);assert.equal(lib.reads,reads);assert.deepEqual(after.documents[0].history,before.documents[0].history);assert.deepEqual(after.documents[0].state,before.documents[0].state);assert.deepEqual(JSON.parse(await(await(await disk.getFileHandle(FOLDER_PREVIOUS)).getFile()).text()).folders,hierarchy());
+});
+test('document moves, folder renames and deletion of empty folders retain annotations and clean only old app copies',async t=>{
+  const lib=library(),disk=memoryFolder();lib.settings.set(LIBRARY_FOLDERS_KEY,hierarchy());lib.records.get('doc').folderId='part';const backup=manager(t,lib);await backup.connect(disk);const before=await manifest(disk);
+  lib.records.get('doc').folderId='archive';let folders=editLibraryFolders(hierarchy(),[...lib.records.values()],{type:'rename',id:'archive',name:'옮긴 곳'}).folders;folders=editLibraryFolders(folders,[...lib.records.values()],{type:'delete',id:'part'}).folders;lib.settings.set(LIBRARY_FOLDERS_KEY,folders);backup.schedule();await backup.flush();const after=await manifest(disk);
+  assert.equal((await disk.getDirectoryHandle('책')).children.has('1부'),false);assert.equal(disk.children.has('보관'),false);assert.equal(after.documents[0].copy.folderId,'archive');assert.match(await(await copyFile(disk,after)).text(),/Raw received bytes/);assert.deepEqual(after.documents[0].history,before.documents[0].history);assert.equal(lib.records.get('doc').modified,2000);
+});
+test('unmanaged files and changed raw copies are never overwritten or recursively removed',async t=>{
+  const lib=library(),disk=memoryFolder();lib.settings.set(LIBRARY_FOLDERS_KEY,hierarchy());lib.records.get('doc').folderId='part';const backup=manager(t,lib);await backup.connect(disk);const before=await manifest(disk),books=await disk.getDirectoryHandle('책');
+  (await books.getFileHandle('외부.txt',{create:true})).replace('Keep outside file');lib.settings.set(LIBRARY_FOLDERS_KEY,editLibraryFolders(hierarchy(),[...lib.records.values()],{type:'move',id:'books',parentId:'archive'}).folders);backup.schedule();await backup.flush();assert.equal(await(await(await books.getFileHandle('외부.txt')).getFile()).text(),'Keep outside file');assert.equal(disk.children.has('책'),true);
+  const head=await manifest(disk),entry=head.documents[0],destination=await(await(await disk.getDirectoryHandle('보관')).getDirectoryHandle('책')).getDirectoryHandle('1부');(await destination.getFileHandle(entry.copy.name)).replace('External edit');backup.schedule();await assert.rejects(backup.flush(),/앱 밖/);assert.deepEqual(await manifest(disk),head);assert.equal(await(await(await destination.getFileHandle(entry.copy.name)).getFile()).text(),'External edit');assert.deepEqual(before.documents[0].history,head.documents[0].history);
+});
+test('a conflicting external directory blocks publication without changing its files or the last saved hierarchy',async t=>{
+  const lib=library(),disk=memoryFolder(),backup=manager(t,lib);await backup.connect(disk);const before=await manifest(disk),external=await disk.getDirectoryHandle('책',{create:true});(await external.getFileHandle('외부.html',{create:true})).replace('Not ours');lib.settings.set(LIBRARY_FOLDERS_KEY,hierarchy());backup.schedule();await assert.rejects(backup.flush(),/관리하지 않는/);assert.deepEqual(await manifest(disk),before);assert.equal(await(await(await external.getFileHandle('외부.html')).getFile()).text(),'Not ours');assert.equal(external.children.size,1);
+});
+test('legacy version-one folders upgrade in place, and invalid folder paths reject before touching the library',async t=>{
+  const lib=library(),disk=memoryFolder();await manager(t,lib).connect(disk);const old=await manifest(disk);old.version=1;delete old.folders;old.documents.forEach(e=>delete e.copy);(await disk.getFileHandle(FOLDER_MANIFEST)).replace(JSON.stringify(old));const fresh=library([]);await manager(t,fresh).connect(disk);assert.equal(fresh.records.size,1);assert.equal((await manifest(disk)).version,2);
+  for(const damage of ['cycle','copy']){const damaged=memoryFolder();await manager(t,library()).connect(damaged);const head=await manifest(damaged);if(damage==='cycle')head.folders=[{id:'a',parentId:'a',name:'순환'}];else head.documents[0].copy.name='../secret.html';(await damaged.getFileHandle(FOLDER_MANIFEST)).replace(JSON.stringify(head));const receiver=library([]);await assert.rejects(manager(t,receiver).connect(damaged));assert.equal(receiver.records.size,0);assert.equal(receiver.settings.has('folder'),false);}
+});
+test('restoring into an existing same-name library folder remaps IDs and physical ownership without overwriting notes',async t=>{
+  const sender=library(),disk=memoryFolder();sender.settings.set(LIBRARY_FOLDERS_KEY,[{id:'remote',parentId:'',name:'책'}]);sender.records.get('doc').folderId='remote';await manager(t,sender).connect(disk);
+  const receiver=library([]);receiver.settings.set(LIBRARY_FOLDERS_KEY,[{id:'local',parentId:'',name:'책'}]);await manager(t,receiver).connect(disk);assert.deepEqual(receiver.settings.get(LIBRARY_FOLDERS_KEY),[{id:'local',parentId:'',name:'책'}]);assert.equal(receiver.records.get('doc').folderId,'local');assert.equal((await manifest(disk)).documents[0].copy.folderId,'local');assert.match(await(await copyFile(disk,await manifest(disk))).text(),/Raw received bytes/);
 });

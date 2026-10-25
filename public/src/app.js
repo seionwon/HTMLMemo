@@ -3,7 +3,7 @@ import { parseHTML, SCRIPT_CSP, serializeBookSource } from './document.js';
 import { SaveQueue, AnnotationCheckpoints, ANNOTATION_LABELS } from './model.js';
 import { openEditionProbe, migrateAnnotations } from './migrate.js';
 import { Reader } from './reader.js';
-import { listDocuments, getDocument, deleteDocument, getSetting, setSetting, saveDocumentHTML, listRevisionPeriods, listRevisionDay, adjacentRevisionDay, getRevision, putDocumentRevision, checkpointAnnotations, putDocumentView, putDocumentSourceIdentity, writeExternalHTML } from './storage.js';
+import { listDocuments, getDocument, deleteDocument, getSetting, setSetting, saveDocumentHTML, listRevisionPeriods, listRevisionDay, adjacentRevisionDay, getRevision, putDocumentRevision, checkpointAnnotations, putDocumentView, putDocumentSourceIdentity, writeExternalHTML, updateLibraryFolders, onStorageChange, readLibrary } from './storage.js';
 import {readWebPage,pastedPage,PASTE_LIMIT,isWebSearch,BrowserTabs} from './web.js';
 import { readLocalHTML, droppedHTMLFiles, findLocalDuplicates, identifyLocalFile, htmlExportName } from './local-files.js';
 import { normalizePreferences, loadPreferences, storePreferences, serializeSettings, readSettingsFile, PRESET_COLORS, PRESET_PALETTES, normalizeHexColor, hexToRgb, rgbToHex, hexToHsv, hsvToHex } from './preferences.js';
@@ -11,8 +11,11 @@ import {bundledExample} from './distribution.js';
 import { InstallController, isIOS, installableLocation, installationURL, PUBLIC_APP_URL } from './install.js';
 import { APP_VERSION } from './version.js';
 import { DataFolder } from './data-folder.js';
+import {validateFolders,folderPath,folderDescendants,editLibraryFolders} from './library-folders.js';
 
 let records = []; const tabs = []; let activeId = 'library'; let folder = null; let popoverName = ''; let sidebarMode = '';
+let libraryFolders=[],libraryFolderId='',libraryCollapsed=new Set(),libraryRefresh=0;
+let libraryFolderById=new Map(),libraryFolderChildren=new Map(),libraryFolderCounts=new Map(),libraryPathCache=new Map();
 let preferences=normalizePreferences(), settingsFileHandle=null, settingsFolderHint='';
 let dataFolder;
 const FOLDER_WELCOME_KEY='htmlmemo-data-folder-welcome-v1';
@@ -118,29 +121,112 @@ async function saveSettingsBackup(){
   if(savePicker()){try{const handle=await window.showSaveFilePicker({suggestedName:settingsFileHandle?.name||'HTMLMemo-settings.json',types:[{description:'HTMLMemo 설정',accept:{'application/json':['.json']}}]});const writer=await handle.createWritable();try{await writer.write(json);await writer.close();}catch(error){await writer.abort().catch(()=>{});throw error;}settingsFileHandle=handle;await setSetting('settings-file',handle);settingsDialog();toast('설정을 로컬 파일로 저장했습니다.');return;}catch(error){if(!['SecurityError','NotSupportedError'].includes(error.name))throw error;}}
   download(json,'HTMLMemo-settings.json','application/json;charset=utf-8');toast('설정 JSON 파일을 저장했습니다. 「설정 파일 불러오기」로 다시 열 수 있어요.');
 }
-async function refreshLibrary() { records=await listDocuments(); renderLibrary(); }
+async function refreshLibrary() { const refresh=++libraryRefresh;const {documents,folders}=await readLibrary();if(refresh!==libraryRefresh)return;records=documents;libraryFolders=validateFolders(folders);if(libraryFolderId&&!libraryFolders.some(f=>f.id===libraryFolderId))libraryFolderId='';renderLibrary(); }
 function renderLibrary() {
+  indexLibraryFolders();
   const filter=$('#library-filter').value.toLocaleLowerCase(),sort=preferences.librarySort,direction=preferences.librarySortDirection==='asc'?1:-1;
-  const shown=records.filter(r=>(r.title+' '+r.source+' '+r.name).toLocaleLowerCase().includes(filter)).sort((a,b)=>direction*(sort==='title'?a.title.localeCompare(b.title,'ko'):a[sort]-b[sort]));
+  const shown=records.filter(r=>filter?(r.title+' '+r.source+' '+r.name+' '+libraryPathLabel(r.folderId||'')).toLocaleLowerCase().includes(filter):(r.folderId||'')===libraryFolderId).sort((a,b)=>direction*(sort==='title'?a.title.localeCompare(b.title,'ko'):a[sort]-b[sort]));
+  const shownFolders=libraryFolders.filter(f=>filter?libraryPathLabel(f.id).toLocaleLowerCase().includes(filter):f.parentId===libraryFolderId).sort((a,b)=>a.name.localeCompare(b.name,'ko'));
   const dateField=sort==='created'?'created':'modified',dateLabel=dateField==='created'?'저장일':'수정일';
   const grid=$('#document-grid');grid.dataset.view=preferences.libraryView;
   $$('[data-library-view]').forEach(button=>{const active=button.dataset.libraryView===preferences.libraryView;button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active));});
-  $('#document-count').textContent=records.length; $('#empty-library').hidden=shown.length>0;
-  $('#empty-library h3').textContent=records.length?'검색 결과가 없습니다.':'첫 HTML 문서를 보관해보세요.';
-  $('#empty-library p').innerHTML=records.length?'다른 제목이나 주소로 찾아보세요.':'웹에서 저장하거나, 가지고 있는 HTML 파일을 열면<br>이곳에서 계속 읽고 메모할 수 있어요.';
-  $('#open-example').hidden=!!records.length;
-  grid.innerHTML=shown.map(record=>{
+  $('#document-count').textContent=records.length; $('#empty-library').hidden=shown.length+shownFolders.length>0;
+  $('#empty-library h3').textContent=filter?'검색 결과가 없습니다.':libraryFolderId?'이 폴더는 비어 있습니다.':records.length||libraryFolders.length?'이 위치에는 문서가 없습니다.':'첫 HTML 문서를 보관해보세요.';
+  $('#empty-library p').innerHTML=filter?'다른 제목·파일명·폴더 이름으로 찾아보세요.':libraryFolderId||records.length||libraryFolders.length?'HTML 파일을 가져오거나 문서 메뉴의 「폴더로 이동」을 사용하세요.':'웹에서 저장하거나, 가지고 있는 HTML 파일을 열면<br>이곳에서 계속 읽고 메모할 수 있어요.';
+  $('#open-example').hidden=!!records.length||!!filter;
+  grid.innerHTML=shownFolders.map(item=>`<article class="library-folder-card" data-library-item="folder" data-library-id="${item.id}" data-folder-target="${item.id}" draggable="true"><button class="library-folder-open" data-library-folder="${item.id}" title="${esc(libraryPathLabel(item.id))}">${icon('folder',22)}<span><strong>${esc(item.name)}</strong><small>${folderDocumentCount(item.id)}개 문서 · ${libraryFolders.filter(f=>f.parentId===item.id).length}개 하위 폴더</small></span></button><button class="icon-button card-menu" data-folder-menu="${item.id}" aria-label="${esc(item.name)} 폴더 메뉴">${icon('more',17)}</button></article>`).join('')+shown.map(record=>{
     const count=record.metadata?.annotations?.length||0;const progress=record.metadata?.view?.scrollTop||0;
     const host=esc(displayHost(record.source)), title=esc(record.title), originalName=typeof record.name==='string'?esc(record.name):'', size=record.byteSize?formatBytes(record.byteSize):'HTML';
     const date=formatDate(record[dateField]),dateTitle=esc(dateLabel+': '+new Date(record[dateField]).toLocaleString('ko-KR'));
     // Both layouts share one title/source. A decorative preview used to repeat
     // them above the details, and list mode kept a third hidden copy.
-    return `<article class="document-card" data-record="${record.id}"><button class="card-open" data-open="${record.id}"><div class="card-details"><span class="list-file-icon" aria-hidden="true">${icon('file',16)}</span><div class="library-title"><h3 class="list-title" title="${title}">${title}</h3>${originalName?`<span class="list-filename" title="${originalName}">${originalName}</span>`:''}</div><p class="card-source"><span class="list-host" title="${host}">${host}</span><span class="list-date" title="${dateTitle}" aria-label="${dateTitle}">${date}</span></p><div class="card-meta"><span class="list-annotations" title="주석 ${count}개" aria-label="주석 ${count}개">${icon('highlight',13)} <span>${count}</span></span><span class="list-size">${size}</span><span class="list-progress" title="${progress?'이어서 읽기':'새 문서'}">${progress?'이어서 읽기':'새 문서'} ${icon('forward',13)}</span></div></div></button><button class="card-menu icon-button" data-card-menu="${record.id}" aria-label="${title} 문서 메뉴">${icon('more',17)}</button></article>`;
+    const place=esc(libraryPathLabel(record.folderId||'')),progressLabel=filter?place:progress?'이어서 읽기':'새 문서';
+    return `<article class="document-card" data-record="${record.id}" data-library-item="document" data-library-id="${record.id}" draggable="true"><button class="card-open" data-open="${record.id}"><div class="card-details"><span class="list-file-icon" aria-hidden="true">${icon('file',16)}</span><div class="library-title"><h3 class="list-title" title="${title}">${title}</h3>${originalName?`<span class="list-filename" title="${originalName}">${originalName}</span>`:''}</div><p class="card-source"><span class="list-host" title="${host}">${host}</span><span class="list-date" title="${dateTitle}" aria-label="${dateTitle}">${date}</span></p><div class="card-meta"><span class="list-annotations" title="주석 ${count}개" aria-label="주석 ${count}개">${icon('highlight',13)} <span>${count}</span></span><span class="list-size">${size}</span><span class="list-progress" title="${progressLabel}">${progressLabel} ${icon('forward',13)}</span></div></div></button><button class="card-menu icon-button" data-card-menu="${record.id}" aria-label="${title} 문서 메뉴">${icon('more',17)}</button></article>`;
   }).join('');
   $$('[data-open]').forEach(button=>button.onclick=safely(()=>openRecord(records.find(r=>r.id===button.dataset.open))));
   $$('[data-card-menu]').forEach(button=>button.onclick=()=>documentMenu(records.find(r=>r.id===button.dataset.cardMenu)));
+  $$('[data-folder-menu]').forEach(button=>button.onclick=()=>libraryFolderMenu(button.dataset.folderMenu));
+  renderLibraryFolders();
   if(activeId==='library')$('#status-left').textContent=`${records.length}개의 문서 · ${folder?folder.name+' 자동 저장':'이 기기에 보관'}`;
   renderFolderState();
+}
+function indexLibraryFolders() {
+  libraryFolderById=new Map(libraryFolders.map(f=>[f.id,f]));libraryFolderChildren=new Map();libraryFolderCounts=new Map([['',records.length]]);libraryPathCache=new Map([['',folder?.name||'전용 폴더']]);
+  for(const item of libraryFolders){if(!libraryFolderChildren.has(item.parentId))libraryFolderChildren.set(item.parentId,[]);libraryFolderChildren.get(item.parentId).push(item);}
+  for(const children of libraryFolderChildren.values())children.sort((a,b)=>a.name.localeCompare(b.name,'ko'));
+  for(const record of records){let id=record.folderId;for(let i=0;id&&i<32;i++){libraryFolderCounts.set(id,(libraryFolderCounts.get(id)||0)+1);id=libraryFolderById.get(id)?.parentId;}}
+}
+function folderDocumentCount(id){return libraryFolderCounts.get(id)||0;}
+function libraryPathLabel(id) {
+  if(libraryPathCache.has(id))return libraryPathCache.get(id);
+  const node=libraryFolderById.get(id);if(!node)return libraryPathCache.get('')||folder?.name||'전용 폴더';
+  const path=libraryPathLabel(node.parentId)+' / '+node.name;libraryPathCache.set(id,path);return path;
+}
+function navigateLibraryFolder(id) {
+  if(id&&!libraryFolderById.has(id))throw Error('폴더가 변경되었습니다. 다시 선택해주세요.');
+  libraryFolderId=id;$('#library-filter').value='';for(const item of folderPath(libraryFolders,id))libraryCollapsed.delete(item.id);renderLibrary();
+}
+function renderLibraryFolders() {
+  const path=folderPath(libraryFolders,libraryFolderId),root=folder?.name||'전용 폴더';
+  $('#library-folder-up').innerHTML=icon('back',16);$('#library-folder-up').disabled=!libraryFolderId;
+  $('#library-folder-help').innerHTML=icon('info',15);
+  $('#library-new-folder').innerHTML=icon('folder',15)+'<span>새 폴더</span>';
+  $('#library-breadcrumbs').innerHTML=[{id:'',name:root},...path].map(item=>`<button type="button" data-library-folder="${item.id}" data-folder-target="${item.id}" title="${esc(libraryPathLabel(item.id))}" ${item.id===libraryFolderId?'aria-current="page"':''}>${item.id?'':icon('folder',15)}<span>${esc(item.name)}</span></button>`).join('<span class="breadcrumb-divider" aria-hidden="true">/</span>');
+  const tree=$('#library-folder-tree');tree.hidden=!libraryFolders.length;$('#library-layout').classList.toggle('has-folders',!!libraryFolders.length);$('#library-search-scope').hidden=!$('#library-filter').value;
+  const branch=(id,depth)=> (libraryFolderChildren.get(id)||[]).map(item=>{
+    const children=libraryFolderChildren.get(item.id)?.length,collapsed=libraryCollapsed.has(item.id);
+    return `<div class="library-tree-row ${item.id===libraryFolderId?'active':''}" style="--folder-depth:${depth}" data-folder-target="${item.id}">${children?`<button class="library-tree-toggle" type="button" data-folder-toggle="${item.id}" aria-label="${esc(item.name)} ${collapsed?'펼치기':'접기'}" aria-expanded="${!collapsed}">${icon(collapsed?'forward':'down',12)}</button>`:'<span class="library-tree-spacer"></span>'}<button class="library-tree-open" type="button" data-library-folder="${item.id}" title="${esc(libraryPathLabel(item.id))}">${icon('folder',14)}<span>${esc(item.name)}</span><small>${folderDocumentCount(item.id)}</small></button></div>${!collapsed?branch(item.id,depth+1):''}`;
+  }).join('');
+  tree.innerHTML=`<div class="library-tree-root ${libraryFolderId?'':'active'}" data-folder-target=""><button class="library-tree-open" type="button" data-library-folder="" title="${esc(root)} · 최상위 폴더(root)">${icon('folder',15)}<span>${esc(root)}</span><small>root</small></button></div>${branch('',0)}`;
+  $$('[data-library-folder]').forEach(button=>button.onclick=safely(()=>navigateLibraryFolder(button.dataset.libraryFolder)));
+  $$('[data-folder-toggle]').forEach(button=>button.onclick=()=>{const id=button.dataset.folderToggle;if(libraryCollapsed.has(id))libraryCollapsed.delete(id);else libraryCollapsed.add(id);renderLibraryFolders();});
+}
+async function changeLibraryFolder(change) {
+  await updateLibraryFolders((folders,documents)=>editLibraryFolders(folders,documents,change));
+  await refreshLibrary();
+  try{await dataFolder?.flush();}catch(error){showError(error);return;}
+  toast(folder?'폴더와 문서 위치를 전용 폴더에 저장했습니다.':'서재에 저장했습니다. 데이터 폴더를 연결하면 폴더 구조도 함께 보관됩니다.');
+}
+function libraryFolderNameDialog(item=null) {
+  const parentId=libraryFolderId;
+  modal(`<form id="library-folder-form"><div class="dialog-heading"><h2>${item?'폴더 이름 변경':'새 폴더'}</h2><button class="icon-button" type="button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><p class="dialog-description small">위치: ${esc(libraryPathLabel(item?item.parentId:parentId))}</p><label class="paste-label" for="library-folder-name">폴더 이름</label><input id="library-folder-name" class="paste-title" maxlength="100" required value="${esc(item?.name||'')}" autocomplete="off"><p class="dialog-description small">전용 폴더 아래에 실제 하위 폴더를 만듭니다. 같은 위치의 이름은 겹칠 수 없습니다.</p><p id="library-folder-error" class="folder-form-error" role="alert"></p><div class="dialog-actions"><button type="button" class="secondary-button" data-dialog-close>취소</button><button id="library-folder-save" class="primary-button" type="submit">${item?'변경':'만들기'}</button></div></form>`,dialog=>{
+    $('#library-folder-form').onsubmit=safely(async event=>{event.preventDefault();const button=$('#library-folder-save');if(button.disabled)return;button.disabled=true;
+      try{await changeLibraryFolder(item?{type:'rename',id:item.id,name:$('#library-folder-name').value}:{type:'create',id:uid(),parentId,name:$('#library-folder-name').value});dialog.close();}
+      catch(error){$('#library-folder-error').textContent=error.message;}finally{button.disabled=false;}
+    });requestAnimationFrame(()=>{$('#library-folder-name').focus();$('#library-folder-name').select?.();});
+  });
+}
+function libraryFolderMenu(id) {
+  const item=libraryFolderById.get(id);if(!item)return;
+  const occupied=(libraryFolderChildren.get(id)?.length||0)||records.some(r=>r.folderId===id);
+  modal(`<div class="dialog-heading"><h2>${esc(item.name)}</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><p class="dialog-description small">${esc(libraryPathLabel(id))}</p><div class="document-actions"><button id="folder-menu-open" class="menu-button">${icon('folder')} 폴더 열기</button><button id="folder-menu-rename" class="menu-button">${icon('pen')} 이름 변경</button><button id="folder-menu-move" class="menu-button">${icon('forward')} 다른 폴더로 이동</button><button id="folder-menu-delete" class="menu-button danger" ${occupied?'disabled':''} title="${occupied?'문서와 하위 폴더를 먼저 옮기세요.':'비어 있는 폴더 삭제'}">${icon('trash')} 빈 폴더 삭제</button></div><p class="dialog-description small">비어 있는 폴더만 삭제할 수 있습니다. 앱에 등록되지 않은 외부 파일은 이동·삭제하지 않습니다.</p>`,dialog=>{
+    $('#folder-menu-open').onclick=()=>{dialog.close();navigateLibraryFolder(id);};$('#folder-menu-rename').onclick=()=>libraryFolderNameDialog(item);$('#folder-menu-move').onclick=()=>libraryMoveDialog('folder',item);
+    $('#folder-menu-delete').onclick=safely(async()=>{if(!await confirmDialog('빈 폴더를 삭제할까요?',libraryPathLabel(id)+' · 문서와 주석은 삭제하지 않습니다.','삭제'))return;await changeLibraryFolder({type:'delete',id});});
+  });
+}
+function libraryMoveDialog(type,item) {
+  const forbidden=type==='folder'?folderDescendants(libraryFolders,item.id):new Set(),current=type==='folder'?item.parentId:item.folderId||'';
+  const destinations=[{id:'',label:libraryPathLabel('')+' (root)'},...libraryFolders.map(f=>({id:f.id,label:libraryPathLabel(f.id)})).sort((a,b)=>a.label.localeCompare(b.label,'ko'))].filter(f=>!forbidden.has(f.id));
+  const available=destinations.some(f=>f.id!==current),initial=destinations.find(f=>f.id!==current)?.id;
+  modal(`<form id="library-move-form"><div class="dialog-heading"><h2>${type==='folder'?'폴더':'문서'} 이동</h2><button type="button" class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><p class="dialog-description"><strong>${esc(item.title||item.name)}</strong></p><p class="dialog-description small">현재 위치: ${esc(libraryPathLabel(current))}</p><label class="paste-label" for="library-folder-destination">옮길 폴더</label><select id="library-folder-destination" class="folder-destination">${destinations.map(f=>`<option value="${f.id}" ${f.id===current?'disabled':''} ${f.id===initial?'selected':''}>${esc(f.label)}</option>`).join('')}</select><p class="dialog-description small">${available?'주석·북마크·읽기 위치·저장 이력은 그대로 유지합니다.': '이동할 수 있는 다른 폴더가 없습니다. 먼저 서재에서 새 폴더를 만드세요.'}</p><p id="library-move-error" class="folder-form-error" role="alert"></p><div class="dialog-actions"><button class="secondary-button" type="button" data-dialog-close>취소</button><button id="library-move-save" class="primary-button" type="submit" ${available?'':'disabled'}>이동</button></div></form>`,dialog=>{
+    $('#library-move-form').onsubmit=safely(async event=>{event.preventDefault();const button=$('#library-move-save');if(button.disabled)return;button.disabled=true;
+      try{const parentId=$('#library-folder-destination').value;await changeLibraryFolder(type==='folder'?{type:'move',id:item.id,parentId}:{type:'move-documents',ids:[item.id],parentId});dialog.close();}
+      catch(error){$('#library-move-error').textContent=error.message;}finally{button.disabled=false;}
+    });$('#library-folder-destination').focus();
+  });
+}
+function bindLibraryFolderDrag() {
+  const library=$('#library'),mime='application/x-htmlmemo-library-item';let dragged=null;
+  const clear=()=>$$('.folder-drop-target',library).forEach(el=>el.classList.remove('folder-drop-target'));
+  library.addEventListener('dragstart',event=>{const item=event.target.closest('[data-library-item]');if(!item)return;dragged={type:item.dataset.libraryItem,id:item.dataset.libraryId};event.dataTransfer.setData(mime,JSON.stringify(dragged));event.dataTransfer.effectAllowed='move';});
+  library.addEventListener('dragover',event=>{const target=event.target.closest('[data-folder-target]');if(!target||!dragged||![...event.dataTransfer.types].includes(mime))return;
+    if(dragged.type==='folder'&&folderDescendants(libraryFolders,dragged.id).has(target.dataset.folderTarget))return;
+    event.preventDefault();event.dataTransfer.dropEffect='move';clear();target.classList.add('folder-drop-target');
+  });
+  library.addEventListener('dragleave',event=>{if(!library.contains(event.relatedTarget))clear();});library.addEventListener('dragend',()=>{dragged=null;clear();});
+  library.addEventListener('drop',safely(async event=>{const target=event.target.closest('[data-folder-target]');if(!target||!dragged||![...event.dataTransfer.types].includes(mime))return;event.preventDefault();const item=dragged;dragged=null;clear();const parentId=target.dataset.folderTarget;
+    await changeLibraryFolder(item.type==='folder'?{type:'move',id:item.id,parentId}:{type:'move-documents',ids:[item.id],parentId});
+  }));
 }
 function renderTabs() {
   const container=$('#tabs'),nodes=new Map($$('[data-tab]',container).map(el=>[el.dataset.tab,el]));
@@ -248,7 +334,7 @@ async function openRecord(record, prepared = null, {deferReady = false, sourceId
     if(sourceIdentity)await sourceIdentity;
     if (!tab.queue.editsPending) {
       const saved = await putDocumentView(tab.record.id, tab.reader.metadata.view);
-      tab.record.metadata = saved.metadata;
+      tab.record.metadata = saved.metadata;tab.record.folderId=saved.folderId||'';
       records=records.filter(r=>r.id!==record.id).concat(saved);
       return;
     }
@@ -289,7 +375,7 @@ async function openRecord(record, prepared = null, {deferReady = false, sourceId
   renderToolbar();
   updateChrome();
   // Preserve the imported/current annotation baseline before the first new edit.
-  try{const saved=await putDocumentRevision({...tab.record,metadata:baselineMetadata},{baseline:true});tab.record.byteSize=saved.byteSize;delete tab.record.html;delete tab.record.file;delete tab.record.originalFile;}
+  try{const saved=await putDocumentRevision({...tab.record,metadata:baselineMetadata},{baseline:true});tab.record.byteSize=saved.byteSize;tab.record.folderId=saved.folderId||'';delete tab.record.html;delete tab.record.file;delete tab.record.originalFile;}
   catch(error){tab.queue.schedule();try{await tab.queue.flush();}catch{showError(error);}}
   record.html=null;record.file=null;record.originalFile=null;parsed.html=null;parsed.file=null;
   if(!deferReady){tab.opening=false;renderTabs();if(activeId===tab.id)updateChrome();}
@@ -336,7 +422,7 @@ async function createDocument(snapshot, handle = null, name = null, local = {}) 
   // Attach a rejection handler now; openRecord awaits it before baseline save.
   const identity=identifyLocalFile(local);identity.catch(()=>{});
   const parsed=snapshot.file ? {...parseHTML('<html><head></head><body></body></html>',{title:snapshot.title,execution:{allowScripts:!!snapshot.allowScripts}}),file:snapshot.file,nativeScroll:true,freshAnnotations:!!local.freshAnnotations} : parseHTML(snapshot.html,{title:snapshot.title,source:snapshot.url,viewport:snapshot.viewport,warnings:snapshot.warnings},{includeMetadata:true,allowScripts:snapshot.allowScripts,freshAnnotations:!!local.freshAnnotations});
-  const title=parsed.metadata.title; const record={id:uid(),title,name:name||handle?.name||filename(title),source:parsed.metadata.source,created:Date.now(),modified:Date.now(),fileHandle:handle,originalHandle:local.originalHandle||null,metadata:parsed.metadata};
+  const title=parsed.metadata.title; const record={id:uid(),title,name:name||handle?.name||filename(title),source:parsed.metadata.source,created:Date.now(),modified:Date.now(),folderId:local.libraryFolderId??libraryFolderId,fileHandle:handle,originalHandle:local.originalHandle||null,metadata:parsed.metadata};
   if(snapshot.file)record.file=snapshot.file;else record.html=parsed.html;
   if(local.originalFile)record.originalFile=local.originalFile;
   if(local.sourceIdentity)record.sourceIdentity=local.sourceIdentity;
@@ -420,9 +506,10 @@ function chooseFolder({onConnected} = {}) {
   });
 }
 async function importFiles() {
+  const parentId=libraryFolderId;
   if(!openPicker()){$('#file-input').click();return;}
   let handles;try{handles=await window.showOpenFilePicker({types:importTypes,multiple:true});}catch(error){if(['SecurityError','NotSupportedError'].includes(error.name)){$('#file-input').click();return;}throw error;}
-  for(const handle of handles)await openLocalFile(handle);
+  for(const handle of handles)await openLocalFile(handle,parentId);
 }
 function duplicateImportDialog(local, matches) {
   const choices=[...matches].sort((a,b)=>Number(!!b.metadata?.annotations?.length)-Number(!!a.metadata?.annotations?.length)||(b.modified||0)-(a.modified||0));
@@ -435,16 +522,17 @@ function duplicateImportDialog(local, matches) {
     dialog.addEventListener('close',()=>resolve({action:['new','existing'].includes(dialog.returnValue)?dialog.returnValue:'cancel',id:$('#duplicate-import-target').value}),{once:true});
   }));
 }
-function openLocalFile(input) {
+function openLocalFile(input,parentId=libraryFolderId) {
   // File picker, input, drop and launch events share one queue. Concurrent
   // imports must not overwrite a pending three-way choice or miss each other.
-  const pending=localImportQueue.then(()=>importLocalFile(input));
+  const pending=localImportQueue.then(()=>importLocalFile(input,parentId));
   localImportQueue=pending.catch(()=>{});return pending;
 }
-async function importLocalFile(input) {
+async function importLocalFile(input,parentId) {
   try{
     $('#status-left').textContent='로컬 HTML을 읽고 중복을 확인하는 중…';
     const local=await readLocalHTML(input,{native:true,allowScripts:true,identify:false});
+    local.libraryFolderId=parentId;
     const matches=await findLocalDuplicates(local,await listDocuments(),getDocument);
     if(matches.length){
       const legacy=matches.filter(record=>!record.sourceIdentity);
@@ -1163,6 +1251,8 @@ function documentMenu(record) {
     $('#menu-migrate').onclick=safely(async()=>{$('#dialog').close();await migrateEdition(await openRecord(record));});
     $('#menu-remove').onclick=safely(async()=>{if(!await confirmDialog('서재에서 삭제할까요?','앱 보관함에서만 삭제합니다. 연결된 외부 HTML 파일은 남습니다.','삭제'))return;const tab=tabs.find(t=>t.record?.id===record.id);if(tab)await closeTab(tab.id);await deleteDocument(record.id);await refreshLibrary();});
   });
+  const actions=$('#dialog .document-actions'),button=document.createElement('button');button.className='menu-button';button.id='menu-folder-move';button.innerHTML=icon('folder')+' 폴더로 이동';actions.insertBefore(button,$('#menu-remove'));button.onclick=()=>libraryMoveDialog('document',record);
+  const location=document.createElement('p');location.className='dialog-description small';location.textContent='위치: '+libraryPathLabel(record.folderId||'');actions.before(location);
 }
 function handleKey(event) {
   const isField=/^(INPUT|TEXTAREA|SELECT)$/.test(event.target?.tagName)||event.target?.isContentEditable;
@@ -1231,9 +1321,10 @@ function bindUI() {
   addressForm.addEventListener('keydown',event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();$('#address').blur();$('.tab.active .tab-select',$('#tabs'))?.focus();}});
   addressForm.onsubmit=safely(async event=>{event.preventDefault();const value=$('#address').value;$('.chrome').classList.remove('address-editing');$('#address').blur();await openBrowser(value,active()?.type!=='browser');});
   $('#save-page').onclick=safely(savePage);$('#hero-import').onclick=safely(importFiles);
-  $('#file-input').onchange=safely(async event=>{const files=[...event.target.files];event.target.value='';for(const file of files)await openLocalFile(file);});
+  $('#file-input').onchange=safely(async event=>{const files=[...event.target.files],parentId=libraryFolderId;event.target.value='';for(const file of files)await openLocalFile(file,parentId);});
   $('#settings-file-input').onchange=safely(async event=>{const file=event.target.files[0];event.target.value='';if(file){await restoreSettings(file);settingsDialog();}});
   $('#library-filter').oninput=renderLibrary;$('#library-sort').onchange=safely(e=>{const [librarySort,librarySortDirection]=e.target.value.split(':');changePreferences({librarySort,librarySortDirection});});$$('[data-library-view]').forEach(button=>button.onclick=safely(()=>changePreferences({libraryView:button.dataset.libraryView})));$('#settings-button').onclick=settingsDialog;$('#web-help-button').onclick=()=>webHelpDialog();$('#paste-button').onclick=()=>pasteTextDialog();
+  $('#library-new-folder').onclick=()=>libraryFolderNameDialog();$('#library-folder-up').onclick=()=>navigateLibraryFolder(libraryFolderById.get(libraryFolderId)?.parentId||'');$('#library-folder-help').onclick=()=>modal(`<div class="dialog-heading"><h2>서재 폴더 사용 안내</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div>${$('#library-folder-help-content').innerHTML}<div class="dialog-actions"><button class="primary-button" data-dialog-close>확인</button></div>`);bindLibraryFolderDrag();
   $('#open-example').onclick=safely(async()=>{let html=await bundledExample();if(html===null){const response=await fetch('./example.html');if(!response.ok)throw new Error('예제 문서를 불러오지 못했습니다.');html=await response.text();}await createDocument({html,title:'천천히 읽는다는 것',viewport:{width:960,height:800}});});
   document.addEventListener('keydown',handleKey);document.addEventListener('pointerdown',event=>{if(!event.target.closest('#toolbar,#tool-popover,[data-htmlmemo-reading-controls]')&&!$('#tool-popover').hidden)closePopover();});
   $('#dialog').addEventListener('click',event=>{if(event.target===$('#dialog'))$('#dialog').close();});
@@ -1245,7 +1336,7 @@ function bindUI() {
   window.addEventListener('focus',resumeBrowser);document.addEventListener('visibilitychange',resumeBrowser);
   window.addEventListener('storage',()=>{try{preferences=loadPreferences(localStorage);applyTheme(preferences.theme);renderLibrary();dataFolder?.schedule({settingsOnly:true});}catch(error){showError(error);}});
   window.addEventListener('resize',()=>{closePopover();applyToolbarPosition();requestAnimationFrame(revealActiveTab);});
-  window.addEventListener('dragover',event=>{if([...event.dataTransfer.types].includes('Files'))event.preventDefault();});window.addEventListener('drop',safely(async event=>{if(![...(event.dataTransfer.types||[])].includes('Files'))return;event.preventDefault();for(const file of await droppedHTMLFiles(event.dataTransfer))await openLocalFile(file);}));
+  window.addEventListener('dragover',event=>{if([...event.dataTransfer.types].includes('Files'))event.preventDefault();});window.addEventListener('drop',safely(async event=>{if(![...(event.dataTransfer.types||[])].includes('Files'))return;event.preventDefault();const parentId=libraryFolderId;for(const file of await droppedHTMLFiles(event.dataTransfer))await openLocalFile(file,parentId);}));
 }
 function network() {$('#network-status').textContent=navigator.onLine?'온라인':'오프라인';$('#network-status').classList.toggle('offline',!navigator.onLine);}
 function fitHeader() {
@@ -1266,9 +1357,10 @@ async function initialize() {
   try{preferences=loadPreferences(localStorage);}catch(error){toast('설정 일부를 읽지 못했습니다. 연결한 데이터 폴더로 복원할 수 있습니다.',true);}
   dataFolder=new DataFolder({storage:localStorage,report:state=>{if(state.handle)folder=state.handle;renderFolderState();},onRestored:async result=>{preferences=loadPreferences(localStorage);applyTheme(preferences.theme);$('#library-sort').value=preferences.librarySort+':'+preferences.librarySortDirection;for(const tab of tabs)if(tab.reader)Object.assign(tab.reader,preferences.annotation);applyToolbarPosition();await refreshLibrary();if(result.recovered)toast('이전의 온전한 폴더 저장본에서 복원했습니다. 최신 변경 일부가 빠졌을 수 있습니다.',true);}});
   applyTheme(preferences.theme);bindUI();fitHeader();$('#library-sort').value=preferences.librarySort+':'+preferences.librarySortDirection;network();folder=await getSetting('folder');settingsFileHandle=await getSetting('settings-file');settingsFolderHint=await getSetting('settings-folder-hint')||'';await refreshLibrary();activate('library');
+  onStorageChange(()=>{if(activeId==='library')refreshLibrary().catch(showError);});
   if(folder){try{await dataFolder.connect(folder,{resume:true});await refreshLibrary();}catch(error){renderFolderState();showError(error);}}
   if(needsFolderWelcome()&&!$('#dialog').open)folderWelcomeDialog();
   if(installableLocation(location)&&'serviceWorker'in navigator)await navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'}).then(reg=>reg?.update?.().catch(()=>{})).catch(()=>toast('오프라인 준비를 완료하지 못했습니다. 다음 접속에서 다시 준비합니다.',true));
-  if('launchQueue'in window)window.launchQueue.setConsumer(safely(async params=>{for(const handle of params.files||[])await openLocalFile(handle);}));
+  if('launchQueue'in window)window.launchQueue.setConsumer(safely(async params=>{const parentId=libraryFolderId;for(const handle of params.files||[])await openLocalFile(handle,parentId);}));
 }
 initialize().catch(error=>{$('#status-left').textContent='서재를 준비하지 못했습니다.';showError(error);});

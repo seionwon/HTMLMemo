@@ -1,7 +1,9 @@
-import { listDocuments, getDocument, listRevisions, restoreFolderDocuments, getSetting, setSetting, onStorageChange, permission } from './storage.js';
+import { listDocuments, getDocument, listRevisions, restoreFolderDocuments, getSetting, setSetting, onStorageChange, permission, readLibrary } from './storage.js';
 import { localFileIdentity } from './local-files.js';
 import { PREFERENCES_KEY, normalizePreferences } from './preferences.js';
 import { validateAnnotations } from './model.js';
+import {LIBRARY_FOLDERS_KEY,validateFolders,mergeLibraryFolders,documentCopyName} from './library-folders.js';
+import {syncFolderTree,cleanupFolderTree} from './folder-tree.js';
 
 export const FOLDER_MANIFEST = 'HTMLMemo-library.json';
 export const FOLDER_PREVIOUS = 'HTMLMemo-library.previous.json';
@@ -43,7 +45,7 @@ export function applyFolderSettings(storage, settings) {
 }
 export function portableRecord(record) {
   const result={};
-  for(const key of ['id','title','name','source','created','modified','metadata','nativeScroll','byteSize','sourceIdentity'])if(record[key]!==undefined)result[key]=record[key];
+  for(const key of ['id','title','name','source','created','modified','metadata','nativeScroll','byteSize','sourceIdentity','folderId'])if(record[key]!==undefined)result[key]=record[key];
   return result;
 }
 function validateState(value, id) {
@@ -54,15 +56,18 @@ function validateState(value, id) {
     if(!Array.isArray(metadata.bookmarks)||metadata.bookmarks.length>10000||metadata.bookmarks.some(b=>typeof b?.id!=='string'||typeof b.title!=='string'||!Number.isFinite(b.top)||!Number.isFinite(b.left)))throw Error('폴더의 북마크가 손상되었습니다.');
   };
   validateMarks(record.metadata);
+  if(record.folderId!==undefined&&record.folderId!==''&&!validId(record.folderId))throw Error('문서의 서재 폴더 위치가 손상되었습니다.');
   for(const revision of value.revisions){if(!object(revision)||!Number.isFinite(revision.created))throw Error('폴더의 주석 이력이 손상되었습니다.');validateMarks(revision);}
   return {record:portableRecord(record),revisions:value.revisions.map(({id:oldId,documentId,...revision})=>revision)};
 }
 function validateManifest(value) {
-  if(!object(value)||value.format!==FORMAT||value.version!==1||!validId(value.id)||!validId(value.revision)||!Array.isArray(value.documents)||value.documents.length>100000)throw Error('지원하지 않거나 손상된 HTMLMemo 데이터 폴더입니다.');
+  if(!object(value)||value.format!==FORMAT||![1,2].includes(value.version)||!validId(value.id)||!validId(value.revision)||!Array.isArray(value.documents)||value.documents.length>100000)throw Error('지원하지 않거나 손상된 HTMLMemo 데이터 폴더입니다.');
+  const folders=validateFolders(value.folders||(value.version===1?[]:null)),folderIds=new Set(['',...folders.map(f=>f.id)]);
   const seen=new Set();
   for(const entry of value.documents){
     if(!validId(entry?.id)||seen.has(entry.id)||!['html','file'].includes(entry.sourceType)||!/^[a-f0-9]{64}$/.test(entry.stamp)||!/^[a-f0-9]{64}$/.test(entry.annotationStamp))throw Error('폴더의 문서 목록이 손상되었습니다.');
     seen.add(entry.id);checkRef(entry.source);checkRef(entry.state);checkRef(entry.history);if(entry.original)checkRef(entry.original);
+    if(value.version===2||entry.copy){const copy=entry.copy,suffix=(entry.original||entry.source).name.slice(64);if(!object(copy)||!folderIds.has(copy.folderId)||typeof copy.name!=='string'||copy.name.length>220||/[\u0000-\u001f\u007f/\\<>:"|?*]/.test(copy.name)||/^[. ]/.test(copy.name)||!copy.name.endsWith(`[${entry.id}]${suffix}`))throw Error('원본 복사본의 폴더 경로가 올바르지 않습니다.');}
   }
   checkRef(value.settings);return value;
 }
@@ -100,15 +105,17 @@ async function loadSnapshot(folder,head) {
   const settingsFile=await objectFile(data,head.manifest.settings,true);
   if(settingsFile.size>16*1024*1024)throw Error('폴더의 설정 파일이 너무 큽니다.');
   const settings=validateSettings(JSON.parse(await settingsFile.text()));
+  const folders=validateFolders(head.manifest.folders||[]),folderIds=new Set(['',...folders.map(f=>f.id)]);
   for(const entry of head.manifest.documents){
     const stateFile=await objectFile(data,entry.state,true);
     if(stateFile.size>128*1024*1024)throw Error('폴더의 주석 이력 파일이 너무 큽니다.');
     const historyFile=await objectFile(data,entry.history,true);if(historyFile.size>128*1024*1024)throw Error('폴더의 주석 이력 파일이 너무 큽니다.');
     const state=validateState({...JSON.parse(await stateFile.text()),revisions:JSON.parse(await historyFile.text()).revisions},entry.id);
+    if(!folderIds.has(state.record.folderId||'')||entry.copy&&(state.record.folderId||'')!==entry.copy.folderId)throw Error('문서의 서재 폴더 위치가 목록과 일치하지 않습니다.');
     const source=await objectFile(data,entry.source,true),original=entry.original?await objectFile(data,entry.original,true):null;
     documents.push({...state,source,original,sourceType:entry.sourceType});
   }
-  return {head,documents,settings};
+  return {head,documents,settings,folders};
 }
 async function recoverSnapshot(folder) {
   let failure;
@@ -130,7 +137,8 @@ const defaultLock = action => {
 export class DataFolder {
   constructor({storage,report=()=>{},onRestored=()=>{},operations={},lock=defaultLock,delay=500}={}) {
     this.storage=storage;this.report=report;this.onRestored=onRestored;this.lock=lock;this.delay=delay;
-    this.ops={listDocuments,getDocument,listRevisions,restoreFolderDocuments,getSetting,setSetting,...operations};
+    this.ops={listDocuments,getDocument,listRevisions,restoreFolderDocuments,getSetting,setSetting,readLibrary,...operations};
+    if(operations.listDocuments&&!operations.readLibrary)this.ops.readLibrary=async()=>({documents:await this.ops.listDocuments(),folders:await this.ops.getSetting(LIBRARY_FOLDERS_KEY)||[]});
     this.handle=null;this.head=null;this.state='unconnected';this.error=null;this.revision=0;this.saved=0;this.running=null;this.timer=null;this.restoring=false;this.dirty=new Set();this.allDirty=true;
     this.unsubscribe=onStorageChange(id=>this.schedule({id}));
   }
@@ -159,9 +167,11 @@ export class DataFolder {
         await this.ops.setSetting('folder',handle);
         this.handle=handle;this.head=target;
         if(snapshot){
-          const existing=new Map((await this.ops.listDocuments()).map(r=>[r.id,r])),entries=[];
+          const localLibrary=await this.ops.readLibrary(),localFolders=validateFolders(localLibrary.folders),merged=mergeLibraryFolders(localFolders,snapshot.folders,uid);
+          const existing=new Map(localLibrary.documents.map(r=>[r.id,r])),entries=[];
           for(const item of snapshot.documents){
             let record=structuredClone(item.record),found=existing.get(record.id);
+            if(record.folderId)record.folderId=merged.mapping.get(record.folderId);
             if(found&&JSON.stringify(portableRecord(found))===JSON.stringify(record)){
               const local=await this.ops.getDocument(record.id),body=local.file instanceof Blob?local.file:new Blob([local.html]);
               const history=(await this.ops.listRevisions(record.id)).map(({id,documentId,...revision})=>revision);
@@ -171,9 +181,9 @@ export class DataFolder {
             const content=item.sourceType==='file'?{file:item.source}:{html:await item.source.text()};if(item.original)content.originalFile=item.original;
             entries.push({record,content,revisions:item.revisions});existing.set(record.id,record);
           }
-          await this.ops.restoreFolderDocuments(entries);
+          await this.ops.restoreFolderDocuments(entries,merged.folders,localFolders);
           applyFolderSettings(this.storage,snapshot.settings);
-          await this.onRestored({count:entries.length,recovered:!!snapshot.recovered});
+          await this.onRestored({count:entries.length,folders:merged.folders.length,recovered:!!snapshot.recovered});
         }
         if(snapshot?.recovered){const raw=await optionalText(handle,FOLDER_MANIFEST);if(raw!==null)await atomicWrite(handle,'HTMLMemo-library.recovered-'+uid()+'.json',raw);}
         this.saved=0;this.revision++;this.allDirty=true;
@@ -204,14 +214,16 @@ export class DataFolder {
     if(!recovered&&before&&!sameHead(before.manifest,this.head?.manifest)&&!sameHead(before.manifest,checkpoint))throw Error('다른 창이나 기기에서 폴더가 변경됐습니다. 다시 연결하면 양쪽 문서를 보존해 합칩니다.');
     if(!before&&this.head&&!recovered)throw Error('폴더 목록이 사라졌습니다. 기존 데이터를 덮어쓰지 않습니다. 다시 연결해주세요.');
     const base=recovered?this.head:before,data=await this.handle.getDirectoryHandle(FOLDER_DATA,{create:true});
+    const library=await this.ops.readLibrary(),folders=validateFolders(library.folders),folderIds=new Set(['',...folders.map(f=>f.id)]);
+    const place=(entry,record)=>{const folderId=record.folderId||'';if(!folderIds.has(folderId))throw Error('문서의 서재 폴더를 찾지 못했습니다. 폴더를 다시 연결해주세요.');return {...entry,copy:{folderId,name:documentCopyName(record,entry.original||entry.source)}};};
     const checkAll=this.allDirty||!sameHead(base?.manifest,this.head?.manifest);
     const previous=new Map((base?.manifest.documents||[]).map(e=>[e.id,e])),documents=[],checked=new Set();
-    for(const summary of await this.ops.listDocuments()){
+    for(const summary of library.documents){
       const record=portableRecord(summary);let old=previous.get(record.id);
       if(old){try{for(const ref of [old.source,old.original,old.state,old.history].filter(Boolean)){if(!checked.has(ref.name))await objectFile(data,ref);checked.add(ref.name);}}catch(error){if(!['NotFoundError','DataIntegrityError'].includes(error.name))throw error;old=null;}}
-      if(old&&!checkAll&&!this.dirty.has(record.id)){documents.push(old);continue;}
+      if(old&&!checkAll&&!this.dirty.has(record.id)){documents.push(place(old,record));continue;}
       const historyVersion=summary.historyVersion||0,stamp=(await localFileIdentity(jsonBlob({record,historyVersion}))).digest;
-      if(old?.stamp===stamp){documents.push(old);continue;}
+      if(old?.stamp===stamp){documents.push(place(old,record));continue;}
       let source=old?.source,original=old?.original,sourceType=old?.sourceType;
       if(!source){
         const content=await this.ops.getDocument(record.id);if(!content)continue;
@@ -231,14 +243,16 @@ export class DataFolder {
       }
       const stateBlob=jsonBlob({record});if(stateBlob.size>128*1024*1024)throw Error('한 문서의 현재 주석이 폴더 저장 한도(128MB)를 넘었습니다.');
       const state=await storeObject(data,stateBlob,'json');
-      documents.push({id:record.id,source,original,sourceType,state,history,stamp,annotationStamp});
+      documents.push(place({id:record.id,source,original,sourceType,state,history,stamp,annotationStamp},record));
     }
     const settingsBlob=jsonBlob(folderSettings(this.storage));if(settingsBlob.size>16*1024*1024)throw Error('설정의 크기가 폴더 저장 한도(16MB)를 넘었습니다.');
     const settings=await storeObject(data,settingsBlob,'json');
-    const manifest={format:FORMAT,version:1,id:base?.manifest.id||uid(),revision:uid(),savedAt:new Date().toISOString(),settings,documents};
+    const manifest={format:FORMAT,version:2,id:base?.manifest.id||uid(),revision:uid(),savedAt:new Date().toISOString(),settings,folders,documents};
     // Check every referenced file exists, without rereading large immutable sources on edits.
     for(const ref of new Map(references(manifest).map(ref=>[ref.name,ref])).values())if(!checked.has(ref.name))await objectFile(data,ref);
-    if(!recovered&&base&&JSON.stringify({settings:base.manifest.settings,documents:base.manifest.documents})===JSON.stringify({settings,documents})){
+    const treeShape=head=>JSON.stringify({folders:head?.folders||[],documents:(head?.documents||[]).map(e=>({id:e.id,copy:e.copy,original:e.original||e.source}))});
+    if(checkAll||treeShape(manifest)!==treeShape(base?.manifest))await syncFolderTree(this.handle,manifest,base?.manifest,{readOriginal:ref=>objectFile(data,ref),write:atomicWrite});
+    if(!recovered&&base&&JSON.stringify({settings:base.manifest.settings,folders:base.manifest.folders,documents:base.manifest.documents})===JSON.stringify({settings,folders,documents})){
       this.head=base;await this.ops.setSetting(CHECKPOINT,{id:base.manifest.id,revision:base.manifest.revision});return;
     }
     const latest=await optionalText(this.handle,FOLDER_MANIFEST);
@@ -247,6 +261,8 @@ export class DataFolder {
     if(base)await atomicWrite(this.handle,FOLDER_PREVIOUS,base.raw);
     const raw=JSON.stringify(manifest,null,2)+'\n';await atomicWrite(this.handle,FOLDER_MANIFEST,raw);
     this.head={raw,manifest};await this.ops.setSetting(CHECKPOINT,{id:manifest.id,revision:manifest.revision});
+    // Old snapshots use protected objects, so moving visible raw copies cannot break recovery.
+    try{await cleanupFolderTree(this.handle,manifest,base?.manifest);}catch{/* Keep leftovers rather than deleting an unverified file or risking the committed backup. */}
     // Only collect our own content-addressed objects, after both manifests are durable.
     const keep=new Set([...references(manifest),...references(base?.manifest)].map(ref=>ref.name));
     try{

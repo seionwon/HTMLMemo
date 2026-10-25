@@ -18,7 +18,7 @@ export function memoryFolder(name='HTMLMemo',control={}) {
       }
       const child=children.get(name);if(!child)throw new DOMException('Missing file','NotFoundError');if(child.kind!=='file')throw new DOMException('Wrong kind','TypeMismatchError');return child;
     },
-    async removeEntry(name){children.delete(name);},async *entries(){yield* children;},
+    async removeEntry(name,{recursive=false}={}){const child=children.get(name);if(!child)throw new DOMException('Missing entry','NotFoundError');if(child.kind==='directory'&&child.children.size&&!recursive)throw new DOMException('Directory is not empty','InvalidModificationError');children.delete(name);},async *entries(){yield* children;},
   };return folder;
 }
 export function memoryLocal(entries=[]) {
