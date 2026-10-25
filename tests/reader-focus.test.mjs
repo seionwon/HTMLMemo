@@ -64,7 +64,7 @@ test('floating toolbar stays compact without duplicate TTS or relocated zoom con
  assert.match(css,/\.floating-toolbar\{height:auto;min-height:0;padding:0 1px;gap:0/);
  assert.match(css,/#app\.reader-focus>\.chrome/);
  assert.doesNotMatch(html,/chrome-topline/);
- assert.match(css,/\.addressbar\{height:24px;min-height:0;padding-block:0;margin-block:0\}/);
+ assert.match(css,/\.addressbar\{height:24px;min-height:0;padding:0;margin:0\}/);
 });
 
 test('document focus is entered through a document double-click, without a separate screen button',()=>{

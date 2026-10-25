@@ -19,6 +19,12 @@ function app({width=400,content=1000,left=0}={}){
   const add=(id,title=id)=>{const host=doc.createElement('div');host.id='workspace-'+id;doc.querySelector('#workspaces').append(host);context.tabs.push({id,title,type:'document',host,record:{name:id+'.html'}});};
   return {context,doc,strip,frames,wheel,add};
 }
+test('the first header row removes outside gutters and keeps edge focus rings inside its buttons',async()=>{
+  const css=await readFile(new URL('../public/design.tailwind.css',import.meta.url),'utf8'),row=[...css.matchAll(/\.addressbar\{([^}]+)\}/gu)].at(-1)[1];
+  assert.match(row,/(?:^|;)padding:0(?:;|$)/u);assert.match(row,/(?:^|;)margin:0(?:;|$)/u);
+  assert.match(css,/\.chrome\{position:relative;padding:0;margin:0\}/u);
+  assert.match(css,/\.addressbar button:focus-visible\{outline-offset:-2px\}/u);
+});
 test('tabs share available width, retain a usable minimum and overflow only inside the header strip',async()=>{
   const css=await readFile(new URL('../public/design.tailwind.css',import.meta.url),'utf8');
   const rule=css.match(/\.addressbar \.tab\{([^}]+)\}/)[1];
