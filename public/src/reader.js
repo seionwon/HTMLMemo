@@ -2,7 +2,7 @@ import { createReadAloud } from './read-aloud.js';
 import { SearchIndexCache } from './search-index.js';
 import { IsolatedRuntime,needsIsolatedRuntime } from './isolated-runtime.js';
 import { clamp, uid, icon } from './utils.js';
-import { History, TEXT_TOOLS, DRAW_TOOLS } from './model.js';
+import { History, TEXT_TOOLS, DRAW_TOOLS, FILL_TOOLS } from './model.js';
 import { LAYER_ID, LOCAL_CSP, parseHTML, savedMainFrame, prepareLoadedHTML, cleanAnnotations, textIndex, selectionAnchor, resolveTextAnchor, wrapOffsets, rangeFromOffsets, sentenceOffsets, serializeHTML, inspectBookDocument, drawingTargetQuote, describeDrawingTarget, currentSection } from './document.js';
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -1789,7 +1789,7 @@ export class Reader {
     }catch(error){this.restoreTextSelection(target);throw error;}
     finally{this.selectionNotePending=false;}
   }
-  annotation(type, properties) { return {id:uid(), type, color:this.color, width:this.width, opacity:type === 'highlight' || type === 'area' ? this.opacity : 1, created:Date.now(), ...(type==='rect'?{fill:this.rectFill===true,...(this.rectFill===true?{fillOpacity:this.opacity}:{})}:{}), ...properties}; }
+  annotation(type, properties) { return {id:uid(), type, color:this.color, width:this.width, opacity:type === 'highlight' || type === 'area' ? this.opacity : 1, created:Date.now(), ...(FILL_TOOLS.includes(type)?{fill:this.rectFill===true,...(this.rectFill===true?{fillOpacity:this.opacity}:{})}:{}), ...properties}; }
   addText(type, anchor, text) {
     if (!anchor?.quote?.trim()) return false;
     if (type === 'note') {
@@ -2126,10 +2126,10 @@ export class Reader {
   }
   drawAnnotation(annotation, preview = false, geometry = null) {
     const {points:p,scale} = preview ? {points:annotation.points,scale:1} : geometry || this.drawingGeometry(annotation); if (!p?.length) return null;
-    const attrs = {stroke:annotation.color, 'stroke-width':annotation.width * (annotation.type === 'pen' ? scale : 1), fill:'none', opacity:annotation.opacity, 'stroke-linecap':'round', 'stroke-linejoin':'round', 'data-htmlmemo-id':annotation.id, style:'pointer-events:visiblePainted;cursor:pointer'};
+    const attrs = {stroke:annotation.color, 'stroke-width':annotation.width * (annotation.type === 'pen' ? scale : 1), fill:'none', ...(FILL_TOOLS.includes(annotation.type)&&annotation.fill===true?{fill:annotation.color,'fill-opacity':annotation.fillOpacity}:{}), opacity:annotation.opacity, 'stroke-linecap':'round', 'stroke-linejoin':'round', 'data-htmlmemo-id':annotation.id, style:'pointer-events:visiblePainted;cursor:pointer'};
     const first = p[0]; const last = p.at(-1);
     if (annotation.type === 'pen') return svg(this.doc, 'path', {...attrs, d:p.map((point,i) => `${i ? 'L':'M'}${point.x.toFixed(2)},${point.y.toFixed(2)}`).join(' ')});
-    if (['rect','area'].includes(annotation.type)) return svg(this.doc, 'rect', {...attrs, x:Math.min(first.x,last.x), y:Math.min(first.y,last.y), width:Math.abs(first.x-last.x), height:Math.abs(first.y-last.y), ...(annotation.type === 'area' ? {fill:annotation.color, stroke:'none'} : annotation.fill===true?{fill:annotation.color,'fill-opacity':annotation.fillOpacity}:{})});
+    if (['rect','area'].includes(annotation.type)) return svg(this.doc, 'rect', {...attrs, x:Math.min(first.x,last.x), y:Math.min(first.y,last.y), width:Math.abs(first.x-last.x), height:Math.abs(first.y-last.y), ...(annotation.type === 'area' ? {fill:annotation.color, stroke:'none'} : {})});
     if (annotation.type === 'area-underline') return svg(this.doc, 'path', {...attrs, d:`M${first.x},${first.y}L${last.x},${last.y}`});
     if (annotation.type === 'ellipse') return svg(this.doc, 'ellipse', {...attrs, cx:(first.x+last.x)/2, cy:(first.y+last.y)/2, rx:Math.abs(first.x-last.x)/2, ry:Math.abs(first.y-last.y)/2});
     if (annotation.type === 'circle') return svg(this.doc, 'circle', {...attrs, cx:(first.x+last.x)/2, cy:(first.y+last.y)/2, r:Math.min(Math.abs(first.x-last.x),Math.abs(first.y-last.y))/2});
