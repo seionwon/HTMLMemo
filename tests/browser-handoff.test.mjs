@@ -70,7 +70,10 @@ test('direct CORS reading is explicit, coalesced and disabled for search while f
  a.context.readWebPage=async()=>{throw Error('CORS blocked');};assert.equal(await a.context.capturePage(tab),false);assert.strictEqual(a.help[0].tab,tab);assert.match(a.help[0].message,/CORS blocked/);
  const search=await a.context.openBrowser('검색');await a.context.capturePage(search);assert.strictEqual(a.pastes.at(-1),search);assert.equal(calls,1);
 });
-test('only app preview history is controlled; external browser history is left to Chrome',async()=>{
- const a=app(),tab=await a.context.openBrowser('https://app.example/');await a.context.openBrowser('https://app.example/next',false);await a.context.browserHistory(-1);assert.equal(tab.url,'https://app.example/');
- const remote=await a.context.openBrowser('https://source.example/');await a.context.openBrowser('https://source.example/next',false);assert.equal(a.opened.length,1);await a.context.browserHistory(-1);assert.equal(remote.url,'https://source.example/next');
+test('same-origin preview navigation and explicit external URL changes work without app history controls',async()=>{
+ const a=app(),tab=await a.context.openBrowser('https://app.example/');await a.context.openBrowser('https://app.example/next',false);
+ assert.equal(tab.url,'https://app.example/next');assert.equal(tab.frame.src,tab.url);assert.equal(a.opened.length,0);
+ const remote=await a.context.openBrowser('https://source.example/');await a.context.openBrowser('https://source.example/next',false);
+ assert.equal(a.opened.length,1);assert.equal(remote.url,'https://source.example/next');assert.equal(a.opened[0].location.href,remote.url);
+ assert.equal(a.context.browserHistory,undefined);
 });

@@ -23,8 +23,29 @@ test('the first header row removes outside gutters and keeps edge focus rings in
   const css=await readFile(new URL('../public/design.tailwind.css',import.meta.url),'utf8'),row=[...css.matchAll(/\.addressbar\{([^}]+)\}/gu)].at(-1)[1];
   assert.match(row,/(?:^|;)padding:0(?:;|$)/u);assert.match(row,/(?:^|;)margin:0(?:;|$)/u);
   assert.match(css,/\.chrome\{position:relative;padding:0;margin:0\}/u);
-  assert.match(css,/\.addressbar \.navigation button:focus-visible,\.addressbar>#settings-button:focus-visible\{outline-offset:-2px\}/u);
+  assert.match(css,/\.addressbar>#settings-button:focus-visible,\.addressbar \.tab-select:focus-visible\{outline-offset:-2px\}/u);
   assert.doesNotMatch(css,/\.addressbar button:focus-visible\{/u,'middle save controls keep their existing outer focus ring');
+});
+test('the app header omits all three navigation buttons and their initialization and event handlers',async()=>{
+  const html=await readFile(new URL('../public/index.html',import.meta.url),'utf8'),doc=new DOMParser().parseFromString(html,'text/html');
+  assert.equal(doc.querySelector('.addressbar .navigation,#back,#forward,#reload'),null);
+  assert.doesNotMatch(source,/["']#(?:back|forward|reload)["']|\bbrowserHistory\b/u);
+  const css=await readFile(new URL('../public/design.tailwind.css',import.meta.url),'utf8');
+  assert.doesNotMatch(css,/\.navigation\b/u);
+  assert.deepEqual([...doc.querySelector('.addressbar').children].map(node=>node.id),['address-form','tabs','library-tab','save-page','settings-button']);
+});
+test('header updates work without navigation elements in the library, document, preview, external tab and execution screen',async()=>{
+  const html=await readFile(new URL('../public/index.html',import.meta.url),'utf8'),doc=new DOMParser().parseFromString(html,'text/html'),saved=[];
+  doc.querySelector('.navigation')?.remove();
+  const context=vm.createContext({document:doc,$:selector=>$(selector,doc),icon,active:()=>context.tab,reader:()=>context.tab?.reader,
+    setIconButton(selector,name,label){doc.querySelector(selector).setAttribute('aria-label',label);},saveStatus:tab=>saved.push(tab)});
+  vm.runInContext('var activeId="library",sharingApp=false;'+source.slice(source.indexOf('function updateChrome('),source.indexOf('function createHost(')),context);
+  const states=[{id:'library',page:'library',label:'페이지 저장',disabled:true},{id:'document',page:'document',label:'HTML 내보내기',disabled:false,tab:{type:'document',title:'읽는 책',record:{name:'book.html'},reader:{}}},
+    {id:'preview',page:'browser',label:'페이지 저장',disabled:false,tab:{type:'browser',title:'미리보기',url:'https://app.example/example.html',readable:true}},
+    {id:'external',page:'browser',label:'Chrome에서 가져오기',disabled:false,tab:{type:'browser',title:'웹',url:'https://source.example/',external:true}},
+    {id:'execution',page:'execution',label:'URL 복사',disabled:false}];
+  for(const state of states){context.activeId=state.id;context.tab=state.tab;assert.doesNotThrow(()=>context.updateChrome(),state.id);assert.equal(doc.querySelector('.chrome').dataset.page,state.page);assert.equal(doc.querySelector('#save-page').getAttribute('aria-label'),state.label);assert.equal(doc.querySelector('#save-page').disabled,state.disabled);}
+  assert.equal(saved.length,1);
 });
 test('tabs share available width, retain a usable minimum and overflow only inside the header strip',async()=>{
   const css=await readFile(new URL('../public/design.tailwind.css',import.meta.url),'utf8');

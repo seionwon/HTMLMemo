@@ -204,13 +204,10 @@ async function selectTab(id) {
   if(tab.external)focusBrowserTab(tab);
 }
 function updateChrome() {
-  const tab=active(); const r=reader(); const local=tab?.type==='document';const execution=activeId==='execution';
+  const tab=active(); const local=tab?.type==='document';const execution=activeId==='execution';
   $('.chrome').dataset.page=local?'document':tab?'browser':activeId;
   if(!$('.chrome').classList.contains('address-editing'))$('#address').value=local?tab.record.name:tab?.url||'';
   $('#address-icon').innerHTML=icon(local?'file':'globe',15);$('#local-label').hidden=!local;
-  $('#back').disabled=local?!r?.linkHistory.length:!tab||tab.external||tab.cursor<=0||!!tab.capturing;
-  $('#forward').disabled=!tab||local||tab.external||tab.cursor>=tab.history.length-1||!!tab.capturing;
-  $('#reload').disabled=!tab||local||tab.external||!!tab.capturing;
   setIconButton('#save-page',execution?'globe':local?'download':tab?.external?'folder':'save',execution?'URL 복사':local?'HTML 내보내기':tab?.external?'Chrome에서 가져오기':'페이지 저장',17);
   $('#save-page').disabled=execution?sharingApp:!tab||!!tab.capturing;
   if(local)saveStatus(tab); else if(tab)$('#status-left').textContent=tab.external?'웹 탐색은 브라우저 탭 · 복사한 글과 저장한 HTML은 여기서 주석 달기':tab.capturing?'읽기용 사본을 준비하는 중…':tab.readable?'페이지 저장 → 주석 달기 · 추가 설치 없음':'앱 문서를 준비하는 중…';
@@ -540,13 +537,6 @@ async function navigate(tab,url){
   tab.url=url;tab.title=isWebSearch(url)?'웹 검색':displayHost(url);tab.history.splice(tab.cursor+1);tab.history.push(url);tab.cursor++;
   if(tab.external){renderExternalTab(tab);renderTabs();updateChrome();focusBrowserTab(tab);return;}
   tab.readable=false;tab.loading=true;tab.frame.src=url;renderBrowserState(tab);renderTabs();updateChrome();
-}
-async function browserHistory(direction){
-  const tab=active();if(!tab)return;
-  if(tab.reader){if(direction<0)await tab.reader.back();updateChrome();return;}
-  if(tab.external||tab.capturing)return;
-  const next=tab.cursor+direction;if(next<0||next>=tab.history.length)return;
-  tab.cursor=next;tab.url=tab.history[next];tab.readable=false;tab.loading=true;tab.frame.src=tab.url;renderBrowserState(tab);updateChrome();
 }
 function toolbarButton(action,name,label,extra='') {return `<button class="tool-button" data-action="${action}" aria-label="${label}" title="${label}" ${extra}>${icon(name,18)}</button>`;}
 function annotationToolFamily(tool) {return {area:'highlight','area-underline':'underline',text:'note'}[tool]||tool;}
@@ -1138,7 +1128,7 @@ async function copyAppURL(){
 }
 function bindUI() {
   document.addEventListener('fullscreenchange',()=>{if(document.fullscreenElement===$('#app') && readerFocused)nativeReaderFullscreen=true;else if(nativeReaderFullscreen){nativeReaderFullscreen=false;setReaderFocus(false);}});
-  [['#web-help-button','info','웹페이지 가져오기 안내'],['#address-open','external'],['#back','back'],['#forward','forward'],['#reload','reload'],['#save-page','save'],['#library-search-icon','search'],['#empty-icon','file'],['#library-card-view','grid','카드'],['#library-list-view','list','목록']].forEach(([id,name,label])=>setButton(id,name,label));
+  [['#web-help-button','info','웹페이지 가져오기 안내'],['#address-open','external'],['#save-page','save'],['#library-search-icon','search'],['#empty-icon','file'],['#library-card-view','grid','카드'],['#library-list-view','list','목록']].forEach(([id,name,label])=>setButton(id,name,label));
   setIconButton('#library-tab','library','내 서재');
   setIconButton('#settings-button','settings','설정');bindTabs();
   $('#library-tab').onclick=()=>activate('library');$('#browse-start').onclick=focusAddress;
@@ -1152,7 +1142,6 @@ function bindUI() {
   addressForm.addEventListener('focusout',event=>{if(!addressForm.contains(event.relatedTarget)){$('.chrome').classList.remove('address-editing');updateChrome();requestAnimationFrame(revealActiveTab);}});
   addressForm.addEventListener('keydown',event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();$('#address').blur();$('.tab.active .tab-select',$('#tabs'))?.focus();}});
   addressForm.onsubmit=safely(async event=>{event.preventDefault();const value=$('#address').value;$('.chrome').classList.remove('address-editing');$('#address').blur();await openBrowser(value,active()?.type!=='browser');});
-  $('#back').onclick=safely(()=>browserHistory(-1));$('#forward').onclick=safely(()=>browserHistory(1));$('#reload').onclick=()=>{const tab=active();if(tab?.frame&&!tab.capturing){tab.loading=true;tab.readable=false;tab.frame.src=tab.url;renderBrowserState(tab);}};
   $('#save-page').onclick=safely(savePage);$('#hero-import').onclick=safely(importFiles);
   $('#file-input').onchange=safely(async event=>{const files=[...event.target.files];event.target.value='';for(const file of files)await openLocalFile(file);});
   $('#settings-file-input').onchange=safely(async event=>{const file=event.target.files[0];event.target.value='';if(file){await restoreSettings(file);settingsDialog();}});

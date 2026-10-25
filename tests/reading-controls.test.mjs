@@ -34,6 +34,14 @@ test('plain documents retain zoom and one TTS entry in an unscaled upper reading
   r.zoom=.2;r.updateReadingControls();assert.equal(r.zoomControl.textContent,'20%');
   r.zoom=8;r.updateReadingControls();assert.equal(r.zoomControl.textContent,'800%');
 });
+test('book-provided return, previous and next buttons keep their original nodes and click handlers',()=>{
+  const {r,doc}=fixture('<header class="topbar"><div class="controls"><button id="back">↰</button><button id="prev">‹</button><button id="next">›</button><button>A−</button><button>A+</button></div></header>'),calls=[];
+  const buttons=['back','prev','next'].map(id=>doc.getElementById(id));
+  const handlers=buttons.map(button=>button.onclick=()=>calls.push(button.id));
+  r.setupReadingControls();r.setupReadingControls();
+  buttons.forEach((button,index)=>{assert.strictEqual(doc.getElementById(button.id),button);assert.strictEqual(button.onclick,handlers[index]);button.onclick();});
+  assert.deepEqual(calls,['back','prev','next']);assert.deepEqual(buttons.map(button=>button.textContent),['↰','‹','›']);
+});
 test('reading controls are restored once after a book header is replaced or removed',()=>{
   const {r,doc}=fixture('<header class="topbar"><button>A+</button></header>');r.setupReadingControls();const old=r.readingControls,oldSpeech=r.speechControls;
   r.topbarNode.remove();r.setupReadingControls();assert.equal(old.isConnected,false);assert.equal(r.readingControls.ownerDocument,r.host.ownerDocument);
