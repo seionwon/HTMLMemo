@@ -1,4 +1,4 @@
-import { FORMAT_VERSION, validateAnnotations } from './model.js';
+import { FORMAT_VERSION, validateAnnotations, cleanSourceStorage } from './model.js';
 
 export const LAYER_ID = 'htmlmemo-annotation-layer';
 export const DATA_ID = 'htmlmemo-data';
@@ -239,6 +239,7 @@ function* prepareHTML(html, defaults, {includeMetadata = false, document: loaded
     execution:{allowScripts:!!allowScripts}, annotations: freshAnnotations?[]:embedded.annotations || [], view: {scrollTop:Math.max(0,Number(view.scrollTop)||0),scrollLeft:Math.max(0,Number(view.scrollLeft)||0),zoom:Number.isFinite(view.zoom)?Math.min(8,Math.max(.2,view.zoom)):null,autoFit:view.autoFit==null?!Number.isFinite(view.zoom):view.autoFit!==false,...(Number.isFinite(view.tocWidth)?{tocWidth:Math.min(640,Math.max(8,Math.round(Number(view.tocWidth))))}:{})}, bookmarks:freshAnnotations?[]:bookmarks,
     warnings: [...new Set([...(Array.isArray(embedded.warnings) ? embedded.warnings : defaults.warnings || []), ...(book && !book.complete ? [BOOK_DATA_MISSING] : [])])].filter(w=>typeof w==='string').slice(0,5000),
   };
+  if(view.sourceStorage)metadata.view.sourceStorage=cleanSourceStorage(view.sourceStorage);
   const nativeScroll = !!allowScripts || !!loadedDocument || html.length >= 4 * 1024 * 1024 || n >= 20000;
   // Native-scrolling local documents retain their own viewport rules. This is
   // required for document-owned sticky navigation and sidebars to keep the

@@ -4,6 +4,7 @@ import {readFile} from 'node:fs/promises';
 import {documentFor,installDOM} from './dom.mjs';
 import {savedMainFrame,parseHTML,sanitizeRuntimeHTML,LOCAL_CSP,SCRIPT_CSP} from '../public/src/document.js';
 import {IsolatedRuntime} from '../public/src/isolated-runtime.js';
+import {cleanSourceStorage} from '../public/src/model.js';
 installDOM();
 const frame=content=>`<iframe id="mainFrame" srcdoc="${content.replaceAll('&','&amp;').replaceAll('"','&quot;')}"></iframe>`;
 const page=body=>'<html><head></head><body>'+body+'</body></html>';
@@ -57,6 +58,12 @@ test('source nodes cannot replace metadata or append executable content via attr
   const a=runtime();await a.r.accept({type:'initial',html:initial});
   await a.r.accept({type:'patches',patches:[{id:'r5',kind:'attributes',tag:'script',attributes:[['src','https://remote.invalid/run.js'],['data-htmlmemo-runtime-id','r5']]},{id:'r5',kind:'content',html:'<script data-htmlmemo-runtime-id="r5">attack()</script>'}]});
   assert.equal(a.doc.querySelector('p').textContent,'Current text');assert.equal(a.doc.querySelector('script[src]'),null);assert.match(a.doc.getElementById('htmlmemo-data').textContent,/original private notes/);
+});
+test('document preferences remain bounded inert pairs and round-trip separately from app settings',async()=>{
+  const values=[['font-size','36'],['__proto__','inert string'],['font-size','duplicate'],['not-string',{}],['oversized','x'.repeat(262145)]];
+  const expected=[['font-size','36'],['__proto__','inert string']];assert.deepEqual(cleanSourceStorage(values),expected);assert.equal(cleanSourceStorage(Array.from({length:300},(_,i)=>['k'+i,'v'])).length,256);assert.deepEqual(cleanSourceStorage({secret:'app value'}),[]);
+  const parsed=parseHTML('<html><head><script id="htmlmemo-data" type="application/json">'+JSON.stringify({version:1,annotations:[],view:{sourceStorage:values}})+'</script></head><body><p>Text</p></body></html>');assert.deepEqual(parsed.metadata.view.sourceStorage,expected);
+  const a=runtime();let saved;a.r.onStorage=value=>saved=value;await a.r.accept({type:'storage',entries:values});assert.deepEqual(saved,expected);assert.match(a.doc.getElementById('htmlmemo-data').textContent,/original private notes/);
 });
 test('the source CSP cannot fetch or load external scripts and the display policy prohibits execution',()=>{
   assert.match(LOCAL_CSP,/script-src 'none'/);assert.match(SCRIPT_CSP,/connect-src data: blob:/);const scripts=SCRIPT_CSP.match(/script-src ([^;]+)/)[1];assert.ok(!/https?:/.test(scripts));

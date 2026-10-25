@@ -1,17 +1,19 @@
 import {SCRIPT_CSP,sanitizeRuntimeHTML,serializeBookSource} from './document.js';
+import {cleanSourceStorage} from './model.js';
 
 const ID='data-htmlmemo-runtime-id',MAX_HTML=64*1024*1024;
 const validId=value=>typeof value==='string'&&/^r\d{1,12}$/.test(value);
 
 // This function is serialized into the opaque child before ANY source script.
 // No app settings, annotations, tokens, storage handles or executable RPC enter it.
-function bootstrap(channel) {
+function bootstrap(channel,preferences) {
   const ID='data-htmlmemo-runtime-id',MAX=64*1024*1024,send=parent.postMessage.bind(parent),ids=new WeakMap(),nodes=new Map();
   let serial=0,started=false,timer=0;const dirty=new Map();
-  const storage=()=>{const values=new Map();return {get length(){return values.size;},key:i=>[...values.keys()][i]??null,getItem:key=>values.get(String(key))??null,setItem:(key,value)=>values.set(String(key),String(value)),removeItem:key=>values.delete(String(key)),clear:()=>values.clear()};};
-  // Books may remember a sidebar width. Give them a fresh, private memory store,
-  // never the app's persistent storage or a channel back to it.
-  for(const key of ['localStorage','sessionStorage'])try{Object.defineProperty(window,key,{value:storage()});}catch{}
+  let storageTimer=0;
+  const storage=(entries=[],persist=false)=>{const values=new Map(entries),changed=()=>{if(persist&&!storageTimer)storageTimer=setTimeout(()=>{storageTimer=0;send({channel,type:'storage',entries:[...values]},'*');},30);};return {get length(){return values.size;},key:i=>[...values.keys()][i]??null,getItem:key=>values.get(String(key))??null,setItem:(key,value)=>{key=String(key);value=String(value);if(values.get(key)===value)return;const next=new Map(values);next.set(key,value);if(key.length>1000||next.size>256||[...next].reduce((sum,[k,v])=>sum+k.length+v.length,0)>262144)throw new DOMException('문서 설정 저장 한도를 넘었습니다.','QuotaExceededError');values.set(key,value);changed();},removeItem:key=>{if(values.delete(String(key)))changed();},clear:()=>{if(values.size){values.clear();changed();}}};};
+  // Only this document's own bounded preferences can survive reopening. No
+  // values from the app's localStorage, settings or other documents enter it.
+  for(const key of ['localStorage','sessionStorage'])try{Object.defineProperty(window,key,{value:storage(key==='localStorage'?preferences:[],key==='localStorage')});}catch{}
   const key=node=>{if(!ids.has(node)){const id='r'+(++serial);ids.set(node,id);nodes.set(id,node);}return ids.get(node);};
   const inert=node=>node?.closest?.('script,template');
   const html=node=>{
@@ -40,8 +42,8 @@ function bootstrap(channel) {
     for(const record of records){const node=record.target.nodeType===1?record.target:record.target.parentElement;if(!node||inert(node))continue;const kind=record.type==='attributes'?'attributes':'content';if(dirty.get(node)!=='content')dirty.set(node,kind);}
     schedule();
   }).observe(document,{subtree:true,childList:true,characterData:true,attributes:true});
-  addEventListener('message',event=>{
-    const value=event.data;if(event.source!==parent||value?.channel!==channel)return;
+  const command=value=>{
+    if(value?.channel!==channel)return;
     if(value.type==='hash'&&typeof value.hash==='string'&&value.hash.length<2000){location.hash=value.hash;return;}
     if(!['click','input','change','toggle'].includes(value.type)||!/^r\d{1,12}$/.test(value.id))return;
     const node=nodes.get(value.id);if(!node?.isConnected)return;
@@ -52,6 +54,11 @@ function bootstrap(channel) {
     }
     // No eval, arbitrary property access, network/file request or parent callback.
     if(value.type==='click'){node.click();schedule();}
+  };
+  let commandPort;
+  addEventListener('message',event=>{
+    const value=event.data;if(commandPort||event.source!==parent||value?.channel!==channel||value.type!=='connect'||!event.ports[0])return;
+    commandPort=event.ports[0];commandPort.onmessage=message=>command(message.data);
   });
   addEventListener('DOMContentLoaded',()=>setTimeout(publish,0),{once:true});
   if(document.readyState!=='loading')schedule();
@@ -59,8 +66,8 @@ function bootstrap(channel) {
 
 /** Source code runs in an opaque origin. Only inert, sanitized DOM comes back. */
 export class IsolatedRuntime {
-  constructor({host,doc,source,onError=()=>{}}) {
-    this.host=host;this.doc=doc;this.source=source;this.onError=onError;this.channel=crypto.randomUUID();this.queue=Promise.resolve();this.disposed=false;this.listeners=[];this.nodes=new Map();this.attributes=new Map();
+  constructor({host,doc,source,storage=[],onStorage=()=>{},onError=()=>{}}) {
+    this.host=host;this.doc=doc;this.source=source;this.storage=cleanSourceStorage(storage);this.onStorage=onStorage;this.onError=onError;this.channel=crypto.randomUUID();this.queue=Promise.resolve();this.disposed=false;this.listeners=[];this.nodes=new Map();this.attributes=new Map();
   }
   async start() {
     const owner=this.host.ownerDocument,win=owner.defaultView;
@@ -79,12 +86,19 @@ export class IsolatedRuntime {
     }
     const source=await serializeBookSource(original,{version:1,annotations:[],bookmarks:[],view:{},execution:{allowScripts:false}});
     if(this.disposed)return;
-    const script='('+bootstrap.toString()+')('+JSON.stringify(this.channel)+');';
+    const script='('+bootstrap.toString()+')('+JSON.stringify(this.channel)+','+JSON.stringify(this.storage).replaceAll('<','\\u003c')+');';
     const policy=SCRIPT_CSP.replace("frame-src 'self'","frame-src 'none'");
     this.url=URL.createObjectURL(new Blob(['<!doctype html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="'+policy+'"><script>'+script+'</script></head>',source],{type:'text/html;charset=utf-8'}));
     const initial=new Promise((resolve,reject)=>{this.resolve=resolve;this.reject=reject;this.timer=setTimeout(()=>this.fail(Error('문서 스크립트의 격리 실행 결과를 준비하지 못했습니다.')),30000);});
     this.receive=event=>{
       const value=event.data;if(this.disposed||event.source!==frame.contentWindow||value?.channel!==this.channel)return;
+      if(value.type==='initial'&&!this.port){
+        // Establish the port in the app window's own message callback. A DOM
+        // callback invoked in the static child has that child's incumbent
+        // Window, so Window.postMessage source identity is not a command bus.
+        const connection=new win.MessageChannel();this.port=connection.port1;
+        frame.contentWindow.postMessage({channel:this.channel,type:'connect'},'*',[connection.port2]);
+      }
       this.queue=this.queue.then(()=>this.accept(value)).catch(error=>this.fail(error));
     };
     win.addEventListener('message',this.receive);this.window=win;
@@ -94,6 +108,10 @@ export class IsolatedRuntime {
   fail(error) {clearTimeout(this.timer);if(this.reject){this.reject(error);this.resolve=this.reject=null;}else if(!this.disposed)this.onError(error);this.dispose();}
   async accept(value) {
     if(this.disposed)return;
+    if(value.type==='storage'){
+      if(!Array.isArray(value.entries)||value.entries.length>256||JSON.stringify(value.entries).length>600000)return;
+      const entries=cleanSourceStorage(value.entries);if(JSON.stringify(entries)!==JSON.stringify(this.storage)){this.storage=entries;this.onStorage(entries);}return;
+    }
     if(value.type==='error'){this.fail(Error(String(value.message).slice(0,300)));return;}
     if(value.type==='initial'){
       if(!this.resolve||typeof value.html!=='string'||value.html.length>MAX_HTML)throw Error('유효하지 않은 문서 실행 결과입니다.');
@@ -139,7 +157,7 @@ export class IsolatedRuntime {
     }
     const id=target.getAttribute(ID);if(validId(id))this.attributes.set(id,next);
   }
-  send(value) {if(!this.disposed)this.frame?.contentWindow?.postMessage({channel:this.channel,...value},'*');}
+  send(value) {if(!this.disposed)this.port?.postMessage({channel:this.channel,...value});}
   bind() {
     const add=(target,type,fn,capture=true)=>{target.addEventListener(type,fn,capture);this.listeners.push(()=>target.removeEventListener(type,fn,capture));};
     const sourceTarget=event=>{const node=event.target?.nodeType===1?event.target:event.target?.parentElement,source=node?.closest('['+ID+']');return source&&this.nodes.get(source.getAttribute(ID))===source?source:null;};
@@ -153,5 +171,5 @@ export class IsolatedRuntime {
     add(this.doc,'toggle',event=>{const node=sourceTarget(event);if(node?.localName==='details')this.send({type:'toggle',id:node.getAttribute(ID),open:node.open});});
     add(this.doc.defaultView,'hashchange',()=>this.send({type:'hash',hash:this.doc.defaultView.location.hash}));
   }
-  dispose() {this.disposed=true;clearTimeout(this.timer);this.reject?.(new DOMException('문서 열기가 취소되었습니다.','AbortError'));this.resolve=this.reject=null;for(const remove of this.listeners)remove();this.window?.removeEventListener('message',this.receive);this.frame?.remove();if(this.url)URL.revokeObjectURL(this.url);}
+  dispose() {this.disposed=true;clearTimeout(this.timer);this.reject?.(new DOMException('문서 열기가 취소되었습니다.','AbortError'));this.resolve=this.reject=null;for(const remove of this.listeners)remove();this.port?.close();this.window?.removeEventListener('message',this.receive);this.frame?.remove();if(this.url)URL.revokeObjectURL(this.url);this.nodes.clear();this.attributes.clear();}
 }

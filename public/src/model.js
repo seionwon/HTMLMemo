@@ -48,6 +48,18 @@ export function validateAnnotations(value) {
     return structuredClone(item);
   });
 }
+// Only preferences written inside this document's isolated runtime are kept.
+// Pairs avoid prototype/property access and keep untrusted storage bounded.
+export function cleanSourceStorage(value) {
+  if(!Array.isArray(value))return [];
+  const result=[],keys=new Set();let size=0;
+  for(const pair of value.slice(0,256)){
+    if(!Array.isArray(pair)||pair.length!==2||pair.some(v=>typeof v!=='string')||pair[0].length>1000||keys.has(pair[0]))continue;
+    size+=pair[0].length+pair[1].length;if(size>262144)break;
+    keys.add(pair[0]);result.push([...pair]);
+  }
+  return result;
+}
 export class History {
   constructor(initial = []) { this.entries = [structuredClone(initial)]; this.index = 0; }
   commit(value) { this.entries.splice(this.index + 1); this.entries.push(structuredClone(value)); if (this.entries.length > 101) this.entries.shift(); this.index = this.entries.length - 1; return this.current; }

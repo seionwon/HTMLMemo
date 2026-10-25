@@ -19,7 +19,7 @@ test('direct web reading accepts only HTTP(S), never credential-bearing or execu
 test('direct reading uses CORS without cookies or a proxy and preserves the redirected source/base for capture',async()=>{
   const calls=[];let captured;
   const result=await readWebPage('https://source.example/start',{fetchPage:async(url,options)=>{calls.push({url,options});return response('<html><head><base href="../assets/"><title>문서</title></head><body><p>내용</p></body></html>','text/html; charset=utf-8','https://source.example/book/page');},capture:async(doc,options)=>{captured={doc,options};return {title:doc.title,url:options.url};}});
-  assert.equal(result.url,'https://source.example/book/page');assert.equal(captured.doc.querySelectorAll('base').length,1);assert.equal(captured.doc.querySelector('base').getAttribute('href'),'https://source.example/assets/');
+  assert.equal(result.url,'https://source.example/book/page');assert.equal(captured.doc.querySelectorAll('base').length,1);assert.equal(captured.doc.querySelector('base').getAttribute('href'),'https://source.example/assets/');assert.equal(captured.options.baseURL,'https://source.example/assets/');
   assert.equal(calls[0].url,'https://source.example/start');assert.equal(calls[0].options.mode,'cors');assert.equal(calls[0].options.credentials,'omit');assert.equal(calls[0].options.referrerPolicy,'no-referrer');assert.ok(calls[0].options.signal);
   await captured.options.fetchResource('https://source.example/image.png');assert.equal(calls[1].options.credentials,'omit');
 });

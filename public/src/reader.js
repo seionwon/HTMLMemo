@@ -39,7 +39,7 @@ export class Reader {
           this.doc = this.frame.contentDocument;
           if (!this.doc?.body) throw new Error('HTML 문서를 표시하지 못했습니다.');
           if(this.metadata.execution?.allowScripts){
-            this.runtime=new IsolatedRuntime({host:this.host,doc:this.doc,source:parsed.file||new Blob([parsed.html],{type:'text/html;charset=utf-8'}),onError:error=>this.callbacks.onError?.(error)});
+            this.runtime=new IsolatedRuntime({host:this.host,doc:this.doc,source:parsed.file||new Blob([parsed.html],{type:'text/html;charset=utf-8'}),storage:this.metadata.view.sourceStorage,onStorage:entries=>{this.metadata.view.sourceStorage=entries;this.callbacks.onPosition?.();},onError:error=>this.callbacks.onError?.(error)});
             await this.runtime.start();
           }
           await this.adoptSavedMainFrame();
@@ -69,6 +69,7 @@ export class Reader {
             this.doc.removeEventListener('click',blockNavigation,true);this.doc.removeEventListener('keydown',blockNavigation,true);
             const openingScroll = {top:this.doc.defaultView.scrollY,left:this.doc.defaultView.scrollX};
             this.metadata = parsed.savedMetadata ? {...prepared.metadata,...parsed.metadata} : prepared.metadata; this.history = new History(this.metadata.annotations);
+            if(this.runtime)this.metadata.view.sourceStorage=this.runtime.storage;
             this.autoFit = this.metadata.view.autoFit !== false;
             this.initialHTML = prepared.html;
             this.naturalWidth = this.metadata.viewport.width;

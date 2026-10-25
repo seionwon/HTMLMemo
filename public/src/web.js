@@ -57,10 +57,11 @@ export async function readWebPage(url,{fetchPage=globalThis.fetch,capture=global
   const charset=resource.type.match(/charset\s*=\s*["']?([^\s;"']+)/i)?.[1]||header.match(/<meta\b[^>]*charset\s*=\s*["']?([\w-]+)/i)?.[1]||'utf-8';
   let html;try{html=new TextDecoder(charset).decode(resource.bytes);}catch{throw new Error('이 페이지의 문자 인코딩을 읽지 못했습니다. HTML 파일로 저장한 뒤 가져와주세요.');}
   const doc=new DOMParser().parseFromString(html,'text/html'),base=doc.createElement('base');
-  base.setAttribute('href',webURL(new URL(doc.querySelector('base[href]')?.getAttribute('href')||resource.url,resource.url).href));
+  const baseURL=webURL(new URL(doc.querySelector('base[href]')?.getAttribute('href')||resource.url,resource.url).href);
+  base.setAttribute('href',baseURL);
   for(const old of doc.querySelectorAll('base'))old.remove();doc.head.prepend(base);
   if(typeof capture!=='function')throw new Error('페이지 가져오기 기능을 준비하지 못했습니다. 앱을 새로고침해주세요.');
-  return capture(doc,{url:resource.url,fetchResource:value=>readResource(value,fetchPage)});
+  return capture(doc,{url:resource.url,baseURL,fetchResource:value=>readResource(value,fetchPage)});
 }
 export function pastedPage({text,title='붙여넣은 글',url=''}={}){
   if(typeof text!=='string'||!text.trim())throw new Error('가져올 글을 붙여넣어주세요.');

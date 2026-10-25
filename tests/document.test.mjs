@@ -193,6 +193,12 @@ test('capture embeds nested styles, image URLs, canvas and input state into one 
 test('capture reports resource failures without silently keeping network dependencies',async()=>{
   await import('../public/shared/capture.js');const doc=documentFor('<html><head><title>Failure</title><style>p{background:url(missing.svg)}</style></head><body><img src="missing.svg"><p>original text</p></body></html>');const snapshot=await HTMLMemoCapture.captureDocument(doc,{fetchResource:async()=>{throw new Error('blocked');}});assert.equal(snapshot.warnings.length,2);assert.equal(documentFor(snapshot.html).querySelector('img').hasAttribute('src'),false);assert.ok(!snapshot.html.includes('url(missing.svg)'));assert.ok(snapshot.html.includes('original text'));
 });
+test('fetched capture resolves assets and links against an explicit source base under a locked app base URI',async()=>{
+  await import('../public/shared/capture.js');
+  const doc=documentFor('<html><head><title>Remote capture</title><link rel="stylesheet" href="styles/main.css"><style>p{background:url(inline.svg)}</style></head><body><img src="picture.svg"><a href="chapter">Next</a></body></html>','https://app.invalid/HTMLMemo/'),fetched=[];
+  const snapshot=await HTMLMemoCapture.captureDocument(doc,{url:'https://source.example/book/page',baseURL:'https://source.example/assets/',fetchResource:async url=>{fetched.push(url);return {bytes:new TextEncoder().encode(url.endsWith('.css')?'p{background:url(../nested.svg)}':'<svg/>'),type:url.endsWith('.css')?'text/css':'image/svg+xml'};}});
+  assert.deepEqual(fetched.sort(),['inline.svg','nested.svg','picture.svg','styles/main.css'].map(path=>'https://source.example/assets/'+path).sort());assert.match(documentFor(snapshot.html).querySelector('img').getAttribute('src'),/^data:image\/svg\+xml;base64,/);assert.equal(documentFor(snapshot.html).querySelector('a').getAttribute('href'),'https://source.example/assets/chapter');assert.equal(snapshot.warnings.length,0);
+});
 
 test('local JavaScript mode preserves scripts, handlers and executable links through annotation export and reopen',()=>{
   const source='<html><head><title>Script book</title></head><body><div id="book">불러오는 중…</div><button onclick="renderBook()">Open</button><a href="javascript:renderBook()">Read</a><script>function renderBook(){document.getElementById("book").textContent="Ready";}renderBook();</script></body></html>';
