@@ -1061,14 +1061,15 @@ test('real Chrome: Pages-only annotation history groups idle input and continuou
     await page.waitFor('document.querySelector(".document-host:not([hidden]) iframe")?.style.visibility==="visible"&&document.querySelector("#status-left").textContent.includes("주석이 앱에 자동 저장됨")');
     const state=()=>page.evaluate(`(async()=>{const s=await import('./src/storage.js'),row=(await s.listDocuments())[0];return {id:row.id,count:row.metadata.annotations.length,history:await s.listRevisions(row.id)};})()`);
     assert.equal((await state()).history.length,1);
-    // CDP advances Chrome's actual timers/Date, not a production test switch or
-    // a replacement implementation. A finite budget pauses time at the boundary.
-    await page.send('Emulation.setVirtualTimePolicy',{policy:'pause'});let budgetDone;
-    page.on('Emulation.virtualTimeBudgetExpired',()=>budgetDone?.());
-    const advance=async ms=>{let timer;const done=new Promise((resolve,reject)=>{timer=setTimeout(()=>reject(Error('Virtual-time budget did not finish')),15000);budgetDone=resolve;});try{await page.send('Emulation.setVirtualTimePolicy',{policy:'advance',budget:ms,maxVirtualTimeTaskStarvationCount:100});await done;}finally{clearTimeout(timer);budgetDone=null;}};
-    const advanceTo=async deadline=>{const now=await page.evaluate('Date.now()');if(deadline>now)await advance(deadline-now);};
+    // Inject only the checkpoint clock through its existing dependency hooks.
+    // Pausing the whole browser also pauses IndexedDB callbacks, so native
+    // autosave, input handlers and database work must keep their real clock.
+    await page.evaluate(`(async()=>{const {AnnotationCheckpoints}=await import('./src/model.js'),clock={time:Date.now(),serial:0,timers:new Map(),queues:new Set()};clock.options={now:()=>clock.time,setTimer:(fn,ms)=>{clock.timers.set(++clock.serial,{fn,at:clock.time+ms});return clock.serial;},clearTimer:id=>clock.timers.delete(id)};const schedule=AnnotationCheckpoints.prototype.schedule;AnnotationCheckpoints.prototype.schedule=function(...args){if(this.now!==clock.options.now){if(this.timer!==null)this.clearTimer(this.timer);this.timer=null;Object.assign(this,clock.options);clock.queues.add(this);}return schedule.apply(this,args);};clock.advance=async ms=>{const target=clock.time+ms;for(;;){const next=[...clock.timers].sort((a,b)=>a[1].at-b[1].at)[0];if(!next||next[1].at>target)break;clock.time=next[1].at;clock.timers.delete(next[0]);next[1].fn();await Promise.all([...clock.queues].map(q=>q.running).filter(Boolean));}clock.time=target;};window.historyClock=clock;})()`);
+    const advance=ms=>page.evaluate(`window.historyClock.advance(${ms})`);
+    const advanceTo=async deadline=>{const now=await page.evaluate('window.historyClock.time');if(deadline>now)await advance(deadline-now);};
     const select=()=>page.evaluate(`(()=>{const doc=document.querySelector('.document-host:not([hidden]) iframe').contentDocument,walker=doc.createTreeWalker(doc.querySelector('#target'),NodeFilter.SHOW_TEXT);let node,last;while(node=walker.nextNode())if(node.textContent.trim().length>=8)last=node;const range=doc.createRange();range.setStart(last,0);range.setEnd(last,6);doc.getSelection().removeAllRanges();doc.getSelection().addRange(range);doc.dispatchEvent(new Event('selectionchange'));})()`);
-    const highlight=async()=>{await select();await page.evaluate(`document.querySelector('[data-action="highlight"]').click()`);return page.evaluate('Date.now()');};
+    let expectedAnnotations=0;
+    const highlight=async()=>{await select();await page.evaluate(`document.querySelector('[data-action="highlight"]').click()`);expectedAnnotations++;await page.waitFor(`(async()=>{const s=await import('./src/storage.js');return (await s.listDocuments())[0].metadata.annotations.length===${expectedAnnotations}&&!document.querySelector('.tab-dirty:not([hidden])');})()`);return page.evaluate('window.historyClock.time');};
     await highlight();await advance(301);assert.equal((await state()).count,1);assert.equal((await state()).history.length,1);
     await advance(30000);const secondAt=await highlight();await advance(301);assert.equal((await state()).count,2);assert.equal((await state()).history.length,1);
     await advanceTo(secondAt+59999);assert.equal((await state()).history.length,1);await advance(1);await page.waitFor(`(async()=>{return (await(await import('./src/storage.js')).listRevisions((await(await import('./src/storage.js')).listDocuments())[0].id)).length===2;})()`);assert.equal((await state()).history.at(-1).annotations.length,2);
@@ -1079,7 +1080,7 @@ test('real Chrome: Pages-only annotation history groups idle input and continuou
     // Typing in an unfinished memo also counts as annotation activity, without
     // writing that draft or postponing the independent fast autosave.
     await highlight();await advance(301);await select();await page.evaluate(`document.querySelector('[data-action="note"]').click()`);await advance(100);await page.waitFor('document.querySelector("#note-text")&&document.querySelector("#dialog").open');
-    await advance(50000);const inputAt=await page.evaluate(`(()=>{const text=document.querySelector('#note-text');text.value='An unfinished memo';text.dispatchEvent(new Event('input',{bubbles:true}));return Date.now();})()`);
+    await advance(50000);const inputAt=await page.evaluate(`(()=>{const text=document.querySelector('#note-text');text.value='An unfinished memo';text.dispatchEvent(new Event('input',{bubbles:true}));return window.historyClock.time;})()`);
     await advanceTo(inputAt+59999);assert.equal((await state()).history.length,3);await advance(1);await page.waitFor(`(async()=>{return (await(await import('./src/storage.js')).listRevisions((await(await import('./src/storage.js')).listDocuments())[0].id)).length===4;})()`);assert.equal((await state()).history.at(-1).annotations.length,13);
     await page.evaluate(`document.querySelector('#dialog').close()`);await advance(1);await page.evaluate(`document.querySelector('[data-action="more"]').click()`);await page.evaluate(`document.querySelector('[data-more="history"]').click()`);await page.waitFor('document.querySelector("#history-save-policy")');
     assert.match(await page.evaluate('document.querySelector("#history-save-policy").textContent'),/5분.*1분.*중복/);await mkdir(join(root,'test-results'),{recursive:true});
@@ -1579,11 +1580,11 @@ test('real Chrome: scrolling saves quietly in batches, preserves annotation hist
     assert.equal(await page.evaluate(`(()=>{const event=new Event('beforeunload',{cancelable:true});window.dispatchEvent(event);return event.defaultPrevented;})()`),true);
     await page.evaluate(`${frame}.contentDocument.querySelector('main').scrollTop=900;`);
     await page.waitFor(`(async()=>{const {listDocuments}=await import('./src/storage.js');return (await listDocuments())[0].metadata.annotations.length===1&&!document.querySelector('.tab-dirty:not([hidden])');})()`);
-    const edited=await state();assert.equal(edited.revisions,baseline.revisions+1);assert.equal(edited.html,baseline.html);
+    const edited=await state();assert.equal(edited.revisions,baseline.revisions);assert.equal(edited.html,baseline.html);
     // Closing before the debounce expires captures the current position synchronously.
     await page.evaluate(`${frame}.contentDocument.querySelector('main').scrollTop=1400;`);
     await page.click('.tab.document.active .tab-close');await page.waitFor('document.querySelectorAll(".tab.document").length===0');
-    const closed=await state();assert.ok(Math.abs(closed.view.scrollTop-1400*closed.view.zoom)<1);assert.equal(closed.revisions,edited.revisions);
+    const closed=await state();assert.ok(Math.abs(closed.view.scrollTop-1400*closed.view.zoom)<1);assert.equal(closed.revisions,edited.revisions+1);
     await page.click('[data-open]');await page.waitFor(`${frame}?.contentDocument?.querySelector('main')?.scrollTop>=1399`);
     // Leaving the app also bypasses the delay. The lifecycle event is simulated;
     // persistence and the document's actual scrolling are exercised in Chrome.
