@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {documentFor,installDOM} from './dom.mjs';
 import {savedMainFrame,parseHTML,sanitizeRuntimeHTML,LOCAL_CSP,SCRIPT_CSP} from '../public/src/document.js';
-import {IsolatedRuntime,needsIsolatedRuntime} from '../public/src/isolated-runtime.js';
+import {IsolatedRuntime,needsIsolatedRuntime,privateRuntimeSource} from '../public/src/isolated-runtime.js';
 import {cleanSourceStorage} from '../public/src/model.js';
 import {Reader} from '../public/src/reader.js';
 installDOM();
@@ -31,6 +31,11 @@ test('ordinary static HTML avoids an execution frame while scripts, handlers and
   assert.equal(needsIsolatedRuntime(documentFor(page('<p>Static</p><script type="application/json">{"value":1}</script>'))),false);
   for(const body of ['<script>run()</script>','<script src="data:text/javascript,run()"></script>','<script type="module">run()</script>','<button onclick="run()">Go</button>','<a href="java\nscript:run()">Go</a>'])assert.equal(needsIsolatedRuntime(documentFor(page(body))),true);
 });
+test('private notes outside the head and drawn exports never enter the source execution document',async()=>{
+  const html=page('<script id="htmlmemo-data" type="application/json">{"annotations":["private body note"]}</script><p><span data-htmlmemo-mark>Visible article</span></p><svg id="htmlmemo-annotation-layer"><text>private drawn note</text></svg><script>window.sourceStillRuns=true</script>').replace('<head>','<head><meta http-equiv="Content-Security-Policy" content="script-src \'none\'">'),source=new Blob([html]),clean=privateRuntimeSource(documentFor(html),source),text=await clean.text();
+  assert.doesNotMatch(text,/private body note|private drawn note|data-htmlmemo-mark|Content-Security-Policy/);assert.match(text,/Visible article/);assert.match(text,/sourceStillRuns/);assert.equal(await source.text(),html);
+  const ordinary=documentFor('<html><head><script id="htmlmemo-data" type="application/json">private head metadata</script></head><body><p>Ordinary original</p></body></html>');assert.strictEqual(privateRuntimeSource(ordinary,source),source,'ordinary sources stay immutable Blobs for streaming; head metadata is replaced separately');
+});
 test('hostile runtime HTML is inert, strips navigations and cannot supply app annotation metadata',()=>{
   const safe=sanitizeRuntimeHTML(page('<p onclick="attack()">Text</p><script>attack()</script><script id="htmlmemo-data" type="application/json">{"annotations":["fake"]}</script><meta http-equiv="refresh" content="0;url=https://remote.invalid"><iframe src="https://remote.invalid"></iframe><form action="https://remote.invalid"><input></form><a href="javascript:attack()">Link</a>'));
   assert.equal(safe.querySelector('script,meta[http-equiv],iframe,[onclick],form[action],a[href]'),null);assert.ok(!safe.querySelector('form').hasAttribute('inert'));assert.equal(safe.querySelector('p').textContent,'Text');
@@ -53,6 +58,14 @@ test('root and content attributes update loading/section state without modifying
   await a.r.accept({type:'patches',patches:[{id:'r1',kind:'attributes',tag:'html',attributes:[['data-htmlmemo-runtime-id','r1'],['data-reader-ready','true'],['onclick','attack()']]},{id:'r4',kind:'attributes',tag:'article',attributes:[['data-htmlmemo-runtime-id','r4'],['data-section','second']]}]});
   assert.equal(a.doc.documentElement.dataset.readerReady,'true');assert.equal(a.doc.documentElement.hasAttribute('onclick'),false);assert.ok(a.doc.documentElement.hasAttribute('data-htmlmemo-isolated-runtime'));assert.equal(a.doc.querySelector('article').dataset.section,'second');
   await a.r.accept({type:'patches',patches:[{id:'r4',kind:'attributes',tag:'article',attributes:[['data-section','third']]}]});assert.equal(a.doc.querySelector('article').getAttribute('data-htmlmemo-runtime-id'),'r4');assert.equal(a.doc.querySelector('article').dataset.section,'third');
+});
+test('late source disclosure updates cannot close groups expanded by the app for search results',async()=>{
+  const a=runtime();await a.r.accept({type:'initial',html:initial.replace('</article>','<details open data-htmlmemo-runtime-id="r6"><summary>Matches</summary></details></article>')});const group=a.doc.querySelector('details');group.setAttribute('data-htmlmemo-book-search-open','false');
+  await a.r.accept({type:'patches',patches:[{id:'r6',kind:'attributes',tag:'details',attributes:[]}]});assert.equal(group.hasAttribute('open'),true);assert.equal(group.getAttribute('data-htmlmemo-runtime-id'),'r6');
+});
+test('consumed book image payloads can be released without deleting volumes, notes or arbitrary nodes',async()=>{
+  const a=runtime(),asset=a.doc.createElement('script');asset.id='book-asset-0';asset.type='application/octet-stream';asset.textContent='original image bytes';a.doc.body.append(asset);await a.r.accept({type:'initial',html:initial,assets:['book-asset-0']});assert.ok(a.doc.getElementById('book-asset-0'));
+  await a.r.accept({type:'released-assets',ids:['book-asset-0','book-volume-0','htmlmemo-data','r4']});assert.equal(a.doc.getElementById('book-asset-0'),null);assert.ok(a.doc.getElementById('book-volume-0'));assert.match(a.doc.getElementById('htmlmemo-data').textContent,/original private notes/);assert.ok(a.doc.querySelector('article'));
 });
 test('unsupported RPC operations, malformed selectors and oversized patch lists cannot modify the reader',async()=>{
   const a=runtime();await a.r.accept({type:'initial',html:initial});const before=a.doc.documentElement.outerHTML;

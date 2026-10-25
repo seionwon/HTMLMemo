@@ -12,6 +12,18 @@ export function needsIsolatedRuntime(doc) {
 }
 const locator=node=>{const path=[];for(let n=node;n?.parentElement;n=n.parentElement)path.unshift([...n.parentElement.children].indexOf(n));return {tag:node?.localName,id:node?.id,anchor:node?.getAttribute?.('data-htmlmemo-anchor'),path};};
 const locate=(doc,key)=>{let node=key.id?doc.getElementById(key.id):null;if(!node&&/^(?:body|(?:n|js)\d+)$/.test(key.anchor))node=doc.querySelector('[data-htmlmemo-anchor="'+key.anchor+'"]');if(!node){node=doc.documentElement;for(const index of key.path)node=node?.children[index];}return node?.localName===key.tag?node:null;};
+export function privateRuntimeSource(doc,source) {
+  if(!doc.querySelector('#htmlmemo-annotation-layer,[data-htmlmemo-mark],[data-htmlmemo-search]')&&![...doc.querySelectorAll('#htmlmemo-data')].some(node=>node.parentElement!==doc.head))return source;
+  // Stream ordinary originals; unusual metadata locations and already drawn
+  // exports need a cleaned copy before any source code can read the document.
+  const clone=doc.documentElement.cloneNode(true);
+  clone.querySelectorAll('#htmlmemo-data,#htmlmemo-annotation-layer,#htmlmemo-annotation-style,[data-htmlmemo-ui]').forEach(node=>node.remove());
+  // The displayed document also contains our script-src 'none' prefix. The
+  // opaque runner gets its own restrictive policy before these cleaned bytes.
+  for(const node of clone.querySelectorAll('meta[http-equiv]'))if(/^content-security-policy$/i.test(node.getAttribute('http-equiv')))node.remove();
+  for(const node of [...clone.querySelectorAll('[data-htmlmemo-mark],[data-htmlmemo-search]')].reverse())node.replaceWith(...node.childNodes);
+  return new Blob(['<!doctype html>'+clone.outerHTML],{type:'text/html;charset=utf-8'});
+}
 
 // This function is serialized into the opaque child before ANY source script.
 // No app settings, annotations, tokens, storage handles or executable RPC enter it.
@@ -42,7 +54,7 @@ function bootstrap(channel,preferences) {
   const emit=value=>send({channel,...value},'*');
   const publish=()=>{
     timer=0;
-    if(!started){if(!document.body)return;const snapshot=html(document.documentElement);if(snapshot.length>MAX){emit({type:'error',message:'문서의 실행 결과가 안전한 표시 한도(64MB)를 넘었습니다.'});return;}emit({type:'initial',html:snapshot});started=true;dirty.clear();return;}
+    if(!started){if(!document.body)return;const snapshot=html(document.documentElement);if(snapshot.length>MAX){emit({type:'error',message:'문서의 실행 결과가 안전한 표시 한도(64MB)를 넘었습니다.'});return;}emit({type:'initial',html:snapshot,assets:[...document.querySelectorAll('script[id^="book-asset-"]')].map(node=>node.id)});started=true;dirty.clear();return;}
     const entries=[...dirty];dirty.clear();
     const roots=entries.filter(([node])=>node.isConnected&&!inert(node)&&!entries.some(([other,kind])=>kind==='content'&&other!==node&&other.contains(node)));
     const patches=[];let length=0;
@@ -52,13 +64,17 @@ function bootstrap(channel,preferences) {
       if(/^(?:file|password)$/i.test(node.type)||node.value.length>200000)continue;
       const id=key(node),state=JSON.stringify([node.value,!!node.checked,appliedInput]);if(controls.get(id)!==state){controls.set(id,state);patches.push({id,kind:'control',value:node.value,checked:!!node.checked,revision:appliedInput});}
     }
+    const released=[];for(const root of removed)if(!root.isConnected)for(const node of [root,...(root.querySelectorAll?.('*')||[])]){if(node.localName==='script'&&/^book-asset-\d{1,10}$/.test(node.id))released.push(node.id);nodes.delete(ids.get(node));controls.delete(ids.get(node));controlNodes.delete(node);}removed.clear();if(released.length)emit({type:'released-assets',ids:[...new Set(released)]});
     if(patches.length)emit({type:'patches',patches});
-    for(const root of removed)if(!root.isConnected)for(const node of [root,...(root.querySelectorAll?.('*')||[])]){nodes.delete(ids.get(node));controls.delete(ids.get(node));controlNodes.delete(node);}removed.clear();
   };
   const schedule=()=>{if(!timer)timer=setTimeout(publish,30);};
   new MutationObserver(records=>{
     if(!started)return;
-    for(const record of records){for(const node of record.removedNodes||[])if(node.nodeType===1)removed.add(node);const node=record.target.nodeType===1?record.target:record.target.parentElement;if(!node||inert(node))continue;const kind=record.type==='attributes'?'attributes':'content';if(dirty.get(node)!=='content')dirty.set(node,kind);}
+    for(const record of records){
+      for(const node of record.removedNodes||[])if(node.nodeType===1)removed.add(node);
+      if(record.type==='childList'&&[...record.addedNodes,...record.removedNodes].every(node=>node.nodeType===1&&node.localName==='script'))continue;
+      const node=record.target.nodeType===1?record.target:record.target.parentElement;if(!node||inert(node))continue;const kind=record.type==='attributes'?'attributes':'content';if(dirty.get(node)!=='content')dirty.set(node,kind);
+    }
     schedule();
   }).observe(document,{subtree:true,childList:true,characterData:true,attributes:true});
   const command=value=>{
@@ -103,15 +119,7 @@ export class IsolatedRuntime {
     this.originalHandlers=[];for(const node of this.doc.querySelectorAll('*')){const attributes=[...node.attributes].filter(a=>/^on/i.test(a.name)||/^(?:href|xlink:href)$/.test(a.name)&&/^javascript:/i.test(a.value.trim())).map(a=>[a.name,a.value]);if(attributes.length)this.originalHandlers.push({target:locator(node),attributes});}
     // Remove exported notes before the source gets to run. The original source
     // Blob remains immutable in storage; the app's live metadata never enters it.
-    let original=this.source;
-    if(this.doc.querySelector('#htmlmemo-annotation-layer,[data-htmlmemo-mark],[data-htmlmemo-search]')){
-      // Stream ordinary originals; only an already annotated HTML snapshot
-      // needs a cleaned clone so notes drawn into its SVG cannot reach code.
-      const clone=this.doc.documentElement.cloneNode(true);
-      clone.querySelectorAll('#htmlmemo-data,#htmlmemo-annotation-layer,#htmlmemo-annotation-style,[data-htmlmemo-ui]').forEach(node=>node.remove());
-      for(const node of [...clone.querySelectorAll('[data-htmlmemo-mark],[data-htmlmemo-search]')].reverse())node.replaceWith(...node.childNodes);
-      original=new Blob(['<!doctype html>'+clone.outerHTML],{type:'text/html;charset=utf-8'});
-    }
+    const original=privateRuntimeSource(this.doc,this.source);
     const source=await serializeBookSource(original,{version:1,annotations:[],bookmarks:[],view:{},execution:{allowScripts:false}});
     if(this.disposed)return;
     const script='('+bootstrap.toString()+')('+JSON.stringify(this.channel)+','+JSON.stringify(this.storage).replaceAll('<','\\u003c')+');';
@@ -156,13 +164,17 @@ export class IsolatedRuntime {
       if(!Array.isArray(value.entries)||value.entries.length>256||JSON.stringify(value.entries).length>600000)return;
       const entries=cleanSourceStorage(value.entries);if(JSON.stringify(entries)!==JSON.stringify(this.storage)){this.storage=entries;this.onStorage(entries);}return;
     }
+    if(value.type==='released-assets'){
+      if(Array.isArray(value.ids)&&value.ids.length<=10000)for(const id of value.ids)if(typeof id==='string'&&/^book-asset-\d{1,10}$/.test(id)){const node=this.doc.getElementById(id);if(node?.localName==='script'&&node.type==='application/octet-stream')node.remove();}return;
+    }
     if(value.type==='error'){this.fail(Error(String(value.message).slice(0,300)));return;}
     if(value.type==='initial'){
       if(!this.resolve||typeof value.html!=='string'||value.html.length>MAX_HTML)throw Error('유효하지 않은 문서 실행 결과입니다.');
       const next=sanitizeRuntimeHTML(value.html),payloads=[...this.doc.querySelectorAll('script[type="application/octet-stream"]')],metadata=this.doc.getElementById('htmlmemo-data');
       this.doc.head.replaceChildren(...[...next.head.childNodes].map(node=>this.doc.importNode(node,true)));this.doc.body.replaceChildren(...[...next.body.childNodes].map(node=>this.doc.importNode(node,true)));
       if(metadata)this.doc.head.append(metadata);
-      for(const node of payloads)this.doc.body.append(node);
+      const assets=Array.isArray(value.assets)&&value.assets.length<=10000?new Set(value.assets):null;
+      for(const node of payloads)if(!assets||!/^book-asset-\d{1,10}$/.test(node.id)||assets.has(node.id))this.doc.body.append(node);
       this.copyAttributes(this.doc.documentElement,next.documentElement);this.copyAttributes(this.doc.body,next.body);this.copyAttributes(this.doc.head,next.head);
       this.doc.documentElement.setAttribute('data-htmlmemo-isolated-runtime','');
       this.index(this.doc.documentElement);
@@ -198,6 +210,7 @@ export class IsolatedRuntime {
     const app=name=>name.startsWith('data-htmlmemo-')&&name!==ID,previous=this.attributes.get(target.getAttribute(ID)),next=new Map([...source.attributes].map(a=>[a.name,a.value]));
     for(const name of new Set([...(previous?.keys()||[...target.attributes].map(a=>a.name)),...next.keys()])){
       if(app(name)||previous&&previous.get(name)===next.get(name))continue;
+      if(name==='open'&&target.localName==='details'&&target.hasAttribute('data-htmlmemo-book-search-open'))continue;
       if(name==='style'&&previous){
         const old=this.doc.createElement('span');old.setAttribute('style',previous.get(name)||'');
         for(const property of new Set([...Array.from(old.style),...Array.from(source.style)]))if(!property.startsWith('--htmlmemo-')&&(old.style.getPropertyValue(property)!==source.style.getPropertyValue(property)||old.style.getPropertyPriority(property)!==source.style.getPropertyPriority(property))){const value=source.style.getPropertyValue(property);if(value)target.style.setProperty(property,value,source.style.getPropertyPriority(property));else target.style.removeProperty(property);}
