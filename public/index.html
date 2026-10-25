@@ -34,7 +34,6 @@
         </div>
         <div class="app-menu-group" role="group" aria-label="앱 관리">
           <button id="install-button" class="menu-button" role="menuitem" aria-label="앱 설치">앱 설치</button>
-          <button id="menu-folder" class="menu-button" role="menuitem"></button>
           <button id="settings-button" class="menu-button" role="menuitem" aria-label="설정"></button>
         </div>
         <div class="app-menu-group" role="group" aria-label="앱 정보">
@@ -54,7 +53,7 @@
           <div class="library-heading"><div><h2>내 서재 <span id="document-count">0</span></h2><p>저장한 페이지와 생각들이 모이는 곳</p></div><div class="library-controls"><div class="library-search"><span id="library-search-icon"></span><input id="library-filter" placeholder="제목, 주소로 찾기" aria-label="서재 검색"></div><select id="library-sort" aria-label="서재 정렬" title="저장일: 서재에 처음 저장한 시각. 최신순은 내림차순, 오래된순은 오름차순입니다."><option value="modified:desc">수정일 · 최신순</option><option value="modified:asc">수정일 · 오래된순</option><option value="created:desc">저장일 · 최신순</option><option value="created:asc">저장일 · 오래된순</option><option value="title:asc">제목 · 가나다순</option><option value="title:desc">제목 · 역순</option></select><div class="library-view-switch" role="group" aria-label="서재 보기 방식"><button id="library-card-view" class="library-view-button" type="button" data-library-view="card" aria-pressed="true"></button><button id="library-list-view" class="library-view-button" type="button" data-library-view="list" aria-pressed="false"></button></div></div></div>
           <div id="document-grid" class="document-grid"></div>
           <div id="empty-library" class="empty-library"><span class="empty-icon" id="empty-icon"></span><h3>첫 HTML 문서를 보관해보세요.</h3><p>웹에서 저장하거나, 가지고 있는 HTML 파일을 열면<br>이곳에서 계속 읽고 메모할 수 있어요.</p><button id="open-example" class="text-button">예제 문서로 도구 둘러보기 <span>→</span></button></div>
-          <footer class="library-footer"><span><i></i>문서는 이 기기에 저장됩니다.</span><button id="choose-folder" class="text-button">저장 폴더 연결 <span>↗</span></button></footer>
+          <footer class="library-footer"><span><i></i>문서는 이 기기에 저장됩니다.</span></footer>
         </div>
       </section>
       <section id="execution" class="execution-page" hidden>

@@ -174,7 +174,7 @@ test('the single header menu preserves library, web opening, HTML import, app de
   for(const id of ['#library-tab','#execution-tab','#save-page'])assert.ok(doc.querySelector(id).closest('header'));
   assert.deepEqual([...doc.querySelectorAll('#library .hero-actions button')].map(button=>button.id),['browse-start','hero-import','paste-button']);
   assert.ok(doc.querySelector('#hero-import').closest('#library'));assert.equal(doc.querySelector('#hero-import').textContent,'HTML 파일 가져오기');
-  assert.ok(doc.querySelector('#choose-folder'));assert.ok(doc.querySelector('#menu-folder'));
+  assert.equal(!!doc.querySelector('#choose-folder,#menu-folder'),false);
   assert.equal(doc.querySelector('#library-tab').getAttribute('aria-current'),'page');
   click('#execution-tab');
   assert.equal(doc.querySelector('#execution').hidden,false);
@@ -203,7 +203,7 @@ test('the dropdown opens without a modal and supports keyboard navigation, Escap
   const key=value=>{const event=new doc.defaultView.Event('keydown',{bubbles:true,cancelable:true});event.key=value;doc.activeElement.dispatchEvent(event);};
   assert.equal(menu.hidden,true);trigger.onclick();
   assert.equal(menu.hidden,false);assert.equal(trigger.getAttribute('aria-expanded'),'true');assert.ok(!doc.querySelector('#dialog').open);
-  assert.equal(doc.activeElement.id,'execution-tab');key('ArrowDown');assert.equal(doc.activeElement.id,'install-button');key('ArrowDown');assert.equal(doc.activeElement.id,'menu-folder');
+  assert.equal(doc.activeElement.id,'execution-tab');key('ArrowDown');assert.equal(doc.activeElement.id,'install-button');key('ArrowDown');assert.equal(doc.activeElement.id,'settings-button');
   key('End');assert.equal(doc.activeElement.id,'about-button');key('Home');assert.equal(doc.activeElement.id,'execution-tab');
   key('Escape');assert.equal(menu.hidden,true);assert.equal(trigger.getAttribute('aria-expanded'),'false');assert.equal(doc.activeElement,trigger);
   trigger.onclick();doc.body.dispatchEvent(new doc.defaultView.Event('pointerdown',{bubbles:true}));assert.equal(menu.hidden,true);
@@ -254,24 +254,31 @@ test('card and list views sort by both directions for saved date, modified date 
 test('folder setup guides users to a subfolder and saves a handle only after an explicit picker action',async()=>{
   const app=await fileApp(),doc=app.doc,selected={kind:'directory',name:'HTMLMemo'};let options,calls=0;
   app.context.window.showDirectoryPicker=async value=>{options=value;calls++;return selected;};
-  doc.querySelector('#choose-folder').onclick();assert.equal(calls,0);
+  doc.querySelector('#settings-button').onclick();doc.querySelector('#settings-folder').onclick();assert.equal(calls,0);
   assert.match(doc.querySelector('#dialog-content').textContent,/전용 하위 폴더/);assert.match(doc.querySelector('#dialog-content').textContent,/문서\/HTMLMemo/);
   doc.querySelector('#select-storage-folder').onclick();await new Promise(resolve=>setImmediate(resolve));
   assert.equal(calls,1);assert.equal(options.mode,'readwrite');assert.equal(options.startIn,'documents');assert.equal(options.id,'htmlmemo-storage-v2');
-  assert.equal(app.settings.get('folder'),selected);assert.equal(doc.querySelector('#dialog').open,false);assert.match(doc.querySelector('#choose-folder').textContent,/HTMLMemo 연결됨/);
+  assert.equal(app.settings.get('folder'),selected);assert.equal(doc.querySelector('#dialog').open,true);assert.equal(doc.querySelector('#dialog h2').textContent,'HTMLMemo 설정');assert.equal(doc.querySelector('#settings-folder').textContent,'변경');assert.match(doc.querySelector('#status-left').textContent,/HTMLMemo 자동 저장/);
 });
 
 test('folder cancellation, blocked access and failed persistence preserve the previous connection and allow retry',async()=>{
   const previous={kind:'directory',name:'Previous'},next={kind:'directory',name:'New HTMLMemo'},app=await fileApp({settings:[['folder',previous]]}),doc=app.doc;
   let fail='AbortError';app.context.window.showDirectoryPicker=async()=>{if(fail){const error=new Error('Blocked or cancelled');error.name=fail;throw error;}return next;};
-  doc.querySelector('#menu-folder').onclick();
+  doc.querySelector('#settings-button').onclick();doc.querySelector('#settings-folder').onclick();
   for(const name of ['AbortError','NotAllowedError']){
     fail=name;doc.querySelector('#select-storage-folder').onclick();await new Promise(resolve=>setImmediate(resolve));
     assert.equal(app.settings.get('folder'),previous);assert.equal(doc.querySelector('#dialog').open,true);assert.equal(doc.querySelector('#select-storage-folder').disabled,false);
-    assert.match(doc.querySelector('#folder-connection-status').textContent,/하위/u);assert.match(doc.querySelector('#choose-folder').textContent,/Previous 연결됨/);
+    assert.match(doc.querySelector('#folder-connection-status').textContent,/하위/u);assert.match(doc.querySelector('#status-left').textContent,/Previous 자동 저장/);
   }
   fail='';const set=app.settings.set.bind(app.settings);app.settings.set=()=>{throw Error('Storage unavailable');};
   doc.querySelector('#select-storage-folder').onclick();await new Promise(resolve=>setImmediate(resolve));assert.equal(app.settings.get('folder'),previous);assert.match(doc.querySelector('#folder-connection-status').textContent,/저장하지 못했습니다/);
   app.settings.set=set;doc.querySelector('#select-storage-folder').onclick();await new Promise(resolve=>setImmediate(resolve));
-  assert.equal(app.settings.get('folder'),next);assert.equal(doc.querySelector('#dialog').open,false);assert.match(doc.querySelector('#choose-folder').textContent,/New HTMLMemo 연결됨/);
+  assert.equal(app.settings.get('folder'),next);assert.equal(doc.querySelector('#dialog').open,true);assert.equal(doc.querySelector('#dialog h2').textContent,'HTMLMemo 설정');assert.match(doc.querySelector('#status-left').textContent,/New HTMLMemo 자동 저장/);
+});
+
+test('settings is the only folder connection entry and unsupported browsers retain local storage',async()=>{
+  const app=await fileApp(),doc=app.doc;
+  assert.equal(!!doc.querySelector('#choose-folder,#menu-folder'),false);assert.equal(doc.querySelector('.library-footer').textContent,'문서는 이 기기에 저장됩니다.');
+  doc.querySelector('#settings-button').onclick();assert.equal(doc.querySelectorAll('#settings-folder').length,1);assert.equal(doc.querySelector('#settings-folder').textContent,'폴더 연결');
+  doc.querySelector('#settings-folder').onclick();await new Promise(resolve=>setImmediate(resolve));assert.match(doc.querySelector('#toast').textContent,/외부 폴더 연결을 지원하지 않습니다/);assert.equal(doc.querySelector('#dialog h2').textContent,'HTMLMemo 설정');assert.equal(app.settings.get('folder'),undefined);
 });
