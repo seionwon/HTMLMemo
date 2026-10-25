@@ -92,7 +92,7 @@ test('more tools contain no duplicated toolbar, sidebar, bookmark or export acti
  a.context.toolAction('more');a.doc.querySelector('[data-more=sidebar]').onclick();assert.deepEqual(a.calls.search,['search']);
  a.doc.querySelector('#sidebar').hidden=false;a.context.toolAction('more');assert.deepEqual(ids(),expected,'an already open panel needs no duplicate entry');
  a.doc.querySelector('#sidebar').hidden=true;a.r.documentSidebarUI=a.doc.createElement('section');a.doc.body.append(a.r.documentSidebarUI);a.context.toolAction('more');assert.deepEqual(ids(),expected,'native books use their own sidebar');
- assert.ok(a.doc.querySelector('#save-page'));assert.ok(a.doc.querySelector('#app-menu #settings-button'));
+ assert.ok(a.doc.querySelector('#save-page'));assert.ok(a.doc.querySelector('.addressbar #settings-button'));
 });
 test('toolbar groups keep area and text variants in one tool with repeat-click, keyboard selection and no wider toolbar',()=>{
  const a=app();Object.assign(a.r,{tool:'select',zoom:1,color:'#edcf67',history:{canUndo:false,canRedo:false}});

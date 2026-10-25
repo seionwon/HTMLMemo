@@ -12,7 +12,7 @@ const saveCode=source.slice(source.indexOf('async function savePage('),source.in
 const selectCode=source.slice(source.indexOf('async function selectTab('),source.indexOf('function updateChrome('));
 const tabsCode=source.slice(source.indexOf('function renderTabs('),source.indexOf('function focusAddress('));
 function app(){
- const doc=new DOMParser().parseFromString('<html><body><div id="tabs"></div><button id="library-tab"></button><button id="execution-tab"></button><div id="workspaces"></div></body></html>','text/html');
+ const doc=new DOMParser().parseFromString('<html><body><div id="tabs"></div><button id="library-tab"></button><div id="workspaces"></div></body></html>','text/html');
  const saved=[],help=[],notices=[],pastes=[],opened=[];let direct=0,captures=0;
  const window={open(){const target={closed:false,opener:window,document:{createElement:n=>{const node=doc.createElement(n);node.click=()=>target.location.href=node.href;return node;},body:doc.createElement('body')},location:{href:'about:blank'},focus(){this.focused=(this.focused||0)+1;}};opened.push(target);return target;}};
  const context=vm.createContext({document:doc,window,URL,location:new URL('https://app.example/'),BrowserTabs,isWebSearch,$:(s,r=doc)=>$(s,r),$$:(s,r=doc)=>$$(s,r),icon,esc:escapeHTML,normalizeURL,displayHost,uid,

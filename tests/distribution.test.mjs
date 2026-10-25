@@ -80,9 +80,10 @@ async function fileApp({address='file:///Users/beginner/HTMLMemo.html',navigator
   const context=vm.createContext({document:doc,window,indexedDB,localStorage:{getItem:key=>local.get(key)??null,setItem:(key,value)=>local.set(key,value)},location:new URL(address),navigator:{onLine:false,storage:{},...navigator},URL:LocalURL,Blob,File,crypto,TextEncoder,TextDecoder,Uint8Array,DataView,atob,btoa,structuredClone,Event,innerWidth:1200,innerHeight:850,matchMedia:()=>({matches:false}),setInterval(){},setTimeout(fn,ms){if(ms===800)queueMicrotask(fn);return 1;},clearTimeout(){},requestAnimationFrame:fn=>fn(),fetch:()=>{throw new Error('An embedded app must not fetch a server');}});
   const script=[...doc.querySelectorAll('script')].find(el=>el.type!=='application/json');new vm.Script(script.textContent).runInContext(context);await new Promise(resolve=>setImmediate(resolve));assert.match(doc.querySelector('#status-left').textContent,/개의 문서/);return {doc,context,blobs,local,settings:stores.get('settings'),emit:(name,event)=>events.get(name)?.forEach(fn=>fn(event))};
 }
+function openExecution(app){app.doc.querySelector('#settings-button').onclick();app.doc.querySelector('#settings-execution').onclick();}
 test('execution shares only the canonical URL, with no app package or installation download',async()=>{
   const copied=[];const app=await fileApp({address:'https://preview.example/app/?private=secret#note',navigator:{clipboard:{writeText:async value=>copied.push(value)}}});
-  assert.equal(app.doc.querySelector('#save-page').disabled,true);app.doc.querySelector('#execution-tab').onclick();
+  assert.equal(app.doc.querySelector('#save-page').disabled,true);openExecution(app);
   assert.equal(app.doc.querySelector('#share-url').value,PUBLIC_APP_URL);assert.equal(app.doc.querySelector('#shared-app-link').getAttribute('href'),PUBLIC_APP_URL);
   for(const selector of ['#pages-package','#delivery-package','#pages-status'])assert.equal(app.doc.querySelector(selector),null);
   app.doc.querySelector('#share-app').onclick();await new Promise(resolve=>setImmediate(resolve));
@@ -99,7 +100,7 @@ test('MHTML import filters, installed file handlers and offline packaging includ
 });
 test('clipboard absence or denial selects the visible URL and restores the share controls',async()=>{
   for(const navigator of [{},{clipboard:{writeText:async()=>{throw new Error('Clipboard denied');}}}]){
-    const app=await fileApp({navigator});app.doc.querySelector('#execution-tab').onclick();let selected=0;
+    const app=await fileApp({navigator});openExecution(app);let selected=0;
     app.doc.querySelector('#share-url').select=()=>selected++;app.doc.querySelector('#share-app').onclick();
     await new Promise(resolve=>setImmediate(resolve));assert.equal(selected,1);assert.match(app.doc.querySelector('#share-status').textContent,/직접 복사/);
     assert.equal(app.doc.querySelector('#share-app').disabled,false);assert.equal(app.doc.querySelector('#save-page').disabled,false);assert.equal(app.blobs.length,0);
@@ -107,17 +108,17 @@ test('clipboard absence or denial selects the visible URL and restores the share
 });
 test('concurrent copy clicks request the canonical URL only once and recover both buttons',async()=>{
   let finish,calls=0;const app=await fileApp({navigator:{clipboard:{writeText:()=>{calls++;return new Promise(resolve=>finish=resolve);}}}});
-  app.doc.querySelector('#execution-tab').onclick();const share=app.doc.querySelector('#share-app'),toolbar=app.doc.querySelector('#save-page');
+  openExecution(app);const share=app.doc.querySelector('#share-app'),toolbar=app.doc.querySelector('#save-page');
   share.onclick();toolbar.onclick();assert.equal(calls,1);assert.equal(share.disabled,true);assert.equal(toolbar.disabled,true);
   finish();await new Promise(resolve=>setImmediate(resolve));assert.equal(share.disabled,false);assert.equal(toolbar.disabled,false);assert.equal(app.blobs.length,0);
 });
 test('the real app uses the same button for native installation and iPhone Chrome instructions',async()=>{
   const desktop=await fileApp({address:PUBLIC_APP_URL});let prompted=0;
-  desktop.doc.querySelector('#execution-tab').onclick();assert.equal(desktop.doc.querySelector('#execution').hidden,false);
+  openExecution(desktop);assert.equal(desktop.doc.querySelector('#execution').hidden,false);
   desktop.emit('beforeinstallprompt',{preventDefault(){},prompt:async()=>prompted++,userChoice:Promise.resolve({outcome:'accepted'})});
   desktop.doc.querySelector('#execution-install').onclick();await new Promise(resolve=>setImmediate(resolve));assert.equal(prompted,1);
   desktop.emit('appinstalled');assert.equal(desktop.doc.querySelector('#execution-install').textContent,'설치 완료');
-  const iphone=await fileApp({address:PUBLIC_APP_URL,navigator:{userAgent:'iPhone CriOS/140'}});iphone.doc.querySelector('#execution-tab').onclick();assert.equal(iphone.doc.querySelector('#execution-install').hidden,false);
+  const iphone=await fileApp({address:PUBLIC_APP_URL,navigator:{userAgent:'iPhone CriOS/140'}});openExecution(iphone);assert.equal(iphone.doc.querySelector('#execution-install').hidden,false);
   iphone.doc.querySelector('#execution-install').onclick();await new Promise(resolve=>setImmediate(resolve));assert.match(iphone.doc.querySelector('#dialog-content').textContent,/Chrome/);assert.match(iphone.doc.querySelector('#dialog-content').textContent,/공유/);assert.match(iphone.doc.querySelector('#dialog-content').textContent,/홈 화면에 추가/);
 });
 test('execution is the only installation entry and describes both immediate URL use and optional app installation',async()=>{
@@ -128,13 +129,13 @@ test('execution is the only installation entry and describes both immediate URL 
     assert.equal(html.querySelector('#execution h1').innerHTML,'URL로 바로 쓰고,<br>앱으로도 설치.');
     assert.match(html.querySelector('.execution-description').textContent,/필요하면 앱으로 설치/);
   }
-  assert.equal(doc.querySelector('#execution').hidden,true);doc.querySelector('#execution-tab').onclick();assert.equal(doc.querySelector('#execution').hidden,false);
+  assert.equal(doc.querySelector('#execution').hidden,true);openExecution(app);assert.equal(doc.querySelector('#execution').hidden,false);
   assert.equal(!!doc.querySelector('#dialog').open,false);assert.equal(doc.querySelector('#execution-install').textContent,'앱 설치');assert.equal(doc.querySelector('#execution-install').getAttribute('aria-label'),'앱 설치');
   doc.querySelector('#execution-install').onclick();await new Promise(resolve=>setImmediate(resolve));assert.match(doc.querySelector('#dialog-content').textContent,/페이지를 앱으로 설치/);
   assert.equal(doc.querySelector('#share-url').value,PUBLIC_APP_URL);assert.equal(app.blobs.length,0);
 });
 test('the single execution installation button restores its state after dismissal or failure and can retry',async()=>{
-  const app=await fileApp({address:PUBLIC_APP_URL}),doc=app.doc;doc.querySelector('#execution-tab').onclick();const button=doc.querySelector('#execution-install');let finish,calls=0;
+  const app=await fileApp({address:PUBLIC_APP_URL}),doc=app.doc;openExecution(app);const button=doc.querySelector('#execution-install');let finish,calls=0;
   app.emit('beforeinstallprompt',{preventDefault(){},prompt:async()=>calls++,userChoice:new Promise(resolve=>finish=resolve)});
   button.onclick();assert.equal(calls,1);assert.equal(button.disabled,true);assert.equal(button.textContent,'설치 확인 중…');assert.equal(button.getAttribute('aria-label'),'설치 확인 중…');
   button.onclick();assert.equal(calls,1);finish({outcome:'dismissed'});await new Promise(resolve=>setImmediate(resolve));assert.equal(button.disabled,false);assert.equal(button.textContent,'앱 설치');assert.match(doc.querySelector('#toast').textContent,/취소/);
@@ -181,59 +182,65 @@ test('compact library escapes full titles and sources and keeps unknown sizes an
 });
 
 
-test('the single header menu preserves library, web opening, HTML import, app delivery and offline About',async()=>{
+test('the settings icon preserves library, web opening, HTML import, app delivery and offline About without a menu',async()=>{
   const {doc}=await fileApp();
   const click=id=>doc.querySelector(id).onclick(new Event('click'));
   assert.equal(doc.querySelector('.desk-nav,#desk-resizer,.chrome-topline,#home-button'),null);
-  assert.equal(doc.querySelectorAll('#app-menu-button').length,1);
+  assert.equal(!!doc.querySelector('#app-menu-button,#app-menu,#execution-tab,#about-button'),false);
+  assert.equal(doc.querySelectorAll('#settings-button').length,1);
   assert.equal(doc.querySelector('#tabs').getAttribute('role'),'tablist');
   assert.ok(doc.querySelector('#tabs').closest('.addressbar'));
   assert.equal(doc.querySelector('#tabs').closest('#app-menu'),null);
   assert.equal(doc.querySelector('#open-tabs-menu'),null);
-  for(const id of ['#execution-tab','#settings-button','#about-button'])assert.ok(doc.querySelector(id).closest('#app-menu'));
+  assert.ok(doc.querySelector('#settings-button').closest('.addressbar'));
   assert.equal(doc.querySelector('#install-button'),null);
   assert.equal(!!doc.querySelector('#app-menu #web-help-button'),false);assert.ok(doc.querySelector('#library #web-help-button'));
   assert.equal(!!doc.querySelector('#new-tab,#app-menu #paste-button'),false);
   assert.equal(doc.querySelector('#import-button'),null);
   assert.equal(doc.querySelector('#save-page').previousElementSibling.id,'library-tab');
   assert.equal(doc.querySelector('#library-tab').textContent,'');assert.equal(doc.querySelector('#library-tab').title,'내 서재');
-  for(const id of ['#library-tab','#execution-tab','#save-page'])assert.ok(doc.querySelector(id).closest('header'));
+  for(const id of ['#library-tab','#settings-button','#save-page'])assert.ok(doc.querySelector(id).closest('header'));
   assert.deepEqual([...doc.querySelectorAll('#library .hero-actions button')].map(button=>button.id),['browse-start','hero-import','paste-button']);
   assert.ok(doc.querySelector('#hero-import').closest('#library'));assert.equal(doc.querySelector('#hero-import').textContent,'HTML 파일 가져오기');
   assert.equal(!!doc.querySelector('#choose-folder,#menu-folder'),false);
   assert.equal(doc.querySelector('#library-tab').getAttribute('aria-current'),'page');
-  click('#execution-tab');
+  click('#settings-button');
+  for(const id of ['#settings-execution','#settings-about'])assert.ok(doc.querySelector(id).closest('#dialog'));
+  click('#settings-execution');
+  assert.equal(doc.querySelector('#dialog').open,false);
   assert.equal(doc.querySelector('#execution').hidden,false);
   assert.equal(doc.querySelector('#library').hidden,true);
-  assert.equal(doc.querySelector('#execution-tab').getAttribute('aria-current'),'page');
   assert.equal(doc.querySelector('#library-tab').getAttribute('aria-current'),'false');
   let focused=false;doc.querySelector('#address').focus=()=>focused=true;
   click('#library-tab');click('#browse-start');assert.equal(focused,true);
   assert.equal(doc.querySelector('#library').hidden,false);
   assert.equal(doc.querySelector('#execution').hidden,true);
-  click('#execution-tab');click('#library-tab');
+  openExecution({doc});click('#library-tab');
   assert.equal(doc.querySelector('#library').hidden,false);
   assert.equal(doc.querySelector('#library-tab').getAttribute('aria-current'),'page');
   let picked=false;doc.querySelector('#file-input').click=()=>picked=true;
   await click('#hero-import');assert.equal(picked,true);
   assert.equal(doc.querySelector('#save-page').textContent,'');assert.equal(doc.querySelector('#save-page').title,'페이지 저장');
-  click('#about-button');assert.equal(doc.querySelector('#dialog').open,true);
+  click('#settings-button');click('#settings-about');assert.equal(doc.querySelector('#dialog').open,true);
   assert.equal(doc.querySelector('.about-brand h3').textContent,'HTMLMemo');
   const {version}=JSON.parse(await readFile(new URL('../package.json',import.meta.url),'utf8'));
   assert.equal(doc.querySelector('#app-version').textContent,version);
   assert.match(doc.querySelector('.about-brand img').getAttribute('src'),/^data:image\/svg\+xml;base64,/);
 });
 
-test('the dropdown opens without a modal and supports keyboard navigation, Escape and outside click',async()=>{
-  const {doc}=await fileApp(),menu=doc.querySelector('#app-menu'),trigger=doc.querySelector('#app-menu-button');
-  const key=value=>{const event=new doc.defaultView.Event('keydown',{bubbles:true,cancelable:true});event.key=value;doc.activeElement.dispatchEvent(event);};
-  assert.equal(menu.hidden,true);trigger.onclick();
-  assert.equal(menu.hidden,false);assert.equal(trigger.getAttribute('aria-expanded'),'true');assert.ok(!doc.querySelector('#dialog').open);
-  assert.equal(doc.activeElement.id,'execution-tab');key('ArrowDown');assert.equal(doc.activeElement.id,'settings-button');
-  key('End');assert.equal(doc.activeElement.id,'about-button');key('Home');assert.equal(doc.activeElement.id,'execution-tab');
-  key('Escape');assert.equal(menu.hidden,true);assert.equal(trigger.getAttribute('aria-expanded'),'false');assert.equal(doc.activeElement,trigger);
-  trigger.onclick();doc.body.dispatchEvent(new doc.defaultView.Event('pointerdown',{bubbles:true}));assert.equal(menu.hidden,true);
-  trigger.onclick();doc.querySelector('#execution-tab').click();assert.equal(menu.hidden,true);assert.equal(doc.querySelector('#execution').hidden,false);
+test('settings is a single labelled icon and both relocated actions preserve existing documents and preferences',async()=>{
+  const record={id:'kept-settings',title:'기존 문서',name:'kept.html',created:1234,modified:5678,metadata:{annotations:[{id:'note',text:'보존할 주석'}],bookmarks:[{id:'mark'}]}},before=structuredClone(record),app=await fileApp({documents:[record]}),{doc}=app,trigger=doc.querySelector('#settings-button');
+  assert.equal(trigger.textContent,'');assert.ok(trigger.querySelector('svg'));assert.equal(trigger.title,'설정');assert.equal(trigger.getAttribute('aria-label'),'설정');assert.equal(trigger.getAttribute('aria-haspopup'),'dialog');assert.equal(trigger.getAttribute('aria-controls'),'dialog');assert.equal(trigger.getAttribute('aria-expanded'),null);
+  assert.equal(trigger.previousElementSibling.id,'save-page');assert.equal(trigger.nextElementSibling,null);
+  trigger.onclick();assert.equal(doc.querySelector('#dialog').open,true);assert.equal(doc.querySelector('#dialog h2').textContent,'HTMLMemo 설정');
+  const group=doc.querySelector('.settings-app-actions');assert.equal(group.previousElementSibling.className,'dialog-heading');
+  assert.deepEqual([...group.querySelectorAll('button')].map(button=>button.textContent.trim()),['실행과 앱 전달','About']);
+  for(const button of group.querySelectorAll('button')){assert.equal(button.getAttribute('type'),'button');assert.equal(button.getAttribute('role'),null);assert.ok(button.querySelector('svg'));}
+  doc.querySelector('#settings-about').onclick();assert.equal(doc.querySelector('#dialog h2').textContent,'About');assert.ok(doc.activeElement.hasAttribute('data-dialog-close'));doc.querySelector('#dialog [data-dialog-close]').onclick();
+  assert.equal(doc.querySelector('#dialog').open,false);assert.equal(doc.querySelector('#library').hidden,false);
+  openExecution(app);assert.equal(doc.querySelector('#dialog').open,false);assert.equal(doc.querySelector('#execution').hidden,false);assert.equal(doc.activeElement,doc.querySelector('#execution h1'));
+  doc.querySelector('#library-tab').onclick();assert.deepEqual(record,before);assert.equal(doc.querySelectorAll('.document-card').length,1);
+  trigger.onclick();assert.ok(doc.querySelector('#appearance'));assert.ok(doc.querySelector('#settings-folder'));assert.ok(doc.querySelector('#settings-save'));assert.equal(doc.querySelectorAll('#settings-execution,#settings-about').length,2);
 });
 
 test('library text paste is a single ordinary action that opens the editor and cancels without changing saved notes',async()=>{

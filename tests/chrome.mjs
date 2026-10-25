@@ -37,10 +37,11 @@ export async function launchChrome(){
   return {page,errors,process:child,profile,async close(){await page.close();child.kill('SIGTERM');await Promise.race([new Promise(resolve=>child.once('exit',resolve)),delay(5000)]);if(child.exitCode===null)child.kill('SIGKILL');await rm(profile,{recursive:true,force:true,maxRetries:5,retryDelay:100});}};
 }
 
-// The app keeps document switching and closing inside its single header menu.
-export async function clickAppMenu(page,selector){
-  if(await page.evaluate('document.querySelector("#app-menu").hidden'))await page.click('#app-menu-button');
-  await page.click(selector);
+// Settings is opened directly from the icon; app delivery and About live inside it.
+export async function clickSettingsAction(page,selector){
+  if(!await page.evaluate('document.querySelector("#dialog").open&&!!document.querySelector("#appearance")'))await page.click('#settings-button');
+  await page.waitFor('document.querySelector("#dialog").open&&!!document.querySelector("#settings-execution")');
+  if(selector!=='#settings-button')await page.click(selector);
 }
 
 export async function clickLibraryImport(page){

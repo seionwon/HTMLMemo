@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { root, prepareAssets } from '../scripts/assets.mjs';
 import { createServer } from '../scripts/server.mjs';
-import { launchChrome, clickAppMenu, clickLibraryImport } from './chrome.mjs';
+import { launchChrome, clickSettingsAction, clickLibraryImport } from './chrome.mjs';
 import { FORMAT_VERSION } from '../public/src/model.js';
 import { deflateRawSync } from 'node:zlib';
 const appVersion=JSON.parse(await readFile(new URL('../package.json',import.meta.url),'utf8')).version;
@@ -463,7 +463,7 @@ test('real Chrome: palette controls stay above palettes and retain their setting
     for(const width of [1280,390,320]){
       await page.send('Emulation.setDeviceMetricsOverride',{width,height:800,deviceScaleFactor:1,mobile:width<600});
       if(width===390){
-        await clickAppMenu(page,'#settings-button');await page.waitFor('document.querySelector("#appearance")');
+        await clickSettingsAction(page,'#settings-button');await page.waitFor('document.querySelector("#appearance")');
         await page.evaluate(`(()=>{const n=document.querySelector('#appearance');n.value='dark';n.dispatchEvent(new Event('change',{bubbles:true}));})()`);
         await page.click('#dialog [data-dialog-close]');assert.equal(await page.evaluate('document.documentElement.dataset.theme'),'dark');
       }
@@ -588,7 +588,7 @@ test('real Chrome: toolbar mode groups remove semantic duplicates and keep area,
       // The app defaults to an explicit light theme, so a media override alone
       // would silently leave every screenshot light. Exercise the real setting.
       const theme=width<600?'dark':'light';
-      await clickAppMenu(page,'#settings-button');await page.waitFor('document.querySelector("#dialog").open&&document.querySelector("#appearance")');
+      await clickSettingsAction(page,'#settings-button');await page.waitFor('document.querySelector("#dialog").open&&document.querySelector("#appearance")');
       await page.evaluate(`(()=>{const appearance=document.querySelector('#appearance');appearance.value=${JSON.stringify(theme)};appearance.dispatchEvent(new Event('change',{bubbles:true}));})()`);
       await page.click('#dialog [data-dialog-close]');assert.equal(await page.evaluate('document.documentElement.dataset.theme'),theme);
       for(const [group,variant] of [['highlight','area'],['underline','area-underline'],['note','text']])await choose(group,variant);
@@ -699,7 +699,7 @@ test('real Chrome: Pages-only URL use, safe text import, app tabs and optional i
     await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
     await page.navigate(url);await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
     assert.equal(await page.evaluate('!!document.querySelector(\'meta[name="htmlmemo-app"],#connection-button,#execution-chrome\')'),false);
-    await clickAppMenu(page,'#execution-tab');
+    await clickSettingsAction(page,'#settings-execution');
     assert.equal(await page.evaluate('document.querySelector("#install-button")'),null);
     assert.equal(await page.evaluate('document.querySelectorAll("#execution-install").length'),1);
     assert.match(await page.evaluate('document.querySelector("#execution h1").innerText'),/URL로 바로 쓰고,\s*앱으로도 설치\./);
@@ -712,6 +712,16 @@ test('real Chrome: Pages-only URL use, safe text import, app tabs and optional i
       await page.evaluate('document.querySelector("#execution").scrollTop=0');
       assert.equal(await page.evaluate('(()=>{const h=document.querySelector("#execution h1"),b=document.querySelector("#execution-install"),r=h.getBoundingClientRect(),s=b.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&h.scrollWidth<=h.clientWidth&&s.left>=0&&s.right<=innerWidth&&s.width>0&&!b.disabled&&b.getAttribute("aria-label")==="앱 설치";})()'),true);
       await writeFile(join(root,`test-results/pages-only-execution-${width}.png`),await page.screenshot());
+      assert.deepEqual(await page.evaluate('(()=>{const b=document.querySelector("#settings-button"),r=b.getBoundingClientRect();return {text:b.textContent,title:b.title,label:b.getAttribute("aria-label"),icon:!!b.querySelector("svg"),width:r.width,height:r.height,last:b.parentElement.lastElementChild===b,oldMenu:!!document.querySelector("#app-menu,#app-menu-button")};})()'),{text:'',title:'설정',label:'설정',icon:true,width:26,height:24,last:true,oldMenu:false});
+      await page.click('#settings-button');await page.waitFor('document.querySelector("#dialog").open&&!!document.querySelector("#settings-execution")');
+      const settings=await page.evaluate('(()=>{const d=document.querySelector("#dialog"),r=d.getBoundingClientRect();return {fits:r.left>=0&&r.right<=innerWidth&&r.height<=innerHeight,labels:[...d.querySelectorAll(".settings-app-actions button")].map(b=>b.textContent.trim()),clickable:[...d.querySelectorAll(".settings-app-actions button")].every(b=>{const r=b.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight&&b.contains(document.elementFromPoint(r.left+r.width/2,r.top+r.height/2));})};})()');
+      assert.deepEqual(settings,{fits:true,labels:['실행과 앱 전달','About'],clickable:true});await writeFile(join(root,`test-results/pages-only-settings-${width}.png`),await page.screenshot());
+      await page.evaluate('document.querySelector("#settings-about").focus()');await page.send('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13,text:'\r',unmodifiedText:'\r'});await page.send('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
+      await page.waitFor(`document.querySelector("#dialog").open&&document.querySelector("#app-version")?.textContent===${JSON.stringify(appVersion)}`);assert.equal(await page.evaluate('document.querySelector("#dialog h2").textContent'),'About');assert.equal(await page.evaluate('document.activeElement.matches("#dialog [data-dialog-close]")'),true);
+      if(width===320)await writeFile(join(root,'test-results/pages-only-about-320.png'),await page.screenshot());
+      await page.send('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});await page.send('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});await page.waitFor('!document.querySelector("#dialog").open&&document.activeElement.id==="settings-button"');
+      await page.send('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13,text:'\r',unmodifiedText:'\r'});await page.send('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});await page.waitFor('document.querySelector("#dialog").open&&!!document.querySelector("#settings-execution")');
+      await page.click('#settings-execution');await page.waitFor('!document.querySelector("#dialog").open&&!document.querySelector("#execution").hidden&&document.activeElement===document.querySelector("#execution h1")');
     }
     // Exercise the retained button without invoking a real OS installer.
     await page.evaluate('(()=>{window.installPromptCalls=0;const event=new Event("beforeinstallprompt",{cancelable:true});event.prompt=async()=>{window.installPromptCalls++;};event.userChoice=new Promise(resolve=>window.finishInstallation=resolve);window.dispatchEvent(event);document.querySelector("#execution-install").focus();})()');
@@ -856,25 +866,25 @@ test('real Chrome: browsing, capture, local annotation, file writes, reopen and 
     // The library renders before offline installation finishes. Do not interrupt
     // the first service worker's installation with the navigation below.
     await page.waitFor('!!navigator.serviceWorker.controller');
-    await t.test('one address row and one dropdown preserve every action on desktop and mobile',async()=>{
+    await t.test('one address row and the settings icon preserve every action on desktop and mobile',async()=>{
       await page.evaluate("localStorage.setItem('htmlmemo-desk-nav-width-v1','360');");
       await page.navigate(url);await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
       await page.evaluate('window.importCalls=0;window.showOpenFilePicker=async()=>{window.importCalls++;return [];};');
       for(const width of [1280,800,390,320]){
         await page.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
-        const layout=await page.evaluate(`(()=>{const main=document.querySelector('#main').getBoundingClientRect(),header=document.querySelector('.chrome').getBoundingClientRect(),row=document.querySelector('.addressbar').getBoundingClientRect();return {left:main.left,width:main.width,viewport:innerWidth,oldNavigation:!!document.querySelector('.chrome-topline,.desk-nav,#desk-resizer'),rows:header.height-row.height,controls:['#library-tab','#save-page','#app-menu-button'].map(id=>{const element=document.querySelector(id),r=element.getBoundingClientRect(),hit=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);return {id,visible:r.width>0&&r.height>0&&r.left>=0&&r.right<=innerWidth&&element.contains(hit)};})};})()`);
+        const layout=await page.evaluate(`(()=>{const main=document.querySelector('#main').getBoundingClientRect(),header=document.querySelector('.chrome').getBoundingClientRect(),row=document.querySelector('.addressbar').getBoundingClientRect();return {left:main.left,width:main.width,viewport:innerWidth,oldNavigation:!!document.querySelector('.chrome-topline,.desk-nav,#desk-resizer'),rows:header.height-row.height,controls:['#library-tab','#save-page','#settings-button'].map(id=>{const element=document.querySelector(id),r=element.getBoundingClientRect(),hit=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);return {id,visible:r.width>0&&r.height>0&&r.left>=0&&r.right<=innerWidth&&element.contains(hit)};})};})()`);
         assert.equal(layout.oldNavigation,false);assert.equal(layout.left,0);assert.equal(layout.width,layout.viewport);assert.equal(layout.rows,1);
         assert.ok(layout.controls.every(control=>control.visible),JSON.stringify({width,...layout}));
         assert.deepEqual(await page.evaluate(`['#library-tab','#save-page'].map(id=>{const element=document.querySelector(id);return {text:element.textContent,title:element.title,label:element.getAttribute('aria-label'),width:element.getBoundingClientRect().width,icon:!!element.querySelector('svg')};})`),[{text:'',title:'내 서재',label:'내 서재',width:26,icon:true},{text:'',title:'페이지 저장',label:'페이지 저장',width:26,icon:true}]);
-        await page.click('#app-menu-button');
-        const dropdown=await page.evaluate(`(()=>{const menu=document.querySelector('#app-menu'),m=menu.getBoundingClientRect(),header=document.querySelector('.chrome').getBoundingClientRect();return {anchored:m.top>=header.bottom&&m.left>=0&&m.right<=innerWidth,modal:document.querySelector('#dialog').open,items:[...menu.querySelectorAll('button')].filter(e=>!e.hidden).map(element=>{const r=element.getBoundingClientRect(),hit=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);return element.contains(hit);})};})()`);
-        assert.equal(dropdown.anchored,true);assert.equal(dropdown.modal,false);assert.ok(dropdown.items.every(Boolean));
-        await clickAppMenu(page,'#about-button');await page.waitFor(`document.querySelector("#dialog").open && document.querySelector("#app-version")?.textContent===${JSON.stringify(appVersion)}`);
+        await page.click('#settings-button');
+        const settings=await page.evaluate(`(()=>{const dialog=document.querySelector('#dialog'),r=dialog.getBoundingClientRect();return {fits:r.left>=0&&r.right<=innerWidth&&r.height<=innerHeight,modal:dialog.open,oldMenu:!!document.querySelector('#app-menu,#app-menu-button'),items:[...dialog.querySelectorAll('.settings-app-actions button')].map(element=>{const r=element.getBoundingClientRect(),hit=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);return element.contains(hit);})};})()`);
+        assert.equal(settings.fits,true);assert.equal(settings.modal,true);assert.equal(settings.oldMenu,false);assert.deepEqual(settings.items,[true,true]);
+        await clickSettingsAction(page,'#settings-about');await page.waitFor(`document.querySelector("#dialog").open && document.querySelector("#app-version")?.textContent===${JSON.stringify(appVersion)}`);
         assert.equal(await page.evaluate('document.querySelector(".about-brand h3").textContent'),'HTMLMemo');
         await page.click('#dialog [data-dialog-close]');
-        await clickAppMenu(page,'#execution-tab');await page.waitFor('!document.querySelector("#execution").hidden');
+        await clickSettingsAction(page,'#settings-execution');await page.waitFor('!document.querySelector("#execution").hidden');
         await page.click('#library-tab');await page.click('#browse-start');await page.waitFor('!document.querySelector("#library").hidden && document.activeElement.id==="address"');
-        await clickAppMenu(page,'#execution-tab');await page.click('#library-tab');await page.waitFor('!document.querySelector("#library").hidden');
+        await clickSettingsAction(page,'#settings-execution');await page.click('#library-tab');await page.waitFor('!document.querySelector("#library").hidden');
         await clickLibraryImport(page);
       }
       assert.equal(await page.evaluate('window.importCalls'),4);
@@ -906,7 +916,7 @@ test('real Chrome: browsing, capture, local annotation, file writes, reopen and 
       const previous=await page.evaluate('document.querySelector(".tab.document.active").dataset.tab');
       await page.click('.tab.document:not(.active) .tab-select');
       assert.notEqual(await page.evaluate('document.querySelector(".tab.document.active").dataset.tab'),previous);
-      assert.equal(await page.evaluate('document.querySelector("#app-menu").hidden'),true);
+      assert.equal(await page.evaluate('!!document.querySelector("#app-menu")'),false);
       await page.click(`[data-tab="${previous}"] .tab-select`);
       assert.equal(await page.evaluate('document.querySelector(".chrome").getBoundingClientRect().height'),25);
     });
@@ -1287,7 +1297,7 @@ test('real Chrome: adaptive file tabs shrink evenly before scrolling and preserv
       await page.evaluate(`(()=>{const transfer=new DataTransfer();for(let i=${previous};i<${count};i++){const title='문서 '+String(i+1).padStart(2,'0')+' — 긴 제목도 같은 너비로 줄어드는 HTML 문서 탭',html='<html><head><title>'+title+'</title></head><body><h1>'+title+'</h1><p>Unique adaptive document '+i+'</p></body></html>';transfer.items.add(new File([html],'adaptive-'+i+'.html',{type:'text/html'}));}const input=document.querySelector('#file-input');input.files=transfer.files;input.dispatchEvent(new Event('change',{bubbles:true}));})()`);
       await page.waitFor(`document.querySelectorAll('#tabs .tab.document').length===${count}&&${ready}`,60000);
     };
-    const measure=()=>page.evaluate(`(()=>{const strip=document.querySelector('#tabs'),r=strip.getBoundingClientRect(),active=strip.querySelector('.tab.active').getBoundingClientRect();return {count:strip.children.length,viewport:innerWidth,stripWidth:strip.clientWidth,contentWidth:strip.scrollWidth,scrollLeft:strip.scrollLeft,widths:[...strip.children].map(el=>el.getBoundingClientRect().width),activeVisible:active.left>=r.left-1&&active.right<=r.right+1,headerHeight:document.querySelector('.chrome').offsetHeight,pageOverflow:document.documentElement.scrollWidth>innerWidth,controls:['#library-tab','#save-page','#app-menu-button'].every(selector=>{const el=document.querySelector(selector),b=el.getBoundingClientRect();return b.width>0&&b.left>=0&&b.right<=innerWidth&&el.contains(document.elementFromPoint(b.left+b.width/2,b.top+b.height/2));})};})()`);
+    const measure=()=>page.evaluate(`(()=>{const strip=document.querySelector('#tabs'),r=strip.getBoundingClientRect(),active=strip.querySelector('.tab.active').getBoundingClientRect();return {count:strip.children.length,viewport:innerWidth,stripWidth:strip.clientWidth,contentWidth:strip.scrollWidth,scrollLeft:strip.scrollLeft,widths:[...strip.children].map(el=>el.getBoundingClientRect().width),activeVisible:active.left>=r.left-1&&active.right<=r.right+1,headerHeight:document.querySelector('.chrome').offsetHeight,pageOverflow:document.documentElement.scrollWidth>innerWidth,controls:['#library-tab','#save-page','#settings-button'].every(selector=>{const el=document.querySelector(selector),b=el.getBoundingClientRect();return b.width>0&&b.left>=0&&b.right<=innerWidth&&el.contains(document.elementFromPoint(b.left+b.width/2,b.top+b.height/2));})};})()`);
     const visible=()=>page.waitFor(`(()=>{const strip=document.querySelector('#tabs').getBoundingClientRect(),tab=document.querySelector('#tabs .tab.active').getBoundingClientRect();return tab.left>=strip.left-1&&tab.right<=strip.right+1;})()`);
     const screen=async name=>{await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,`test-results/tab-sizing-${name}.png`),await page.screenshot());};
     const metrics=[];
@@ -1354,7 +1364,7 @@ test('real Chrome: visible file tabs keep one header row and preserve documents 
     const url=process.env.HTMLMEMO_TABS_TEST_URL||`http://127.0.0.1:${server.address().port}/`;
     await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});await page.navigate(url);
     await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
-    await clickAppMenu(page,'#settings-button');await page.evaluate(`(()=>{const appearance=document.querySelector('#appearance');appearance.value='dark';appearance.dispatchEvent(new Event('change'));document.querySelector('#dialog').close();})()`);
+    await clickSettingsAction(page,'#settings-button');await page.evaluate(`(()=>{const appearance=document.querySelector('#appearance');appearance.value='dark';appearance.dispatchEvent(new Event('change'));document.querySelector('#dialog').close();})()`);
     // The native picker is simulated; actual OPFS handles exercise multi-file reading.
     await page.evaluate(`(async()=>{const root=await navigator.storage.getDirectory(),handles=[];for(const [index,title] of ['입문','실전','개발 용어','긴 이름의 문서도 탭으로 전환하고 파일 이름을 확인합니다'].entries()){const handle=await root.getFileHandle('book-'+index+'.html',{create:true}),writer=await handle.createWritable();await writer.write('<html><head><title>'+title+'</title></head><body><h1>'+title+'</h1><p id="selection">Annotations belong to this document when switching between tabs.</p><main style="height:4000px">Reading content for '+title+'</main></body></html>');await writer.close();handles.push(handle);}window.showOpenFilePicker=async options=>{window.pickerAllowsMultiple=options.multiple;return handles;};})()`);
     await clickLibraryImport(page);await page.waitFor('document.querySelectorAll("#tabs .tab.document").length===4&&document.querySelector("#status-left").textContent.includes("자동 저장됨")');
@@ -1372,7 +1382,7 @@ test('real Chrome: visible file tabs keep one header row and preserve documents 
         await key(value);await page.waitFor(`document.querySelector('#tabs .tab.active').dataset.tab===${JSON.stringify(id)}`);
         await page.waitFor(`(()=>{const strip=document.querySelector('#tabs').getBoundingClientRect(),active=document.querySelector('#tabs .tab.active').getBoundingClientRect();return active.left>=strip.left-1&&active.right<=strip.right+1;})()`);
       }
-      const layout=await page.evaluate(`(()=>{const header=document.querySelector('.chrome').getBoundingClientRect(),strip=document.querySelector('#tabs').getBoundingClientRect();return {height:header.height,stripVisible:strip.width>0&&strip.left>=0&&strip.right<=innerWidth,selected:document.querySelectorAll('#tabs [aria-selected=true]').length,panels:document.querySelectorAll('.workspace-host:not([hidden])').length,controls:['#library-tab','#save-page','#app-menu-button'].every(selector=>{const element=document.querySelector(selector),r=element.getBoundingClientRect();return r.width>0&&r.right<=innerWidth&&element.contains(document.elementFromPoint(r.left+r.width/2,r.top+r.height/2));})};})()`);
+      const layout=await page.evaluate(`(()=>{const header=document.querySelector('.chrome').getBoundingClientRect(),strip=document.querySelector('#tabs').getBoundingClientRect();return {height:header.height,stripVisible:strip.width>0&&strip.left>=0&&strip.right<=innerWidth,selected:document.querySelectorAll('#tabs [aria-selected=true]').length,panels:document.querySelectorAll('.workspace-host:not([hidden])').length,controls:['#library-tab','#save-page','#settings-button'].every(selector=>{const element=document.querySelector(selector),r=element.getBoundingClientRect();return r.width>0&&r.right<=innerWidth&&element.contains(document.elementFromPoint(r.left+r.width/2,r.top+r.height/2));})};})()`);
       assert.deepEqual(layout,{height:25,stripVisible:true,selected:1,panels:1,controls:true});
       assert.equal(await page.evaluate(`document.querySelector('#tabs .tab.active').title.includes('book-3.html')`),true);
       if(width===1280||width===320){await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,`test-results/visible-tabs-${width}.png`),await page.screenshot());}
@@ -1400,7 +1410,7 @@ test('real Chrome: visible file tabs keep one header row and preserve documents 
     await page.click('#library-tab');await page.click(`[data-open="${saved.id}"]`);
     await page.waitFor(`${frame}?.contentDocument?.querySelector('[data-htmlmemo-mark]')&&${frame}.contentWindow.scrollY>=499`);
     await page.evaluate('document.querySelector("#tabs .tab.active .tab-select").focus()');await key('Delete');await page.waitFor('document.querySelectorAll("#tabs .tab.document").length===2');
-    assert.equal(await page.evaluate('document.querySelector("#app-menu").hidden'),true);
+    assert.equal(await page.evaluate('!!document.querySelector("#app-menu")'),false);
     await page.click('#tabs .tab.active .tab-close');await page.waitFor('document.querySelectorAll("#tabs .tab").length===1');
     await page.evaluate('document.querySelector("#tabs .tab.active .tab-select").focus()');await key('Delete');
     await page.waitFor('document.querySelectorAll("#tabs .tab").length===0&&document.activeElement.id==="library-tab"');
@@ -1820,17 +1830,17 @@ test('real Chrome: native sidebar view choices are visible on open and preserve 
     };
     for(const width of [1280,390]){
       await page.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
-      if(width===390){await clickAppMenu(page,'#settings-button');await page.evaluate(`(()=>{const n=document.querySelector('#appearance');n.value='dark';n.dispatchEvent(new Event('change',{bubbles:true}));})()`);await page.click('#dialog [data-dialog-close]');}
+      if(width===390){await clickSettingsAction(page,'#settings-button');await page.evaluate(`(()=>{const n=document.querySelector('#appearance');n.value='dark';n.dispatchEvent(new Event('change',{bubbles:true}));})()`);await page.click('#dialog [data-dialog-close]');}
       const compact=await page.evaluate(`(()=>{const d=${doc},sidebar=d.querySelector('[data-htmlmemo-native-sidebar]'),panel=d.querySelector('[data-htmlmemo-doc-sidebar-ui]'),row=panel.querySelector('.sidebar-views');sidebar.scrollTop=0;const r=row.getBoundingClientRect(),s=sidebar.getBoundingClientRect(),style=d.defaultView.getComputedStyle(sidebar);return {height:r.height,buttons:[...row.querySelectorAll('button')].map(b=>b.getBoundingClientRect().height),topGap:r.top-s.top-parseFloat(style.borderTopWidth),sidebarPadding:style.paddingTop,rowPadding:d.defaultView.getComputedStyle(row).paddingTop};})()`);
       assert.equal(compact.height,25);assert.deepEqual(compact.buttons,[24,24,24,24]);assert.equal(compact.topGap,0);assert.equal(compact.sidebarPadding,'0px');assert.equal(compact.rowPadding,'0px');
       assert.equal(await page.evaluate(`(()=>{const buttons=[...${doc}.querySelectorAll('[data-htmlmemo-doc-sidebar-ui] [data-sidebar-view]')];return buttons.every(button=>button.title&&button.querySelector('svg')&&/^\\d*$/.test(button.textContent))&&Math.max(...buttons.map(button=>button.getBoundingClientRect().top))-Math.min(...buttons.map(button=>button.getBoundingClientRect().top))<1;})()`),true);
       await page.click('[data-action=more]');
       assert.deepEqual(await page.evaluate('[...document.querySelectorAll("[data-more]")].map(b=>b.dataset.more)'),['rect','ellipse','arrow','strike','history','migrate','info']);
       await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,`test-results/sidebar-views-tools-native-${width}.png`),await page.screenshot());
-      await page.click('[data-popover-close]');await page.click('#app-menu-button');
-      const topLabels=await page.evaluate('[...document.querySelectorAll("#app-menu button")].map(b=>b.textContent.trim())');
+      await page.click('[data-popover-close]');await page.click('#settings-button');
+      const topLabels=await page.evaluate('[...document.querySelectorAll(".settings-app-actions button")].map(b=>b.textContent.trim())');
       for(const duplicate of ['검색','목차 · 북마크','주석','실행 취소','다시 실행','현재 위치 북마크','HTML 내보내기','사각형','주석 저장 이력'])assert.equal(topLabels.includes(duplicate),false);
-      await page.click('#app-menu-button');
+      await page.click('#dialog [data-dialog-close]');
       await chooseNative('search');
       assert.equal(await page.evaluate(`${doc}.querySelector('#htmlmemo-native-document-search').placeholder`),'불러온 부분에서 찾기');
       assert.equal(await page.evaluate(`${doc}.querySelector('#book-search')===window.nativeBookSearch`),true);
@@ -2075,12 +2085,12 @@ test('real Chrome: folder setup explains subfolders and preserves connections th
     await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));chrome=await launchChrome();const page=chrome.page;
     const url=process.env.HTMLMEMO_FOLDER_TEST_URL||process.env.HTMLMEMO_SIDEBAR_TEST_URL||`http://127.0.0.1:${server.address().port}/`;
     await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});await page.navigate(url);await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
-    await clickAppMenu(page,'#settings-button');await page.evaluate(`(()=>{const appearance=document.querySelector('#appearance');appearance.value='dark';appearance.dispatchEvent(new Event('change'));document.querySelector('#dialog').close();})()`);
+    await clickSettingsAction(page,'#settings-button');await page.evaluate(`(()=>{const appearance=document.querySelector('#appearance');appearance.value='dark';appearance.dispatchEvent(new Event('change'));document.querySelector('#dialog').close();})()`);
     // The OS restricted-folder dialog is not automated. Simulated picker outcomes
     // exercise recovery; a real OPFS handle exercises persistence and file writes.
     await page.evaluate(`window.folderPicks=0;window.cancelFolder=true;window.showDirectoryPicker=async options=>{window.folderPicks++;window.folderOptions={id:options.id,mode:options.mode,startIn:typeof options.startIn==='string'?options.startIn:options.startIn.name};if(window.cancelFolder)throw new DOMException('Cancelled','AbortError');return (await navigator.storage.getDirectory()).getDirectoryHandle('HTMLMemo',{create:true});};`);
     assert.equal(await page.evaluate('!!document.querySelector("#choose-folder,#menu-folder")'),false);
-    await clickAppMenu(page,'#settings-button');await page.waitFor('document.querySelector("#settings-folder")?.textContent==="폴더 연결"');
+    await clickSettingsAction(page,'#settings-button');await page.waitFor('document.querySelector("#settings-folder")?.textContent==="폴더 연결"');
     await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/folder-setup-settings-1280.png'),await page.screenshot());
     await page.click('#settings-folder');await page.waitFor('document.querySelector("#dialog[open] h2")?.textContent==="저장 폴더 연결"');assert.equal(await page.evaluate('window.folderPicks'),0);
     assert.match(await page.evaluate('document.querySelector("#dialog-content").textContent'),/문서\/HTMLMemo/);
@@ -2096,7 +2106,7 @@ test('real Chrome: folder setup explains subfolders and preserves connections th
     assert.equal(await page.evaluate(`(async()=>{const {getSetting}=await import('./src/storage.js'),directory=await getSetting('folder');if(!(directory instanceof FileSystemDirectoryHandle))throw Error('Directory handle was not preserved');const file=await directory.getFileHandle('check.txt',{create:true}),writer=await file.createWritable();await writer.write('HTMLMemo directory check');await writer.close();return (await file.getFile()).text();})()`),'HTMLMemo directory check');
     await page.navigate(url);await page.waitFor('document.querySelector("#status-left").textContent.includes("HTMLMemo 자동 저장")');
     await page.evaluate(`window.showDirectoryPicker=async()=>{throw new DOMException('Denied','NotAllowedError');};`);
-    await clickAppMenu(page,'#settings-button');await page.click('#settings-folder');await page.click('#select-storage-folder');await page.waitFor('document.querySelector("#folder-connection-status").textContent.includes("허용하지")');
+    await clickSettingsAction(page,'#settings-button');await page.click('#settings-folder');await page.click('#select-storage-folder');await page.waitFor('document.querySelector("#folder-connection-status").textContent.includes("허용하지")');
     assert.equal(await page.evaluate(`(async()=>{const {getSetting}=await import('./src/storage.js');return (await getSetting('folder')).name;})()`),'HTMLMemo');
     await page.evaluate(`window.showDirectoryPicker=async()=> (await navigator.storage.getDirectory()).getDirectoryHandle('New HTMLMemo',{create:true});`);await page.click('#select-storage-folder');await page.waitFor('document.querySelector("#dialog[open] h2")?.textContent==="HTMLMemo 설정"');
     assert.equal(await page.evaluate(`(async()=>{const {getSetting}=await import('./src/storage.js');return (await getSetting('folder')).name;})()`),'New HTMLMemo');

@@ -9,7 +9,7 @@ const source=await readFile(new URL('../public/src/app.js',import.meta.url),'utf
 const render=source.slice(source.indexOf('function renderTabs('),source.indexOf('function focusAddress('));
 const bind=source.slice(source.indexOf('function bindTabs('),source.indexOf('function activate('));
 function app({width=400,content=1000,left=0}={}){
-  const doc=new DOMParser().parseFromString('<html><body><div id="tabs"></div><button id="library-tab"></button><button id="execution-tab"></button><div id="workspaces"></div></body></html>','text/html');
+  const doc=new DOMParser().parseFromString('<html><body><div id="tabs"></div><button id="library-tab"></button><div id="workspaces"></div></body></html>','text/html');
   const strip=doc.querySelector('#tabs'),frames=[];let position=left;
   Object.defineProperties(strip,{clientWidth:{value:width},scrollWidth:{value:content},scrollLeft:{get:()=>position,set:value=>position=Math.max(0,Math.min(content-width,value))}});
   strip.getBoundingClientRect=()=>({left:10,right:width+10,width});
