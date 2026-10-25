@@ -734,7 +734,7 @@ export function createReadAloud(reader) {
       stop();run=idx=null;
       ROOT=root;selectionScope={root,proseRoot,section,range,first:range.startContainer,last:range.endContainer,raw:range.toString()};
       if (!bar) buildBar();
-      state='ready';render();return true;
+      state='ready';render();pauseResume();return true;
     } catch (e) {
       reader.callbacks?.onNotice?.('선택한 글의 위치를 찾지 못했습니다. 글을 다시 선택해 주세요.');return false;
     }

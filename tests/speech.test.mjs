@@ -8,7 +8,7 @@ function fixture({accepted=true}={}) {
   const r=Object.assign(Object.create(Reader.prototype),{readAloud:player,host:{ownerDocument:{defaultView:win}},doc:{getSelection:()=>({rangeCount:0,isCollapsed:true})},callbacks:{onError:e=>errors.push(e.message)}});
   return {r,win,player,opened,errors,get toggles(){return toggles;},get cancels(){return cancels;},get closed(){return closed;}};
 }
-test('selection and main TTS delegate to the same player without direct or automatic speech',()=>{
+test('selection and main TTS delegate to the same player without separate native speech',()=>{
   const f=fixture();f.r.selection={quote:'선택한 문장입니다.',start:10,end:21};
   assert.equal(f.r.speakSelection(),true);assert.deepEqual(f.opened,[f.r.selection]);assert.strictEqual(f.r.readAloud,f.player);f.r.toggleReadAloud();assert.equal(f.toggles,1);assert.strictEqual(f.r.readAloud,f.player);assert.equal(f.cancels,0);
   f.r.stopSpeech();assert.equal(f.closed,1);assert.equal(f.cancels,1);

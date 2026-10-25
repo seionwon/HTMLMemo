@@ -265,10 +265,12 @@ test('real Chrome: TTS selection shares the main player and settings while keepi
       else await page.click(selector);
     };
     const mainOpen=async()=>{
+      const before=await count();
       const selector='.document-host:not([hidden]) > [data-htmlmemo-reading-controls] [data-action=speak]';
       if(await page.evaluate(`!!document.querySelector(${JSON.stringify(selector)})`))await page.click(selector);
       else {const p=await page.evaluate(`(()=>{const f=${frame},r=f.contentDocument.querySelector('[data-htmlmemo-reading-controls] [data-action=speak]').getBoundingClientRect(),b=f.getBoundingClientRect(),s=b.width/f.offsetWidth;return{x:b.left+(r.left+r.width/2)*s,y:b.top+(r.top+r.height/2)*s};})()`);await page.send('Input.dispatchMouseEvent',{type:'mousePressed',...p,button:'left',clickCount:1});await page.send('Input.dispatchMouseEvent',{type:'mouseReleased',...p,button:'left',clickCount:1});}
       await page.waitFor('document.querySelector(".mstts-player")?.dataset.ttsScope==="document"&&document.querySelector(".mstts-player > button")?.textContent==="▶"');
+      assert.equal(await count(),before,'the main TTS button opens the player without speech');
     };
     const choose=async(label,text)=>{
       await page.click(`.mstts-select-trigger[aria-label="${label}"]`);const at=await page.evaluate(`[...document.querySelectorAll('[role=listbox][aria-label="${label}"] [role=option]')].findIndex(b=>b.textContent.replace('✓','')===${JSON.stringify(text)})`);assert.ok(at>=0,text);await page.click(`[role=listbox][aria-label="${label}"] [role=option]:nth-child(${at+1})`);
@@ -290,7 +292,7 @@ test('real Chrome: TTS selection shares the main player and settings while keepi
       for(const width of [1280,390,320]){
         await page.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});await page.send('Emulation.setTouchEmulationEnabled',{enabled:width===390,maxTouchPoints:1});
         await page.evaluate('window.sharedSelectionBar=document.querySelector(".mstts-player")');await select();const before=await count();await activate('#tool-popover [data-selection=speak]',width===390?'touch':width===320?'keyboard':'mouse');await page.waitFor('document.querySelector(".mstts-player[data-tts-scope=selection]")');
-        assert.equal(await count(),before);assert.equal(await page.evaluate('document.querySelector(".mstts-player")===window.sharedSelectionBar&&document.querySelectorAll(".mstts-player").length===1'),true);await play();assert.deepEqual(await last(),expected('Alpha selected sentence.'));
+        await page.waitFor(`window.selectionUtterances.length===${before+1}&&document.querySelector('.mstts-player [aria-label="일시정지"]')`);assert.equal(await page.evaluate('document.querySelector(".mstts-player")===window.sharedSelectionBar&&document.querySelectorAll(".mstts-player").length===1'),true);assert.deepEqual(await last(),expected('Alpha selected sentence.'));
         assert.equal(await page.evaluate(`(()=>{const d=${doc},r=[...${frame}.contentWindow.CSS.highlights.get('mstts')][0];return r.startContainer===d.querySelector('#tts-start').firstChild&&r.startOffset===6&&r.endContainer===d.querySelector('#tts-start').firstChild;})()`),true);
         await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,`test-results/tts-selection-${mode}-${width}.png`),await page.screenshot());
         await pause();const paused=await count();await page.evaluate(`(()=>{const d=${doc},r=d.createRange();r.selectNodeContents(d.querySelector('#outside-after'));const s=d.getSelection();s.removeAllRanges();s.addRange(r);d.dispatchEvent(new Event('selectionchange'));d.querySelector('main').scrollTop=500;d.defaultView.scrollTo(0,500);})()`);assert.equal(await count(),paused);await play();assert.deepEqual(await last(),expected('Alpha selected sentence.'));
@@ -300,11 +302,15 @@ test('real Chrome: TTS selection shares the main player and settings while keepi
         await page.click('.mstts-player [aria-label="정지"]');await play();assert.deepEqual(await last(),expected('Alpha selected sentence.'));
         const utterances=await page.evaluate(`window.selectionUtterances.slice(${before}).map(u=>({text:u.text,rate:u.rate,voice:u.voice?.voiceURI}))`);assert.equal(utterances.every(u=>['Alpha selected sentence.','Beta selected sentence.'].includes(u.text)&&u.rate===1.5&&u.voice==='english-b'),true);
         await page.click('.mstts-player [aria-label="플레이어 닫기"]');await page.evaluate(`(()=>{const d=${doc};d.getSelection().removeAllRanges();d.querySelector('main').scrollTop=0;d.defaultView.scrollTo(0,0);document.querySelector('.document-host:not([hidden]) .reader-viewport').scrollTop=0;})()`);await mainOpen();await play();const normal=await last();assert.equal(normal.text,'Selection TTS test');assert.equal(normal.rate,1.5);assert.equal(normal.voice,'english-b');
-        metrics.cases.push({mode,width,input:width===390?'touch':width===320?'keyboard':'mouse',playerReused:true,noAutoplay:true,selectionBoundsPreserved:true,highlightClipped:true,pauseRetainsRange:true,stopRetainsRange:true,errorRetriesSameSentence:true,normalModeRestored:true,utterances});
+        metrics.cases.push({mode,width,input:width===390?'touch':width===320?'keyboard':'mouse',playerReused:true,selectionAutoplay:true,selectionBoundsPreserved:true,highlightClipped:true,pauseRetainsRange:true,stopRetainsRange:true,errorRetriesSameSentence:true,normalModeRestored:true,utterances});
+      }
+      if(mode==='body'){
+        await page.click('.mstts-player [aria-label="플레이어 닫기"]');await select();const before=await count();await activate('#tool-popover [data-selection=speak]','keyboard');
+        await page.waitFor(`window.selectionUtterances.length===${before+1}&&document.querySelector('.mstts-player[data-tts-scope=selection] [aria-label="일시정지"]')`);assert.equal(await page.evaluate('document.querySelectorAll(".mstts-player").length'),1);assert.deepEqual(await last(),expected('Alpha selected sentence.'));metrics.closedPlayerAutoplay=true;
       }
       assert.deepEqual(await page.evaluate(savedState),stored);
       if(mode==='book'){
-        await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});await page.evaluate('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');await select();await activate('#tool-popover [data-selection=speak]','keyboard');await page.waitFor('document.querySelector(".mstts-player")?.dataset.ttsScope==="selection"&&document.querySelector(".mstts-player > button")?.textContent==="▶"');await play();await pause();const before=await count();
+        await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});await page.evaluate('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');await select();await activate('#tool-popover [data-selection=speak]','keyboard');await page.waitFor('document.querySelector(".mstts-player")?.dataset.ttsScope==="selection"&&document.querySelector(".mstts-player > button")?.textContent==="⏸"');await pause();const before=await count();
         await page.evaluate(`${doc}.defaultView.location.hash='v0:two'`);await page.waitFor(`${doc}.querySelector('#reader-content').dataset.section==='v0:two'`);await play();assert.equal(await count(),before);assert.equal(await page.evaluate('document.querySelector(".mstts-player > button").textContent'),'▶');metrics.bookChapterGuard=true;
       }
       await page.click('.mstts-player [aria-label="플레이어 닫기"]');
