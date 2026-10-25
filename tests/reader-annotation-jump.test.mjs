@@ -40,3 +40,8 @@ test('a saved ready flag without a loaded first chapter cannot finish opening a 
 test('legacy annotation IDs containing selector punctuation still navigate by their exact ID',async()=>{
   const f=fixture();f.r.metadata.annotations[0].id='legacy"[주석]';const node=f.doc.createElement('span');node.setAttribute('data-htmlmemo-id','legacy"[주석]');f.doc.body.append(node);assert.equal(await f.r.jumpAnnotation('legacy"[주석]'),true);assert.equal(f.jumps[0],node);assert.deepEqual(f.errors,[]);
 });
+test('ordinary HTML ignores unrelated reader status text and flags when navigating an existing annotation',async()=>{
+  const f=fixture();delete f.r.metadata.annotations[0].anchorTarget.section;delete f.doc.getElementById('reader-content').dataset.section;f.doc.documentElement.dataset.readerReady='false';
+  const status=f.doc.createElement('div');status.id='reader-status';status.textContent='일반 페이지의 상태 안내';const node=f.doc.createElement('span');node.dataset.htmlmemoId='saved-note';f.doc.body.append(status,node);
+  assert.equal(await f.r.jumpAnnotation('saved-note'),true);assert.equal(f.jumps[0],node);assert.deepEqual(f.errors,[]);
+});

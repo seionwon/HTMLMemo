@@ -2162,7 +2162,8 @@ export class Reader {
     return new Promise(resolve=>{
       let settled=false,busy=false,scheduled=null,timer=null,notice=null,noticeShown=false,refresh=navigate;
       const cancelled=()=>this.disposed||generation!==this.annotationJumpGeneration;
-      const sectionReady=()=> (!section||currentSection(this.doc)===section)&&!this.doc.getElementById('reader-status')?.textContent.trim()&&this.doc.documentElement.dataset.readerReady!=='false';
+      const book=!!section||this.bookIntegrity?.complete;
+      const sectionReady=()=> (!section||currentSection(this.doc)===section)&&(!book||!this.doc.getElementById('reader-status')?.textContent.trim()&&this.doc.documentElement.dataset.readerReady!=='false');
       const finish=result=>{if(settled)return;settled=true;observer?.disconnect();clearTimeout(timer);clearTimeout(notice);clearTimeout(scheduled);if(this.cancelAnnotationJump===cancel)this.cancelAnnotationJump=null;resolve({...result,noticeShown});};
       const cancel=()=>finish({cancelled:true});
       const schedule=()=>{if(!settled&&!busy&&scheduled===null)scheduled=setTimeout(()=>{scheduled=null;void attempt();},40);};
