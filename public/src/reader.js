@@ -390,7 +390,9 @@ export class Reader {
     this.doc.addEventListener('pointermove', event => { if(this.tocDrag)return; if(this.moveMiddleScroll(event))return;this.pointerMove(event); }, true);
     this.doc.addEventListener('pointerup', event => { if(this.tocDrag)return; if(this.endMiddleScroll(event))return;this.pointerUp(event); }, true);
     this.doc.addEventListener('pointercancel', () => { this.cancelAnnotationDrag();this.stopMiddleScroll();this.gesture = null; this.preview?.remove(); this.preview = null; });
-    this.doc.addEventListener('lostpointercapture', event => {if(this.annotationDrag?.pointerId===event.pointerId)this.cancelAnnotationDrag();});
+    // Touch starts with implicit capture on the mark. Moving capture to the
+    // document root also releases that mark; only losing our own capture cancels.
+    this.doc.addEventListener('lostpointercapture', event => {if(event.target===this.doc.documentElement&&this.annotationDrag?.pointerId===event.pointerId)this.cancelAnnotationDrag();});
     this.doc.defaultView?.addEventListener?.('blur',()=>this.cancelAnnotationDrag());
     this.doc.addEventListener('auxclick', event => {if(event.button===1&&!event.target.closest?.('a,button,input,textarea,select,[contenteditable]'))event.preventDefault();}, true);
     this.doc.addEventListener('selectionchange', () => this.captureTextSelection());

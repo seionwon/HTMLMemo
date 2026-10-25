@@ -72,3 +72,10 @@ test('changing book sections cancels an in-progress move instead of saving it in
   const f=fixture(),{r,doc,from,to}=f,section=doc.createElement('main');section.id='reader-content';section.dataset.section='v0:one';section.append(from,to);doc.body.append(section);r.render();const before=structuredClone(r.metadata.annotations);
   r.pointerDown(f.event());r.pointerMove(f.event(120,70));section.dataset.section='v0:two';r.pointerMove(f.event(140,90));assert.equal(r.annotationDrag,null);assert.equal(f.changes,0);assert.deepEqual(r.metadata.annotations,before);assert.equal(doc.querySelector('[data-htmlmemo-preview],[data-htmlmemo-drag-source]'),null);
 });
+test('touch implicit capture can transfer from a mark to the root; losing root capture still cancels',()=>{
+  const f=fixture(),{r,doc}=f;r.viewport=doc.createElement('div');r.setupDocumentTocResize=()=>{};r.startFontObserver=()=>{};r.bind({deferDynamicObserver:true});const before=structuredClone(r.metadata.annotations),mark=doc.querySelector('[data-htmlmemo-id]');
+  r.pointerDown(f.event());r.pointerMove(f.event(120,70));const drag=r.annotationDrag;
+  const lost=target=>{const event=doc.createEvent('Event');event.initEvent('lostpointercapture',true,false);Object.defineProperty(event,'pointerId',{value:1});target.dispatchEvent(event);};
+  lost(mark);assert.strictEqual(r.annotationDrag,drag);assert.equal(f.captured,true);assert.ok(doc.querySelector('[data-htmlmemo-preview]'));
+  lost(doc.documentElement);assert.equal(r.annotationDrag,null);assert.equal(f.captured,false);assert.deepEqual(r.metadata.annotations,before);assert.equal(f.changes,0);
+});
