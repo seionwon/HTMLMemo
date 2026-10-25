@@ -6,7 +6,13 @@ const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 export class CDP {
   constructor(socket){this.socket=socket;this.serial=0;this.pending=new Map();this.listeners=new Map();this.contexts=new Map();this.runnerSessions=new Map();socket.addEventListener('message',event=>{
     const message=JSON.parse(event.data);if(message.id){const pending=this.pending.get(message.id);if(!pending)return;clearTimeout(pending.timer);this.pending.delete(message.id);message.error?pending.reject(new Error(message.error.message)):pending.resolve(message.result);}
-    else {if(message.method==='Runtime.executionContextCreated')this.contexts.set((message.sessionId||'')+':'+message.params.context.id,{...message.params.context,sessionId:message.sessionId});if(message.method==='Runtime.executionContextDestroyed')this.contexts.delete((message.sessionId||'')+':'+message.params.executionContextId);if(message.method==='Runtime.executionContextsCleared')this.contexts.clear();for(const listener of this.listeners.get(message.method)||[])listener(message.params);}
+    else {
+      if(message.method==='Target.attachedToTarget'&&message.params.targetInfo.type==='iframe')this.send('Runtime.enable',{},message.params.sessionId).catch(()=>{});
+      if(message.method==='Runtime.executionContextCreated')this.contexts.set((message.sessionId||'')+':'+message.params.context.id,{...message.params.context,sessionId:message.sessionId});
+      if(message.method==='Runtime.executionContextDestroyed')this.contexts.delete((message.sessionId||'')+':'+message.params.executionContextId);
+      if(message.method==='Runtime.executionContextsCleared')for(const [key,context] of this.contexts)if(context.sessionId===message.sessionId)this.contexts.delete(key);
+      for(const listener of this.listeners.get(message.method)||[])listener(message.params);
+    }
   });}
   static async connect(url){const socket=new WebSocket(url);await new Promise((resolve,reject)=>{socket.addEventListener('open',resolve,{once:true});socket.addEventListener('error',reject,{once:true});});return new CDP(socket);}
   send(method,params={},sessionId){return new Promise((resolve,reject)=>{const id=++this.serial;const timer=setTimeout(()=>{this.pending.delete(id);reject(new Error('CDP timeout: '+method));},20000);this.pending.set(id,{resolve,reject,timer});this.socket.send(JSON.stringify({id,method,params,...(sessionId?{sessionId}:{})}));});}
@@ -15,16 +21,15 @@ export class CDP {
   // Read test instrumentation in the opaque source, never copy source globals
   // into the app or grant production RPC access to arbitrary properties.
   async scriptEvaluate(expression){
-    const {result:owner}=await this.send('Runtime.evaluate',{expression:'document.querySelector(".document-host:not([hidden]) iframe[data-htmlmemo-runtime-runner]")'});
-    if(!owner.objectId)throw Error('No active isolated runtime');
-    const {node}=await this.send('DOM.describeNode',{objectId:owner.objectId});await this.send('Runtime.releaseObject',{objectId:owner.objectId});
-    const context=[...this.contexts.values()].find(c=>c.auxData?.frameId===node.frameId&&c.auxData?.isDefault);
-    let sessionId=context?.sessionId;
-    if(!context){
-      sessionId=this.runnerSessions.get(node.frameId);
-      if(!sessionId){const attached=await this.send('Target.attachToTarget',{targetId:node.frameId,flatten:true});sessionId=attached.sessionId;this.runnerSessions.set(node.frameId,sessionId);}
+    const name=await this.evaluate('document.querySelector(".document-host:not([hidden]) iframe[data-htmlmemo-runtime-runner]")?.name');
+    if(!name)throw Error('No active isolated runtime');
+    let context;
+    for(const candidate of this.contexts.values()){
+      if(!candidate.auxData?.isDefault)continue;
+      try{const match=await this.send('Runtime.evaluate',{expression:'window.name==='+JSON.stringify(name),contextId:candidate.id,returnByValue:true},candidate.sessionId);if(match.result.value){context=candidate;break;}}catch{}
     }
-    const result=await this.send('Runtime.evaluate',{expression,...(context?{contextId:context.id}:{}),awaitPromise:true,returnByValue:true,userGesture:true},sessionId);if(result.exceptionDetails)throw Error(result.exceptionDetails.exception?.description||result.exceptionDetails.text);return result.result.value;
+    if(!context)throw Error('Isolated runtime context not ready: '+JSON.stringify([...this.contexts.values()].map(c=>({frame:c.auxData?.frameId,session:!!c.sessionId,default:c.auxData?.isDefault}))));
+    const result=await this.send('Runtime.evaluate',{expression,contextId:context.id,awaitPromise:true,returnByValue:true,userGesture:true},context.sessionId);if(result.exceptionDetails)throw Error(result.exceptionDetails.exception?.description||result.exceptionDetails.text);return result.result.value;
   }
   async scriptWaitFor(expression,timeout=15000){const start=Date.now();while(Date.now()-start<timeout){try{if(await this.scriptEvaluate(expression))return;}catch{}await delay(100);}throw Error('Timed out waiting for isolated source: '+expression);}
   async waitFor(expression,timeout=15000){const start=Date.now();while(Date.now()-start<timeout){try{if(await this.evaluate(expression))return;}catch{/* Execution contexts disappear during navigation. */}await delay(100);}throw new Error('Timed out waiting for: '+expression);}
@@ -47,7 +52,7 @@ export async function launchChrome({firstRun=false}={}){
   try{endpoint=await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('Chrome launch timeout: '+output.slice(-1800))),60000);child.stderr.on('data',chunk=>{output+=chunk.toString();const match=output.match(/DevTools listening on (ws:\/\/[^\s]+)/);if(match){clearTimeout(timer);resolve(match[1]);}});child.once('exit',code=>{clearTimeout(timer);reject(new Error('Chrome exited '+code+': '+output.slice(-1800)));});});}
   catch(error){child.kill();await rm(profile,{recursive:true,force:true}).catch(()=>{});throw error;}
   const debugURL='http://'+new URL(endpoint).host;
-  const targets=await fetch(debugURL+'/json/list').then(response=>response.json());const page=await CDP.connect(targets.find(t=>t.type==='page').webSocketDebuggerUrl);await page.send('Page.enable');await page.send('Runtime.enable');
+  const targets=await fetch(debugURL+'/json/list').then(response=>response.json());const page=await CDP.connect(targets.find(t=>t.type==='page').webSocketDebuggerUrl);await page.send('Page.enable');await page.send('Runtime.enable');await page.send('Target.setAutoAttach',{autoAttach:true,waitForDebuggerOnStart:false,flatten:true});
   // Keep routine reader tests independent from onboarding. The first-run test
   // explicitly opts into an untouched profile and exercises the real welcome.
   if(!firstRun)await page.send('Page.addScriptToEvaluateOnNewDocument',{source:"try{localStorage.setItem('htmlmemo-data-folder-welcome-v1','1')}catch{}"});

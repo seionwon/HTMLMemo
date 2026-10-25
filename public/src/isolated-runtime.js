@@ -8,6 +8,11 @@ const validId=value=>typeof value==='string'&&/^r\d{1,12}$/.test(value);
 // No app settings, annotations, tokens, storage handles or executable RPC enter it.
 function bootstrap(channel,preferences) {
   const ID='data-htmlmemo-runtime-id',MAX=64*1024*1024,send=parent.postMessage.bind(parent),ids=new WeakMap(),nodes=new Map();
+  window.name='htmlmemo-runtime-'+channel;
+  // Hidden execution frames do not receive rendering opportunities. Source
+  // books still need a cancellable animation callback to finish lazy chapters.
+  window.requestAnimationFrame=callback=>setTimeout(()=>callback(performance.now()),16);
+  window.cancelAnimationFrame=id=>clearTimeout(id);
   let serial=0,started=false,timer=0;const dirty=new Map();
   let storageTimer=0;
   const storage=(entries=[],persist=false)=>{const values=new Map(entries),changed=()=>{if(persist&&!storageTimer)storageTimer=setTimeout(()=>{storageTimer=0;send({channel,type:'storage',entries:[...values]},'*');},30);};return {get length(){return values.size;},key:i=>[...values.keys()][i]??null,getItem:key=>values.get(String(key))??null,setItem:(key,value)=>{key=String(key);value=String(value);if(values.get(key)===value)return;const next=new Map(values);next.set(key,value);if(key.length>1000||next.size>256||[...next].reduce((sum,[k,v])=>sum+k.length+v.length,0)>262144)throw new DOMException('문서 설정 저장 한도를 넘었습니다.','QuotaExceededError');values.set(key,value);changed();},removeItem:key=>{if(values.delete(String(key)))changed();},clear:()=>{if(values.size){values.clear();changed();}}};};
@@ -45,9 +50,10 @@ function bootstrap(channel,preferences) {
   const command=value=>{
     if(value?.channel!==channel)return;
     if(value.type==='hash'&&typeof value.hash==='string'&&value.hash.length<2000){location.hash=value.hash;return;}
-    if(!['click','input','change','toggle'].includes(value.type)||!/^r\d{1,12}$/.test(value.id))return;
+    if(!['click','input','change','toggle','submit'].includes(value.type)||!/^r\d{1,12}$/.test(value.id))return;
     const node=nodes.get(value.id);if(!node?.isConnected)return;
     if(value.type==='toggle'&&node.localName==='details'){if(node.open!==!!value.open)node.open=!!value.open;return;}
+    if(value.type==='submit'&&node.localName==='form'){node.requestSubmit();return;}
     if(value.type==='input'||value.type==='change'){
       if(!['input','textarea','select'].includes(node.localName)||typeof value.value!=='string'||value.value.length>200000)return;
       node.value=value.value;node.dispatchEvent(new Event(value.type,{bubbles:true}));return;
@@ -88,10 +94,26 @@ export class IsolatedRuntime {
     if(this.disposed)return;
     const script='('+bootstrap.toString()+')('+JSON.stringify(this.channel)+','+JSON.stringify(this.storage).replaceAll('<','\\u003c')+');';
     const policy=SCRIPT_CSP.replace("frame-src 'self'","frame-src 'none'");
-    this.url=URL.createObjectURL(new Blob(['<!doctype html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="'+policy+'"><script>'+script+'</script></head>',source],{type:'text/html;charset=utf-8'}));
+    // A sandboxed Blob URL cannot reliably change its fragment in Chrome.
+    // Stream immutable source bytes INSIDE an opaque srcdoc instead; no full
+    // source string or same-origin execution is needed in the app window.
+    const prefix='<!doctype html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="'+policy+'"><script>'+script+'</script></head>';
+    const loader=async event=>{
+      if(event.source!==parent||event.data?.channel!==CHANNEL||event.data.type!=='source'||!(event.data.source instanceof Blob))return;
+      removeEventListener('message',loader);
+      try{
+        const reader=event.data.source.stream().getReader(),decoder=new TextDecoder('utf-8');
+        document.open();document.write(PREFIX);
+        for(;;){const {done,value}=await reader.read();if(done)break;document.write(decoder.decode(value,{stream:true}));}
+        document.write(decoder.decode());document.close();
+      }catch(error){parent.postMessage({channel:CHANNEL,type:'error',message:String(error.message)},'*');}
+    };
+    const loaderCode=loader.toString().replaceAll('CHANNEL',JSON.stringify(this.channel)).replaceAll('PREFIX',JSON.stringify(prefix).replaceAll('<','\\u003c'));
+    const loaderHTML='<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="'+policy+'"><script>(()=>{const loader='+loaderCode+';addEventListener("message",loader);parent.postMessage({type:"source-ready",channel:'+JSON.stringify(this.channel)+'},"*");})();</script>';
     const initial=new Promise((resolve,reject)=>{this.resolve=resolve;this.reject=reject;this.timer=setTimeout(()=>this.fail(Error('문서 스크립트의 격리 실행 결과를 준비하지 못했습니다.')),30000);});
     this.receive=event=>{
       const value=event.data;if(this.disposed||event.source!==frame.contentWindow||value?.channel!==this.channel)return;
+      if(value.type==='source-ready'){if(!this.sourceDelivered){this.sourceDelivered=true;frame.contentWindow.postMessage({type:'source',channel:this.channel,source},'*');}return;}
       if(value.type==='initial'&&!this.port){
         // Establish the port in the app window's own message callback. A DOM
         // callback invoked in the static child has that child's incumbent
@@ -102,7 +124,7 @@ export class IsolatedRuntime {
       this.queue=this.queue.then(()=>this.accept(value)).catch(error=>this.fail(error));
     };
     win.addEventListener('message',this.receive);this.window=win;
-    frame.src=this.url;this.host.append(frame);
+    frame.srcdoc=loaderHTML;this.host.append(frame);
     await initial;this.bind();return this;
   }
   fail(error) {clearTimeout(this.timer);if(this.reject){this.reject(error);this.resolve=this.reject=null;}else if(!this.disposed)this.onError(error);this.dispose();}
@@ -132,6 +154,7 @@ export class IsolatedRuntime {
         if(!/^[a-z][a-z0-9-]{0,63}$/.test(patch.tag)||!Array.isArray(patch.attributes)||patch.attributes.length>200)continue;
         const temp=new DOMParser().parseFromString('<html><head></head><body></body></html>','text/html'),special=['html','head','body'].includes(patch.tag),node=special?(patch.tag==='html'?temp.documentElement:temp[patch.tag]):temp.createElement(patch.tag);if(!special)temp.body.append(node);
         for(const pair of patch.attributes)if(Array.isArray(pair)&&pair.length===2&&pair.every(v=>typeof v==='string'))try{node.setAttribute(pair[0],pair[1]);}catch{}
+        node.setAttribute(ID,patch.id);
         const safeDoc=sanitizeRuntimeHTML(temp.documentElement.outerHTML),safe=special?(patch.tag==='html'?safeDoc.documentElement:safeDoc[patch.tag]):safeDoc.body.firstElementChild;if(safe)this.copyAttributes(target,safe);
       }else if(patch.kind==='content'&&typeof patch.html==='string'&&patch.html.length<=MAX_HTML){
         const safe=sanitizeRuntimeHTML(target===this.doc.documentElement?patch.html:target===this.doc.head?'<html>'+patch.html+'<body></body></html>':target===this.doc.body?'<html><head></head>'+patch.html+'</html>':'<html><head></head><body>'+patch.html+'</body></html>');
@@ -162,6 +185,7 @@ export class IsolatedRuntime {
     const add=(target,type,fn,capture=true)=>{target.addEventListener(type,fn,capture);this.listeners.push(()=>target.removeEventListener(type,fn,capture));};
     const sourceTarget=event=>{const node=event.target?.nodeType===1?event.target:event.target?.parentElement,source=node?.closest('['+ID+']');return source&&this.nodes.get(source.getAttribute(ID))===source?source:null;};
     for(const type of ['input','change'])add(this.doc,type,event=>{const node=sourceTarget(event);if(node&&['input','textarea','select'].includes(node.localName))this.send({type,id:node.getAttribute(ID),value:node.value});});
+    add(this.doc,'submit',event=>{event.preventDefault();const node=sourceTarget(event);if(node?.localName==='form')this.send({type:'submit',id:node.getAttribute(ID)});});
     add(this.doc,'click',event=>{
       const node=sourceTarget(event),control=node?.closest('button,summary,a[href],[role="button"],input[type="button"],input[type="submit"]');if(!control||!validId(control.getAttribute(ID)))return;
       if(control.localName==='a'&&!control.getAttribute('href')?.startsWith('#'))return;

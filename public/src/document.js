@@ -163,6 +163,9 @@ export function sanitizeRuntimeHTML(html) {
   const doc=new DOMParser().parseFromString(html,'text/html'),work=sanitizeTree(doc,'',0,false,true);
   while(!work.next().done){}
   doc.querySelectorAll('#htmlmemo-data').forEach(node=>node.remove());
+  // Scriptless sandbox + form-action CSP already prohibit submission. The
+  // display controls must remain focusable so input can reach the opaque book.
+  doc.querySelectorAll('form').forEach(node=>node.removeAttribute('inert'));
   return doc;
 }
 export function parseHTML(html, defaults = {}, options = {}) {

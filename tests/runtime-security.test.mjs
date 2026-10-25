@@ -5,6 +5,7 @@ import {documentFor,installDOM} from './dom.mjs';
 import {savedMainFrame,parseHTML,sanitizeRuntimeHTML,LOCAL_CSP,SCRIPT_CSP} from '../public/src/document.js';
 import {IsolatedRuntime} from '../public/src/isolated-runtime.js';
 import {cleanSourceStorage} from '../public/src/model.js';
+import {Reader} from '../public/src/reader.js';
 installDOM();
 const frame=content=>`<iframe id="mainFrame" srcdoc="${content.replaceAll('&','&amp;').replaceAll('"','&quot;')}"></iframe>`;
 const page=body=>'<html><head></head><body>'+body+'</body></html>';
@@ -28,7 +29,7 @@ test('ordinary embedded frames retain their own isolation rather than receiving 
 });
 test('hostile runtime HTML is inert, strips navigations and cannot supply app annotation metadata',()=>{
   const safe=sanitizeRuntimeHTML(page('<p onclick="attack()">Text</p><script>attack()</script><script id="htmlmemo-data" type="application/json">{"annotations":["fake"]}</script><meta http-equiv="refresh" content="0;url=https://remote.invalid"><iframe src="https://remote.invalid"></iframe><form action="https://remote.invalid"><input></form><a href="javascript:attack()">Link</a>'));
-  assert.equal(safe.querySelector('script,meta[http-equiv],iframe,[onclick],form[action],a[href]'),null);assert.ok(safe.querySelector('form').hasAttribute('inert'));assert.equal(safe.querySelector('p').textContent,'Text');
+  assert.equal(safe.querySelector('script,meta[http-equiv],iframe,[onclick],form[action],a[href]'),null);assert.ok(!safe.querySelector('form').hasAttribute('inert'));assert.equal(safe.querySelector('p').textContent,'Text');
 });
 function runtime(){
   const doc=documentFor('<html><head><script id="htmlmemo-data" type="application/json">{"annotations":["original private notes"]}</script></head><body><script id="book-volume-0" type="application/octet-stream">original compressed bytes</script></body></html>'),r=new IsolatedRuntime({host:{ownerDocument:doc},doc,source:new Blob(['source'])});let ready=0;r.resolve=()=>ready++;return {doc,r,get ready(){return ready;}};
@@ -47,6 +48,7 @@ test('root and content attributes update loading/section state without modifying
   const a=runtime();await a.r.accept({type:'initial',html:initial});
   await a.r.accept({type:'patches',patches:[{id:'r1',kind:'attributes',tag:'html',attributes:[['data-htmlmemo-runtime-id','r1'],['data-reader-ready','true'],['onclick','attack()']]},{id:'r4',kind:'attributes',tag:'article',attributes:[['data-htmlmemo-runtime-id','r4'],['data-section','second']]}]});
   assert.equal(a.doc.documentElement.dataset.readerReady,'true');assert.equal(a.doc.documentElement.hasAttribute('onclick'),false);assert.ok(a.doc.documentElement.hasAttribute('data-htmlmemo-isolated-runtime'));assert.equal(a.doc.querySelector('article').dataset.section,'second');
+  await a.r.accept({type:'patches',patches:[{id:'r4',kind:'attributes',tag:'article',attributes:[['data-section','third']]}]});assert.equal(a.doc.querySelector('article').getAttribute('data-htmlmemo-runtime-id'),'r4');assert.equal(a.doc.querySelector('article').dataset.section,'third');
 });
 test('unsupported RPC operations, malformed selectors and oversized patch lists cannot modify the reader',async()=>{
   const a=runtime();await a.r.accept({type:'initial',html:initial});const before=a.doc.documentElement.outerHTML;
@@ -64,6 +66,7 @@ test('document preferences remain bounded inert pairs and round-trip separately 
   const expected=[['font-size','36'],['__proto__','inert string']];assert.deepEqual(cleanSourceStorage(values),expected);assert.equal(cleanSourceStorage(Array.from({length:300},(_,i)=>['k'+i,'v'])).length,256);assert.deepEqual(cleanSourceStorage({secret:'app value'}),[]);
   const parsed=parseHTML('<html><head><script id="htmlmemo-data" type="application/json">'+JSON.stringify({version:1,annotations:[],view:{sourceStorage:values}})+'</script></head><body><p>Text</p></body></html>');assert.deepEqual(parsed.metadata.view.sourceStorage,expected);
   const a=runtime();let saved;a.r.onStorage=value=>saved=value;await a.r.accept({type:'storage',entries:values});assert.deepEqual(saved,expected);assert.match(a.doc.getElementById('htmlmemo-data').textContent,/original private notes/);
+  const r=Object.create(Reader.prototype);Object.assign(r,{metadata:parsed.metadata,host:{hidden:false},viewport:{scrollTop:30,scrollLeft:0},zoom:1,autoFit:true,callbacks:{}});assert.equal(r.rememberPosition(),true);assert.deepEqual(r.metadata.view.sourceStorage,expected);assert.equal(r.rememberPosition(),false);
 });
 test('the source CSP cannot fetch or load external scripts and the display policy prohibits execution',()=>{
   assert.match(LOCAL_CSP,/script-src 'none'/);assert.match(SCRIPT_CSP,/connect-src data: blob:/);const scripts=SCRIPT_CSP.match(/script-src ([^;]+)/)[1];assert.ok(!/https?:/.test(scripts));

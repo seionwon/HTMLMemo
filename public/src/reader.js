@@ -1745,7 +1745,7 @@ export class Reader {
   rememberPosition() {
     // Hidden tabs can report zero geometry; never replace the last visible reading position with it.
     if(this.host?.hidden || this.disposed)return false;
-    const view = {scrollTop:this.scrollTop, scrollLeft:this.scrollLeft, zoom:this.zoom, autoFit:this.autoFit, ...(Number.isFinite(this.tocResizedWidth)?{tocWidth:this.tocResizedWidth}:{})};
+    const view = {scrollTop:this.scrollTop, scrollLeft:this.scrollLeft, zoom:this.zoom, autoFit:this.autoFit, ...(Number.isFinite(this.tocResizedWidth)?{tocWidth:this.tocResizedWidth}:{}),...(this.metadata.view?.sourceStorage?{sourceStorage:this.metadata.view.sourceStorage}:{})};
     const previous = this.metadata.view || {};
     if (Object.keys(previous).length === Object.keys(view).length && Object.keys(view).every(key => view[key] === previous[key])) return false;
     this.metadata.view = view;
