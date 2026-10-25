@@ -267,7 +267,8 @@ export function serializeHTML(doc, metadata) {
   const clone = doc.documentElement.cloneNode(true);
   clone.querySelector('#' + DATA_ID)?.remove();
   for (const mark of [...clone.querySelectorAll('[data-htmlmemo-search]')].reverse()) mark.replaceWith(...mark.childNodes);
-  clone.querySelectorAll('[data-htmlmemo-preview], [data-htmlmemo-selected]').forEach(element => element.remove());
+  clone.querySelectorAll('[data-htmlmemo-preview], [data-htmlmemo-selected], [data-htmlmemo-hit]').forEach(element => element.remove());
+  clone.removeAttribute('data-htmlmemo-picking');clone.querySelector('#'+LAYER_ID)?.style.removeProperty('--htmlmemo-hit-padding');
   // Reader-only sidebar controls and their grid/flex overrides must never
   // alter the source document's own TOC after it is saved and reopened.
   clearReaderSidebarArtifacts(clone);

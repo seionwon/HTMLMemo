@@ -146,6 +146,9 @@ export class Reader {
     });
   }
   baseEditorStyle() {
+    return 'html[data-htmlmemo-picking] [data-htmlmemo-mark],html[data-htmlmemo-picking] [data-htmlmemo-mark] *{cursor:pointer!important}html[data-htmlmemo-picking] [data-htmlmemo-hit]{pointer-events:stroke!important;cursor:pointer!important}' + this.layoutEditorStyle();
+  }
+  layoutEditorStyle() {
     // Keep the source book's responsive #reader-menu visibility; forcing flex
     // makes this drawer button reappear on desktop, where it has no effect.
     return `${this.nativeScroll ? '' : 'html{overflow:hidden!important;height:auto!important;min-height:0!important;scroll-behavior:auto!important}body{touch-action:pan-x pan-y;height:auto!important;min-height:0!important}'}html[data-htmlmemo-drawing] *{cursor:crosshair!important;user-select:none!important;touch-action:none!important}html[data-htmlmemo-drawing] aside,html[data-htmlmemo-drawing] aside *,html[data-htmlmemo-drawing] nav,html[data-htmlmemo-drawing] nav *,html[data-htmlmemo-drawing] header,html[data-htmlmemo-drawing] header *,html[data-htmlmemo-drawing] .toc,html[data-htmlmemo-drawing] .toc *,html[data-htmlmemo-drawing] #toc,html[data-htmlmemo-drawing] #toc *,html[data-htmlmemo-drawing] [data-htmlmemo-toc-sidebar],html[data-htmlmemo-drawing] [data-htmlmemo-toc-sidebar] *,html[data-htmlmemo-drawing] [data-htmlmemo-doc-topbar],html[data-htmlmemo-drawing] [data-htmlmemo-doc-topbar] *{cursor:auto!important;touch-action:auto!important}html[data-htmlmemo-drawing] aside a,html[data-htmlmemo-drawing] aside button,html[data-htmlmemo-drawing] aside summary,html[data-htmlmemo-drawing] nav a,html[data-htmlmemo-drawing] nav button,html[data-htmlmemo-drawing] nav summary,html[data-htmlmemo-drawing] .toc a,html[data-htmlmemo-drawing] .toc button,html[data-htmlmemo-drawing] .toc summary,html[data-htmlmemo-drawing] #toc a,html[data-htmlmemo-drawing] #toc button,html[data-htmlmemo-drawing] #toc summary,html[data-htmlmemo-drawing] [data-htmlmemo-toc-sidebar] a,html[data-htmlmemo-drawing] [data-htmlmemo-toc-sidebar] button,html[data-htmlmemo-drawing] [data-htmlmemo-toc-sidebar] summary,html[data-htmlmemo-drawing] [data-htmlmemo-doc-topbar] button,html[data-htmlmemo-drawing] [data-htmlmemo-doc-topbar] select{cursor:pointer!important}[data-htmlmemo-scroll-host]{position:relative!important}html[data-htmlmemo-toc-resizing],html[data-htmlmemo-toc-resizing] body{cursor:col-resize!important;user-select:none!important;-webkit-user-select:none!important}[data-htmlmemo-sidebar-grid]{grid-template-columns:var(--htmlmemo-toc-grid-columns)!important;transition:none!important}[data-htmlmemo-toc-sidebar],[data-htmlmemo-toc-item],[data-htmlmemo-sidebar-flex]{width:var(--htmlmemo-toc-width)!important;min-width:var(--htmlmemo-toc-width)!important;max-width:var(--htmlmemo-toc-width)!important;box-sizing:border-box!important;transition:none!important}[data-htmlmemo-sidebar-flex]{flex:0 0 var(--htmlmemo-toc-width)!important}[data-htmlmemo-toc-sidebar]{overflow-x:hidden!important}[data-htmlmemo-toc-item-strip]{width:8px!important;min-width:8px!important;max-width:8px!important;flex:0 0 8px!important;padding-left:0!important;padding-right:0!important;overflow:hidden!important;box-sizing:border-box!important}[data-htmlmemo-toc-strip]{width:8px!important;min-width:8px!important;max-width:8px!important;flex:0 0 8px!important;padding-left:0!important;padding-right:0!important;overflow:hidden!important;box-sizing:border-box!important;cursor:col-resize!important;user-select:none!important;pointer-events:auto!important}[data-htmlmemo-toc-strip]>:not([data-htmlmemo-toc-resizer]):not([data-htmlmemo-toc-resizer-bound]){opacity:0!important;visibility:hidden!important;pointer-events:none!important}[data-htmlmemo-toc-strip] [data-htmlmemo-toc-resizer],[data-htmlmemo-toc-strip] [data-htmlmemo-toc-resizer-bound]{left:0!important;width:8px!important;min-width:8px!important;opacity:1!important;visibility:visible!important;pointer-events:auto!important}[data-htmlmemo-toc-resizer],[data-htmlmemo-toc-resizer-bound]{cursor:col-resize!important;touch-action:none!important;user-select:none!important;-webkit-user-select:none!important;transition:none!important}[data-htmlmemo-topbar-grid]{grid-template-rows:var(--htmlmemo-topbar-grid-rows)!important}[data-htmlmemo-topbar-pad]{padding-top:24px!important}[data-htmlmemo-topbar-offset]{top:24px!important}[data-htmlmemo-doc-topbar],[data-htmlmemo-doc-topbar-item]{height:24px!important;min-height:24px!important;max-height:24px!important;padding-top:0!important;padding-bottom:0!important;margin-top:0!important;margin-bottom:0!important;box-sizing:border-box!important;align-items:center!important}[data-htmlmemo-doc-topbar] *{padding-top:0!important;padding-bottom:0!important;margin-top:0!important;margin-bottom:0!important;min-height:0!important;box-sizing:border-box!important}[data-htmlmemo-doc-topbar]>div,[data-htmlmemo-doc-topbar]>nav{height:100%!important;max-height:24px!important;align-items:center!important}[data-htmlmemo-doc-topbar] h1,[data-htmlmemo-doc-topbar] h2,[data-htmlmemo-doc-topbar] h3,[data-htmlmemo-doc-topbar] strong,[data-htmlmemo-doc-topbar] [class*="title"]{font-size:13px!important;line-height:22px!important;white-space:nowrap!important}[data-htmlmemo-doc-topbar] button,[data-htmlmemo-doc-topbar] [role="button"],[data-htmlmemo-doc-topbar] input{height:20px!important;min-height:20px!important;max-height:20px!important;padding-top:0!important;padding-bottom:0!important;font-size:12px!important;line-height:18px!important;border-radius:4px!important;align-items:center!important;justify-content:center!important}[data-htmlmemo-doc-topbar] select{height:20px!important;min-height:20px!important;max-height:20px!important;padding-top:0!important;padding-bottom:0!important;font-size:12px!important;line-height:18px!important;border-radius:4px!important}[data-htmlmemo-doc-topbar] button:not(#reader-menu),[data-htmlmemo-doc-topbar] [role="button"]:not(#reader-menu),[data-htmlmemo-doc-topbar] input:not(#reader-menu){display:inline-flex!important}[data-htmlmemo-doc-topbar] svg{width:14px!important;height:14px!important}`;
@@ -408,8 +411,8 @@ export class Reader {
       const target = event.target?.nodeType === 1 ? event.target : event.target?.parentElement;
       this.lastTocClickState = this.captureTocClickState(target);
       if (this.tocResizeJustEnded || this.isTocResizerNode(target)) { this.tocResizeJustEnded = false; event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation?.(); return; }
-      const annotation = target?.closest?.('[data-htmlmemo-id]');
-      if (annotation && this.tool === 'select') { event.preventDefault(); event.stopPropagation(); this.selectedId = annotation.dataset.htmlmemoId; this.callbacks.onSelect?.(this.selectedId); return; }
+      const annotationId = this.annotationIdAt(target);
+      if (annotationId && this.tool === 'select') { event.preventDefault(); event.stopPropagation(); this.selectedId = annotationId; this.callbacks.onSelect?.(this.selectedId); return; }
       if (this.tocStrip) {
         const btn = target?.closest?.('button,[role="button"]');
         if (btn && !this.tocResize?.sidebar?.contains?.(btn)) {
@@ -1614,6 +1617,7 @@ export class Reader {
     set(this.frame.style,'transform',`scale(${this.zoom})`);
     set(this.sizer.style,'width',this.naturalWidth*this.zoom+'px');
     set(this.sizer.style,'height',(this.nativeScroll?Math.max(200*this.zoom,this.viewport.clientHeight):(this.naturalHeight||800)*this.zoom)+'px');
+    this.syncAnnotationPicking();
     this.updateReadingControls();
   }
   rootScrollTop() { return this.doc?.defaultView?.scrollY || this.doc?.scrollingElement?.scrollTop || this.doc?.documentElement?.scrollTop || 0; }
@@ -1754,6 +1758,7 @@ export class Reader {
   }
   setTool(tool) {
     this.tool = tool; this.doc.documentElement.toggleAttribute('data-htmlmemo-drawing', DRAW_TOOLS.includes(tool) || ['note','text'].includes(tool));
+    this.syncAnnotationPicking();
     if (TEXT_TOOLS.includes(tool) && this.selection) this.addText(tool, this.selection);
     this.callbacks.onView?.();
   }
@@ -1954,7 +1959,7 @@ export class Reader {
   pointerDown(event) {
     if (event.button !== 0) return;
     if (this.tool === 'eraser') {
-      const target = event.target.closest?.('[data-htmlmemo-id]'); if (target) { event.preventDefault(); this.remove(target.dataset.htmlmemoId); } return;
+      const id = this.annotationIdAt(event.target); if (id) { event.preventDefault(); this.remove(id); } return;
     }
     if (this.isInteractiveControl(event.target)) return;
     if (DRAW_TOOLS.includes(this.tool) || ['note','text'].includes(this.tool)) {
@@ -2101,6 +2106,24 @@ export class Reader {
     return {points:annotation.points.map(p => ({x:box.x + p.x * box.width, y:box.y + p.y * box.height})),scale:1};
   }
   absolutePoints(annotation) { return this.drawingGeometry(annotation).points; }
+  annotationIdAt(target) {
+    const node=(target?.nodeType===3?target.parentElement:target)?.closest?.('[data-htmlmemo-id],[data-htmlmemo-hit]');
+    const id=node?.getAttribute('data-htmlmemo-id')||node?.getAttribute('data-htmlmemo-hit');
+    return id&&this.metadata.annotations.some(annotation=>annotation.id===id)?id:null;
+  }
+  syncAnnotationPicking() {
+    this.doc?.documentElement?.toggleAttribute?.('data-htmlmemo-picking',['select','eraser'].includes(this.tool||'select'));
+    // Six screen pixels beyond either edge, independent of the reader zoom.
+    const style=this.layer?.style,padding=12/(this.zoom||1)+'px';
+    if(style&&style.getPropertyValue('--htmlmemo-hit-padding')!==padding)style.setProperty('--htmlmemo-hit-padding',padding);
+  }
+  drawingHitArea(node,id) {
+    if(!['path','rect','ellipse','circle'].includes(node.localName))return null;
+    const hit=node.cloneNode(false),width=node.getAttribute('stroke')==='none'?0:Number(node.getAttribute('stroke-width'))||0;
+    hit.removeAttribute('data-htmlmemo-id');hit.setAttribute('data-htmlmemo-hit',id);hit.setAttribute('aria-hidden','true');hit.setAttribute('fill','none');hit.setAttribute('stroke','transparent');
+    hit.setAttribute('style',`pointer-events:none;stroke-width:calc(${width}px + var(--htmlmemo-hit-padding,12px))`);
+    return hit;
+  }
   drawAnnotation(annotation, preview = false, geometry = null) {
     const {points:p,scale} = preview ? {points:annotation.points,scale:1} : geometry || this.drawingGeometry(annotation); if (!p?.length) return null;
     const attrs = {stroke:annotation.color, 'stroke-width':annotation.width * (annotation.type === 'pen' ? scale : 1), fill:'none', opacity:annotation.opacity, 'stroke-linecap':'round', 'stroke-linejoin':'round', 'data-htmlmemo-id':annotation.id, style:'pointer-events:visiblePainted;cursor:pointer'};
@@ -2153,12 +2176,13 @@ export class Reader {
       this.drawingContentKey=null;this.drawingLayoutKey=null;
     }
     this.layer=layer;
+    this.syncAnnotationPicking();
     const width=scrollHost ? Math.max(1, scrollHost.clientWidth || this.doc.documentElement?.clientWidth || this.naturalWidth) : (this.nativeScroll ? this.doc.documentElement?.clientWidth || this.naturalWidth : this.naturalWidth);
     const height=(this.nativeScroll || scrollHost) ? 1 : this.naturalHeight || 800;
     if(layer.getAttribute('width')!==String(width))layer.setAttribute('width',String(width));
     if(layer.getAttribute('height')!==String(height))layer.setAttribute('height',String(height));
     if(contentKey!==this.drawingContentKey || layoutKey!==this.drawingLayoutKey){
-      layer.replaceChildren(...drawings.map((a,i)=>this.drawAnnotation(a,false,geometry[i])).filter(Boolean));
+      layer.replaceChildren(...drawings.flatMap((a,i)=>{const node=this.drawAnnotation(a,false,geometry[i]);if(!node)return [];const hit=this.drawingHitArea(node,a.id);return hit?[node,hit]:[node];}));
       this.drawingContentKey=contentKey;this.drawingLayoutKey=layoutKey;
     }
     if(scrollHost){

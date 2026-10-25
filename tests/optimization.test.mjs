@@ -84,7 +84,7 @@ test('500 strokes sharing a paragraph measure its origin, box and font once per 
   reader.ensureAnnotationLayerHost=()=>null;reader.layerOrigin=()=>{origins++;return {left:0,top:0,scrollHost:null};};reader.drawingFontSize=()=>{fonts++;return fontSize;};
   p.getBoundingClientRect=()=>{boxes++;return {left:10,top:20,width:400,height};};p.getClientRects=()=>{visibility++;return [{}];};
   const query=doc.querySelector.bind(doc);doc.querySelector=selector=>{if(selector.startsWith('[data-htmlmemo-anchor='))queries++;return query(selector);};
-  reader.renderDrawingLayer();assert.deepEqual({origins,boxes,fonts,visibility,queries},{origins:1,boxes:1,fonts:1,visibility:1,queries:1});assert.equal(reader.layer.children.length,500);
+  reader.renderDrawingLayer();assert.deepEqual({origins,boxes,fonts,visibility,queries},{origins:1,boxes:1,fonts:1,visibility:1,queries:1});assert.equal(reader.layer.querySelectorAll('[data-htmlmemo-id]').length,500);assert.equal(reader.layer.querySelectorAll('[data-htmlmemo-hit]').length,500);
   const first=reader.layer.firstElementChild;reader.renderDrawingLayer();assert.strictEqual(reader.layer.firstElementChild,first);assert.equal(boxes,2,'measurements are not retained across passes');
   height=400;fontSize=36;reader.renderDrawingLayer();assert.equal(reader.layer.firstElementChild.getAttribute('d'),'M90.00,60.00 L250.00,100.00');
   p.remove();reader.renderDrawingLayer();assert.equal(reader.layer.children.length,0);assert.equal(reader.metadata.annotations.length,500);
