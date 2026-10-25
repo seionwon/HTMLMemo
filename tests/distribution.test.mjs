@@ -165,11 +165,13 @@ test('the single header menu preserves library, web opening, HTML import, app de
   assert.ok(doc.querySelector('#tabs').closest('.addressbar'));
   assert.equal(doc.querySelector('#tabs').closest('#app-menu'),null);
   assert.equal(doc.querySelector('#open-tabs-menu'),null);
-  for(const id of ['#execution-tab','#new-tab','#install-button','#web-help-button','#paste-button','#settings-button','#about-button'])assert.ok(doc.querySelector(id).closest('#app-menu'));
+  for(const id of ['#execution-tab','#install-button','#web-help-button','#settings-button','#about-button'])assert.ok(doc.querySelector(id).closest('#app-menu'));
+  assert.equal(!!doc.querySelector('#new-tab,#app-menu #paste-button'),false);
   assert.equal(doc.querySelector('#import-button'),null);
   assert.equal(doc.querySelector('#save-page').previousElementSibling.id,'library-tab');
   assert.equal(doc.querySelector('#library-tab').textContent,'');assert.equal(doc.querySelector('#library-tab').title,'내 서재');
-  for(const id of ['#library-tab','#execution-tab','#new-tab','#save-page'])assert.ok(doc.querySelector(id).closest('header'));
+  for(const id of ['#library-tab','#execution-tab','#save-page'])assert.ok(doc.querySelector(id).closest('header'));
+  assert.deepEqual([...doc.querySelectorAll('#library .hero-actions button')].map(button=>button.id),['browse-start','hero-import','paste-button']);
   assert.ok(doc.querySelector('#hero-import').closest('#library'));assert.equal(doc.querySelector('#hero-import').textContent,'HTML 파일 가져오기');
   assert.ok(doc.querySelector('#choose-folder'));assert.ok(doc.querySelector('#menu-folder'));
   assert.equal(doc.querySelector('#library-tab').getAttribute('aria-current'),'page');
@@ -179,7 +181,7 @@ test('the single header menu preserves library, web opening, HTML import, app de
   assert.equal(doc.querySelector('#execution-tab').getAttribute('aria-current'),'page');
   assert.equal(doc.querySelector('#library-tab').getAttribute('aria-current'),'false');
   let focused=false;doc.querySelector('#address').focus=()=>focused=true;
-  click('#new-tab');assert.equal(focused,true);
+  click('#library-tab');click('#browse-start');assert.equal(focused,true);
   assert.equal(doc.querySelector('#library').hidden,false);
   assert.equal(doc.querySelector('#execution').hidden,true);
   click('#execution-tab');click('#library-tab');
@@ -200,11 +202,18 @@ test('the dropdown opens without a modal and supports keyboard navigation, Escap
   const key=value=>{const event=new doc.defaultView.Event('keydown',{bubbles:true,cancelable:true});event.key=value;doc.activeElement.dispatchEvent(event);};
   assert.equal(menu.hidden,true);trigger.onclick();
   assert.equal(menu.hidden,false);assert.equal(trigger.getAttribute('aria-expanded'),'true');assert.ok(!doc.querySelector('#dialog').open);
-  assert.equal(doc.activeElement.id,'new-tab');key('ArrowDown');assert.equal(doc.activeElement.id,'paste-button');key('ArrowDown');assert.equal(doc.activeElement.id,'execution-tab');
-  key('End');assert.equal(doc.activeElement.id,'about-button');key('Home');assert.equal(doc.activeElement.id,'new-tab');
+  assert.equal(doc.activeElement.id,'execution-tab');key('ArrowDown');assert.equal(doc.activeElement.id,'install-button');key('ArrowDown');assert.equal(doc.activeElement.id,'menu-folder');
+  key('End');assert.equal(doc.activeElement.id,'about-button');key('Home');assert.equal(doc.activeElement.id,'execution-tab');
   key('Escape');assert.equal(menu.hidden,true);assert.equal(trigger.getAttribute('aria-expanded'),'false');assert.equal(doc.activeElement,trigger);
   trigger.onclick();doc.body.dispatchEvent(new doc.defaultView.Event('pointerdown',{bubbles:true}));assert.equal(menu.hidden,true);
-  trigger.onclick();doc.querySelector('#new-tab').click();assert.equal(menu.hidden,true);assert.equal(doc.activeElement.id,'address');
+  trigger.onclick();doc.querySelector('#execution-tab').click();assert.equal(menu.hidden,true);assert.equal(doc.querySelector('#execution').hidden,false);
+});
+
+test('library text paste is a single ordinary action that opens the editor and cancels without changing saved notes',async()=>{
+  const record={id:'kept-paste',title:'기존 문서',name:'kept.html',created:1234,modified:5678,metadata:{annotations:[{id:'note',text:'보존할 주석'}],bookmarks:[{id:'mark'}]}},before=structuredClone(record),{doc}=await fileApp({documents:[record]});
+  assert.equal(doc.querySelectorAll('#paste-button').length,1);const paste=doc.querySelector('#library .hero-actions #paste-button');assert.ok(paste);assert.equal(paste.getAttribute('role'),null);assert.equal(paste.textContent,'텍스트 붙여넣기');
+  paste.onclick();assert.equal(doc.querySelector('#dialog').open,true);assert.equal(doc.activeElement.id,'paste-text');assert.equal(doc.querySelector('#paste-title').value,'붙여넣은 글');assert.equal(doc.querySelector('#paste-source').value,'');
+  doc.querySelector('#dialog .dialog-actions [data-dialog-close]').onclick();assert.equal(doc.querySelector('#dialog').open,false);assert.equal(doc.querySelector('#library').hidden,false);assert.equal(doc.querySelectorAll('.document-card').length,1);assert.deepEqual(record,before);
 });
 
 test('card and list views sort by both directions for saved date, modified date and title, and restore the selection',async()=>{

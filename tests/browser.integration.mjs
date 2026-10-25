@@ -712,7 +712,7 @@ test('real Chrome: Pages-only URL use, safe text import, app tabs and optional i
     assert.deepEqual(await page.evaluate('(()=>{const a=document.querySelector(".browser-host:not([hidden]) [data-open-external]");return {url:a.href,target:a.target,rel:a.rel};})()'),{url:exampleURL,target:'_blank',rel:'noopener noreferrer'});
     // Obsolete extension messages must not import a page or alter navigation.
     await page.evaluate('postMessage({channel:"htmlmemo-extension-ready"},"*");postMessage({channel:"htmlmemo-extension-capture",capture:{title:"Unrequested page",html:"<p>ignored</p>"}},"*");window.pickerCalls=0;window.showSaveFilePicker=async()=>{pickerCalls++;throw Error("No picker is needed for library import");};');
-    await page.click('.browser-host:not([hidden]) [data-web-help]');await page.click('#web-help-paste');
+    await page.click('#library-tab');await page.click('#paste-button');
     const text='기억할 문장과 함께 읽습니다.\n둘째 줄을 유지합니다.\n\n<script>window.pastedExecuted=true</script>';
     await page.evaluate(`document.querySelector('#paste-title').value='URL만으로 보관한 글';document.querySelector('#paste-text').value=${JSON.stringify(text)};`);
     await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/pages-only-desktop.png'),await page.screenshot());
@@ -849,7 +849,7 @@ test('real Chrome: browsing, capture, local annotation, file writes, reopen and 
         assert.equal(await page.evaluate('document.querySelector(".about-brand h3").textContent'),'HTMLMemo');
         await page.click('#dialog [data-dialog-close]');
         await clickAppMenu(page,'#execution-tab');await page.waitFor('!document.querySelector("#execution").hidden');
-        await clickAppMenu(page,'#new-tab');await page.waitFor('!document.querySelector("#library").hidden && document.activeElement.id==="address"');
+        await page.click('#library-tab');await page.click('#browse-start');await page.waitFor('!document.querySelector("#library").hidden && document.activeElement.id==="address"');
         await clickAppMenu(page,'#execution-tab');await page.click('#library-tab');await page.waitFor('!document.querySelector("#library").hidden');
         await clickLibraryImport(page);
       }
@@ -1156,8 +1156,16 @@ test('real Chrome: compact library shares titles and sources, keeps dense views 
     await page.evaluate(`(async()=>{const {putDocumentRevision}=await import('./src/storage.js'),{parseHTML}=await import('./src/document.js');for(let i=0;i<8;i++){const title=i===0?'로컬 LLM 학습 노트':i===1?'아주긴제목'.repeat(12)+' & <정리>':'Compact book '+i,source=i%2?'https://very-long-library-source.example.test/book/'+i:'',html='<html><head><title>Compact library</title></head><body><h1 id="compact-target">Document '+i+'</h1><p>Keep the original source and annotation records.</p></body></html>',parsed=parseHTML(html,{title,source},{allowScripts:true});parsed.metadata.title=title;if(i===0){parsed.metadata.annotations=[{id:'kept-note',type:'note',text:'기존 주석 보존',color:'#334155',width:3,opacity:1,points:[{x:20,y:30}]}];parsed.metadata.bookmarks=[{id:'kept-mark',title:'기존 북마크',top:0,left:0}];}await putDocumentRevision({id:'compact-'+i,title,name:'compact-'+i+'.html',source,created:1000+i,modified:2000+i,html:parsed.html,metadata:parsed.metadata});}})()`);
     const state=()=>page.evaluate(`(async()=>{const {listDocuments,listRevisions}=await import('./src/storage.js');return Promise.all((await listDocuments()).map(async r=>({id:r.id,title:r.title,modified:r.modified,annotations:r.metadata.annotations,bookmarks:r.metadata.bookmarks,revisions:(await listRevisions(r.id)).length})));})()`);
     const before=await state();await page.navigate(url);await page.waitFor('document.querySelectorAll(".document-card").length===8');
+    assert.equal(await page.evaluate('!!document.querySelector("#new-tab,#app-menu #paste-button")'),false);
+    assert.deepEqual(await page.evaluate('[...document.querySelectorAll("#library .hero-actions button")].map(button=>button.id)'),['browse-start','hero-import','paste-button']);
+    assert.equal(await page.evaluate('document.querySelectorAll("#paste-button").length'),1);
     for(const width of [1280,800,600,390,320]){
       await page.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
+      assert.equal(await page.evaluate(`(()=>{const hero=document.querySelector('#library .hero').getBoundingClientRect();return [...document.querySelectorAll('#library .hero-actions button')].every(button=>{const r=button.getBoundingClientRect();return r.width>0&&r.height>0&&r.left>=0&&r.right<=innerWidth&&r.top>=hero.top&&r.bottom<=hero.bottom&&button.contains(document.elementFromPoint(r.left+r.width/2,r.top+r.height/2));});})()`),true,'all three library actions remain visible and reachable at '+width);
+      await page.click('#paste-button');await page.waitFor('document.querySelector("#dialog").open&&document.activeElement.id==="paste-text"');
+      assert.equal(await page.evaluate('document.querySelector("#paste-button").getAttribute("role")'),null);
+      if([1280,390,320].includes(width)){await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/library-compact-paste-'+width+'.png'),await page.screenshot());}
+      await page.click('#dialog .dialog-actions [data-dialog-close]');await page.waitFor('!document.querySelector("#dialog").open&&!document.querySelector("#library").hidden');assert.deepEqual(await state(),before);
       for(const view of ['card','list']){
         await page.click('#library-'+view+'-view');
         const metrics=await page.evaluate(`(()=>{const grid=document.querySelector('#document-grid'),cards=[...grid.querySelectorAll('.document-card')],rect=node=>{const r=node.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width,height:r.height};};return {view:grid.dataset.view,overflow:document.querySelector('#library').scrollWidth>innerWidth,hero:rect(document.querySelector('.hero')).height,cards:cards.map(card=>{const r=rect(card),open=card.querySelector('.card-open'),menu=card.querySelector('.card-menu'),m=rect(menu);return {height:r.height,top:r.top,titleCount:card.querySelectorAll('h3').length,sourceCount:card.querySelectorAll('.list-host').length,preview:!!card.querySelector('.card-preview,.list-details'),title:card.querySelector('.list-title').textContent,fullTitle:card.querySelector('.list-title').title,menuWidth:m.width,menuHeight:m.height,menuHit:menu.contains(document.elementFromPoint(m.left+m.width/2,m.top+m.height/2)),inside:[...open.querySelectorAll('.list-title,.list-host,.list-date,.list-annotations,.list-size,.list-progress')].every(node=>{const b=rect(node);return !b.width||b.left>=r.left&&b.right<=r.right&&b.top>=r.top&&b.bottom<=r.bottom;})};})};})()`);

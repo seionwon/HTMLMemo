@@ -1167,10 +1167,10 @@ async function copyAppURL(){
 }
 function bindUI() {
   document.addEventListener('fullscreenchange',()=>{if(document.fullscreenElement===$('#app') && readerFocused)nativeReaderFullscreen=true;else if(nativeReaderFullscreen){nativeReaderFullscreen=false;setReaderFocus(false);}});
-  [['#new-tab','globe','웹 페이지 열기'],['#paste-button','note','텍스트 붙여넣기'],['#web-help-button','info','웹페이지 가져오기 안내'],['#execution-tab','external','실행과 앱 전달'],['#address-open','external'],['#back','back'],['#forward','forward'],['#reload','reload'],['#save-page','save'],['#app-menu-button','chevron-down','메뉴'],['#settings-button','settings','설정'],['#menu-folder','folder','저장 폴더 연결'],['#about-button','info','About'],['#library-search-icon','search'],['#empty-icon','file'],['#library-card-view','grid','카드'],['#library-list-view','list','목록']].forEach(([id,name,label])=>setButton(id,name,label));
+  [['#web-help-button','info','웹페이지 가져오기 안내'],['#execution-tab','external','실행과 앱 전달'],['#address-open','external'],['#back','back'],['#forward','forward'],['#reload','reload'],['#save-page','save'],['#app-menu-button','chevron-down','메뉴'],['#settings-button','settings','설정'],['#menu-folder','folder','저장 폴더 연결'],['#about-button','info','About'],['#library-search-icon','search'],['#empty-icon','file'],['#library-card-view','grid','카드'],['#library-list-view','list','목록']].forEach(([id,name,label])=>setButton(id,name,label));
   setIconButton('#library-tab','library','내 서재');
   bindAppMenu();bindTabs();$('#menu-folder').onclick=safely(chooseFolder);$('#about-button').onclick=aboutDialog;
-  $('#library-tab').onclick=()=>activate('library');$('#new-tab').onclick=()=>{activate('library');focusAddress();};$('#browse-start').onclick=focusAddress;
+  $('#library-tab').onclick=()=>activate('library');$('#browse-start').onclick=focusAddress;
   $('#execution-tab').onclick=()=>activate('execution');$('#execution-import').onclick=safely(importFiles);$('#execution-web').onclick=()=>webHelpDialog();$('#execution-settings').onclick=settingsDialog;
   $('#share-url').value=PUBLIC_APP_URL;$('#shared-app-link').href=PUBLIC_APP_URL;
   $('#share-app').onclick=safely(copyAppURL);

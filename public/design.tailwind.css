@@ -277,7 +277,7 @@ body[data-codememo-design]{margin:0;font-family:var(--app-font);background:var(-
 #library .hero{padding:12px 0;min-height:0}
 #library .hero-copy{display:flex;align-items:center;justify-content:space-between;gap:12px}
 #library .hero .eyebrow,#library .hero-description,#library .feature-tags{display:none}
-#library .hero h1{font-size:16px;line-height:1.35;letter-spacing:-.4px;margin:0}
+#library .hero h1{flex-shrink:0;font-size:16px;line-height:1.35;letter-spacing:-.4px;margin:0}
 #library .hero-actions{margin:0;gap:6px;flex-wrap:wrap}
 #library .hero-actions .primary-button,#library .hero-actions .secondary-button{height:28px;min-width:0;padding:5px 10px;font-size:11px;border-radius:6px}
 #library .hero-actions .primary-button>span{font-size:12px}
