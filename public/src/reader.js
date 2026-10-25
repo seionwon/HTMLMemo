@@ -146,7 +146,7 @@ export class Reader {
     });
   }
   baseEditorStyle() {
-    return 'html[data-htmlmemo-picking] [data-htmlmemo-mark],html[data-htmlmemo-picking] [data-htmlmemo-mark] *{cursor:pointer!important}html[data-htmlmemo-picking] [data-htmlmemo-hit]{pointer-events:stroke!important;cursor:pointer!important}html[data-htmlmemo-picking="select"] [data-htmlmemo-id],html[data-htmlmemo-picking="select"] [data-htmlmemo-hit]{touch-action:none!important}[data-htmlmemo-preview],[data-htmlmemo-preview] *{pointer-events:none!important}[data-htmlmemo-drag-source]{opacity:.25!important;pointer-events:none!important}html[data-htmlmemo-moving],html[data-htmlmemo-moving][data-htmlmemo-picking] *{cursor:grabbing!important;user-select:none!important;-webkit-user-select:none!important}' + this.layoutEditorStyle();
+    return 'html[data-htmlmemo-picking] [data-htmlmemo-mark],html[data-htmlmemo-picking] [data-htmlmemo-mark] *{cursor:pointer!important}html[data-htmlmemo-picking] [data-htmlmemo-hit]{pointer-events:stroke!important;cursor:pointer!important}html[data-htmlmemo-picking="select"] #htmlmemo-annotation-layer,html[data-htmlmemo-picking="select"] [data-htmlmemo-id],html[data-htmlmemo-picking="select"] [data-htmlmemo-hit]{touch-action:none!important}[data-htmlmemo-preview],[data-htmlmemo-preview] *{pointer-events:none!important}[data-htmlmemo-drag-source]{opacity:.25!important;pointer-events:none!important}html[data-htmlmemo-moving],html[data-htmlmemo-moving][data-htmlmemo-picking] *{cursor:grabbing!important;user-select:none!important;-webkit-user-select:none!important}' + this.layoutEditorStyle();
   }
   layoutEditorStyle() {
     // Keep the source book's responsive #reader-menu visibility; forcing flex
@@ -2015,7 +2015,7 @@ export class Reader {
     const drag=this.annotationDrag;if(!drag||drag.pointerId!==event.pointerId)return false;
     event.preventDefault();event.stopPropagation();
     if(this.disposed||this.tool!=='select'||drag.section!==currentSection(this.doc)){this.cancelAnnotationDrag();return true;}
-    const point=this.point(event);drag.delta={x:point.x-drag.start.x,y:point.y-drag.start.y};
+    const point=this.point(event);drag.delta={x:point.x-drag.start.x,y:point.y-drag.start.y};drag.lastPoint={clientX:event.clientX,clientY:event.clientY};
     if(!drag.moved){
       if(Math.hypot(drag.delta.x,drag.delta.y)*(this.zoom||1)<4)return true;
       drag.moved=true;this.doc.documentElement.setAttribute('data-htmlmemo-moving','');
@@ -2054,11 +2054,13 @@ export class Reader {
   }
   finishAnnotationDrag(event) {
     const drag=this.annotationDrag;if(!drag||drag.pointerId!==event.pointerId)return false;
-    if(drag.moved)this.moveAnnotationDrag(event);
+    // Keep a touch drop at the last visible preview; a release can report
+    // coordinates after the browser has already ended direct manipulation.
+    if(drag.moved&&event.pointerType!=='touch')this.moveAnnotationDrag(event);
     if(this.annotationDrag!==drag)return true;
     let next=null;
     if(drag.moved&&this.metadata.annotations.includes(drag.source)&&drag.section===currentSection(this.doc)){
-      if(drag.geometry){if(Math.hypot(drag.delta.x,drag.delta.y)>.001)next=this.movedDrawingAnnotation(drag,event);}
+      if(drag.geometry){if(Math.hypot(drag.delta.x,drag.delta.y)>.001)next=this.movedDrawingAnnotation(drag,event.pointerType==='touch'?drag.lastPoint:event);}
       else{const entry=this.searchCache().entry(this.doc.body);this.searchCache().flush(entry);if(!entry.dirty&&entry.index===drag.index)next=drag.next;if(next?.textAnchor.start===drag.resolved.start&&next?.textAnchor.end===drag.resolved.end)next=null;}
     }
     this.cancelAnnotationDrag();

@@ -79,3 +79,6 @@ test('touch implicit capture can transfer from a mark to the root; losing root c
   lost(mark);assert.strictEqual(r.annotationDrag,drag);assert.equal(f.captured,true);assert.ok(doc.querySelector('[data-htmlmemo-preview]'));
   lost(doc.documentElement);assert.equal(r.annotationDrag,null);assert.equal(f.captured,false);assert.deepEqual(r.metadata.annotations,before);assert.equal(f.changes,0);
 });
+test('a touch release saves the last visible preview even when its release coordinates differ',async()=>{
+  const f=fixture(),{r}=f,before=r.drawingGeometry(r.metadata.annotations[0]);r.pointerDown(f.event(80,40,{pointerType:'touch'}));r.pointerMove(f.event(120,70,{pointerType:'touch'}));await r.pointerUp(f.event(0,0,{pointerType:'touch'}));assert.equal(f.changes,1);for(const [i,p] of r.drawingGeometry(r.metadata.annotations[0]).points.entries()){assert.ok(Math.abs(p.x-before.points[i].x-40)<1e-8);assert.ok(Math.abs(p.y-before.points[i].y-30)<1e-8);}
+});
