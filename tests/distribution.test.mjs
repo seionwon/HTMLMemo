@@ -165,7 +165,8 @@ test('the single header menu preserves library, web opening, HTML import, app de
   assert.ok(doc.querySelector('#tabs').closest('.addressbar'));
   assert.equal(doc.querySelector('#tabs').closest('#app-menu'),null);
   assert.equal(doc.querySelector('#open-tabs-menu'),null);
-  for(const id of ['#execution-tab','#install-button','#web-help-button','#settings-button','#about-button'])assert.ok(doc.querySelector(id).closest('#app-menu'));
+  for(const id of ['#execution-tab','#install-button','#settings-button','#about-button'])assert.ok(doc.querySelector(id).closest('#app-menu'));
+  assert.equal(!!doc.querySelector('#app-menu #web-help-button'),false);assert.ok(doc.querySelector('#library #web-help-button'));
   assert.equal(!!doc.querySelector('#new-tab,#app-menu #paste-button'),false);
   assert.equal(doc.querySelector('#import-button'),null);
   assert.equal(doc.querySelector('#save-page').previousElementSibling.id,'library-tab');
@@ -214,6 +215,15 @@ test('library text paste is a single ordinary action that opens the editor and c
   assert.equal(doc.querySelectorAll('#paste-button').length,1);const paste=doc.querySelector('#library .hero-actions #paste-button');assert.ok(paste);assert.equal(paste.getAttribute('role'),null);assert.equal(paste.textContent,'텍스트 붙여넣기');
   paste.onclick();assert.equal(doc.querySelector('#dialog').open,true);assert.equal(doc.activeElement.id,'paste-text');assert.equal(doc.querySelector('#paste-title').value,'붙여넣은 글');assert.equal(doc.querySelector('#paste-source').value,'');
   doc.querySelector('#dialog .dialog-actions [data-dialog-close]').onclick();assert.equal(doc.querySelector('#dialog').open,false);assert.equal(doc.querySelector('#library').hidden,false);assert.equal(doc.querySelectorAll('.document-card').length,1);assert.deepEqual(record,before);
+});
+
+test('library web import guide opens the existing help and retains import, paste and saved notes',async()=>{
+  const record={id:'kept-guide',title:'기존 문서',name:'kept.html',created:1234,modified:5678,metadata:{annotations:[{id:'note',text:'보존할 주석'}],bookmarks:[{id:'mark'}]}},before=structuredClone(record),{doc}=await fileApp({documents:[record]});
+  const guide=doc.querySelector('#library #web-help-button');assert.ok(guide);assert.equal(doc.querySelectorAll('#web-help-button').length,1);assert.equal(guide.getAttribute('role'),null);assert.equal(guide.getAttribute('aria-haspopup'),'dialog');assert.equal(guide.textContent,'웹페이지 가져오기 안내');assert.ok(guide.previousElementSibling.classList.contains('hero'));
+  guide.onclick();assert.equal(doc.querySelector('#dialog').open,true);assert.equal(doc.querySelector('#dialog h2').textContent,'Chrome에서 탐색하고 여기서 메모하기');assert.ok(doc.querySelector('#web-help-import'));assert.ok(doc.querySelector('#web-help-paste'));
+  doc.querySelector('#web-help-paste').onclick();assert.ok(doc.querySelector('#paste-form'));doc.querySelector('#dialog .dialog-actions [data-dialog-close]').onclick();
+  let picked=0;doc.querySelector('#file-input').click=()=>picked++;guide.onclick();doc.querySelector('#web-help-import').onclick();await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(picked,1);assert.equal(doc.querySelector('#dialog').open,false);assert.equal(doc.querySelector('#library').hidden,false);assert.equal(doc.querySelectorAll('.document-card').length,1);assert.deepEqual(record,before);
 });
 
 test('card and list views sort by both directions for saved date, modified date and title, and restore the selection',async()=>{

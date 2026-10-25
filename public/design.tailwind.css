@@ -281,6 +281,9 @@ body[data-codememo-design]{margin:0;font-family:var(--app-font);background:var(-
 #library .hero-actions{margin:0;gap:6px;flex-wrap:wrap}
 #library .hero-actions .primary-button,#library .hero-actions .secondary-button{height:28px;min-width:0;padding:5px 10px;font-size:11px;border-radius:6px}
 #library .hero-actions .primary-button>span{font-size:12px}
+#library .library-help{display:flex;gap:4px;width:fit-content;max-width:100%;min-height:20px;margin:0 0 4px auto;padding:0;font-size:10px;text-decoration:underline;text-underline-offset:2px}
+#library .library-help svg{width:14px;height:14px}
+#library .library-help span{font-size:inherit}
 #library .library-heading{padding:10px 0;gap:8px}
 #library .library-heading h2{font-size:15px;margin:0}
 #library .library-heading p{display:none}
