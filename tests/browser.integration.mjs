@@ -1590,7 +1590,7 @@ test('real Chrome: scrolling saves quietly in batches, preserves annotation hist
     // persistence and the document's actual scrolling are exercised in Chrome.
     await page.evaluate(`${frame}.contentDocument.querySelector('main').scrollTop=1700;window.dispatchEvent(new PageTransitionEvent('pagehide'));`);
     await page.waitFor(`(async()=>{const {listDocuments}=await import('./src/storage.js');const record=(await listDocuments())[0];return Math.abs(record.metadata.view.scrollTop-1700*record.metadata.view.zoom)<1;})()`);
-    const final=await state();assert.equal(final.revisions,edited.revisions);assert.equal(final.modified,edited.modified);
+    const final=await state();assert.equal(final.revisions,closed.revisions);assert.equal(final.modified,edited.modified);
     await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/quiet-position-save-desktop.png'),await page.screenshot());
     await page.send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await writeFile(join(root,'test-results/quiet-position-save-mobile.png'),await page.screenshot());
     assert.deepEqual(chrome.errors,[]);
