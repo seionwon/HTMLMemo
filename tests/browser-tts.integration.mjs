@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { root, prepareAssets } from '../scripts/assets.mjs';
 import { createServer } from '../scripts/server.mjs';
-import { launchChrome, clickAppMenu } from './chrome.mjs';
+import { launchChrome } from './chrome.mjs';
 import { FORMAT_VERSION } from '../public/src/model.js';
 test('real Chrome: MemoSuite TTS toolbar in HTMLMemo',{timeout:90000},async t=>{
   await prepareAssets();await mkdir(join(root,'test-results'),{recursive:true});const folder=await mkdtemp(join(tmpdir(),'htmlmemo-web-test-'));await cp(join(root,'public'),folder,{recursive:true});await cp(join(root,'tests/fixtures'),join(folder,'fixtures'),{recursive:true});
@@ -95,7 +95,7 @@ test('real Chrome: MemoSuite TTS toolbar in HTMLMemo',{timeout:90000},async t=>{
       await page.evaluate('window.__utterances.at(-1).onend()');assert.equal(await page.evaluate('window.__utterances.length'),count);
       await page.send('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
       await page.waitFor('!document.querySelector("#app").classList.contains("reader-focus")');
-      await page.click('.document-host:not([hidden]) > [data-htmlmemo-reading-controls] [data-action=speak]');await clickAppMenu(page,'#library-tab');
+      await page.click('.document-host:not([hidden]) > [data-htmlmemo-reading-controls] [data-action=speak]');await page.click('#library-tab');
       assert.equal(await page.evaluate('!!document.querySelector(".mstts-player")'),false);
       assert.equal(await page.evaluate('window.__utterances.some(u=>u.text.includes("읽으면 안 되는"))'),false);
       assert.equal(chrome.errors.length,0,chrome.errors.join('\n'));
