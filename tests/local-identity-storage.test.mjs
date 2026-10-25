@@ -15,7 +15,7 @@ function storage(record=original){
       get:()=>request(current),getKey:()=>request('book'),
       put:value=>{writes.push(name);if(name==='documents')current=structuredClone(value);},
       add:()=>{throw Error('Source bodies and revisions must not be rewritten');},
-      index:()=>({openKeyCursor:()=>request({primaryKey:1})}),
+      index:()=>({openKeyCursor:()=>request({primaryKey:1}),openCursor:()=>request({primaryKey:1,value:current?.metadata})}),
     });
     return tx;
   }};

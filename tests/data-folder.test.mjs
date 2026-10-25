@@ -31,6 +31,13 @@ test('a fresh device restores only folder files with complete history and prefer
   const receiver=library([]),local=memoryLocal();let restored;await manager(t,receiver,local,{onRestored:value=>restored=value}).connect(disk);
   assert.equal(receiver.records.size,1);assert.equal(receiver.records.get('doc').metadata.annotations[0].text,'Separate annotation');assert.equal(receiver.histories.get('doc').length,2);assert.equal(receiver.records.get('doc').fileHandle,undefined);assert.equal(JSON.parse(local.getItem(PREFERENCES_KEY)).annotation.width,7);assert.equal(restored.count,1);assert.match(await receiver.contents.get('doc').originalFile.text(),/Raw received bytes/);
 });
+test('a history-only checkpoint updates the portable history without changing annotations or rewriting source files',async t=>{
+  const lib=library(),control={writes:[]},disk=memoryFolder('HTMLMemo',control),backup=manager(t,lib);lib.records.get('doc').historyVersion=1;
+  await backup.connect(disk);const first=await manifest(disk),reads=lib.reads;control.writes.length=0;
+  lib.histories.get('doc').push({id:3,documentId:'doc',created:3000,kind:'edit',annotations:lib.records.get('doc').metadata.annotations,bookmarks:[]});lib.records.get('doc').historyVersion++;
+  backup.schedule({id:'doc'});await backup.flush();const next=await manifest(disk);
+  assert.notEqual(next.documents[0].history.name,first.documents[0].history.name);assert.equal(JSON.parse(await readObject(disk,next.documents[0].history)).revisions.length,3);assert.deepEqual(next.documents[0].state,first.documents[0].state);assert.equal(lib.reads,reads);assert.ok(!control.writes.some(name=>name.endsWith('.html')));
+});
 test('annotation and view edits reuse original and prepared HTML without loading or rewriting source bodies',async t=>{
   const lib=library(),control={writes:[]},disk=memoryFolder('HTMLMemo',control),backup=manager(t,lib);await backup.connect(disk);const first=await manifest(disk),reads=lib.reads;control.writes.length=0;
   lib.records.get('doc').metadata.annotations[0].text='Updated note';lib.records.get('doc').metadata.view.scrollTop=3000;backup.schedule();await backup.flush();const next=await manifest(disk);

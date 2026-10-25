@@ -1,9 +1,9 @@
 import { $, $$, icon, escapeHTML as esc, uid, filename, normalizeURL, displayHost, formatDate, formatBytes, download } from './utils.js';
 import { parseHTML, SCRIPT_CSP, serializeBookSource } from './document.js';
-import { SaveQueue, ANNOTATION_LABELS } from './model.js';
+import { SaveQueue, AnnotationCheckpoints, ANNOTATION_LABELS } from './model.js';
 import { openEditionProbe, migrateAnnotations } from './migrate.js';
 import { Reader } from './reader.js';
-import { listDocuments, getDocument, deleteDocument, getSetting, setSetting, saveDocumentHTML, listRevisionSummaries, getRevision, putDocumentRevision, putDocumentView, putDocumentSourceIdentity, writeExternalHTML } from './storage.js';
+import { listDocuments, getDocument, deleteDocument, getSetting, setSetting, saveDocumentHTML, listRevisionSummaries, getRevision, putDocumentRevision, checkpointAnnotations, putDocumentView, putDocumentSourceIdentity, writeExternalHTML } from './storage.js';
 import {readWebPage,pastedPage,PASTE_LIMIT,isWebSearch,BrowserTabs} from './web.js';
 import { readLocalHTML, droppedHTMLFiles, findLocalDuplicates, identifyLocalFile, htmlExportName } from './local-files.js';
 import { normalizePreferences, loadPreferences, storePreferences, serializeSettings, readSettingsFile, PRESET_COLORS, PRESET_PALETTES, normalizeHexColor, hexToRgb, rgbToHex, hexToHsv, hsvToHex } from './preferences.js';
@@ -60,8 +60,10 @@ function updateInstall(state) {
   $('#install-message').textContent=state.installed?'앱으로 실행 중입니다. 문서·주석·설정은 이 기기에 저장됩니다.':!installableLocation(location)?'PWA 설치는 배포된 앱 주소에서 가능합니다. HTML 파일의 읽기·주석은 계속 사용할 수 있습니다.':isIOS(navigator)?'아이폰은 앱 설치 버튼에서 Chrome 공유 메뉴 사용 순서를 확인하세요.':'설치하지 않아도 앱의 URL에서 바로 사용할 수 있습니다.';
 }
 function promptText(type, initial = '') {
+  const inputTab=active();
   return new Promise(resolve=>{
     modal(`<form method="dialog" class="note-form"><div class="dialog-heading"><h2>${type==='text'?'텍스트 입력':'메모 남기기'}</h2><button class="icon-button" value="cancel" aria-label="닫기">${icon('close')}</button></div><textarea id="note-text" placeholder="생각을 적어보세요…" maxlength="10000" rows="6">${esc(initial)}</textarea><div class="dialog-actions"><button class="secondary-button" value="cancel">취소</button><button class="primary-button" value="save">저장</button></div></form>`,dialog=>{
+      $('#note-text').oninput=()=>inputTab?.checkpoints?.activity();
       const done=()=>{ resolve(dialog.returnValue==='save'?$('#note-text').value:null); dialog.removeEventListener('close',done); }; dialog.addEventListener('close',done); requestAnimationFrame(()=>$('#note-text').focus());
     });
   });
@@ -252,15 +254,17 @@ async function openRecord(record, prepared = null, {deferReady = false, sourceId
     }
     const html=tab.record.html; const metadata=structuredClone(tab.reader.metadata);
     tab.record.html=html;tab.record.metadata=metadata;tab.record.title=metadata.title;tab.record.modified=Date.now();
-    await saveDocumentHTML(tab.record, html, {revision:tab.restoredFrom?{restoredFrom:tab.restoredFrom}:undefined});
+    await saveDocumentHTML(tab.record, html, {revision:{checkpoint:!!tab.restoredFrom,...(tab.restoredFrom?{restoredFrom:tab.restoredFrom}:{})}});
     tab.restoredFrom=null;
     const {html:body,file:sourceFile,originalFile,...summary}=tab.record;
     records=records.filter(r=>r.id!==record.id).concat(summary);
     delete tab.record.html;delete tab.record.file;delete tab.record.originalFile;
   },()=>{if(activeId===tab.id)saveStatus(tab);renderTabs();renderFolderState();});
+  tab.checkpoints=new AnnotationCheckpoints(async()=>{await tab.queue.flush();await checkpointAnnotations(tab.record.id);},()=>{if(activeId===tab.id)saveStatus(tab);});
   tabs.push(tab);activate(tab.id);
   tab.reader=new Reader(tab.host,parsed,{
-    onChange:()=>{tab.queue.schedule();if(activeId===tab.id){renderToolbar();if(['annotations','bookmarks'].includes(sidebarMode))renderSidebar(sidebarMode);else updateSidebarCounts($('#sidebar'),tab.reader);tab.reader?.refreshDocumentSidebar();}},
+    onChange:()=>{tab.queue.schedule();tab.checkpoints.schedule();if(activeId===tab.id){renderToolbar();if(['annotations','bookmarks'].includes(sidebarMode))renderSidebar(sidebarMode);else updateSidebarCounts($('#sidebar'),tab.reader);tab.reader?.refreshDocumentSidebar();}},
+    onAnnotationInput:()=>tab.checkpoints.activity(),
     onPosition:()=>{tab.queue.schedule({background:true});renderFolderState();},onView:()=>{if(activeId===tab.id){updateChrome();updateToolbarState();}},
     onPreferenceChange:()=>dataFolder?.schedule({settingsOnly:true}),
     onTextSelection:()=>{if(activeId===tab.id)showSelectionMenu(tab.reader);},
@@ -279,7 +283,7 @@ async function openRecord(record, prepared = null, {deferReady = false, sourceId
     await tab.reader.ready;
     baselineMetadata=structuredClone(tab.reader.metadata);
     if(sourceIdentity){const identity=await sourceIdentity;if(identity)tab.record.sourceIdentity=identity;}
-  } catch(error) {tabs.splice(tabs.indexOf(tab),1);tab.reader.dispose();activate('library');throw error;}
+  } catch(error) {tabs.splice(tabs.indexOf(tab),1);tab.checkpoints.dispose();tab.reader.dispose();activate('library');throw error;}
   if(parsed.file){tab.record.file=parsed.file;delete tab.record.html;tab.reader.initialHTML=null;tab.record.metadata=tab.reader.metadata;tab.record.source=tab.reader.metadata.source;tab.title=tab.record.title=tab.reader.metadata.title;}
   if(activeId===tab.id)restoreSidebar();
   renderToolbar();
@@ -293,18 +297,19 @@ async function openRecord(record, prepared = null, {deferReady = false, sourceId
 }
 function saveStatus(tab) {
   const queue=tab.queue;if(!queue)return;
-  const label=queue.error?(queue.editsPending?'주석 자동 저장 실패 · ':'읽기 위치 저장 실패 · ')+queue.error.message:queue.editsPending||tab.opening?'저장 중…':'주석이 앱에 자동 저장됨';
+  const failure=queue.error||tab.checkpoints?.error;
+  const label=queue.error?(queue.editsPending?'주석 자동 저장 실패 · ':'읽기 위치 저장 실패 · ')+queue.error.message:tab.checkpoints?.error?'주석은 자동 저장됨 · 이력 저장 실패 · '+tab.checkpoints.error.message:queue.editsPending||tab.opening?'저장 중…':'주석이 앱에 자동 저장됨';
   const status=$('#status-left');let state=$('.save-state',status);
   if(!state){status.replaceChildren();state=document.createElement('span');status.append(state);}
-  const className=`save-state ${queue.error?'save-error':''}`;
+  const className=`save-state ${failure?'save-error':''}`;
   if(state.textContent.trim()!==label || state.className!==className){
     state.className=className;
-    state.innerHTML=`${icon(queue.error?'more':queue.editsPending||tab.opening?'reload':'check',13)} ${esc(label)}`;
+    state.innerHTML=`${icon(failure?'more':queue.editsPending||tab.opening?'reload':'check',13)} ${esc(label)}`;
   }
   let retry=$('#retry-save');
-  if(queue.error){
+  if(failure){
     if(!retry){retry=document.createElement('button');retry.id='retry-save';retry.className='text-button';status.append(retry);}
-    retry.textContent='저장 재시도';retry.onclick=safely(()=>tab.queue.flush());
+    retry.textContent='저장 재시도';retry.onclick=safely(async()=>{await tab.queue.flush();await tab.checkpoints?.flush({force:true});});
   }else retry?.remove();
   let bookNotice = $('[data-book-incomplete]', status);
   if (tab.reader?.bookIntegrity?.complete === false) {
@@ -320,7 +325,7 @@ async function closeTab(id) {
   tab.closing=true;
   tab.closePromise=(async()=>{
     try{
-      if(tab.reader){await tab.reader.ready;tab.reader.rememberPosition();await tab.queue.flush();tab.reader.dispose();}else tab.host.remove();
+      if(tab.reader){await tab.reader.ready;tab.reader.rememberPosition();await tab.queue.flush();await tab.checkpoints.flush({force:true});tab.checkpoints.dispose();tab.reader.dispose();}else tab.host.remove();
       browserTabs.forget(id);if(lastWebTab===tab)lastWebTab=null;tabs.splice(tabs.indexOf(tab),1);if(activeId===id)activate(tabs.at(-1)?.id||'library');else renderTabs();await refreshLibrary();
     }finally{tab.closing=false;tab.closePromise=null;}
   })();
@@ -370,7 +375,7 @@ function renderFolderState() {
   $('#library-data-folder').textContent=folder?'저장 위치 관리':'데이터 폴더 연결';
   if($('#settings-folder-status'))$('#settings-folder-status').textContent=status;
 }
-async function flushInternalDocuments() { for(const tab of tabs)if(tab.reader){await tab.reader.ready;tab.reader.rememberPosition();await tab.queue.flush();} }
+async function flushInternalDocuments() { for(const tab of tabs)if(tab.reader){await tab.reader.ready;tab.reader.rememberPosition();await tab.queue.flush();await tab.checkpoints.flush({force:true});} }
 async function connectDataFolder(selected,onConnected) {
   await flushInternalDocuments();
   await dataFolder.connect(selected);folder=dataFolder.handle;await refreshLibrary();
@@ -1048,7 +1053,7 @@ async function annotationHistory(tab, before = Infinity) {
   await tab.reader.ready;await tab.queue.flush();
   const versions=await listRevisionSummaries(tab.record.id,before);
   const stamp=value=>new Date(value).toLocaleString('ko-KR',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
-  modal(`<div class="dialog-heading"><h2>주석 저장 이력</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><p class="dialog-description">본문은 유지하고 선택한 시점의 주석과 북마크만 복원합니다. 복원 직전 상태도 이력에 남습니다.</p><p class="dialog-description small">이 기능을 사용하기 시작한 시점부터 보관합니다. 이력은 이 브라우저에 저장되며, 앱 데이터나 문서를 삭제하면 함께 삭제됩니다. HTML 내보내기에는 현재 주석만 포함됩니다.</p><div class="revision-list">${versions.map((version,index)=>`<button class="menu-button" data-revision="${version.id}"><span>${esc(stamp(version.created))} · #${version.id}<br><small>${version.kind==='restore'?'복원 저장':version.kind==='baseline'?'최초 보관':'주석 변경'} · 주석 ${version.annotationCount}개 · 북마크 ${version.bookmarkCount}개${index===0 && before===Infinity?' · 최근 저장':''}</small></span></button>`).join('') || '<p>아직 저장된 이력이 없습니다.</p>'}</div>${versions.length===50?'<button class=secondary-button id=history-older>더 이전 이력</button>':''}${before!==Infinity?'<button class=secondary-button id=history-latest>최근 이력</button>':''}`,()=>{
+  modal(`<div class="dialog-heading"><h2>주석 저장 이력</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><p class="dialog-description">본문은 유지하고 선택한 시점의 주석과 북마크만 복원합니다. 복원 직전 상태도 이력에 남습니다.</p><p id="history-save-policy" class="dialog-description small">작업은 빠르게 자동 저장합니다. 이력은 변경이 있을 때 5분마다 또는 주석 입력을 멈춘 뒤 1분이 지났을 때 중 먼저 해당하는 시점에 묶어 보관합니다. 문서를 닫을 때도 남기며, 같은 내용은 중복 보관하지 않습니다.</p><p class="dialog-description small">이력은 이 기기에 보관하며 데이터 폴더를 연결하면 함께 자동 저장합니다. HTML 내보내기에는 현재 주석만 포함됩니다.</p><div class="revision-list">${versions.map((version,index)=>`<button class="menu-button" data-revision="${version.id}"><span>${esc(stamp(version.created))} · #${version.id}<br><small>${version.kind==='restore'?'복원 저장':version.kind==='baseline'?'최초 보관':'주석 변경'} · 주석 ${version.annotationCount}개 · 북마크 ${version.bookmarkCount}개${index===0 && before===Infinity?' · 최근 저장':''}</small></span></button>`).join('') || '<p>아직 저장된 이력이 없습니다.</p>'}</div>${versions.length===50?'<button class=secondary-button id=history-older>더 이전 이력</button>':''}${before!==Infinity?'<button class=secondary-button id=history-latest>최근 이력</button>':''}`,()=>{
     if($('#history-older'))$('#history-older').onclick=safely(()=>annotationHistory(tab,versions.at(-1).id));
     if($('#history-latest'))$('#history-latest').onclick=safely(()=>annotationHistory(tab));
     $$('[data-revision]',$('#dialog')).forEach(button=>button.onclick=safely(async()=>{
@@ -1062,7 +1067,7 @@ async function annotationHistory(tab, before = Infinity) {
           tab.reader.metadata.bookmarks=structuredClone(version.bookmarks);
           tab.restoredFrom=version.id;
           tab.reader.commit(structuredClone(version.annotations));
-          await tab.queue.flush();$('#dialog').close();
+          await tab.queue.flush();await tab.checkpoints.flush();$('#dialog').close();
           if(sidebarMode)renderSidebar(sidebarMode);
           toast('HTML 본문은 유지하고 주석과 북마크를 복원했습니다.');
         });
@@ -1198,10 +1203,10 @@ function bindUI() {
   $('#open-example').onclick=safely(async()=>{let html=await bundledExample();if(html===null){const response=await fetch('./example.html');if(!response.ok)throw new Error('예제 문서를 불러오지 못했습니다.');html=await response.text();}await createDocument({html,title:'천천히 읽는다는 것',viewport:{width:960,height:800}});});
   document.addEventListener('keydown',handleKey);document.addEventListener('pointerdown',event=>{if(!event.target.closest('#toolbar,#tool-popover,[data-htmlmemo-reading-controls]')&&!$('#tool-popover').hidden)closePopover();});
   $('#dialog').addEventListener('click',event=>{if(event.target===$('#dialog'))$('#dialog').close();});
-  window.addEventListener('beforeunload',event=>{if(tabs.some(t=>t.opening||t.queue?.editsPending||!!folder&&t.queue?.pending)||dataFolder?.pending){event.preventDefault();event.returnValue='';}});
-  const savePositions=()=>{Promise.all(tabs.filter(t=>t.reader?.doc).map(tab=>{tab.reader.rememberPosition();return tab.queue.flush();})).then(()=>dataFolder?.flush()).catch(()=>{});};
+  window.addEventListener('beforeunload',event=>{if(tabs.some(t=>t.opening||t.queue?.editsPending||t.checkpoints?.error||!!folder&&t.queue?.pending)||dataFolder?.pending){event.preventDefault();event.returnValue='';}});
+  const savePositions=(checkpoint=false)=>{Promise.all(tabs.filter(t=>t.reader?.doc).map(async tab=>{tab.reader.rememberPosition();await tab.queue.flush();if(checkpoint)await tab.checkpoints.flush({force:true});})).then(()=>dataFolder?.flush()).catch(()=>{});};
   document.addEventListener('visibilitychange',()=>{if(document.hidden)savePositions();});
-  window.addEventListener('pagehide',savePositions);
+  window.addEventListener('pagehide',()=>savePositions(true));
   window.addEventListener('online',network);window.addEventListener('offline',network);
   window.addEventListener('focus',resumeBrowser);document.addEventListener('visibilitychange',resumeBrowser);
   window.addEventListener('storage',()=>{try{preferences=loadPreferences(localStorage);applyTheme(preferences.theme);renderLibrary();dataFolder?.schedule({settingsOnly:true});}catch(error){showError(error);}});

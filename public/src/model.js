@@ -80,3 +80,36 @@ export class SaveQueue {
   get pending() { return this.saved < this.revision; }
   get editsPending() { return this.saved < this.editRevision; }
 }
+
+// Independent from fast autosave. One event-driven timer per edited document;
+// reading and pointer motion outside annotation input never start a timer.
+export class AnnotationCheckpoints {
+  constructor(write,report=()=>{},{now=()=>Date.now(),setTimer=(fn,ms)=>setTimeout(fn,ms),clearTimer=id=>clearTimeout(id),interval=300000,idle=60000}={}) {
+    Object.assign(this,{write,report,now,setTimer,clearTimer,interval,idle});
+    this.revision=0;this.saved=0;this.started=0;this.lastInput=0;this.timer=null;this.due=0;this.running=null;this.error=null;this.disposed=false;
+  }
+  get pending(){return this.saved<this.revision;}
+  schedule(){if(this.disposed)return;if(!this.pending||this.error)this.started=this.now();this.revision++;this.error=null;this.activity();}
+  activity(){if(!this.pending||this.disposed)return;this.lastInput=this.now();this.arm();}
+  arm(){
+    if(!this.pending||this.disposed||this.error||this.running)return;
+    const due=Math.min(this.started+this.interval,this.lastInput+this.idle);
+    // Keep an earlier wake-up rather than recreating timers for every pen point.
+    if(this.timer!==null&&this.due<=due)return;
+    if(this.timer!==null)this.clearTimer(this.timer);this.due=due;
+    this.timer=this.setTimer(()=>{this.timer=null;if(this.now()<Math.min(this.started+this.interval,this.lastInput+this.idle))this.arm();else void this.flush().catch(()=>{});},Math.max(0,due-this.now()));
+  }
+  async flush({force=false}={}){
+    if(this.disposed)return;if(this.timer!==null)this.clearTimer(this.timer);this.timer=null;
+    if(this.running){await this.running;if(force||this.pending)return this.flush({force});return;}
+    if(!force&&!this.pending)return;
+    this.running=(async()=>{
+      try{
+        do{const next=this.revision;await this.write();this.saved=next;this.error=null;}while(force&&this.pending);
+        if(this.pending)this.started=this.now();this.report(this);
+      }catch(error){this.error=error;this.report(this);throw error;}
+    })();
+    try{await this.running;}finally{this.running=null;this.arm();}
+  }
+  dispose(){this.disposed=true;if(this.timer!==null)this.clearTimer(this.timer);this.timer=null;}
+}

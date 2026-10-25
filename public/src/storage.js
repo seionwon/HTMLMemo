@@ -138,7 +138,7 @@ export async function listRevisionSummaries(id, before = Infinity, limit = 50) {
 }
 
 /** The current document and its annotation revision commit atomically. No source-file permission is needed. */
-export async function putDocumentRevision(record, {baseline = false, restoredFrom = null} = {}) {
+export async function putDocumentRevision(record, {baseline = false, restoredFrom = null, checkpoint = true} = {}) {
   const connection=await db();
   const state={annotations:record.metadata?.annotations || [],bookmarks:record.metadata?.bookmarks || []};
   const {html,file,originalFile,...value}=record;value.diskPending=false;value.diskError=null;
@@ -148,7 +148,7 @@ export async function putDocumentRevision(record, {baseline = false, restoredFro
     let failure;
     const documents=tx.objectStore('documents'),revisions=tx.objectStore('revisions'),contents=tx.objectStore('contents');
     const previous=documents.get(record.id),content=contents.getKey(record.id);
-    const latest=revisions.index('documentId').openKeyCursor(IDBKeyRange.only(record.id),'prev');
+    const index=revisions.index('documentId'),latest=checkpoint?index.openCursor(IDBKeyRange.only(record.id),'prev'):index.openKeyCursor(IDBKeyRange.only(record.id),'prev');
     // Queue reads before any awaits so the transaction stays active.
     latest.onsuccess=()=>{
       try {
@@ -156,13 +156,37 @@ export async function putDocumentRevision(record, {baseline = false, restoredFro
         const old=previous.result;
         // A still-open legacy tab must not erase a later duplicate-check cache.
         if(!value.sourceIdentity&&old?.sourceIdentity)value.sourceIdentity=old.sourceIdentity;
-        if (!last && old && !sameAnnotationState(old.metadata,state)) revisions.add({documentId:record.id,created:Date.now(),kind:'baseline',...annotationState(old.metadata)});
-        if (!last || !sameAnnotationState(old?.metadata,state)) revisions.add({documentId:record.id,created:Date.now(),kind:restoredFrom?'restore':baseline?'baseline':'edit',restoredFrom,...state});
+        value.historyVersion=Number.isSafeInteger(old?.historyVersion)?old.historyVersion:0;
+        let previousState=last?.value;
+        const add=(metadata,kind)=>{revisions.add({documentId:record.id,created:Date.now(),kind,restoredFrom:kind==='restore'?restoredFrom:null,...annotationState(metadata)});previousState=metadata;value.historyVersion++;};
+        if(!last&&old)add(old.metadata,'baseline');
+        if(!last&&!old)add(state,baseline||!checkpoint?'baseline':'edit');
+        // Restoration keeps the unsnapshotted current state and the target in
+        // the same transaction. A failure cannot strand only half of a restore.
+        if(restoredFrom&&old&&!sameAnnotationState(previousState,old.metadata))add(old.metadata,'edit');
+        if(checkpoint&&!sameAnnotationState(previousState,state))add(state,restoredFrom?'restore':'edit');
         if(!content.result){const original=originalFile instanceof Blob?{originalFile}:{};if(file instanceof Blob)contents.add({documentId:record.id,file,...original});else{const source=old?.html ?? html;if(typeof source!=='string')throw Error('HTML 본문을 보관하지 못했습니다. 문서를 다시 열어주세요.');contents.add({documentId:record.id,html:source,...original});}}
         documents.put(value);
       } catch(error){failure=error;tx.abort();}
     };
     tx.oncomplete=()=>{changed(record.id);resolve(value);};tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(failure || tx.error || new Error('주석과 이력을 저장하지 못했습니다.'));
+  });
+}
+
+/** Snapshot the latest durable annotations, never an old in-memory tab or HTML body. */
+export async function checkpointAnnotations(id) {
+  const connection=await db();
+  return new Promise((resolve,reject)=>{
+    const tx=connection.transaction(['documents','revisions'],'readwrite'),documents=tx.objectStore('documents'),revisions=tx.objectStore('revisions');
+    const current=documents.get(id),latest=revisions.index('documentId').openCursor(IDBKeyRange.only(id),'prev');let added=false,failure;
+    latest.onsuccess=()=>{try{
+      const record=current.result;if(!record)return;
+      if(!latest.result||!sameAnnotationState(latest.result.value,record.metadata)){
+        revisions.add({documentId:id,created:Date.now(),kind:latest.result?'edit':'baseline',...annotationState(record.metadata)});
+        record.historyVersion=(Number.isSafeInteger(record.historyVersion)?record.historyVersion:0)+1;documents.put(record);added=true;
+      }
+    }catch(error){failure=error;tx.abort();}};
+    tx.oncomplete=()=>{if(added)changed(id);resolve(added);};tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(failure||tx.error||new Error('주석 이력을 저장하지 못했습니다. 현재 주석은 자동 저장된 상태로 유지됩니다.'));
   });
 }
 
@@ -174,7 +198,7 @@ export async function restoreFolderDocuments(entries) {
     const tx=connection.transaction(['documents','contents','revisions'],'readwrite');let failure;
     try {
       for(const {record,content,revisions} of entries){
-        tx.objectStore('documents').add(record);
+        tx.objectStore('documents').add({...record,historyVersion:revisions.length});
         tx.objectStore('contents').add({documentId:record.id,...content});
         for(const revision of revisions){const {id:oldId,...value}=revision;tx.objectStore('revisions').add({...value,documentId:record.id});}
       }

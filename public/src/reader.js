@@ -1918,11 +1918,13 @@ export class Reader {
       if (!this.layer?.isConnected || (scrollHost && this.layer.parentElement !== scrollHost)) this.renderDrawingLayer();
       const anchor = this.elementAnchor(event.target,true); const p = this.point(event);
       this.gesture = {pointerId:event.pointerId, type:this.tool, anchor, points:[p]};
+      this.callbacks.onAnnotationInput?.();
       event.target.setPointerCapture?.(event.pointerId);
     }
   }
   pointerMove(event) {
     if (!this.gesture || this.gesture.pointerId !== event.pointerId) return;
+    this.callbacks.onAnnotationInput?.();
     event.preventDefault();
     const p = this.point(event); const g = this.gesture;
     if (g.type === 'pen') { if (Math.hypot(p.x - g.points.at(-1).x, p.y - g.points.at(-1).y) >= 1) g.points.push(p); }

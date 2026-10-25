@@ -210,7 +210,7 @@ export class DataFolder {
       const record=portableRecord(summary);let old=previous.get(record.id);
       if(old){try{for(const ref of [old.source,old.original,old.state,old.history].filter(Boolean)){if(!checked.has(ref.name))await objectFile(data,ref);checked.add(ref.name);}}catch(error){if(!['NotFoundError','DataIntegrityError'].includes(error.name))throw error;old=null;}}
       if(old&&!checkAll&&!this.dirty.has(record.id)){documents.push(old);continue;}
-      const stamp=(await localFileIdentity(jsonBlob(record))).digest;
+      const historyVersion=summary.historyVersion||0,stamp=(await localFileIdentity(jsonBlob({record,historyVersion}))).digest;
       if(old?.stamp===stamp){documents.push(old);continue;}
       let source=old?.source,original=old?.original,sourceType=old?.sourceType;
       if(!source){
@@ -221,7 +221,7 @@ export class DataFolder {
         const extension=(record.name.match(/\.(html?|mhtml|mht)$/i)?.[1]||'html').toLowerCase();
         original=content.originalFile instanceof Blob?await storeObject(data,content.originalFile,extension):source;
       }
-      const annotationStamp=(await localFileIdentity(jsonBlob({annotations:record.metadata.annotations,bookmarks:record.metadata.bookmarks}))).digest;
+      const annotationStamp=(await localFileIdentity(jsonBlob({annotations:record.metadata.annotations,bookmarks:record.metadata.bookmarks,historyVersion}))).digest;
       let history=old?.history;
       if(!history||old.annotationStamp!==annotationStamp){
         const revisions=(await this.ops.listRevisions(record.id)).map(({id,documentId,...revision})=>revision);
