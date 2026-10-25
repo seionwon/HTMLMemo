@@ -183,6 +183,7 @@ test('compact cards and lists share exactly one title and source without touchin
   for(const view of ['card','list','card']){
     app.doc.querySelector('#library-'+view+'-view').onclick();const card=app.doc.querySelector('.document-card');
     assert.equal(card.querySelectorAll('h3').length,1);assert.equal(card.querySelector('.list-title').textContent,record.title);assert.equal(card.querySelector('.list-title').title,record.title);
+    assert.equal(card.querySelectorAll('.list-filename').length,1);assert.equal(card.querySelector('.list-filename').textContent,record.name);assert.equal(card.querySelector('.list-filename').title,record.name);assert.equal(card.querySelector('.list-title').nextElementSibling,card.querySelector('.list-filename'));
     assert.equal(card.querySelectorAll('.list-host').length,1);assert.equal(card.querySelector('.list-host').textContent,'로컬 HTML');assert.equal(card.textContent.split(record.title).length-1,1);assert.equal(card.textContent.split('로컬 HTML').length-1,1);
     assert.equal(card.querySelector('.card-preview, .list-details'),null);assert.equal(card.querySelector('.list-annotations').getAttribute('aria-label'),'주석 1개');
     assert.equal(card.querySelector('.list-size').textContent,'2 KB');assert.match(card.querySelector('.list-progress').textContent,/이어서 읽기/);
@@ -197,6 +198,14 @@ test('compact library escapes full titles and sources and keeps unknown sizes an
   assert.equal(card.querySelector('.list-host').textContent,'example.test');assert.equal(card.querySelector('.list-host').title,'example.test');
   assert.equal(card.querySelector('.list-annotations').getAttribute('aria-label'),'주석 0개');assert.equal(card.querySelector('.list-size').textContent,'HTML');assert.match(card.querySelector('.list-progress').textContent,/새 문서/);
   assert.equal(card.querySelector('[data-card-menu]').getAttribute('aria-label'),title+' 문서 메뉴');
+});
+test('library filenames preserve Unicode, whitespace, extensions and markup as plain text in both views',async()=>{
+  const name=' 받은 <img src=x onerror="bad()"> & "원본" 문서.MHTML ',record={id:'filename',title:'문서 제목',name,source:'',created:1234,modified:5678,metadata:{annotations:[{id:'keep'}]}},before=structuredClone(record),app=await fileApp({documents:[record]});
+  for(const view of ['card','list']){app.doc.querySelector('#library-'+view+'-view').onclick();const card=app.doc.querySelector('.document-card'),file=card.querySelector('.list-filename');assert.equal(file.textContent,name);assert.equal(file.title,name);assert.equal(file.querySelector('img'),null);assert.equal(card.querySelectorAll('.list-filename').length,1);}
+  const filter=app.doc.querySelector('#library-filter');filter.value='문서.mhtml';filter.oninput();assert.equal(app.doc.querySelectorAll('.document-card').length,1);assert.deepEqual(record,before);
+});
+test('legacy records without a filename never show undefined, null or a fabricated original name',async()=>{
+  for(const name of [undefined,null,'']){const record={id:'legacy',title:'제목만 있는 문서',name,source:'',created:1234,modified:5678,metadata:{annotations:[]}},app=await fileApp({documents:[record]});for(const view of ['card','list']){app.doc.querySelector('#library-'+view+'-view').onclick();const card=app.doc.querySelector('.document-card');assert.equal(card.querySelector('.list-filename'),null);assert.equal(card.querySelector('.list-title').textContent,record.title);assert.doesNotMatch(card.textContent,/undefined|null/);}}
 });
 
 

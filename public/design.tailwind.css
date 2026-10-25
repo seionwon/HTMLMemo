@@ -305,10 +305,12 @@ body[data-codememo-design]{margin:0;font-family:var(--app-font);background:var(-
 .document-grid .document-card{border-radius:var(--radius-library)}
 .document-grid .document-card:hover{transform:none}
 .document-grid .card-open:focus-visible,.document-grid .card-menu:focus-visible{outline-offset:-2px}
-.document-grid .card-details{height:var(--spacing-library-card);padding:10px 12px}
+.document-grid .card-details{height:var(--spacing-library-card);padding:8px 12px}
 .document-grid .list-file-icon{display:none}
-.document-grid .list-title{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;white-space:normal;overflow:hidden;overflow-wrap:anywhere;text-overflow:ellipsis;max-height:none;height:34px;margin:0 20px 6px 0;padding:0;font:600 12px/17px var(--app-font);letter-spacing:0}
-.document-grid .card-source{display:flex;align-items:center;justify-content:space-between;gap:6px;min-width:0;margin:0 0 6px;font-size:10px;line-height:14px;color:var(--muted)}
+.document-grid .library-title{min-width:0;margin-bottom:4px}
+.document-grid .list-title{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;white-space:normal;overflow:hidden;overflow-wrap:anywhere;text-overflow:ellipsis;max-height:none;height:30px;margin:0 20px 0 0;padding:0;font:600 12px/15px var(--app-font);letter-spacing:0}
+.document-grid .list-filename{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font:400 9px/12px var(--app-font)}
+.document-grid .card-source{display:flex;align-items:center;justify-content:space-between;gap:6px;min-width:0;margin:0 0 2px;font-size:10px;line-height:14px;color:var(--muted)}
 .document-grid .card-source span{padding:0}
 .document-grid .list-host{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .document-grid .list-date{flex-shrink:0;white-space:nowrap;font-size:10px}
@@ -324,7 +326,10 @@ body[data-codememo-design]{margin:0;font-family:var(--app-font);background:var(-
 .document-grid[data-view=list] .card-details{display:grid;grid-template-columns:16px minmax(100px,1fr) minmax(80px,150px) 66px 48px 56px 84px;align-items:center;gap:8px;width:100%;height:var(--spacing-library-row);padding:0 36px 0 10px;color:var(--muted);font-size:10px;white-space:nowrap}
 .document-grid[data-view=list] .card-source,.document-grid[data-view=list] .card-meta{display:contents}
 .document-grid[data-view=list] .list-file-icon{display:flex;color:var(--green)}
-.document-grid[data-view=list] .list-title{display:block;min-width:0;height:auto;margin:0;white-space:nowrap;line-height:18px;-webkit-line-clamp:unset}
+.document-grid[data-view=list] .library-title{display:flex;align-items:baseline;gap:6px;overflow:hidden;margin:0}
+.document-grid[data-view=list] .list-title{display:block;flex:0 1 auto;min-width:0;max-width:60%;height:auto;margin:0;white-space:nowrap;line-height:18px;-webkit-line-clamp:unset}
+.document-grid[data-view=list] .list-title:only-child{max-width:100%}
+.document-grid[data-view=list] .list-filename{flex:1 1 0}
 .document-grid[data-view=list] .list-date,.document-grid[data-view=list] .list-size{text-align:right}
 .document-grid[data-view=list] .list-annotations,.document-grid[data-view=list] .list-progress{justify-content:flex-end;margin:0}
 .document-grid[data-view=list] .card-menu{top:50%;right:4px;transform:translateY(-50%)}
@@ -340,7 +345,7 @@ body[data-codememo-design]{margin:0;font-family:var(--app-font);background:var(-
  #library .hero-actions .primary-button,#library .hero-actions .secondary-button{font-size:10px;padding:4px 7px}
  #library .library-heading{gap:6px;padding:8px 0}
  .document-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
- .document-grid .card-details{padding:10px}
+ .document-grid .card-details{padding:8px 10px}
  .document-grid .list-progress{font-size:0}
  .document-grid .list-progress svg{width:13px;height:13px}
  .library-view-button span{display:none}
