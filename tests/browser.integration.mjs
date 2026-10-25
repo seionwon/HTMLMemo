@@ -2046,7 +2046,7 @@ test('real Chrome: native sidebar view choices are visible on open and preserve 
       assert.equal(await page.evaluate(`${doc}.defaultView.getComputedStyle(${doc}.querySelector('#reader-tree')).display`),'block');
       await chooseNative('annotations');assert.equal(await page.evaluate(`${doc}.querySelector('[data-annotation=native-note] .annotation-main').textContent`),'책의 메모');await revealAnnotation(page,doc,'native-note');await clickNative('[data-annotation=native-note]');
       await chooseNative('search');assert.equal(await page.evaluate(`${doc}.querySelector('#htmlmemo-native-document-search').value`),'Introduction');assert.equal(await page.evaluate(`${doc}.querySelector('#book-search').value`),'용어 전체');
-      await clickNative('#book-search-clear');assert.equal(await page.evaluate(`${doc}.querySelector('#book-search').value`),'');
+      await clickNative('#book-search-clear');await page.waitFor(`${doc}.querySelector('#book-search').value===''`);
       await chooseNative('outline');assert.equal(await page.evaluate(`${doc}.querySelector('#reader-tree')===window.nativeSidebarTree`),true);
       assert.notEqual(await page.evaluate(`${doc}.defaultView.getComputedStyle(${doc}.querySelector('#reader-tree')).display`),'none');
       assert.equal(await page.evaluate(`${doc}.defaultView.getComputedStyle(${doc}.querySelector('[data-htmlmemo-redundant-toc-title]')).display`),'none');

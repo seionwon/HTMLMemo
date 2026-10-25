@@ -4,7 +4,7 @@
 // now is, survives small rewording, and is dropped only when its text is gone from the new edition.
 import { TEXT_TOOLS } from './model.js';
 import { textIndex, rangeFromOffsets, describeDrawingTarget, drawingTargetQuote, LOCAL_CSP } from './document.js';
-import { IsolatedRuntime } from './isolated-runtime.js';
+import { IsolatedRuntime,needsIsolatedRuntime } from './isolated-runtime.js';
 
 const CONTEXT = 40;
 // Below these, a changed text is treated as a different text rather than an edited one.
@@ -191,7 +191,7 @@ export async function openEditionProbe(snapshot, {timeout = 60000} = {}) {
     await new Promise((resolve, reject) => { frame.onload = resolve; frame.onerror = () => reject(new Error('새 판 문서를 열지 못했습니다.')); frame.src = url; document.body.append(frame); });
     const doc = frame.contentDocument;
     if (!doc?.body) throw new Error('새 판 문서를 열지 못했습니다.');
-    if(snapshot.allowScripts!==false){runtime=new IsolatedRuntime({host:document.body,doc,source});await runtime.start();}
+    if(snapshot.allowScripts!==false&&needsIsolatedRuntime(doc)){runtime=new IsolatedRuntime({host:document.body,doc,source});await runtime.start();}
     const book = bookManifest(doc), content = () => doc.getElementById('reader-content');
     const status = () => doc.getElementById('reader-status')?.textContent.trim() || '';
     const settled = key => content()?.dataset.section === key && !status();

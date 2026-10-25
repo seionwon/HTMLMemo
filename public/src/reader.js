@@ -1,6 +1,6 @@
 import { createReadAloud } from './read-aloud.js';
 import { SearchIndexCache } from './search-index.js';
-import { IsolatedRuntime } from './isolated-runtime.js';
+import { IsolatedRuntime,needsIsolatedRuntime } from './isolated-runtime.js';
 import { clamp, uid, icon } from './utils.js';
 import { History, TEXT_TOOLS, DRAW_TOOLS } from './model.js';
 import { LAYER_ID, LOCAL_CSP, parseHTML, savedMainFrame, prepareLoadedHTML, cleanAnnotations, textIndex, selectionAnchor, resolveTextAnchor, wrapOffsets, rangeFromOffsets, sentenceOffsets, serializeHTML, inspectBookDocument, drawingTargetQuote, describeDrawingTarget, currentSection } from './document.js';
@@ -38,8 +38,8 @@ export class Reader {
         try {
           this.doc = this.frame.contentDocument;
           if (!this.doc?.body) throw new Error('HTML 문서를 표시하지 못했습니다.');
-          if(this.metadata.execution?.allowScripts){
-            this.runtime=new IsolatedRuntime({host:this.host,doc:this.doc,source:parsed.file||new Blob([parsed.html],{type:'text/html;charset=utf-8'}),storage:this.metadata.view.sourceStorage,onStorage:entries=>{this.metadata.view.sourceStorage=entries;this.callbacks.onPosition?.();},onError:error=>this.callbacks.onError?.(error)});
+          if(this.metadata.execution?.allowScripts&&needsIsolatedRuntime(this.doc)){
+            this.runtime=new IsolatedRuntime({host:this.host,doc:this.doc,source:parsed.file||new Blob([parsed.html],{type:'text/html;charset=utf-8'}),storage:this.metadata.view.sourceStorage,onStorage:entries=>{this.metadata.view.sourceStorage=entries;(this.callbacks.onSourceSettings||this.callbacks.onPosition)?.();},onError:error=>this.callbacks.onError?.(error)});
             await this.runtime.start();
           }
           await this.adoptSavedMainFrame();
@@ -2173,7 +2173,7 @@ export class Reader {
     }
     if(upgraded)this.callbacks?.onChange?.();
   }
-  html() { return serializeHTML(this.doc, this.metadata); }
+  html() { return serializeHTML(this.runtime?this.runtime.exportDocument():this.doc, this.metadata); }
   async back() { const p = this.linkHistory.pop(); if (!p) return false; this.scrollTop=p.top; this.scrollLeft=p.left; this.callbacks.onView?.(); return true; }
   jump(target) {
     const r = target.getBoundingClientRect(), origin = this.layerOrigin(); this.scrollTop = Math.max(0,(r.top-origin.top+r.height/2)*this.zoom-this.viewport.clientHeight/2); this.scrollLeft = Math.max(0,(r.left-origin.left+r.width/2)*this.zoom-this.viewport.clientWidth/2);

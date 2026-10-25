@@ -366,7 +366,7 @@ async function openRecord(record, prepared = null, {deferReady = false, sourceId
   tab.reader=new Reader(tab.host,parsed,{
     onChange:()=>{tab.queue.schedule();tab.checkpoints.schedule();if(activeId===tab.id){renderToolbar();if(['annotations','bookmarks'].includes(sidebarMode))renderSidebar(sidebarMode);else updateSidebarCounts($('#sidebar'),tab.reader);tab.reader?.refreshDocumentSidebar();}},
     onAnnotationInput:()=>tab.checkpoints.activity(),
-    onPosition:()=>{tab.queue.schedule({background:true});renderFolderState();},onView:()=>{if(activeId===tab.id){updateChrome();updateToolbarState();}},
+    onPosition:()=>{tab.queue.schedule({background:true});renderFolderState();},onSourceSettings:()=>{tab.queue.schedule({background:true});void tab.queue.flush().catch(showError);},onView:()=>{if(activeId===tab.id){updateChrome();updateToolbarState();}},
     onPreferenceChange:()=>dataFolder?.schedule({settingsOnly:true}),
     onTextSelection:()=>{if(activeId===tab.id)showSelectionMenu(tab.reader);},
     onSelectionDismiss:()=>{if(popoverName==='selection'||popoverName.startsWith('tool-mode-'))closePopover();},

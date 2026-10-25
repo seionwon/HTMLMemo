@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {documentFor,installDOM} from './dom.mjs';
 import {savedMainFrame,parseHTML,sanitizeRuntimeHTML,LOCAL_CSP,SCRIPT_CSP} from '../public/src/document.js';
-import {IsolatedRuntime} from '../public/src/isolated-runtime.js';
+import {IsolatedRuntime,needsIsolatedRuntime} from '../public/src/isolated-runtime.js';
 import {cleanSourceStorage} from '../public/src/model.js';
 import {Reader} from '../public/src/reader.js';
 installDOM();
@@ -26,6 +26,10 @@ test('a main saved frame gets readable DOM but never script permission, includin
 test('ordinary embedded frames retain their own isolation rather than receiving access to the app',()=>{
   const prepared=parseHTML(page('<p>Outer article</p>'+frame(page('<p>Embedded</p>'))));
   assert.equal(documentFor(prepared.html).querySelector('iframe').getAttribute('sandbox'),'');
+});
+test('ordinary static HTML avoids an execution frame while scripts, handlers and executable links require isolation',()=>{
+  assert.equal(needsIsolatedRuntime(documentFor(page('<p>Static</p><script type="application/json">{"value":1}</script>'))),false);
+  for(const body of ['<script>run()</script>','<script src="data:text/javascript,run()"></script>','<script type="module">run()</script>','<button onclick="run()">Go</button>','<a href="java\nscript:run()">Go</a>'])assert.equal(needsIsolatedRuntime(documentFor(page(body))),true);
 });
 test('hostile runtime HTML is inert, strips navigations and cannot supply app annotation metadata',()=>{
   const safe=sanitizeRuntimeHTML(page('<p onclick="attack()">Text</p><script>attack()</script><script id="htmlmemo-data" type="application/json">{"annotations":["fake"]}</script><meta http-equiv="refresh" content="0;url=https://remote.invalid"><iframe src="https://remote.invalid"></iframe><form action="https://remote.invalid"><input></form><a href="javascript:attack()">Link</a>'));
@@ -67,6 +71,15 @@ test('document preferences remain bounded inert pairs and round-trip separately 
   const parsed=parseHTML('<html><head><script id="htmlmemo-data" type="application/json">'+JSON.stringify({version:1,annotations:[],view:{sourceStorage:values}})+'</script></head><body><p>Text</p></body></html>');assert.deepEqual(parsed.metadata.view.sourceStorage,expected);
   const a=runtime();let saved;a.r.onStorage=value=>saved=value;await a.r.accept({type:'storage',entries:values});assert.deepEqual(saved,expected);assert.match(a.doc.getElementById('htmlmemo-data').textContent,/original private notes/);
   const r=Object.create(Reader.prototype);Object.assign(r,{metadata:parsed.metadata,host:{hidden:false},viewport:{scrollTop:30,scrollLeft:0},zoom:1,autoFit:true,callbacks:{}});assert.equal(r.rememberPosition(),true);assert.deepEqual(r.metadata.view.sourceStorage,expected);assert.equal(r.rememberPosition(),false);
+});
+test('source form values are plain data, cannot target app metadata and stale responses cannot overwrite newer typing',async()=>{
+  const a=runtime();await a.r.accept({type:'initial',html:initial.replace('</article>','<input id="query" data-htmlmemo-runtime-id="r6" value="draft"><input type="file" data-htmlmemo-runtime-id="r7"></article>')});const input=a.doc.getElementById('query');input.value='new typing';a.r.controlRevisions.set('r6',2);
+  await a.r.accept({type:'patches',patches:[{id:'r6',kind:'control',value:'stale',revision:1}]});assert.equal(input.value,'new typing');
+  await a.r.accept({type:'patches',patches:[{id:'r6',kind:'control',value:'',revision:2},{id:'r7',kind:'control',value:'/private/file',revision:2},{id:'r4',kind:'control',value:'<script>attack()</script>',revision:2}]});assert.equal(input.value,'');assert.equal(a.doc.querySelector('article').textContent,'Current text');assert.equal(a.doc.querySelector('[type=file]').getAttribute('value'),null);assert.match(a.doc.getElementById('htmlmemo-data').textContent,/original private notes/);
+});
+test('an explicit export restores original code only in a detached annotated clone',async()=>{
+  const a=runtime(),script=a.doc.createElement('script');script.textContent='window.originalSource=true';a.r.originalScripts=[{node:script,parent:{tag:'body',path:[1]}}];a.r.originalHandlers=[{target:{tag:'p',id:'export-target',path:[]},attributes:[['onclick','sourceAction()']]}];await a.r.accept({type:'initial',html:initial.replace('<p data-','<p id="export-target" data-')});
+  const exported=a.r.exportDocument();assert.match(exported.querySelector('script:not([type])').textContent,/originalSource/);assert.equal(exported.getElementById('export-target').getAttribute('onclick'),'sourceAction()');assert.equal(exported.querySelector('[data-htmlmemo-runtime-id]'),null);assert.equal(a.doc.querySelector('[onclick],script:not(#htmlmemo-data):not([type="application/octet-stream"])'),null);assert.match(exported.getElementById('htmlmemo-data').textContent,/original private notes/);
 });
 test('the source CSP cannot fetch or load external scripts and the display policy prohibits execution',()=>{
   assert.match(LOCAL_CSP,/script-src 'none'/);assert.match(SCRIPT_CSP,/connect-src data: blob:/);const scripts=SCRIPT_CSP.match(/script-src ([^;]+)/)[1];assert.ok(!/https?:/.test(scripts));

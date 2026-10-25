@@ -3,6 +3,15 @@ import {cleanSourceStorage} from './model.js';
 
 const ID='data-htmlmemo-runtime-id',MAX_HTML=64*1024*1024;
 const validId=value=>typeof value==='string'&&/^r\d{1,12}$/.test(value);
+export function needsIsolatedRuntime(doc) {
+  for(const node of doc.querySelectorAll('*')){
+    if(node.localName==='script'&&(!node.type||/^(?:module|(?:text|application)\/(?:x-)?(?:java|ecma)script)$/i.test(node.type))&&(node.getAttribute('src')||node.textContent.trim()))return true;
+    if([...node.attributes].some(a=>/^on/i.test(a.name)&&a.value.trim()||/^(?:href|xlink:href)$/.test(a.name)&&/^javascript:/i.test(a.value.replace(/[\u0000-\u0020]/g,''))))return true;
+  }
+  return false;
+}
+const locator=node=>{const path=[];for(let n=node;n?.parentElement;n=n.parentElement)path.unshift([...n.parentElement.children].indexOf(n));return {tag:node?.localName,id:node?.id,anchor:node?.getAttribute?.('data-htmlmemo-anchor'),path};};
+const locate=(doc,key)=>{let node=key.id?doc.getElementById(key.id):null;if(!node&&/^(?:body|(?:n|js)\d+)$/.test(key.anchor))node=doc.querySelector('[data-htmlmemo-anchor="'+key.anchor+'"]');if(!node){node=doc.documentElement;for(const index of key.path)node=node?.children[index];}return node?.localName===key.tag?node:null;};
 
 // This function is serialized into the opaque child before ANY source script.
 // No app settings, annotations, tokens, storage handles or executable RPC enter it.
@@ -13,17 +22,17 @@ function bootstrap(channel,preferences) {
   // books still need a cancellable animation callback to finish lazy chapters.
   window.requestAnimationFrame=callback=>setTimeout(()=>callback(performance.now()),16);
   window.cancelAnimationFrame=id=>clearTimeout(id);
-  let serial=0,started=false,timer=0;const dirty=new Map();
+  let serial=0,started=false,timer=0,appliedInput=0;const dirty=new Map(),controls=new Map(),controlNodes=new Set(),removed=new Set();
   let storageTimer=0;
   const storage=(entries=[],persist=false)=>{const values=new Map(entries),changed=()=>{if(persist&&!storageTimer)storageTimer=setTimeout(()=>{storageTimer=0;send({channel,type:'storage',entries:[...values]},'*');},30);};return {get length(){return values.size;},key:i=>[...values.keys()][i]??null,getItem:key=>values.get(String(key))??null,setItem:(key,value)=>{key=String(key);value=String(value);if(values.get(key)===value)return;const next=new Map(values);next.set(key,value);if(key.length>1000||next.size>256||[...next].reduce((sum,[k,v])=>sum+k.length+v.length,0)>262144)throw new DOMException('문서 설정 저장 한도를 넘었습니다.','QuotaExceededError');values.set(key,value);changed();},removeItem:key=>{if(values.delete(String(key)))changed();},clear:()=>{if(values.size){values.clear();changed();}}};};
   // Only this document's own bounded preferences can survive reopening. No
   // values from the app's localStorage, settings or other documents enter it.
   for(const key of ['localStorage','sessionStorage'])try{Object.defineProperty(window,key,{value:storage(key==='localStorage'?preferences:[],key==='localStorage')});}catch{}
-  const key=node=>{if(!ids.has(node)){const id='r'+(++serial);ids.set(node,id);nodes.set(id,node);}return ids.get(node);};
+  const key=node=>{if(!ids.has(node)){const id='r'+(++serial);ids.set(node,id);nodes.set(id,node);if(['input','textarea','select'].includes(node.localName))controlNodes.add(node);}return ids.get(node);};
   const inert=node=>node?.closest?.('script,template');
   const html=node=>{
     const clone=node.cloneNode(true),from=[node,...node.querySelectorAll('*')],to=[clone,...clone.querySelectorAll('*')];
-    for(let i=0;i<from.length;i++)to[i].setAttribute(ID,key(from[i]));
+    for(let i=0;i<from.length;i++){to[i].setAttribute(ID,key(from[i]));if(from[i].localName==='input'&&!/^(?:file|password)$/i.test(from[i].type))to[i].setAttribute('value',from[i].value);if(from[i].localName==='textarea')to[i].textContent=from[i].value;}
     // Volume/image payloads already exist in the non-executable source reader.
     // Never copy them on every chapter, and never send annotation metadata.
     for(const script of clone.querySelectorAll('script'))if(script.id!=='book-manifest')script.remove();
@@ -38,13 +47,18 @@ function bootstrap(channel,preferences) {
     const roots=entries.filter(([node])=>node.isConnected&&!inert(node)&&!entries.some(([other,kind])=>kind==='content'&&other!==node&&other.contains(node)));
     const patches=[];let length=0;
     for(const [node,kind] of roots){const value=kind==='attributes'?{id:key(node),kind,tag:node.localName,attributes:[...node.attributes].map(a=>[a.name,a.value])}:{id:key(node),kind,html:html(node)};length+=value.html?.length||JSON.stringify(value.attributes).length;if(length>MAX){emit({type:'error',message:'문서 변경의 크기가 안전한 표시 한도(64MB)를 넘었습니다.'});return;}patches.push(value);}
+    for(const node of [...controlNodes].slice(0,256)){
+      if(!node.isConnected){controlNodes.delete(node);continue;}
+      if(/^(?:file|password)$/i.test(node.type)||node.value.length>200000)continue;
+      const id=key(node),state=JSON.stringify([node.value,!!node.checked,appliedInput]);if(controls.get(id)!==state){controls.set(id,state);patches.push({id,kind:'control',value:node.value,checked:!!node.checked,revision:appliedInput});}
+    }
     if(patches.length)emit({type:'patches',patches});
-    for(const [id,node] of nodes)if(!node.isConnected)nodes.delete(id);
+    for(const root of removed)if(!root.isConnected)for(const node of [root,...(root.querySelectorAll?.('*')||[])]){nodes.delete(ids.get(node));controls.delete(ids.get(node));controlNodes.delete(node);}removed.clear();
   };
   const schedule=()=>{if(!timer)timer=setTimeout(publish,30);};
   new MutationObserver(records=>{
     if(!started)return;
-    for(const record of records){const node=record.target.nodeType===1?record.target:record.target.parentElement;if(!node||inert(node))continue;const kind=record.type==='attributes'?'attributes':'content';if(dirty.get(node)!=='content')dirty.set(node,kind);}
+    for(const record of records){for(const node of record.removedNodes||[])if(node.nodeType===1)removed.add(node);const node=record.target.nodeType===1?record.target:record.target.parentElement;if(!node||inert(node))continue;const kind=record.type==='attributes'?'attributes':'content';if(dirty.get(node)!=='content')dirty.set(node,kind);}
     schedule();
   }).observe(document,{subtree:true,childList:true,characterData:true,attributes:true});
   const command=value=>{
@@ -56,11 +70,15 @@ function bootstrap(channel,preferences) {
     if(value.type==='submit'&&node.localName==='form'){node.requestSubmit();return;}
     if(value.type==='input'||value.type==='change'){
       if(!['input','textarea','select'].includes(node.localName)||typeof value.value!=='string'||value.value.length>200000)return;
-      node.value=value.value;node.dispatchEvent(new Event(value.type,{bubbles:true}));return;
+      if(Number.isSafeInteger(value.revision)&&value.revision>=0)appliedInput=Math.max(appliedInput,value.revision);
+      node.value=value.value;node.dispatchEvent(new Event(value.type,{bubbles:true}));schedule();return;
     }
     // No eval, arbitrary property access, network/file request or parent callback.
     if(value.type==='click'){node.click();schedule();}
   };
+  // srcdoc inherits the app's base URL. Hash links belong to this source
+  // document, rather than navigating the hidden frame to the app URL.
+  addEventListener('click',event=>{const link=event.target?.closest?.('a[href]'),href=link?.getAttribute('href');if(!event.defaultPrevented&&href?.startsWith('#')){event.preventDefault();location.hash=href;}});
   let commandPort;
   addEventListener('message',event=>{
     const value=event.data;if(commandPort||event.source!==parent||value?.channel!==channel||value.type!=='connect'||!event.ports[0])return;
@@ -73,12 +91,16 @@ function bootstrap(channel,preferences) {
 /** Source code runs in an opaque origin. Only inert, sanitized DOM comes back. */
 export class IsolatedRuntime {
   constructor({host,doc,source,storage=[],onStorage=()=>{},onError=()=>{}}) {
-    this.host=host;this.doc=doc;this.source=source;this.storage=cleanSourceStorage(storage);this.onStorage=onStorage;this.onError=onError;this.channel=crypto.randomUUID();this.queue=Promise.resolve();this.disposed=false;this.listeners=[];this.nodes=new Map();this.attributes=new Map();
+    this.host=host;this.doc=doc;this.source=source;this.storage=cleanSourceStorage(storage);this.onStorage=onStorage;this.onError=onError;this.channel=crypto.randomUUID();this.queue=Promise.resolve();this.disposed=false;this.listeners=[];this.nodes=new Map();this.attributes=new Map();this.controlRevisions=new Map();this.inputRevision=0;
   }
   async start() {
     const owner=this.host.ownerDocument,win=owner.defaultView;
     const frame=owner.createElement('iframe');this.frame=frame;frame.setAttribute('sandbox','allow-scripts');frame.setAttribute('data-htmlmemo-runtime-runner','');frame.name='htmlmemo-runtime-'+this.channel;frame.title='문서 스크립트 격리 실행';frame.setAttribute('aria-hidden','true');frame.tabIndex=-1;frame.referrerPolicy='no-referrer';
-    frame.style.cssText='position:fixed;left:-20000px;top:0;width:1100px;height:900px;border:0;visibility:hidden;pointer-events:none';
+    // Keep it in the viewport so Chrome does not throttle book timers. Inert,
+    // transparent and outside pointer/tab interaction, it never becomes UI.
+    frame.inert=true;frame.style.cssText='position:fixed;left:0;top:0;width:1100px;height:900px;border:0;opacity:0;pointer-events:none;z-index:-1';
+    this.originalScripts=[...this.doc.querySelectorAll('script')].filter(node=>node.id!=='htmlmemo-data').map(node=>({node,parent:locator(node.parentElement)}));
+    this.originalHandlers=[];for(const node of this.doc.querySelectorAll('*')){const attributes=[...node.attributes].filter(a=>/^on/i.test(a.name)||/^(?:href|xlink:href)$/.test(a.name)&&/^javascript:/i.test(a.value.trim())).map(a=>[a.name,a.value]);if(attributes.length)this.originalHandlers.push({target:locator(node),attributes});}
     // Remove exported notes before the source gets to run. The original source
     // Blob remains immutable in storage; the app's live metadata never enters it.
     let original=this.source;
@@ -150,7 +172,10 @@ export class IsolatedRuntime {
     for(const patch of value.patches){
       if(!validId(patch?.id))continue;
       const target=this.nodes.get(patch.id);if(!target?.isConnected)continue;
-      if(patch.kind==='attributes'){
+      if(patch.kind==='control'){
+        const revision=Number.isSafeInteger(patch.revision)&&patch.revision>=0?patch.revision:0;
+        if(revision>=(this.controlRevisions.get(patch.id)||0)&&['input','textarea','select'].includes(target.localName)&&!/^(?:file|password)$/i.test(target.type)&&typeof patch.value==='string'&&patch.value.length<=200000){if(target.value!==patch.value)target.value=patch.value;if(target.localName==='input')target.checked=patch.checked===true;}
+      }else if(patch.kind==='attributes'){
         if(!/^[a-z][a-z0-9-]{0,63}$/.test(patch.tag)||!Array.isArray(patch.attributes)||patch.attributes.length>200)continue;
         const temp=new DOMParser().parseFromString('<html><head></head><body></body></html>','text/html'),special=['html','head','body'].includes(patch.tag),node=special?(patch.tag==='html'?temp.documentElement:temp[patch.tag]):temp.createElement(patch.tag);if(!special)temp.body.append(node);
         for(const pair of patch.attributes)if(Array.isArray(pair)&&pair.length===2&&pair.every(v=>typeof v==='string'))try{node.setAttribute(pair[0],pair[1]);}catch{}
@@ -161,13 +186,13 @@ export class IsolatedRuntime {
         const replacement=target===this.doc.documentElement?safe.documentElement:target===this.doc.head?safe.head:target===this.doc.body?safe.body:safe.body.firstElementChild;
         if(!replacement||replacement.localName!==target.localName)continue;
         const owned=[...target.children].filter(n=>n.hasAttribute('data-htmlmemo-ui')||/^htmlmemo-/.test(n.id)||n.localName==='script'&&/^book-(?:volume|asset)-\d+$/.test(n.id));
+        for(const root of target.children)if(!owned.includes(root))for(const node of [root,...root.querySelectorAll('['+ID+']')]){const id=node.getAttribute(ID);if(this.nodes.get(id)===node){this.nodes.delete(id);this.attributes.delete(id);this.controlRevisions.delete(id);}}
         this.copyAttributes(target,replacement);target.replaceChildren(...[...replacement.childNodes].map(node=>this.doc.importNode(node,true)),...owned);
         this.index(target);
       }
     }
-    for(const [id,node] of this.nodes)if(!node.isConnected){this.nodes.delete(id);this.attributes.delete(id);}
   }
-  index(root) {for(const node of [root,...root.querySelectorAll('['+ID+']')]){const id=node.getAttribute(ID);if(validId(id)){this.nodes.set(id,node);this.attributes.set(id,new Map([...node.attributes].map(a=>[a.name,a.value])));}}}
+  index(root) {for(const node of [root,...root.querySelectorAll('['+ID+']')]){const id=node.getAttribute(ID);if(validId(id)){this.nodes.set(id,node);if(!this.attributes.has(id))this.attributes.set(id,new Map([...node.attributes].map(a=>[a.name,a.value])));}}}
   copyAttributes(target,source) {
     // App-owned marks/layout/runtime state are never author-controlled RPC.
     const app=name=>name.startsWith('data-htmlmemo-')&&name!==ID,previous=this.attributes.get(target.getAttribute(ID)),next=new Map([...source.attributes].map(a=>[a.name,a.value]));
@@ -181,10 +206,19 @@ export class IsolatedRuntime {
     const id=target.getAttribute(ID);if(validId(id))this.attributes.set(id,next);
   }
   send(value) {if(!this.disposed)this.port?.postMessage({channel:this.channel,...value});}
+  exportDocument() {
+    // Restore original executable markup only into a detached export clone.
+    // It never re-enters the live, scriptless reader or the app document.
+    const clone=new DOMParser().parseFromString('<html><head></head><body></body></html>','text/html');clone.replaceChild(clone.importNode(this.doc.documentElement,true),clone.documentElement);
+    for(const item of this.originalHandlers||[]){const target=locate(clone,item.target);if(target)for(const [name,value] of item.attributes)target.setAttribute(name,value);}
+    for(const item of this.originalScripts||[]){if(item.node.id)clone.getElementById(item.node.id)?.remove();(locate(clone,item.parent)||clone.body).append(clone.importNode(item.node,true));}
+    for(const node of clone.querySelectorAll('['+ID+'],[data-htmlmemo-isolated-runtime]')){node.removeAttribute(ID);node.removeAttribute('data-htmlmemo-isolated-runtime');}
+    return clone;
+  }
   bind() {
     const add=(target,type,fn,capture=true)=>{target.addEventListener(type,fn,capture);this.listeners.push(()=>target.removeEventListener(type,fn,capture));};
     const sourceTarget=event=>{const node=event.target?.nodeType===1?event.target:event.target?.parentElement,source=node?.closest('['+ID+']');return source&&this.nodes.get(source.getAttribute(ID))===source?source:null;};
-    for(const type of ['input','change'])add(this.doc,type,event=>{const node=sourceTarget(event);if(node&&['input','textarea','select'].includes(node.localName))this.send({type,id:node.getAttribute(ID),value:node.value});});
+    for(const type of ['input','change'])add(this.doc,type,event=>{const node=sourceTarget(event);if(node&&['input','textarea','select'].includes(node.localName)){const id=node.getAttribute(ID),revision=++this.inputRevision;this.controlRevisions.set(id,revision);this.send({type,id,value:node.value,revision});}});
     add(this.doc,'submit',event=>{event.preventDefault();const node=sourceTarget(event);if(node?.localName==='form')this.send({type:'submit',id:node.getAttribute(ID)});});
     add(this.doc,'click',event=>{
       const node=sourceTarget(event),control=node?.closest('button,summary,a[href],[role="button"],input[type="button"],input[type="submit"]');if(!control||!validId(control.getAttribute(ID)))return;
