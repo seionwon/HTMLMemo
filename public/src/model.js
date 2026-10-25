@@ -1,7 +1,7 @@
 export const FORMAT_VERSION = 1;
 export const TEXT_TOOLS = ['highlight', 'underline', 'strike'];
-export const DRAW_TOOLS = ['pen', 'rect', 'ellipse', 'arrow', 'area', 'area-underline'];
-export const ANNOTATION_LABELS = {pen:'펜 그림',highlight:'형광펜',underline:'밑줄',strike:'취소선',note:'메모',text:'텍스트',rect:'사각형',ellipse:'타원',arrow:'화살표',area:'영역 강조','area-underline':'영역 밑줄'};
+export const DRAW_TOOLS = ['pen', 'rect', 'circle', 'ellipse', 'arrow', 'area', 'area-underline'];
+export const ANNOTATION_LABELS = {pen:'펜 그림',highlight:'형광펜',underline:'밑줄',strike:'취소선',note:'메모',text:'텍스트',rect:'사각형',circle:'원',ellipse:'타원',arrow:'화살표',area:'영역 강조','area-underline':'영역 밑줄'};
 export function validateAnnotations(value) {
   if (!Array.isArray(value)) throw new Error('주석 데이터 형식이 올바르지 않습니다.');
   if (value.length > 20000) throw new Error('한 문서의 주석 수가 너무 많습니다.');
@@ -13,6 +13,8 @@ export function validateAnnotations(value) {
     if (!/^#[\da-f]{6}$/i.test(item.color)) throw new Error('주석 색상 형식이 올바르지 않습니다.');
     if (!Number.isFinite(item.width) || item.width < .1 || item.width > 100) throw new Error('주석 굵기가 올바르지 않습니다.');
     if (!Number.isFinite(item.opacity) || item.opacity < 0 || item.opacity > 1) throw new Error('주석 투명도가 올바르지 않습니다.');
+    if (item.fill != null && (item.type !== 'rect' || typeof item.fill !== 'boolean')) throw new Error('사각형 채움 설정이 올바르지 않습니다.');
+    if ((item.fill === true || item.fillOpacity != null) && (item.type !== 'rect' || item.fill !== true || !Number.isFinite(item.fillOpacity) || item.fillOpacity < 0 || item.fillOpacity > 1)) throw new Error('사각형 채움 투명도가 올바르지 않습니다.');
     if (TEXT_TOOLS.includes(item.type)) {
       const a = item.textAnchor;
       if (!a || typeof a.quote !== 'string' || !a.quote.length || !Number.isSafeInteger(a.start) || !Number.isSafeInteger(a.end) || a.start < 0 || a.end <= a.start || a.quote.length > 200000) throw new Error('주석의 텍스트 위치가 손상되었습니다.');

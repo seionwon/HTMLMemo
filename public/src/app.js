@@ -591,18 +591,20 @@ async function navigate(tab,url){
   tab.readable=false;tab.loading=true;tab.frame.src=url;renderBrowserState(tab);renderTabs();updateChrome();
 }
 function toolbarButton(action,name,label,extra='') {return `<button class="tool-button" data-action="${action}" aria-label="${label}" title="${label}" ${extra}>${icon(name,18)}</button>`;}
-function annotationToolFamily(tool) {return {area:'highlight','area-underline':'underline',text:'note'}[tool]||tool;}
+function annotationToolFamily(tool) {return {area:'highlight','area-underline':'underline',text:'note','rect-filled':'rect'}[tool]||tool;}
+function annotationToolMode(r) {return r.tool==='rect'&&r.rectFill?'rect-filled':r.tool;}
 function annotationToolModes(group) {
   return {
     highlight:{title:'형광펜',key:'H',modes:[['highlight','highlight','글자 형광펜','선택한 글자를 따라 표시'],['area','area','영역 형광펜','원하는 영역을 드래그해 표시']]},
     underline:{title:'밑줄',key:'U',modes:[['underline','underline','글자 밑줄','선택한 글자를 따라 표시'],['area-underline','area-underline','영역 밑줄','원하는 위치에 직접 그리기']]},
     note:{title:'메모 · 텍스트',key:'N',modes:[['note','note','메모 상자','상자 안에 메모 쓰기'],['text','text','자유 텍스트','배경 상자 없이 글자만 쓰기']]},
+    rect:{title:'사각형',key:'R',modes:[['rect','rect','채움 없음','테두리만 그리기'],['rect-filled','rect-filled','채움 있음','형광펜/채움 투명도로 내부 채우기']]},
     eraser:{title:'지우개',key:'E',modes:[['eraser','eraser','개별 주석 지우기','지울 주석을 직접 선택'],['clear','trash','주석 모두 지우기','확인한 뒤 전체 삭제 · 실행 취소 가능',true]]},
   }[group];
 }
 function showAnnotationToolModes(group, keyboard = false) {
   const r=reader(),definition=annotationToolModes(group);if(!r||!definition)return;
-  const current=annotationToolFamily(r.tool)===group?r.tool:r.toolChoices?.[group]||group;
+  const current=annotationToolFamily(r.tool)===group?annotationToolMode(r):r.toolChoices?.[group]||group;
   showPopover('tool-mode-'+group,`<div class="popover-heading"><h3>${definition.title} 방식</h3><button type="button" class="icon-button popover-close" data-popover-close aria-label="${definition.title} 방식 닫기">${icon('close',16)}</button></div><div class="annotation-tool-modes" role="menu" aria-label="${definition.title} 방식">${definition.modes.map(([id,name,label,hint,command])=>`<button type="button" class="menu-button${command?' danger':''}" role="${command?'menuitem':'menuitemradio'}" data-tool-mode="${id}" ${command?`data-tool-command${!r.metadata.annotations.length?' disabled':''}`:`aria-checked="${id===current}"`}>${icon(name,18)}<span><strong>${label}</strong><small>${hint}</small></span>${!command&&id===current?icon('check',14):''}</button>`).join('')}</div>`,()=>{
     const pop=$('#tool-popover'),trigger=$(`[data-action="${group}"]`,$('#toolbar'));
     trigger?.setAttribute('aria-expanded','true');
@@ -620,7 +622,7 @@ function showAnnotationToolModes(group, keyboard = false) {
 function renderToolbar() {
   const r=reader();if(!r||!r.doc)return;
   $('#toolbar').hidden=false;
-  $('#toolbar').innerHTML=`<button class="toolbar-grip" aria-label="툴바 이동">${icon('grip',14)}</button><span class="tool-group">${toolbarButton('select','select','선택 / 읽기 (V)')}${toolbarButton('pen','pen','펜 (P)')}${toolbarButton('highlight','highlight','형광펜 (H)')}${toolbarButton('underline','underline','밑줄 (U)')}${toolbarButton('eraser','eraser','지우개 (E)')}${toolbarButton('note','note','메모 (N)')}</span><span class="toolbar-divider"></span>${toolbarButton('palette','palette','색상 · 굵기 · 투명도 설정','class="tool-button palette-button"')}<span class="tool-group toolbar-history">${toolbarButton('undo','undo','실행 취소 (Ctrl/⌘ Z)')}${toolbarButton('redo','redo','다시 실행 (Ctrl/⌘ Shift Z)')}</span><span class="toolbar-divider"></span>${toolbarButton('more','more','더 많은 도구')}`;
+  $('#toolbar').innerHTML=`<button class="toolbar-grip" aria-label="툴바 이동">${icon('grip',14)}</button><span class="tool-group">${toolbarButton('select','select','선택 / 읽기 (V)')}${toolbarButton('pen','pen','펜 (P)')}${toolbarButton('highlight','highlight','형광펜 (H)')}${toolbarButton('underline','underline','밑줄 (U)')}${toolbarButton('rect','rect','사각형 (R)')}${toolbarButton('eraser','eraser','지우개 (E)')}${toolbarButton('note','note','메모 (N)')}</span><span class="toolbar-divider"></span>${toolbarButton('palette','palette','색상 · 굵기 · 투명도 설정','class="tool-button palette-button"')}<span class="tool-group toolbar-history">${toolbarButton('undo','undo','실행 취소 (Ctrl/⌘ Z)')}${toolbarButton('redo','redo','다시 실행 (Ctrl/⌘ Shift Z)')}</span><span class="toolbar-divider"></span>${toolbarButton('more','more','더 많은 도구')}`;
   $$('[data-action]',$('#toolbar')).forEach(button=>{
     const action=button.dataset.action,modes=annotationToolModes(action);
     button.onpointerdown=e=>{const selection=action==='note'?r.doc.getSelection?.():null;if(e.pointerType==='mouse'||(selection?.rangeCount&&!selection.isCollapsed))e.preventDefault();};
@@ -646,10 +648,10 @@ function updateToolbarState() {
   const r=reader();if(!r)return;
   $$('[data-action]',$('#toolbar')).forEach(button=>{
     const action=button.dataset.action,selected=action===annotationToolFamily(r.tool);button.classList.toggle('active',selected);
-    if(['select','pen','highlight','underline','eraser','note'].includes(action))button.setAttribute('aria-pressed',String(selected));
+    if(['select','pen','highlight','underline','rect','eraser','note'].includes(action))button.setAttribute('aria-pressed',String(selected));
     const definition=annotationToolModes(action);
     if(definition){
-      const mode=definition.modes.find(([id])=>id===(selected?r.tool:r.toolChoices?.[action]))||definition.modes[0];
+      const mode=definition.modes.find(([id])=>id===(selected?annotationToolMode(r):r.toolChoices?.[action]))||definition.modes[0];
       button.innerHTML=icon(mode[1],18);button.title=`${definition.title}: ${mode[2]} (${definition.key}) · 다시 누르거나 ↓ 키로 방식 선택`;
       button.setAttribute('aria-label',button.title);
     }
@@ -740,7 +742,7 @@ function renderPalettePopoverContent(r) {
   let pickerHsv = hexToHsv(currentColor);
   const rgb = hexToRgb(currentColor);
   pop.innerHTML = `<div class="popover-heading" data-palette-drag tabindex="0" role="group" aria-label="펜과 색상 창 이동" title="드래그하여 이동 · 방향키로 이동 (Shift: 크게)"><h3>펜과 색상</h3><button type="button" class="icon-button popover-close" data-popover-close aria-label="펜과 색상 닫기" title="닫기">${icon('close',16)}</button></div>`
-    + `<label class="range-label">굵기 <output id="width-output">${r.width}px</output><input id="pen-width" type="range" min="1" max="18" value="${r.width}"></label><label class="range-label">형광펜 투명도 <output id="opacity-output">${Math.round(r.opacity*100)}%</output><input id="pen-opacity" type="range" min="10" max="90" value="${Math.round(r.opacity*100)}"></label><label class="select-label">펜 표시 시간 <select id="pen-ttl"><option value="0">영구 저장</option><option value="3">3초</option><option value="10">10초</option><option value="30">30초</option></select></label><p class="popover-hint">시간을 정한 펜은 잠깐 표시되고 저장되지 않아요.</p>`
+    + `<label class="range-label">굵기 <output id="width-output">${r.width}px</output><input id="pen-width" type="range" min="1" max="18" value="${r.width}"></label><label class="range-label">형광펜/채움 투명도 <output id="opacity-output">${Math.round(r.opacity*100)}%</output><input id="pen-opacity" type="range" min="10" max="90" value="${Math.round(r.opacity*100)}"></label><label class="select-label">펜 표시 시간 <select id="pen-ttl"><option value="0">영구 저장</option><option value="3">3초</option><option value="10">10초</option><option value="30">30초</option></select></label><p class="popover-hint">시간을 정한 펜은 잠깐 표시되고 저장되지 않아요.</p>`
     + `<div class="palette-section"><div class="palette-bar"><span class="palette-label">팔레트 프리셋</span><div class="palette-actions"><select id="palette-preset" aria-label="팔레트 프리셋"><optgroup label="프리셋 팔레트 (20개)">${PRESET_PALETTES.map((p, idx) => `<option value="${esc(p.id)}" ${p.id === activePalette.id ? 'selected' : ''}>${idx + 1}. ${esc(p.name)} (${p.colors.length})</option>`).join('')}</optgroup>${customPalettes.length ? `<optgroup label="사용자 팔레트 (${customPalettes.length}개)">${customPalettes.map(p => `<option value="${esc(p.id)}" ${p.id === activePalette.id ? 'selected' : ''}>★ ${esc(p.name)} (${p.colors.length})</option>`).join('')}</optgroup>` : ''}</select>${isCustomPalette ? `<button type="button" id="delete-custom-palette" class="palette-mini-btn danger" title="선택한 사용자 팔레트 삭제" aria-label="사용자 팔레트 삭제">삭제</button>` : ''}</div></div><div id="preset-swatches" class="swatches preset-swatches">${activePalette.colors.map(c => `<button type="button" data-color="${c}" style="--swatch:${c}" title="${c}" aria-label="색상 ${c}" class="swatch ${currentColor === c ? 'chosen' : ''}"></button>`).join('')}</div></div>`
     + `<div class="palette-section"><div class="palette-bar"><span class="palette-label">사용자 색상 (${customColors.length})</span><div class="palette-actions"><button type="button" id="add-custom-color" class="palette-mini-btn" title="현재 색상을 사용자 색상에 추가">+ 색상 추가</button><button type="button" id="remove-custom-color" class="palette-mini-btn" ${customColors.includes(currentColor) ? '' : 'disabled'} title="선택한 사용자 색상 삭제">− 삭제</button></div></div><div id="custom-swatches" class="swatches custom-swatches">${customColors.length ? customColors.map(c => `<button type="button" data-color="${c}" data-custom-swatch="${c}" style="--swatch:${c}" title="사용자 색상 ${c}" aria-label="사용자 색상 ${c}" class="swatch custom-swatch ${currentColor === c ? 'chosen' : ''}"></button>`).join('') : '<span class="palette-empty">색상을 고른 뒤 「+ 색상 추가」를 눌러 저장하세요.</span>'}</div><div class="custom-palette-creator"><input id="custom-palette-name" type="text" maxlength="40" placeholder="새 팔레트 이름 (예: 내 필기 세트)" aria-label="새 팔레트 이름"><button type="button" id="save-custom-palette" class="palette-mini-btn primary">+ 팔레트 저장</button></div></div>`
     + `<div class="palette-section color-picker-section"><div class="palette-bar"><span class="palette-label">컬러 피커</span><span class="color-preview-badge"><i id="color-preview-chip" style="background:${currentColor}"></i><code id="color-preview-text">${currentColor.toUpperCase()}</code></span></div><div id="color-picker-sv" class="color-picker-sv" style="--picker-hue:${pickerHsv.h}" role="slider" tabindex="0" aria-label="채도 및 명도 선택"><span id="color-picker-sv-thumb" class="color-picker-sv-thumb" style="left:${pickerHsv.s}%;top:${100 - pickerHsv.v}%"></span></div><div class="color-picker-hue-row"><input id="color-picker-hue" class="color-picker-hue" type="range" min="0" max="360" value="${pickerHsv.h}" aria-label="색상 (Hue)"><input type="color" id="custom-color" value="${currentColor}" title="시스템 색상 선택기" aria-label="사용자 색상"></div><div class="color-picker-inputs"><label class="color-input-field hex-field"><span>HEX</span><input id="color-hex" type="text" maxlength="7" value="${currentColor.toUpperCase()}" aria-label="HEX 색상 코드"></label><label class="color-input-field"><span>R</span><input id="color-r" type="number" min="0" max="255" value="${rgb.r}" aria-label="R (빨강)"></label><label class="color-input-field"><span>G</span><input id="color-g" type="number" min="0" max="255" value="${rgb.g}" aria-label="G (초록)"></label><label class="color-input-field"><span>B</span><input id="color-b" type="number" min="0" max="255" value="${rgb.b}" aria-label="B (파랑)"></label></div></div>`;
@@ -894,9 +896,10 @@ function toolAction(action,button=null) {
   const r=reader();if(!r)return;
   if(action==='speak'){closePopover();r.toggleReadAloud();return;}
   if(action==='note'){const anchor=r.captureTextSelection?.();if(anchor?.quote?.trim()){closePopover();return safely(()=>r.addSelectionNote(anchor))();}}
-  if(['select','pen','highlight','underline','eraser','note','text','rect','ellipse','arrow','area','area-underline','strike'].includes(action)){
-    if(['highlight','area','underline','area-underline','note','text'].includes(action)){r.toolChoices||={};r.toolChoices[annotationToolFamily(action)]=action;}
-    closePopover();r.setTool(action);updateToolbarState();return;
+  if(['select','pen','highlight','underline','eraser','note','text','rect','rect-filled','circle','ellipse','arrow','area','area-underline','strike'].includes(action)){
+    if(['highlight','area','underline','area-underline','note','text','rect','rect-filled'].includes(action)){r.toolChoices||={};r.toolChoices[annotationToolFamily(action)]=action;}
+    if(action==='rect'||action==='rect-filled')r.rectFill=action==='rect-filled';
+    closePopover();r.setTool(action==='rect-filled'?'rect':action);updateToolbarState();return;
   }
   if(action==='undo'){r.undo();return;}if(action==='redo'){r.redo();return;}
   if(action==='palette') {
@@ -907,7 +910,7 @@ function toolAction(action,button=null) {
     $('#zoom-out').onclick=()=>r.setZoom(r.zoom/1.2);$('#zoom-in').onclick=()=>r.setZoom(r.zoom*1.2);$('#zoom-value').onchange=e=>r.setZoom(Number(e.target.value)/100);$('#zoom-fit').onclick=()=>{r.setZoom(1,true);closePopover();};$('#zoom-reset').onclick=()=>{r.setZoom(1);closePopover();};
   },button||r.zoomControl);return;}
   if(action==='more') {
-    const items=[['rect','rect','사각형'],['ellipse','ellipse','타원'],['arrow','arrow','화살표'],['strike','strike','취소선'],['history','history','주석 저장 이력'],['migrate','file-transfer','새 판으로 주석 옮기기'],['info','info','문서 정보']];
+    const items=[['circle','circle','원'],['ellipse','ellipse','타원'],['arrow','arrow','화살표'],['strike','strike','취소선'],['history','history','주석 저장 이력'],['migrate','file-transfer','새 판으로 주석 옮기기'],['info','info','문서 정보']];
     // Books already expose their three sidebar views. Plain HTML needs only a
     // way to reopen its closed panel, not a second copy of every sidebar tab.
     if(!r.documentSidebarUI?.isConnected && $('#sidebar').hidden)items.unshift(['sidebar','list','사이드바 열기']);
@@ -1172,7 +1175,7 @@ function handleKey(event) {
   if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='f'){event.preventDefault();if(reader().documentSidebarUI)reader().showDocumentSidebarView('search');else renderSidebar('search');return;}
   if(event.ctrlKey||event.metaKey||event.altKey)return;
   if(event.key.toLowerCase()==='f'){event.preventDefault();void toggleReaderFocus();return;}
-  const tools={v:'select',p:'pen',h:'highlight',u:'underline',e:'eraser',n:'note'};const tool=tools[event.key.toLowerCase()];if(tool){event.preventDefault();toolAction(tool);}
+  const tools={v:'select',p:'pen',h:'highlight',u:'underline',r:'rect',e:'eraser',n:'note'};const tool=tools[event.key.toLowerCase()];if(tool){event.preventDefault();toolAction(tool);}
 }
 function setReaderFocus(value) {
   readerFocused=value;$('#app').classList.toggle('reader-focus',value);

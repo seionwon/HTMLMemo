@@ -46,6 +46,7 @@ const paths = {
   text: '<path d="M3 5h18M12 5v16M8 21h8M3 5v3M21 5v3"/>',
   shapes: '<rect x="3" y="3" width="11" height="11" rx="1"/><circle cx="16" cy="16" r="6"/>',
   rect: '<rect x="3" y="5" width="18" height="14" rx="1"/>', ellipse: '<ellipse cx="12" cy="12" rx="9" ry="7"/>',
+  'rect-filled': '<rect x="3" y="5" width="18" height="14" rx="1" fill="currentColor" fill-opacity=".35"/>', circle: '<circle cx="12" cy="12" r="8"/>',
   arrow: '<path d="m4 20 16-16M9 4h11v11"/>', area: '<rect x="3" y="5" width="18" height="14" fill="currentColor" opacity=".2"/><rect x="3" y="5" width="18" height="14" stroke-dasharray="3 3"/>',
   palette: '<path d="M12 3a9 9 0 0 0 0 18h1c3 0 3-3 1-4s-1-3 1-3h3c5 0 2-11-6-11z"/><circle cx="7" cy="10" r=".6"/><circle cx="10" cy="6" r=".6"/><circle cx="15" cy="7" r=".6"/>',
   speaker: '<path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/>',

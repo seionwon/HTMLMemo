@@ -56,7 +56,7 @@ test('floating toolbar stays compact without duplicate TTS or relocated zoom con
  Object.assign(a.context,{icon,$$:(selector,root)=>[...root.querySelectorAll(selector)],bindToolbarDrag(){},updateToolbarState(){},applyToolbarPosition(){}});
  const toolbar=appSource.slice(appSource.indexOf('function toolbarButton('),appSource.indexOf('function updateToolbarState()'));
  new vm.Script(toolbar+'renderToolbar();').runInContext(a.context);
- assert.deepEqual([...a.doc.querySelectorAll('#toolbar [data-action]')].map(button=>button.dataset.action),['select','pen','highlight','underline','eraser','note','palette','undo','redo','more']);
+ assert.deepEqual([...a.doc.querySelectorAll('#toolbar [data-action]')].map(button=>button.dataset.action),['select','pen','highlight','underline','rect','eraser','note','palette','undo','redo','more']);
  assert.ok(a.doc.querySelector('#toolbar .toolbar-grip'));
  assert.equal(a.doc.querySelector('#toolbar [data-action=zoom]'),null);
  assert.equal(a.doc.querySelector('#toolbar [data-action=speak]'),null);
@@ -85,10 +85,10 @@ test('more tools contain no duplicated toolbar, sidebar, bookmark or export acti
  const code=appSource.slice(appSource.indexOf('function toolAction('),appSource.indexOf('function bindToolbarDrag('));
  new vm.Script('var sidebarMode="";'+code).runInContext(a.context);a.context.toolAction('more');
  const ids=()=>[...a.doc.querySelectorAll('[data-more]')].map(b=>b.dataset.more);
- const expected=['rect','ellipse','arrow','strike','history','migrate','info'];
+ const expected=['circle','ellipse','arrow','strike','history','migrate','info'];
  assert.deepEqual(ids(),['sidebar',...expected]);assert.equal(new Set(ids()).size,ids().length);
  for(const removed of ['search','outline','annotations','undo','redo','bookmark','connect','area','area-underline','text','clear'])assert.equal(a.doc.querySelector(`[data-more=${removed}]`),null);
- a.doc.querySelector('[data-more=rect]').onclick();assert.deepEqual(selected,['rect']);assert.equal(a.doc.querySelector('#tool-popover').hidden,true);
+ assert.equal(a.doc.querySelector('[data-more=rect]'),null);a.doc.querySelector('[data-more=circle]').onclick();assert.deepEqual(selected,['circle']);assert.equal(a.doc.querySelector('#tool-popover').hidden,true);
  a.context.toolAction('more');a.doc.querySelector('[data-more=sidebar]').onclick();assert.deepEqual(a.calls.search,['search']);
  a.doc.querySelector('#sidebar').hidden=false;a.context.toolAction('more');assert.deepEqual(ids(),expected,'an already open panel needs no duplicate entry');
  a.doc.querySelector('#sidebar').hidden=true;a.r.documentSidebarUI=a.doc.createElement('section');a.doc.body.append(a.r.documentSidebarUI);a.context.toolAction('more');assert.deepEqual(ids(),expected,'native books use their own sidebar');
@@ -124,6 +124,19 @@ test('toolbar groups keep area and text variants in one tool with repeat-click, 
  a.context.toolAction('eraser');button('eraser').onclick();const clear=pop.querySelector('[data-tool-mode=clear]');
  assert.equal(clear.getAttribute('role'),'menuitem');assert.equal(clear.hasAttribute('aria-checked'),false);assert.equal(clear.disabled,false);
  a.r.metadata.annotations=[];a.context.closePopover();button('eraser').onclick();assert.equal(pop.querySelector('[data-tool-mode=clear]').disabled,true);
+});
+test('rectangle modes stay left of the eraser, remember fill within the document and expose keyboard choices',()=>{
+ const a=app();Object.assign(a.r,{tool:'select',color:'#edcf67',history:{canUndo:false,canRedo:false}});a.r.setTool=tool=>{a.r.tool=tool;};
+ Object.assign(a.context,{icon,$$:(selector,root=a.doc)=>[...root.querySelectorAll(selector)],safely:fn=>fn,bindToolbarDrag(){},showPopover(name,html,bind){const pop=a.doc.querySelector('#tool-popover');pop.innerHTML=html;pop.hidden=false;a.context.popoverName=name;bind();}});
+ const controls=appSource.slice(appSource.indexOf('function toolbarButton('),appSource.indexOf('function positionPopover(')),actions=appSource.slice(appSource.indexOf('function toolAction('),appSource.indexOf('function bindToolbarDrag('));
+ vm.runInContext('var popoverName="",sidebarMode="";'+controls+actions+'renderToolbar();',a.context);
+ const trigger=a.doc.querySelector('[data-action=rect]'),pop=a.doc.querySelector('#tool-popover'),original=a.r.metadata.annotations;
+ assert.equal(trigger.nextElementSibling.dataset.action,'eraser');trigger.onclick();assert.equal(a.r.tool,'rect');assert.equal(a.r.rectFill,false);assert.equal(pop.hidden,true);trigger.onclick();assert.equal(pop.hidden,false);assert.equal(pop.querySelector('[aria-checked=true]').dataset.toolMode,'rect');
+ pop.querySelector('[data-tool-mode=rect-filled]').onclick();assert.equal(a.r.tool,'rect');assert.equal(a.r.rectFill,true);assert.match(trigger.getAttribute('aria-label'),/채움 있음/);assert.equal(trigger.getAttribute('aria-pressed'),'true');assert.equal(pop.hidden,true);
+ a.context.toolAction('pen');trigger.onclick();assert.equal(a.r.rectFill,true);trigger.onclick();assert.equal(pop.querySelector('[aria-checked=true]').dataset.toolMode,'rect-filled');
+ pop.querySelector('[data-tool-mode=rect]').onclick();assert.equal(a.r.rectFill,false);assert.match(trigger.getAttribute('aria-label'),/채움 없음/);
+ trigger.onkeydown({key:'ArrowDown',preventDefault(){},stopPropagation(){}});assert.equal(pop.hidden,false);assert.equal(pop.querySelectorAll('[role=menuitemradio]').length,2);assert.strictEqual(a.r.metadata.annotations,original);
+ assert.notEqual(icon('rect'),icon('rect-filled'));assert.notEqual(icon('circle'),icon('ellipse'));
 });
 test('selected text takes priority over repeat-click mode selection for both text annotation tools',()=>{
  const a=app(),chosen=[];Object.assign(a.r,{tool:'select',zoom:1,color:'#edcf67',history:{canUndo:false,canRedo:false}});
