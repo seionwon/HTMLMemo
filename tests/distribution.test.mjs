@@ -113,11 +113,36 @@ test('concurrent copy clicks request the canonical URL only once and recover bot
 });
 test('the real app uses the same button for native installation and iPhone Chrome instructions',async()=>{
   const desktop=await fileApp({address:PUBLIC_APP_URL});let prompted=0;
+  desktop.doc.querySelector('#execution-tab').onclick();assert.equal(desktop.doc.querySelector('#execution').hidden,false);
   desktop.emit('beforeinstallprompt',{preventDefault(){},prompt:async()=>prompted++,userChoice:Promise.resolve({outcome:'accepted'})});
   desktop.doc.querySelector('#execution-install').onclick();await new Promise(resolve=>setImmediate(resolve));assert.equal(prompted,1);
   desktop.emit('appinstalled');assert.equal(desktop.doc.querySelector('#execution-install').textContent,'설치 완료');
-  const iphone=await fileApp({address:PUBLIC_APP_URL,navigator:{userAgent:'iPhone CriOS/140'}});assert.equal(iphone.doc.querySelector('#install-button').hidden,false);
-  iphone.doc.querySelector('#install-button').onclick();await new Promise(resolve=>setImmediate(resolve));assert.match(iphone.doc.querySelector('#dialog-content').textContent,/Chrome/);assert.match(iphone.doc.querySelector('#dialog-content').textContent,/공유/);assert.match(iphone.doc.querySelector('#dialog-content').textContent,/홈 화면에 추가/);
+  const iphone=await fileApp({address:PUBLIC_APP_URL,navigator:{userAgent:'iPhone CriOS/140'}});iphone.doc.querySelector('#execution-tab').onclick();assert.equal(iphone.doc.querySelector('#execution-install').hidden,false);
+  iphone.doc.querySelector('#execution-install').onclick();await new Promise(resolve=>setImmediate(resolve));assert.match(iphone.doc.querySelector('#dialog-content').textContent,/Chrome/);assert.match(iphone.doc.querySelector('#dialog-content').textContent,/공유/);assert.match(iphone.doc.querySelector('#dialog-content').textContent,/홈 화면에 추가/);
+});
+test('execution is the only installation entry and describes both immediate URL use and optional app installation',async()=>{
+  const initial=new DOMParser().parseFromString(assets.app['index.html'].text,'text/html'),app=await fileApp({address:PUBLIC_APP_URL}),doc=app.doc;
+  for(const html of [initial,doc]){
+    assert.equal(!!html.querySelector('#install-button'),false);assert.equal(html.querySelectorAll('#execution-install').length,1);
+    assert.ok(html.querySelector('#execution-install').closest('#execution'));assert.equal(html.querySelector('#execution-install').getAttribute('role'),null);
+    assert.equal(html.querySelector('#execution h1').innerHTML,'URL로 바로 쓰고,<br>앱으로도 설치.');
+    assert.match(html.querySelector('.execution-description').textContent,/필요하면 앱으로 설치/);
+  }
+  assert.equal(doc.querySelector('#execution').hidden,true);doc.querySelector('#execution-tab').onclick();assert.equal(doc.querySelector('#execution').hidden,false);
+  assert.equal(!!doc.querySelector('#dialog').open,false);assert.equal(doc.querySelector('#execution-install').textContent,'앱 설치');assert.equal(doc.querySelector('#execution-install').getAttribute('aria-label'),'앱 설치');
+  doc.querySelector('#execution-install').onclick();await new Promise(resolve=>setImmediate(resolve));assert.match(doc.querySelector('#dialog-content').textContent,/페이지를 앱으로 설치/);
+  assert.equal(doc.querySelector('#share-url').value,PUBLIC_APP_URL);assert.equal(app.blobs.length,0);
+});
+test('the single execution installation button restores its state after dismissal or failure and can retry',async()=>{
+  const app=await fileApp({address:PUBLIC_APP_URL}),doc=app.doc;doc.querySelector('#execution-tab').onclick();const button=doc.querySelector('#execution-install');let finish,calls=0;
+  app.emit('beforeinstallprompt',{preventDefault(){},prompt:async()=>calls++,userChoice:new Promise(resolve=>finish=resolve)});
+  button.onclick();assert.equal(calls,1);assert.equal(button.disabled,true);assert.equal(button.textContent,'설치 확인 중…');assert.equal(button.getAttribute('aria-label'),'설치 확인 중…');
+  button.onclick();assert.equal(calls,1);finish({outcome:'dismissed'});await new Promise(resolve=>setImmediate(resolve));assert.equal(button.disabled,false);assert.equal(button.textContent,'앱 설치');assert.match(doc.querySelector('#toast').textContent,/취소/);
+  app.emit('beforeinstallprompt',{preventDefault(){},prompt:async()=>{throw new Error('설치 창 오류');}});button.onclick();await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(button.disabled,false);assert.equal(button.textContent,'앱 설치');assert.match(doc.querySelector('#toast').textContent,/설치 창 오류/);
+  app.emit('beforeinstallprompt',{preventDefault(){},prompt:async()=>calls++,userChoice:Promise.resolve({outcome:'accepted'})});button.onclick();await new Promise(resolve=>setImmediate(resolve));assert.equal(calls,2);
+  app.emit('appinstalled');assert.equal(button.textContent,'설치 완료');assert.equal(button.getAttribute('aria-label'),'설치 완료');assert.equal(button.hidden,false);assert.match(doc.querySelector('#install-status').textContent,/앱으로 실행 중/);
+  button.onclick();await new Promise(resolve=>setImmediate(resolve));assert.match(doc.querySelector('#dialog-content').textContent,/설치된 HTMLMemo/);assert.equal(calls,2);
 });
 test('settings can be saved and reloaded through file input when native pickers are unavailable',async()=>{const app=await fileApp();app.doc.querySelector('#settings-button').onclick();app.doc.querySelector('#appearance').value='dark';app.doc.querySelector('#appearance').onchange({target:app.doc.querySelector('#appearance')});app.doc.querySelector('#settings-save').onclick();await new Promise(resolve=>setImmediate(resolve));assert.equal(JSON.parse(await app.blobs[0].text()).preferences.theme,'dark');const input=app.doc.querySelector('#settings-file-input');const file=new File([serializeSettings({theme:'system',librarySort:'title',annotation:{width:8}})],'settings.json');input.onchange({target:{files:[file],value:'settings.json'}});await new Promise(resolve=>setImmediate(resolve));const restored=JSON.parse(app.local.get(PREFERENCES_KEY));assert.equal(restored.theme,'system');assert.equal(restored.librarySort,'title');assert.equal(restored.annotation.width,8);assert.equal(app.doc.querySelector('#library-sort').value,'title:asc');});
 
@@ -165,7 +190,8 @@ test('the single header menu preserves library, web opening, HTML import, app de
   assert.ok(doc.querySelector('#tabs').closest('.addressbar'));
   assert.equal(doc.querySelector('#tabs').closest('#app-menu'),null);
   assert.equal(doc.querySelector('#open-tabs-menu'),null);
-  for(const id of ['#execution-tab','#install-button','#settings-button','#about-button'])assert.ok(doc.querySelector(id).closest('#app-menu'));
+  for(const id of ['#execution-tab','#settings-button','#about-button'])assert.ok(doc.querySelector(id).closest('#app-menu'));
+  assert.equal(doc.querySelector('#install-button'),null);
   assert.equal(!!doc.querySelector('#app-menu #web-help-button'),false);assert.ok(doc.querySelector('#library #web-help-button'));
   assert.equal(!!doc.querySelector('#new-tab,#app-menu #paste-button'),false);
   assert.equal(doc.querySelector('#import-button'),null);
@@ -203,7 +229,7 @@ test('the dropdown opens without a modal and supports keyboard navigation, Escap
   const key=value=>{const event=new doc.defaultView.Event('keydown',{bubbles:true,cancelable:true});event.key=value;doc.activeElement.dispatchEvent(event);};
   assert.equal(menu.hidden,true);trigger.onclick();
   assert.equal(menu.hidden,false);assert.equal(trigger.getAttribute('aria-expanded'),'true');assert.ok(!doc.querySelector('#dialog').open);
-  assert.equal(doc.activeElement.id,'execution-tab');key('ArrowDown');assert.equal(doc.activeElement.id,'install-button');key('ArrowDown');assert.equal(doc.activeElement.id,'settings-button');
+  assert.equal(doc.activeElement.id,'execution-tab');key('ArrowDown');assert.equal(doc.activeElement.id,'settings-button');
   key('End');assert.equal(doc.activeElement.id,'about-button');key('Home');assert.equal(doc.activeElement.id,'execution-tab');
   key('Escape');assert.equal(menu.hidden,true);assert.equal(trigger.getAttribute('aria-expanded'),'false');assert.equal(doc.activeElement,trigger);
   trigger.onclick();doc.body.dispatchEvent(new doc.defaultView.Event('pointerdown',{bubbles:true}));assert.equal(menu.hidden,true);

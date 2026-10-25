@@ -700,8 +700,31 @@ test('real Chrome: Pages-only URL use, safe text import, app tabs and optional i
     await page.navigate(url);await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
     assert.equal(await page.evaluate('!!document.querySelector(\'meta[name="htmlmemo-app"],#connection-button,#execution-chrome\')'),false);
     await clickAppMenu(page,'#execution-tab');
-    assert.match(await page.evaluate('document.querySelector("#execution").textContent'),/URL 하나로,\s*설치 없이 바로/);
+    assert.equal(await page.evaluate('document.querySelector("#install-button")'),null);
+    assert.equal(await page.evaluate('document.querySelectorAll("#execution-install").length'),1);
+    assert.match(await page.evaluate('document.querySelector("#execution h1").innerText'),/URL로 바로 쓰고,\s*앱으로도 설치\./);
+    assert.match(await page.evaluate('document.querySelector(".execution-description").textContent'),/필요하면 앱으로 설치/);
     assert.match(await page.evaluate('document.querySelector("#execution").textContent'),/선택/);
+    assert.equal(await page.evaluate('document.querySelector("#dialog").open'),false,'opening the execution page must not start installation');
+    await mkdir(join(root,'test-results'),{recursive:true});
+    for(const width of [1280,390,320]){
+      await page.send('Emulation.setDeviceMetricsOverride',{width,height:width===1280?900:844,deviceScaleFactor:1,mobile:width<600});
+      await page.evaluate('document.querySelector("#execution").scrollTop=0');
+      assert.equal(await page.evaluate('(()=>{const h=document.querySelector("#execution h1"),b=document.querySelector("#execution-install"),r=h.getBoundingClientRect(),s=b.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&h.scrollWidth<=h.clientWidth&&s.left>=0&&s.right<=innerWidth&&s.width>0&&!b.disabled&&b.getAttribute("aria-label")==="앱 설치";})()'),true);
+      await writeFile(join(root,`test-results/pages-only-execution-${width}.png`),await page.screenshot());
+    }
+    // Exercise the retained button without invoking a real OS installer.
+    await page.evaluate('(()=>{window.installPromptCalls=0;const event=new Event("beforeinstallprompt",{cancelable:true});event.prompt=async()=>{window.installPromptCalls++;};event.userChoice=new Promise(resolve=>window.finishInstallation=resolve);window.dispatchEvent(event);document.querySelector("#execution-install").focus();})()');
+    await page.send('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13,text:'\r',unmodifiedText:'\r'});await page.send('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
+    await page.waitFor('window.installPromptCalls===1&&document.querySelector("#execution-install").disabled&&document.querySelector("#execution-install").textContent==="설치 확인 중…"');
+    await page.evaluate('window.finishInstallation({outcome:"dismissed"})');await page.waitFor('!document.querySelector("#execution-install").disabled&&document.querySelector("#execution-install").textContent==="앱 설치"&&document.querySelector("#toast").textContent.includes("취소")');
+    await page.evaluate('(()=>{const event=new Event("beforeinstallprompt",{cancelable:true});event.prompt=async()=>{window.installPromptCalls++;};event.userChoice=Promise.resolve({outcome:"accepted"});window.dispatchEvent(event);})()');await page.click('#execution-install');
+    await page.waitFor('window.installPromptCalls===2&&!document.querySelector("#execution-install").disabled');
+    await page.evaluate('window.dispatchEvent(new Event("appinstalled"))');await page.waitFor('document.querySelector("#execution-install").textContent==="설치 완료"');await page.click('#execution-install');
+    await page.waitFor('document.querySelector("#dialog").open&&document.querySelector("#dialog h2").textContent==="설치된 HTMLMemo입니다."');
+    assert.equal(await page.evaluate('window.installPromptCalls'),2);assert.equal(await page.evaluate('(()=>{const r=document.querySelector("#dialog").getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.height<=innerHeight;})()'),true);
+    await writeFile(join(root,'test-results/pages-only-install-guide-320.png'),await page.screenshot());await page.click('#dialog [data-dialog-close]');
+    await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
     await page.click('#execution-web');await page.waitFor('document.querySelector("#dialog").open&&!!document.querySelector("#web-help-paste")');
     assert.match(await page.evaluate('document.querySelector("#dialog").textContent'),/추가 프로그램이나 서버 연결은 필요하지 않습니다/);
     assert.equal(await page.evaluate('!!document.querySelector(\'#dialog a[href*=".zip"],#dialog a[href^="chrome:"]\')'),false);

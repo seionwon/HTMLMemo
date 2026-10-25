@@ -75,7 +75,7 @@ function installGuide(kind) {
   modal(`<div class="dialog-heading"><h2>${heading}</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div>${content}<p class="local-only-note">${icon('check',15)} 문서·주석·설정은 기기에만 저장합니다.</p><div class="dialog-actions"><button class="primary-button" data-dialog-close>확인</button></div>`);
 }
 function updateInstall(state) {
-  for(const selector of ['#install-button','#execution-install']){const button=$(selector);button.hidden=selector==='#install-button'&&state.installed;button.disabled=state.busy;const label=state.busy?'설치 확인 중…':state.installed?'설치 완료':'앱 설치';if(selector==='#install-button')button.innerHTML=icon('download',16)+'<span>'+label+'</span>';else button.textContent=label;button.title=label;button.setAttribute('aria-label',label);}
+  const button=$('#execution-install'),label=state.busy?'설치 확인 중…':state.installed?'설치 완료':'앱 설치';button.disabled=state.busy;button.textContent=label;button.title=label;button.setAttribute('aria-label',label);
   $('#install-status').textContent=state.installed?'앱으로 실행 중입니다. 문서·주석·설정은 이 기기에 저장됩니다.':!installableLocation(location)?'PWA 설치는 배포된 앱 주소에서 가능합니다. HTML 파일의 읽기·주석은 계속 사용할 수 있습니다.':isIOS(navigator)?'아이폰은 앱 설치 버튼에서 Chrome 공유 메뉴 사용 순서를 확인하세요.':'설치하지 않아도 이 URL에서 바로 사용할 수 있습니다.';
 }
 function promptText(type, initial = '') {
@@ -1174,7 +1174,7 @@ function bindUI() {
   $('#share-url').value=PUBLIC_APP_URL;$('#shared-app-link').href=PUBLIC_APP_URL;
   $('#share-app').onclick=safely(copyAppURL);
   installController=new InstallController({window,navigator,location,matchMedia,onChange:updateInstall,onGuide:installGuide});
-  $('#install-button').onclick=$('#execution-install').onclick=safely(async()=>{const result=await installController.install();if(result==='dismissed')toast('설치를 취소했습니다. 앱 설치 버튼에서 다시 안내를 볼 수 있어요.');});
+  $('#execution-install').onclick=safely(async()=>{const result=await installController.install();if(result==='dismissed')toast('설치를 취소했습니다. 앱 설치 버튼에서 다시 안내를 볼 수 있어요.');});
   const addressForm=$('#address-form');
   addressForm.addEventListener('focusin',()=>$('.chrome').classList.add('address-editing'));
   addressForm.addEventListener('focusout',event=>{if(!addressForm.contains(event.relatedTarget)){$('.chrome').classList.remove('address-editing');updateChrome();requestAnimationFrame(revealActiveTab);}});
