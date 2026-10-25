@@ -49,7 +49,7 @@ function installGuide(kind) {
 }
 function updateInstall(state) {
   const button=$('#execution-install'),label=state.busy?'설치 확인 중…':state.installed?'설치 완료':'앱 설치';button.disabled=state.busy;button.textContent=label;button.title=label;button.setAttribute('aria-label',label);
-  $('#install-status').textContent=state.installed?'앱으로 실행 중입니다. 문서·주석·설정은 이 기기에 저장됩니다.':!installableLocation(location)?'PWA 설치는 배포된 앱 주소에서 가능합니다. HTML 파일의 읽기·주석은 계속 사용할 수 있습니다.':isIOS(navigator)?'아이폰은 앱 설치 버튼에서 Chrome 공유 메뉴 사용 순서를 확인하세요.':'설치하지 않아도 이 URL에서 바로 사용할 수 있습니다.';
+  $('#install-message').textContent=state.installed?'앱으로 실행 중입니다. 문서·주석·설정은 이 기기에 저장됩니다.':!installableLocation(location)?'PWA 설치는 배포된 앱 주소에서 가능합니다. HTML 파일의 읽기·주석은 계속 사용할 수 있습니다.':isIOS(navigator)?'아이폰은 앱 설치 버튼에서 Chrome 공유 메뉴 사용 순서를 확인하세요.':'설치하지 않아도 앱의 URL에서 바로 사용할 수 있습니다.';
 }
 function promptText(type, initial = '') {
   return new Promise(resolve=>{
@@ -1132,7 +1132,7 @@ function bindUI() {
   setIconButton('#library-tab','library','내 서재');
   setIconButton('#settings-button','settings','설정');bindTabs();
   $('#library-tab').onclick=()=>activate('library');$('#browse-start').onclick=focusAddress;
-  $('#execution-import').onclick=safely(importFiles);$('#execution-web').onclick=()=>webHelpDialog();$('#execution-settings').onclick=settingsDialog;
+  $('#execution-web').onclick=()=>webHelpDialog();
   $('#share-url').value=PUBLIC_APP_URL;$('#shared-app-link').href=PUBLIC_APP_URL;
   $('#share-app').onclick=safely(copyAppURL);
   installController=new InstallController({window,navigator,location,matchMedia,onChange:updateInstall,onGuide:installGuide});

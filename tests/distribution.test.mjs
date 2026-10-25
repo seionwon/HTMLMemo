@@ -134,15 +134,30 @@ test('execution is the only installation entry and describes both immediate URL 
   doc.querySelector('#execution-install').onclick();await new Promise(resolve=>setImmediate(resolve));assert.match(doc.querySelector('#dialog-content').textContent,/페이지를 앱으로 설치/);
   assert.equal(doc.querySelector('#share-url').value,PUBLIC_APP_URL);assert.equal(app.blobs.length,0);
 });
+test('execution places URL sharing before a concise installation card without numbers or duplicate links',async()=>{
+  const initial=new DOMParser().parseFromString(assets.app['index.html'].text,'text/html'),app=await fileApp({address:PUBLIC_APP_URL});
+  for(const doc of [initial,app.doc]){
+    const cards=[...doc.querySelectorAll('.execution-cards > article')];assert.equal(cards.length,2);
+    assert.ok(cards[0].querySelector('#share-url'));assert.ok(cards[1].querySelector('#execution-install'));
+    assert.equal(cards[0].querySelector('h2').textContent,'앱 주소 공유하기');assert.equal(cards[1].querySelector('h2'),null);
+    assert.equal(cards[1].getAttribute('aria-label'),'앱 설치');assert.equal(cards[1].firstElementChild.textContent,'홈 화면에 앱 아이콘이 필요할 때 앱 설치를 선택하면 됩니다.');
+    assert.equal(doc.querySelector('.execution-step,#execution-import,#execution-settings'),null);
+    assert.equal(doc.querySelector('#install-message').textContent,'설치하지 않아도 앱의 URL에서 바로 사용할 수 있습니다.');
+    const status=doc.querySelector('#install-status');assert.equal(status.querySelectorAll('br').length,1);assert.equal(status.lastChild.textContent,'설치를 하면 인터넷 연결 없이도 사용 가능합니다.');
+  }
+  assert.doesNotMatch(assets.app['src/app.js'].text,/["']#execution-(?:import|settings)["']/);
+  openExecution(app);assert.equal(app.doc.querySelector('#dialog').open,false);
+});
 test('the single execution installation button restores its state after dismissal or failure and can retry',async()=>{
   const app=await fileApp({address:PUBLIC_APP_URL}),doc=app.doc;openExecution(app);const button=doc.querySelector('#execution-install');let finish,calls=0;
+  const offline=()=>assert.ok(doc.querySelector('#install-status').textContent.endsWith('설치를 하면 인터넷 연결 없이도 사용 가능합니다.'));
   app.emit('beforeinstallprompt',{preventDefault(){},prompt:async()=>calls++,userChoice:new Promise(resolve=>finish=resolve)});
-  button.onclick();assert.equal(calls,1);assert.equal(button.disabled,true);assert.equal(button.textContent,'설치 확인 중…');assert.equal(button.getAttribute('aria-label'),'설치 확인 중…');
+  button.onclick();assert.equal(calls,1);assert.equal(button.disabled,true);assert.equal(button.textContent,'설치 확인 중…');assert.equal(button.getAttribute('aria-label'),'설치 확인 중…');offline();
   button.onclick();assert.equal(calls,1);finish({outcome:'dismissed'});await new Promise(resolve=>setImmediate(resolve));assert.equal(button.disabled,false);assert.equal(button.textContent,'앱 설치');assert.match(doc.querySelector('#toast').textContent,/취소/);
   app.emit('beforeinstallprompt',{preventDefault(){},prompt:async()=>{throw new Error('설치 창 오류');}});button.onclick();await new Promise(resolve=>setImmediate(resolve));
-  assert.equal(button.disabled,false);assert.equal(button.textContent,'앱 설치');assert.match(doc.querySelector('#toast').textContent,/설치 창 오류/);
+  assert.equal(button.disabled,false);assert.equal(button.textContent,'앱 설치');assert.match(doc.querySelector('#toast').textContent,/설치 창 오류/);offline();
   app.emit('beforeinstallprompt',{preventDefault(){},prompt:async()=>calls++,userChoice:Promise.resolve({outcome:'accepted'})});button.onclick();await new Promise(resolve=>setImmediate(resolve));assert.equal(calls,2);
-  app.emit('appinstalled');assert.equal(button.textContent,'설치 완료');assert.equal(button.getAttribute('aria-label'),'설치 완료');assert.equal(button.hidden,false);assert.match(doc.querySelector('#install-status').textContent,/앱으로 실행 중/);
+  app.emit('appinstalled');assert.equal(button.textContent,'설치 완료');assert.equal(button.getAttribute('aria-label'),'설치 완료');assert.equal(button.hidden,false);assert.match(doc.querySelector('#install-status').textContent,/앱으로 실행 중/);offline();
   button.onclick();await new Promise(resolve=>setImmediate(resolve));assert.match(doc.querySelector('#dialog-content').textContent,/설치된 HTMLMemo/);assert.equal(calls,2);
 });
 test('settings can be saved and reloaded through file input when native pickers are unavailable',async()=>{const app=await fileApp();app.doc.querySelector('#settings-button').onclick();app.doc.querySelector('#appearance').value='dark';app.doc.querySelector('#appearance').onchange({target:app.doc.querySelector('#appearance')});app.doc.querySelector('#settings-save').onclick();await new Promise(resolve=>setImmediate(resolve));assert.equal(JSON.parse(await app.blobs[0].text()).preferences.theme,'dark');const input=app.doc.querySelector('#settings-file-input');const file=new File([serializeSettings({theme:'system',librarySort:'title',annotation:{width:8}})],'settings.json');input.onchange({target:{files:[file],value:'settings.json'}});await new Promise(resolve=>setImmediate(resolve));const restored=JSON.parse(app.local.get(PREFERENCES_KEY));assert.equal(restored.theme,'system');assert.equal(restored.librarySort,'title');assert.equal(restored.annotation.width,8);assert.equal(app.doc.querySelector('#library-sort').value,'title:asc');});
