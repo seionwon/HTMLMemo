@@ -282,6 +282,13 @@ test('single-file save guidance is visible at import and in the library, setting
   for(const open of openers){open();check(doc.querySelector('#dialog [data-single-file-guide]'));assert.match(doc.querySelector('#dialog').textContent,/이미 가진 HTML 파일은 그대로 가져올 수 있습니다\./);assert.ok(doc.querySelector('#web-help-import'));assert.ok(doc.querySelector('#web-help-paste'));}
 });
 
+test('export sharing help explains one HTML file, recipient import and local-only autosave without changing saved notes',async()=>{
+  const record={id:'share-guide',title:'공유 안내',name:'공유.html',created:1,modified:2,metadata:{annotations:[{id:'kept',text:'기존 주석'}],bookmarks:[{id:'kept-mark'}]}},before=structuredClone(record),app=await fileApp({documents:[record]}),doc=app.doc;
+  const check=guide=>{assert.ok(guide);assert.equal(guide.hasAttribute('open'),false);assert.match(guide.querySelector('summary').textContent,/주석을 포함한 HTML 파일/);assert.equal(guide.querySelectorAll('li').length,3);assert.match(guide.textContent,/HTML 파일 하나/);assert.match(guide.textContent,/방금 내보낸 \.html 파일/);assert.match(guide.textContent,/내 서재 → HTML 파일 가져오기/);assert.match(guide.textContent,/다시 내보내세요/);assert.match(guide.textContent,/Ctrl\/⌘ S/);assert.match(guide.textContent,/앱 URL만 보내면 문서·주석은 전달되지 않습니다/);assert.match(guide.textContent,/새롭게 열기는 주석 없는 사본/);assert.equal(guide.querySelector('a').getAttribute('href'),PUBLIC_APP_URL);};
+  openExecution(app);check(doc.querySelector('#execution-export-guide [data-export-guide]'));
+  doc.querySelector('#library-tab').onclick();doc.querySelector('[data-card-menu="share-guide"]').onclick();check(doc.querySelector('#dialog [data-export-guide]'));assert.ok(doc.querySelector('#menu-export'));assert.deepEqual(record,before);
+});
+
 test('card and list views sort by both directions for saved date, modified date and title, and restore the selection',async()=>{
   const day=n=>Date.UTC(2026,0,n),documents=[
     {id:'a',title:'가나다',created:day(1),modified:day(6)},

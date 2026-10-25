@@ -45,7 +45,8 @@ test('book export retains unopened bodies, released image payloads and original 
   source.arrayBuffer=source.text=()=>{throw Error('Do not read the whole book');};
   const slice=source.slice.bind(source);
   source.slice=(...args)=>{const part=slice(...args),arrayBuffer=part.arrayBuffer.bind(part);part.arrayBuffer=()=>{read+=part.size;return arrayBuffer();};return part;};
-  const exported=await serializeBookSource(source,{version:1,annotations:[note],bookmarks:[]});
+  const bookmarks=[{id:'book-mark',title:'공유할 장',top:120,left:0}];
+  const exported=await serializeBookSource(source,{version:1,annotations:[note],bookmarks});
   const bytes=new Uint8Array(await exported.arrayBuffer()),text=await exported.text();
   assert.deepEqual([...bytes.slice(0,3)],[239,187,191]);
   assert.ok(read<head.length*3+65536);
@@ -54,6 +55,7 @@ test('book export retains unopened bodies, released image payloads and original 
   const doc=documentFor(text);
   assert.equal(doc.querySelectorAll('#htmlmemo-data').length,1);
   assert.deepEqual(JSON.parse(doc.getElementById('htmlmemo-data').textContent).annotations,[note]);
+  assert.deepEqual(JSON.parse(doc.getElementById('htmlmemo-data').textContent).bookmarks,bookmarks);
   assert.equal(inspectBookDocument(doc).complete,true);
   const again=await serializeBookSource(exported,{version:1,annotations:[],bookmarks:[]});
   assert.equal(documentFor(await again.text()).querySelectorAll('#htmlmemo-data').length,1);

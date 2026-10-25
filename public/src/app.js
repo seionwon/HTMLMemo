@@ -33,6 +33,9 @@ function modal(html, bind = () => {}) {
   closePopover(); $('#dialog-content').innerHTML=html; const dialog=$('#dialog'); dialog.returnValue=''; if (!dialog.open) dialog.showModal();
   $$('[data-dialog-close]',dialog).forEach(button=>button.onclick=()=>dialog.close()); bind(dialog);
 }
+function annotationExportGuide() {
+  return `<details class="export-guide" data-export-guide><summary>주석을 포함한 HTML 파일 저장·보내는 방법</summary>${$('#export-guide-content').innerHTML}</details>`;
+}
 function aboutDialog() {
   modal(`<div class="dialog-heading"><h2>About</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div>${$('#about-content').innerHTML}<div class="dialog-actions"><button class="primary-button" data-dialog-close>확인</button></div>`,()=>{$('#app-version').textContent=APP_VERSION;});
   $('#dialog [data-dialog-close]').focus();
@@ -209,6 +212,8 @@ function updateChrome() {
   if(!$('.chrome').classList.contains('address-editing'))$('#address').value=local?tab.record.name:tab?.url||'';
   $('#address-icon').innerHTML=icon(local?'file':'globe',15);$('#local-label').hidden=!local;
   setIconButton('#save-page',execution?'globe':local?'download':tab?.external?'folder':'save',execution?'URL 복사':local?'HTML 내보내기':tab?.external?'Chrome에서 가져오기':'페이지 저장',17);
+  if(local){$('#save-page').title='HTML 내보내기 · 본문·주석·북마크를 HTML 파일 하나로 저장';$('#save-page').setAttribute('aria-description','현재 주석을 포함한 HTML 파일을 저장해 다른 사람에게 보낼 수 있습니다.');}
+  else $('#save-page').removeAttribute('aria-description');
   $('#save-page').disabled=execution?sharingApp:!tab||!!tab.capturing;
   if(local)saveStatus(tab); else if(tab)$('#status-left').textContent=tab.external?'웹 탐색은 브라우저 탭 · 복사한 글과 저장한 HTML은 여기서 주석 달기':tab.capturing?'읽기용 사본을 준비하는 중…':tab.readable?'페이지 저장 → 주석 달기 · 추가 설치 없음':'앱 문서를 준비하는 중…';
   document.title=tab?tab.title+' · HTMLMemo':'HTMLMemo · 나만의 웹 서재';
@@ -458,7 +463,7 @@ async function exportDocument(tab) {
   const html=source ? await serializeBookSource(source.file || new Blob([source.html], {type:'text/html;charset=utf-8'}), tab.reader.metadata) : tab.reader.html();
   if(handle){const disk=await handle.getFile();await writeExternalHTML({fileHandle:handle,diskStamp:{modified:disk.lastModified,size:disk.size}},html);}
   else download(html,htmlExportName(tab.record.name));
-  toast('현재 주석을 포함한 HTML을 내보냈습니다. 이후 주석은 앱에 자동 저장됩니다.');
+  toast('현재 주석을 포함한 HTML을 내보냈습니다. 저장한 .html 파일을 보내세요.');
 }
 
 function webContext(){return active()?.type==='browser'?active():tabs.includes(lastWebTab)?lastWebTab:null;}
@@ -1025,7 +1030,7 @@ async function annotationHistory(tab, before = Infinity) {
 }
 function documentInfo(tab) {
   const m=tab.reader.metadata;
-  modal(`<div class="dialog-heading"><h2>문서 정보</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><dl class="document-info"><dt>제목</dt><dd>${esc(m.title)}</dd><dt>파일</dt><dd>${esc(tab.record.name)}</dd><dt>원본</dt><dd>${m.source?`<a href="${esc(m.source)}" target="_blank" rel="noopener noreferrer">${esc(m.source)}</a>`:'로컬 HTML 파일'}</dd><dt>저장 위치</dt><dd>앱 보관함 (원본 파일은 변경하지 않음)</dd><dt>주석</dt><dd>${m.annotations.length}개</dd></dl>${m.warnings.length?`<details class="capture-warnings"><summary>보관하지 못한 리소스 ${m.warnings.length}개</summary><ul>${m.warnings.map(w=>`<li>${esc(w)}</li>`).join('')}</ul></details>`:''}<p class="dialog-description small">본문은 보관한 상태로 유지하고 주석과 북마크를 별도로 자동 저장합니다. HTML 내보내기로 현재 주석을 포함한 사본을 만들 수 있어요.</p>`);
+  modal(`<div class="dialog-heading"><h2>문서 정보</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><dl class="document-info"><dt>제목</dt><dd>${esc(m.title)}</dd><dt>파일</dt><dd>${esc(tab.record.name)}</dd><dt>원본</dt><dd>${m.source?`<a href="${esc(m.source)}" target="_blank" rel="noopener noreferrer">${esc(m.source)}</a>`:'로컬 HTML 파일'}</dd><dt>저장 위치</dt><dd>앱 보관함 (원본 파일은 변경하지 않음)</dd><dt>주석</dt><dd>${m.annotations.length}개</dd></dl>${m.warnings.length?`<details class="capture-warnings"><summary>보관하지 못한 리소스 ${m.warnings.length}개</summary><ul>${m.warnings.map(w=>`<li>${esc(w)}</li>`).join('')}</ul></details>`:''}<p class="dialog-description small">작업은 이 기기의 서재에 자동 저장됩니다. 다른 사람에게 주석을 보내려면 HTML 내보내기로 저장한 .html 파일을 보내세요.</p>${annotationExportGuide()}`);
 }
 function pickHTMLFile() {
   if(openPicker())return window.showOpenFilePicker({types:importTypes}).then(([handle])=>handle,error=>{if(['SecurityError','NotSupportedError'].includes(error.name))return inputFile();throw error;});
@@ -1071,7 +1076,7 @@ async function migrateEdition(tab) {
   });
 }
 function documentMenu(record) {
-  modal(`<div class="dialog-heading"><h2>${esc(record.title)}</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><div class="document-actions"><button class="menu-button" id="menu-open">${icon('file')} 열기</button><button class="menu-button" id="menu-export">${icon('download')} HTML 내보내기</button><button class="menu-button" id="menu-history">${icon('undo')} 주석 저장 이력</button><button class="menu-button" id="menu-migrate">${icon('file')} 새 판으로 주석 옮기기</button><button class="menu-button danger" id="menu-remove">${icon('trash')} 서재에서 삭제</button></div>`,()=>{
+  modal(`<div class="dialog-heading"><h2>${esc(record.title)}</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><div class="document-actions"><button class="menu-button" id="menu-open">${icon('file')} 열기</button><button class="menu-button" id="menu-export">${icon('download')} HTML 내보내기</button><button class="menu-button" id="menu-history">${icon('undo')} 주석 저장 이력</button><button class="menu-button" id="menu-migrate">${icon('file')} 새 판으로 주석 옮기기</button><button class="menu-button danger" id="menu-remove">${icon('trash')} 서재에서 삭제</button></div><p class="dialog-description small">HTML 내보내기는 본문·현재 주석·북마크를 HTML 파일 하나로 저장합니다.</p>${annotationExportGuide()}`,()=>{
     $('#menu-open').onclick=safely(async()=>{$('#dialog').close();await openRecord(record);});$('#menu-export').onclick=safely(async()=>{$('#dialog').close();const tab=await openRecord(record);await exportDocument(tab);});
     $('#menu-history').onclick=safely(async()=>{$('#dialog').close();await annotationHistory(await openRecord(record));});
     $('#menu-migrate').onclick=safely(async()=>{$('#dialog').close();await migrateEdition(await openRecord(record));});
@@ -1131,6 +1136,7 @@ function bindUI() {
   [['#web-help-button','info','웹페이지 가져오기 안내'],['#address-open','external'],['#save-page','save'],['#library-search-icon','search'],['#empty-icon','file'],['#library-card-view','grid','카드'],['#library-list-view','list','목록']].forEach(([id,name,label])=>setButton(id,name,label));
   setIconButton('#library-tab','library','내 서재');
   setIconButton('#settings-button','settings','설정');bindTabs();
+  $('#execution-export-guide').innerHTML=annotationExportGuide();
   $('#library-tab').onclick=()=>activate('library');$('#browse-start').onclick=focusAddress;
   $('#execution-web').onclick=()=>webHelpDialog();
   $('#share-url').value=PUBLIC_APP_URL;$('#shared-app-link').href=PUBLIC_APP_URL;

@@ -693,6 +693,43 @@ test('real Chrome: standalone book export keeps lazy chapters and released asset
     if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});
   }
 });
+test('real Chrome: Pages-only annotated HTML export survives a fresh recipient library',{timeout:90000},async()=>{
+  await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-share-export-'));await cp(join(root,'public'),folder,{recursive:true});
+  const server=createServer(folder);let sender,recipient;
+  try{
+    await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));sender=await launchChrome();const page=sender.page,url=process.env.HTMLMEMO_SIDEBAR_TEST_URL||`http://127.0.0.1:${server.address().port}/`;
+    const viewport=async(p,width)=>p.send('Emulation.setDeviceMetricsOverride',{width,height:width===1280?900:844,deviceScaleFactor:1,mobile:width<600});
+    await viewport(page,1280);await page.navigate(url);await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
+    const image='data:image/svg+xml;base64,'+Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="16"><rect width="32" height="16" fill="#334155"/></svg>').toString('base64');
+    const source='<html><head><title>주석 파일 보내기 검증</title><style>body{margin:24px;font:18px/1.8 system-ui}p{padding:16px;min-height:90px}</style></head><body><p>Hello annotated HTML.</p><img alt="포함된 이미지" src="'+image+'"></body></html>';
+    await page.evaluate(`(async()=>{const {parseHTML}=await import('./src/document.js'),{putDocumentRevision}=await import('./src/storage.js'),parsed=parseHTML(${JSON.stringify(source)});parsed.metadata.annotations=[{id:'share-highlight',type:'highlight',color:'#edcf67',width:3,opacity:.35,textAnchor:{start:0,end:5,quote:'Hello',prefix:'',suffix:' annotated HTML.'}},{id:'share-pen',type:'pen',anchor:'body',color:'#ef4444',width:3,opacity:1,points:[{x:.1,y:.2},{x:.3,y:.4}]},{id:'share-note',type:'note',anchor:'body',color:'#334155',width:3,opacity:1,points:[{x:.4,y:.2}],text:'함께 보낼 메모'}];parsed.metadata.bookmarks=[{id:'share-bookmark',title:'함께 보낼 북마크',top:0,left:0}];await putDocumentRevision({id:'share-source',name:'공유.html',title:parsed.metadata.title,created:Date.now(),modified:Date.now(),html:parsed.html,metadata:parsed.metadata});})()`);
+    await page.navigate(url);await page.waitFor('!!document.querySelector("[data-open=share-source]")');await page.click('[data-open=share-source]');
+    const frame='document.querySelector(".document-host:not([hidden]) iframe")',doc=frame+'.contentDocument';
+    const rendered=`${frame}?.style.visibility==='visible'&&${doc}.querySelector('[data-htmlmemo-mark]')&&${doc}.querySelector('[data-htmlmemo-id="share-pen"]')&&${doc}.querySelector('[data-htmlmemo-id="share-note"]')&&!document.querySelector('.tab-dirty:not([hidden])')`;
+    await page.waitFor(rendered);assert.equal(await page.evaluate('document.querySelector("#save-page").getAttribute("aria-label")'),'HTML 내보내기');assert.match(await page.evaluate('document.querySelector("#save-page").title'),/본문·주석·북마크를 HTML 파일 하나/);
+    const checkGuide=async(p,selector,name)=>{
+      assert.equal(await p.evaluate(`document.querySelector(${JSON.stringify(selector)}).open`),false);await p.click(selector+' summary');await p.waitFor(`document.querySelector(${JSON.stringify(selector)}).open`);
+      const state=await p.evaluate(`(()=>{const g=document.querySelector(${JSON.stringify(selector)}),box=g.closest('dialog')||document.querySelector('#execution'),r=box.getBoundingClientRect();return {text:g.textContent,steps:g.querySelectorAll('li').length,link:g.querySelector('a').href,fits:r.left>=0&&r.right<=innerWidth&&box.scrollWidth<=box.clientWidth};})()`);
+      assert.equal(state.steps,3);assert.equal(state.link,'https://seionwon.github.io/HTMLMemo/');assert.match(state.text,/방금 내보낸 \.html 파일/);assert.match(state.text,/내 서재 → HTML 파일 가져오기/);assert.match(state.text,/다시 내보내세요/);assert.equal(state.fits,true);
+      await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,`test-results/pages-only-export-${name}.png`),await p.screenshot());
+    };
+    await page.click('[data-action=more]');await page.click('[data-more=info]');await page.waitFor('document.querySelector("#dialog").open&&!!document.querySelector("#dialog [data-export-guide]")');await checkGuide(page,'#dialog [data-export-guide]','info-1280');await page.click('#dialog [data-dialog-close]');
+    await page.click('#library-tab');await viewport(page,320);await page.click('[data-card-menu=share-source]');await checkGuide(page,'#dialog [data-export-guide]','menu-320');await page.click('#dialog [data-dialog-close]');
+    await clickSettingsAction(page,'#settings-execution');await checkGuide(page,'#execution [data-export-guide]','execution-320');
+    await viewport(page,1280);await page.click('.tab.document .tab-select');await page.waitFor(rendered);
+    await page.evaluate(`window.sharePickerCalls=0;window.showSaveFilePicker=async options=>{window.sharePickerCalls++;window.shareSuggestedName=options.suggestedName;return (await navigator.storage.getDirectory()).getFileHandle('share-export.html',{create:true});};`);
+    await page.click('#save-page');await page.waitFor('document.querySelector("#toast").textContent.includes("현재 주석을 포함한 HTML을 내보냈습니다")');
+    const exported=await page.evaluate(`(async()=>{const root=await navigator.storage.getDirectory(),file=await(await root.getFileHandle('share-export.html')).getFile();return file.text();})()`);
+    assert.equal(await page.evaluate('window.sharePickerCalls'),1);assert.equal(await page.evaluate('window.shareSuggestedName'),'공유-주석.html');assert.match(exported,/id="htmlmemo-data"/);assert.ok(exported.includes(image));assert.doesNotMatch(exported,/data-export-guide|execution-export-guide/);
+    recipient=await launchChrome();const other=recipient.page;await viewport(other,1280);await other.navigate(url);await other.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
+    assert.equal(await other.evaluate('document.querySelectorAll(".document-card").length'),0,'recipient starts with no sender database or settings');
+    await other.evaluate(`(()=>{const transfer=new DataTransfer();transfer.items.add(new File([${JSON.stringify(exported)}],'받은-주석.html',{type:'text/html'}));const input=document.querySelector('#file-input');input.files=transfer.files;input.dispatchEvent(new Event('change',{bubbles:true}));})()`);await other.waitFor(`${rendered}&&${doc}.querySelector('img').naturalWidth===32`);
+    const received=await other.evaluate(`(async()=>{const {listDocuments}=await import('./src/storage.js'),rows=await listDocuments(),m=rows[0].metadata;return {documents:rows.length,ids:m.annotations.map(a=>a.id).sort(),types:m.annotations.map(a=>a.type).sort(),note:m.annotations.find(a=>a.type==='note').text,bookmarks:m.bookmarks.map(b=>b.title),image:${doc}.querySelector('img').naturalWidth};})()`);
+    assert.deepEqual(received,{documents:1,ids:['share-highlight','share-note','share-pen'],types:['highlight','note','pen'],note:'함께 보낼 메모',bookmarks:['함께 보낼 북마크'],image:32});
+    await writeFile(join(root,'test-results/pages-only-export-recipient-1280.png'),await other.screenshot());assert.deepEqual(sender.errors,[]);assert.deepEqual(recipient.errors,[]);
+  }finally{await recipient?.close();await sender?.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
+});
+
 test('real Chrome: Pages-only URL use, safe text import, app tabs and optional installation',{timeout:60000},async()=>{
   await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-pages-only-'));await cp(join(root,'public'),folder,{recursive:true});
   const server=createServer(folder);let chrome;
@@ -930,7 +967,7 @@ test('real Chrome: browsing, capture, local annotation, file writes, reopen and 
       await page.evaluate(`window.showOpenFilePicker=async()=>{const root=await navigator.storage.getDirectory();return [await root.getFileHandle('picked-document.html')];};`);await clickLibraryImport(page);await page.waitFor('document.querySelectorAll(".tab.document").length === 2 && !document.querySelector("#toolbar").hidden');assert.equal(await page.evaluate('document.querySelector("#local-label").hidden'),false);assert.equal(await page.evaluate('document.querySelector(".document-host:not([hidden]) iframe").contentDocument.querySelectorAll("[data-htmlmemo-mark]").length > 0'),true);
     });
     await t.test('opened documents have visible tabs that switch without adding a header row',async()=>{
-      assert.deepEqual(await page.evaluate(`(()=>{const button=document.querySelector('#save-page');return {text:button.textContent,title:button.title,label:button.getAttribute('aria-label')};})()`),{text:'',title:'HTML 내보내기',label:'HTML 내보내기'});
+      assert.deepEqual(await page.evaluate(`(()=>{const button=document.querySelector('#save-page');return {text:button.textContent,title:button.title,label:button.getAttribute('aria-label')};})()`),{text:'',title:'HTML 내보내기 · 본문·주석·북마크를 HTML 파일 하나로 저장',label:'HTML 내보내기'});
       const previous=await page.evaluate('document.querySelector(".tab.document.active").dataset.tab');
       await page.click('.tab.document:not(.active) .tab-select');
       assert.notEqual(await page.evaluate('document.querySelector(".tab.document.active").dataset.tab'),previous);
