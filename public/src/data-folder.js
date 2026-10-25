@@ -72,8 +72,15 @@ async function optionalText(folder,name) {
   catch(error){if(error.name==='NotFoundError')return null;throw error;}
 }
 async function atomicWrite(folder,name,contents) {
-  const handle=await folder.getFileHandle(name,{create:true}),writer=await handle.createWritable();
-  try{await writer.write(contents);await writer.close();}catch(error){await writer.abort().catch(()=>{});throw error;}
+  let handle,created=false,writer;
+  try{handle=await folder.getFileHandle(name);}catch(error){if(error.name!=='NotFoundError')throw error;handle=await folder.getFileHandle(name,{create:true});created=true;}
+  try{writer=await handle.createWritable();await writer.write(contents);await writer.close();}
+  catch(error){
+    await writer?.abort().catch(()=>{});
+    // A failed first create can leave an empty manifest; remove only our new, still-empty file.
+    if(created){try{if((await handle.getFile()).size===0)await folder.removeEntry(name);}catch{/* A revoked permission may also prevent cleanup; retain the error. */}}
+    throw error;
+  }
 }
 async function objectFile(data,ref,verify=false) {
   checkRef(ref);const file=await (await data.getFileHandle(ref.name)).getFile();

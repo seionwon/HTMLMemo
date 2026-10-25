@@ -91,3 +91,8 @@ test('an aborted first object write and a missing managed copy are repaired from
   await assert.rejects(backup.connect(disk),/Interrupted/);assert.equal(backup.state,'error');control.failClose=null;await backup.connect(disk);assert.equal(backup.state,'saved');
   const head=await manifest(disk),data=await disk.getDirectoryHandle(FOLDER_DATA);await data.removeEntry(head.documents[0].source.name);backup.schedule({id:'doc'});await backup.flush();assert.equal(await readObject(disk,(await manifest(disk)).documents[0].source),'<!doctype html><body>Original content</body>');
 });
+test('an interrupted very first manifest leaves no empty root file and reconnect completes without manual file cleanup',async t=>{
+  const lib=library(),control={failClose:FOLDER_MANIFEST},disk=memoryFolder('HTMLMemo',control),backup=manager(t,lib);
+  await assert.rejects(backup.connect(disk),/Interrupted/);await assert.rejects(disk.getFileHandle(FOLDER_MANIFEST),{name:'NotFoundError'});assert.equal(lib.records.size,1);
+  control.failClose=null;await backup.connect(disk);assert.equal(backup.state,'saved');assert.equal((await manifest(disk)).documents.length,1);
+});
