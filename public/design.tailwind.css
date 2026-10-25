@@ -92,7 +92,7 @@ body[data-codememo-design]{margin:0;font-family:var(--app-font);background:var(-
 /* One header row: visible file tabs and a settings icon for app controls. */
 .chrome{position:relative;padding:0;margin:0}
 .addressbar{height:24px;min-height:0;padding:0;margin:0}
-.addressbar button:focus-visible{outline-offset:-2px}
+.addressbar .navigation button:focus-visible,.addressbar>#settings-button:focus-visible{outline-offset:-2px}
 .addressbar .navigation{align-items:center}
 .addressbar .icon-button{width:26px;height:24px;min-height:0;padding-block:0;border-radius:5px}
 #address-form{height:24px;min-height:0;padding-block:0;margin-block:0;border-radius:5px}
