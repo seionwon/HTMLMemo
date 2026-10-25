@@ -261,6 +261,15 @@ body[data-codememo-design]{margin:0;font-family:var(--app-font);background:var(-
 .revision-list .menu-button{width:100%;text-align:left;white-space:normal;border-bottom:1px solid var(--line);padding:12px}
 .revision-list small{color:var(--muted)}
 .revision-preview p{padding:6px 0;border-bottom:1px solid var(--line)}
+.revision-calendar{display:grid;grid-template-columns:1.25fr 1fr 1fr;gap:8px;margin:14px 0 10px}
+.revision-calendar label{min-width:0;font-size:11px;color:var(--muted)}
+.revision-calendar select{display:block;width:100%;min-width:0;margin-top:4px;padding:7px 4px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--text);font:inherit;font-size:12px}
+.revision-date-nav,.revision-page-nav{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.revision-date-nav .secondary-button,.revision-page-nav .secondary-button{min-width:0;padding:6px 8px;font-size:11px}
+.revision-date-nav button:disabled,.revision-page-nav button:disabled{opacity:.4;cursor:default}
+.revision-page-nav{margin-top:10px}.revision-help{margin-top:14px;font-size:11px;color:var(--muted)}.revision-help summary{cursor:pointer}
+.revision-browser .revision-list{max-height:38vh}.revision-browser[aria-busy=true]{opacity:.65}
+@media(max-width:380px){.revision-calendar{gap:4px}.revision-calendar select{font-size:10px}.revision-date-nav .secondary-button,.revision-page-nav .secondary-button{padding:6px;font-size:10px}}
 
 /* Library view switch: cards stay the default; list mode keeps one document on each compact row. */
 .library-view-switch{display:flex;align-items:center;padding:2px;border:1px solid var(--line);border-radius:6px;background:var(--surface)}

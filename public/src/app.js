@@ -3,7 +3,7 @@ import { parseHTML, SCRIPT_CSP, serializeBookSource } from './document.js';
 import { SaveQueue, AnnotationCheckpoints, ANNOTATION_LABELS } from './model.js';
 import { openEditionProbe, migrateAnnotations } from './migrate.js';
 import { Reader } from './reader.js';
-import { listDocuments, getDocument, deleteDocument, getSetting, setSetting, saveDocumentHTML, listRevisionSummaries, getRevision, putDocumentRevision, checkpointAnnotations, putDocumentView, putDocumentSourceIdentity, writeExternalHTML } from './storage.js';
+import { listDocuments, getDocument, deleteDocument, getSetting, setSetting, saveDocumentHTML, listRevisionPeriods, listRevisionDay, adjacentRevisionDay, getRevision, putDocumentRevision, checkpointAnnotations, putDocumentView, putDocumentSourceIdentity, writeExternalHTML } from './storage.js';
 import {readWebPage,pastedPage,PASTE_LIMIT,isWebSearch,BrowserTabs} from './web.js';
 import { readLocalHTML, droppedHTMLFiles, findLocalDuplicates, identifyLocalFile, htmlExportName } from './local-files.js';
 import { normalizePreferences, loadPreferences, storePreferences, serializeSettings, readSettingsFile, PRESET_COLORS, PRESET_PALETTES, normalizeHexColor, hexToRgb, rgbToHex, hexToHsv, hsvToHex } from './preferences.js';
@@ -1049,18 +1049,49 @@ function annotationDialog(tab,id) {
     $('#delete-selected').onclick=()=>{tab.reader.remove(id);$('#dialog').close();};if($('#edit-note'))$('#edit-note').onclick=safely(async()=>{const text=await promptText(a.type,a.text);if(text?.trim())tab.reader.commit(tab.reader.metadata.annotations.map(item=>item.id===id?{...item,text:text.trim()}:item));});
   });
 }
-async function annotationHistory(tab, before = Infinity) {
+async function annotationHistory(tab, selection = {}, valid = () => true) {
   await tab.reader.ready;await tab.queue.flush();
-  const versions=await listRevisionSummaries(tab.record.id,before);
-  const stamp=value=>new Date(value).toLocaleString('ko-KR',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
-  modal(`<div class="dialog-heading"><h2>주석 저장 이력</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><p class="dialog-description">본문은 유지하고 선택한 시점의 주석과 북마크만 복원합니다. 복원 직전 상태도 이력에 남습니다.</p><p id="history-save-policy" class="dialog-description small">작업은 빠르게 자동 저장합니다. 이력은 변경이 있을 때 5분마다 또는 주석 입력을 멈춘 뒤 1분이 지났을 때 중 먼저 해당하는 시점에 묶어 보관합니다. 문서를 닫을 때도 남기며, 같은 내용은 중복 보관하지 않습니다.</p><p class="dialog-description small">이력은 이 기기에 보관하며 데이터 폴더를 연결하면 함께 자동 저장합니다. HTML 내보내기에는 현재 주석만 포함됩니다.</p><div class="revision-list">${versions.map((version,index)=>`<button class="menu-button" data-revision="${version.id}"><span>${esc(stamp(version.created))} · #${version.id}<br><small>${version.kind==='restore'?'복원 저장':version.kind==='baseline'?'최초 보관':'주석 변경'} · 주석 ${version.annotationCount}개 · 북마크 ${version.bookmarkCount}개${index===0 && before===Infinity?' · 최근 저장':''}</small></span></button>`).join('') || '<p>아직 저장된 이력이 없습니다.</p>'}</div>${versions.length===50?'<button class=secondary-button id=history-older>더 이전 이력</button>':''}${before!==Infinity?'<button class=secondary-button id=history-latest>최근 이력</button>':''}`,()=>{
-    if($('#history-older'))$('#history-older').onclick=safely(()=>annotationHistory(tab,versions.at(-1).id));
-    if($('#history-latest'))$('#history-latest').onclick=safely(()=>annotationHistory(tab));
-    $$('[data-revision]',$('#dialog')).forEach(button=>button.onclick=safely(async()=>{
+  const id=tab.record.id,years=await listRevisionPeriods(id);
+  const year=years.find(row=>String(row.value)===String(selection.year))?.value??years[0]?.value;
+  const months=year===undefined||year==='unknown'?[]:await listRevisionPeriods(id,year);
+  const month=months.find(row=>row.value===Number(selection.month))?.value??months[0]?.value;
+  const days=month===undefined?[]:await listRevisionPeriods(id,year,month);
+  const day=days.find(row=>row.value===Number(selection.day))?.value??days[0]?.value;
+  const state={...selection,year,month,day,pages:selection.pages||[]};
+  const [{rows:versions,next},previousDay,nextDay]=year===undefined?[{rows:[],next:null},null,null]:await Promise.all([listRevisionDay(id,state,state.before),adjacentRevisionDay(id,state,'previous'),adjacentRevisionDay(id,state,'next')]);
+  if(!valid())return;
+  const total=years.reduce((sum,row)=>sum+row.count,0),count=year==='unknown'?years.find(row=>row.value==='unknown')?.count||0:days.find(row=>row.value===day)?.count||0;
+  const latest=year===years[0]?.value&&month===months[0]?.value&&day===days[0]?.value&&!state.before;
+  const dateLabel=year==='unknown'?'날짜 미확인':`${year}년 ${month}월 ${day}일`;
+  const options=(rows,unit)=>rows.map(row=>`<option value="${row.value}">${row.value==='unknown'?'날짜 미확인':row.value+unit} (${row.count.toLocaleString('ko-KR')}개)</option>`).join('');
+  const stamp=value=>value===null||!Number.isFinite(new Date(value).getTime())?'날짜 미확인':new Date(value).toLocaleString('ko-KR',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
+  modal(`<div class="revision-browser"><div class="dialog-heading"><h2>주석 저장 이력</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><p class="dialog-description">본문은 유지하고 선택한 시점의 주석과 북마크만 복원합니다. 복원 직전 상태도 이력에 남습니다.</p><div class="revision-calendar" aria-label="이력 날짜 선택"><label>연도<select id="history-year"${years.length?'':' disabled'}>${options(years,'년')}</select></label><label>월<select id="history-month"${months.length?'':' disabled'}>${options(months,'월')}</select></label><label>일<select id="history-day"${days.length?'':' disabled'}>${options(days,'일')}</select></label></div><div class="revision-date-nav"><button id="history-prev-day" class="secondary-button"${previousDay?'':' disabled'}>이전 날짜</button><button id="history-latest" class="secondary-button"${latest||!total?' disabled':''}>최근 이력</button><button id="history-next-day" class="secondary-button"${nextDay?'':' disabled'}>다음 날짜</button></div><p id="history-summary" class="dialog-description small" role="status">전체 ${total.toLocaleString('ko-KR')}개${total?` · ${dateLabel} · ${count.toLocaleString('ko-KR')}개 중 ${state.pages.length*50+1}–${state.pages.length*50+versions.length}개`:''}</p><div class="revision-list" aria-label="선택한 날짜의 저장 이력">${versions.map((version,index)=>`<button class="menu-button" data-revision="${version.id}"><span>${esc(stamp(version.created))} · #${version.id}<br><small>${version.kind==='restore'?'복원 저장':version.kind==='baseline'?'최초 보관':'주석 변경'} · 주석 ${version.annotationCount}개 · 북마크 ${version.bookmarkCount}개${index===0&&latest?' · 최근 저장':''}</small></span></button>`).join('') || '<p>아직 저장된 이력이 없습니다.</p>'}</div>${state.pages.length||next?`<div class="revision-page-nav"><button class="secondary-button" id="history-newer"${state.pages.length?'':' disabled'}>앞 50개</button><button class="secondary-button" id="history-older"${next?'':' disabled'}>이전 이력 50개</button></div>`:''}<details class="revision-help"><summary>자동 저장·이력 보관 안내</summary><p id="history-save-policy" class="dialog-description small">작업은 빠르게 자동 저장합니다. 이력은 변경이 있을 때 5분마다 또는 주석 입력을 멈춘 뒤 1분이 지났을 때 중 먼저 해당하는 시점에 묶어 보관합니다. 문서를 닫을 때도 남기며, 같은 내용은 중복 보관하지 않습니다.</p><p class="dialog-description small">이력이 있는 연·월·일만 표시합니다. 날짜는 이 기기의 시간대를 따르며, 선택한 날짜의 이력을 50개씩 불러옵니다. 이력은 이 기기에 보관하며 데이터 폴더를 연결하면 함께 자동 저장합니다. HTML 내보내기에는 현재 주석만 포함됩니다.</p></details></div>`,dialog=>{
+    const root=$('.revision-browser',dialog),list=$('.revision-list',root);list.scrollTop=state.scroll||0;
+    $('#history-year').value=year??'';$('#history-month').value=month??'';$('#history-day').value=day??'';
+    let busy=false;
+    const load=async(nextSelection,focus)=>{
+      if(busy)return;busy=true;root.setAttribute('aria-busy','true');
+      const controls=$$('select,button:not([data-dialog-close])',root),disabled=controls.map(button=>button.disabled);controls.forEach(button=>button.disabled=true);
+      try{await annotationHistory(tab,nextSelection,()=>dialog.open&&dialog.contains(root));if(dialog.open&&focus)$(focus,dialog)?.focus();}
+      finally{if(root.isConnected){root.removeAttribute('aria-busy');controls.forEach((button,index)=>button.disabled=disabled[index]);busy=false;}}
+    };
+    $('#history-year').onchange=safely(event=>load({year:event.target.value},'#history-year'));
+    $('#history-month').onchange=safely(event=>load({year,month:Number(event.target.value)},'#history-month'));
+    $('#history-day').onchange=safely(event=>load({year,month,day:Number(event.target.value)},'#history-day'));
+    $('#history-prev-day').onclick=safely(()=>load(previousDay,'#history-prev-day'));
+    $('#history-next-day').onclick=safely(()=>load(nextDay,'#history-next-day'));
+    $('#history-latest').onclick=safely(()=>load({},'#history-latest'));
+    if($('#history-older'))$('#history-older').onclick=safely(()=>load({...state,before:next,pages:[...state.pages,state.before||null],scroll:0},'#history-newer'));
+    if($('#history-newer'))$('#history-newer').onclick=safely(()=>load({...state,before:state.pages.at(-1),pages:state.pages.slice(0,-1),scroll:0},'#history-older'));
+    $$('[data-revision]',root).forEach(button=>button.onclick=safely(async()=>{
+      if(busy)return;
       const version=await getRevision(Number(button.dataset.revision));
+      if(!dialog.open||!dialog.contains(root))return;
       if(!version || version.documentId!==tab.record.id)throw Error('저장 이력을 찾지 못했습니다.');
+      const back={...state,scroll:list.scrollTop};
       modal(`<div class="dialog-heading"><h2>주석 이력 확인</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><p>${esc(stamp(version.created))} · #${version.id}</p><p>주석 ${version.annotations.length}개 · 북마크 ${version.bookmarks.length}개</p><div class="revision-preview">${version.annotations.slice(0,100).map(a=>`<p>${esc(a.type)} · ${esc((a.text || a.textAnchor?.quote || '그림 주석').slice(0,500))}</p>`).join('') || '<p>주석 없음</p>'}${version.annotations.length>100?'<p>미리보기는 100개까지 표시합니다. 복원은 모든 주석에 적용됩니다.</p>':''}</div><div class="dialog-actions"><button class="secondary-button" id="history-back">이력 목록</button><button class="primary-button" id="restore-revision">이 시점으로 복원</button></div>`,()=>{
-        $('#history-back').onclick=safely(()=>annotationHistory(tab));
+        const preview=$('.revision-preview',dialog);
+        $('#history-back').onclick=safely(async()=>{await annotationHistory(tab,back,()=>dialog.open&&dialog.contains(preview));if(dialog.open)$(`[data-revision="${version.id}"]`,dialog)?.focus({preventScroll:true});});
         $('#restore-revision').onclick=safely(async()=>{
           // Flush current edits first, so restoration itself never destroys the state being replaced.
           await tab.queue.flush();

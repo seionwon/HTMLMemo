@@ -10,7 +10,7 @@ export function onStorageChange(listener) {
 function changed(id,broadcast=true) { if(broadcast)storageChannel?.postMessage(id);for (const listener of storageListeners) { try { listener(id); } catch { /* A mirror must not undo a committed internal save. */ } } }
 async function db() {
   if (!database) database = new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 3);
+    const request = indexedDB.open(DB_NAME, 4);
     let blocked=false;
     request.onblocked=()=>{blocked=true;database=null;reject(new Error('다른 HTMLMemo 창이 이전 보관함을 사용하고 있습니다. 해당 창을 닫고 다시 열어주세요. 보관한 문서는 유지됩니다.'));};
     request.onupgradeneeded = event => {
@@ -19,6 +19,18 @@ async function db() {
       if (!database.objectStoreNames.contains('settings')) database.createObjectStore('settings');
       if (!database.objectStoreNames.contains('contents')) database.createObjectStore('contents', {keyPath:'documentId'});
       if (!database.objectStoreNames.contains('revisions')) database.createObjectStore('revisions', {keyPath:'id',autoIncrement:true}).createIndex('documentId','documentId');
+      if (!database.objectStoreNames.contains('revisionHeaders')) {
+        const headers=database.createObjectStore('revisionHeaders',{keyPath:'id'});
+        headers.createIndex('documentRevision',['documentId','id']);
+        headers.createIndex('documentCreated',['documentId','time','id']);
+      }
+      // Build the small date index once, preserving every legacy snapshot and ID.
+      // An interrupted upgrade rolls back both the schema and the derived index.
+      if(event && event.oldVersion<4){
+        const tx=request.transaction,headers=tx.objectStore('revisionHeaders');
+        const cursorRequest=tx.objectStore('revisions').openCursor();
+        cursorRequest.onsuccess=()=>{const cursor=cursorRequest.result;if(cursor){headers.add(revisionHeader(cursor.value));cursor.continue();}};
+      }
       // Migrate legacy inline bodies one document at a time, without getAll().
       if(event && event.oldVersion<3){
         const tx=request.transaction,contents=tx.objectStore('contents');
@@ -92,9 +104,9 @@ export async function putDocumentView(id, view) {
 export async function deleteDocument(id) {
   const connection=await db();
   await new Promise((resolve,reject)=>{
-    const tx=connection.transaction(['documents','contents','revisions'],'readwrite');tx.objectStore('documents').delete(id);tx.objectStore('contents').delete(id);
+    const tx=connection.transaction(['documents','contents','revisions','revisionHeaders'],'readwrite');tx.objectStore('documents').delete(id);tx.objectStore('contents').delete(id);
     const request=tx.objectStore('revisions').index('documentId').openCursor(IDBKeyRange.only(id));
-    request.onsuccess=()=>{const cursor=request.result;if(cursor){cursor.delete();cursor.continue();}};
+    request.onsuccess=()=>{const cursor=request.result;if(cursor){tx.objectStore('revisionHeaders').delete(cursor.primaryKey);cursor.delete();cursor.continue();}};
     tx.oncomplete=resolve;tx.onabort=()=>reject(tx.error);tx.onerror=()=>reject(tx.error);
   });
   try { const root = await navigator.storage.getDirectory(); await root.removeEntry(id + '.html'); } catch { /* IndexedDB also contains the complete HTML. */ }
@@ -123,17 +135,76 @@ export const sameAnnotationState = (a,b) => JSON.stringify({annotations:a?.annot
 export const listRevisions = id => transaction('revisions','readonly',store=>store.index('documentId').getAll(id));
 
 export const getRevision = id => transaction('revisions','readonly',store=>store.get(id));
-export async function listRevisionSummaries(id, before = Infinity, limit = 50) {
+
+function revisionHeader(version) {
+  const time=Number.isFinite(version.created)&&Number.isFinite(new Date(version.created).getTime())?version.created:-Infinity;
+  return {id:version.id,documentId:version.documentId,time,created:time===-Infinity?null:time,kind:version.kind,annotationCount:version.annotations?.length||0,bookmarkCount:version.bookmarks?.length||0};
+}
+function addRevision(tx, version) {
+  const request=tx.objectStore('revisions').add(version);
+  request.onsuccess=()=>tx.objectStore('revisionHeaders').add(revisionHeader({...version,id:request.result}));
+}
+/** Local calendar boundaries, including 23/25-hour DST days. Unknown dates remain browsable. */
+export function revisionDate(time) {
+  const date=new Date(time);
+  return time===null||!Number.isFinite(time)||!Number.isFinite(date.getTime())?{year:'unknown',month:null,day:null}:{year:date.getFullYear(),month:date.getMonth()+1,day:date.getDate()};
+}
+export function revisionDateRange(year, month, day) {
+  if(year==='unknown')return [-Infinity,-Infinity];
+  const start=new Date(0);start.setFullYear(Number(year),month==null?0:Number(month)-1,day==null?1:Number(day));start.setHours(0,0,0,0);
+  const end=new Date(start);
+  if(day!=null)end.setDate(end.getDate()+1);else if(month!=null)end.setMonth(end.getMonth()+1);else end.setFullYear(end.getFullYear()+1);
+  return [start.getTime(),end.getTime()];
+}
+const revisionRange=(id,start=-Infinity,end=Infinity)=>IDBKeyRange.bound([id,start],[id,end,...(start===end?[Infinity]:[])],false,start!==end);
+async function readRevisionHeaders(id, range, indexName, limit) {
   const connection=await db();
   return new Promise((resolve,reject)=>{
-    const tx=connection.transaction('revisions','readonly'),rows=[];
-    const request=tx.objectStore('revisions').index('documentId').openCursor(IDBKeyRange.only(id),'prev');
+    const tx=connection.transaction('revisionHeaders','readonly'),rows=[];
+    const request=tx.objectStore('revisionHeaders').index(indexName).openCursor(range,'prev');
+    request.onsuccess=()=>{const cursor=request.result;if(cursor){rows.push(cursor.value);if(rows.length<limit)cursor.continue();}};
+    tx.oncomplete=()=>resolve(rows);tx.onabort=()=>reject(tx.error);tx.onerror=()=>reject(tx.error);
+  });
+}
+export async function listRevisionSummaries(id, before = Infinity, limit = 50) {
+  return readRevisionHeaders(id,IDBKeyRange.bound([id,0],[id,before],false,true),'documentRevision',Math.max(1,Math.min(limit,100)));
+}
+/** One key per populated year/month/day plus index counts; never load annotation payloads. */
+export async function listRevisionPeriods(id, year = null, month = null) {
+  const connection=await db();
+  return new Promise((resolve,reject)=>{
+    const tx=connection.transaction('revisionHeaders','readonly'),index=tx.objectStore('revisionHeaders').index('documentCreated'),rows=[];
+    const bounds=year===null?[-Infinity,Infinity]:revisionDateRange(year,month);
+    const request=index.openKeyCursor(revisionRange(id,...bounds),'prev');
     request.onsuccess=()=>{
       const cursor=request.result;if(!cursor)return;
-      if(cursor.primaryKey<before){const v=cursor.value;rows.push({id:v.id,created:v.created,kind:v.kind,annotationCount:v.annotations.length,bookmarkCount:v.bookmarks.length});}
-      if(rows.length<limit)cursor.continue();
+      const date=revisionDate(cursor.key[1]),value=year===null?date.year:month===null?date.month:date.day;
+      const [start,end]=revisionDateRange(date.year,year===null?null:date.month,month===null?null:date.day);
+      const row={value,count:0};rows.push(row);
+      const count=index.count(revisionRange(id,start,end));count.onsuccess=()=>{row.count=count.result;};
+      // A short compound key sorts before all records at that boundary, so even
+      // midnight timestamps and thousands of identical timestamps are skipped once.
+      cursor.continue([id,start]);
     };
     tx.oncomplete=()=>resolve(rows);tx.onabort=()=>reject(tx.error);tx.onerror=()=>reject(tx.error);
+  });
+}
+export async function listRevisionDay(id, date, before = null, limit = 50) {
+  const [start,end]=revisionDateRange(date.year,date.month,date.day),size=Math.max(1,Math.min(limit,100));
+  const range=before?IDBKeyRange.bound([id,start],[id,before.time,before.id],false,true):revisionRange(id,start,end);
+  const rows=await readRevisionHeaders(id,range,'documentCreated',size+1),more=rows.length>size;
+  if(more)rows.pop();
+  return {rows,next:more?{time:rows.at(-1).time,id:rows.at(-1).id}:null};
+}
+export async function adjacentRevisionDay(id, date, direction) {
+  const [start,end]=revisionDateRange(date.year,date.month,date.day),connection=await db();
+  if(direction!=='next'&&start===-Infinity)return null;
+  return new Promise((resolve,reject)=>{
+    const tx=connection.transaction('revisionHeaders','readonly');let result=null;
+    const range=direction==='next'?IDBKeyRange.bound(start===end?[id,end,Infinity]:[id,end],[id,Infinity],true,true):revisionRange(id,-Infinity,start);
+    const request=tx.objectStore('revisionHeaders').index('documentCreated').openKeyCursor(range,direction==='next'?'next':'prev');
+    request.onsuccess=()=>{if(request.result)result=revisionDate(request.result.key[1]);};
+    tx.oncomplete=()=>resolve(result);tx.onabort=()=>reject(tx.error);tx.onerror=()=>reject(tx.error);
   });
 }
 
@@ -144,7 +215,7 @@ export async function putDocumentRevision(record, {baseline = false, restoredFro
   const {html,file,originalFile,...value}=record;value.diskPending=false;value.diskError=null;
   if(!value.byteSize)value.byteSize=file?.size || (typeof html==='string'?new Blob([html]).size:0);
   return new Promise((resolve,reject)=>{
-    const tx=connection.transaction(['documents','contents','revisions'],'readwrite');
+    const tx=connection.transaction(['documents','contents','revisions','revisionHeaders'],'readwrite');
     let failure;
     const documents=tx.objectStore('documents'),revisions=tx.objectStore('revisions'),contents=tx.objectStore('contents');
     const previous=documents.get(record.id),content=contents.getKey(record.id);
@@ -158,7 +229,7 @@ export async function putDocumentRevision(record, {baseline = false, restoredFro
         if(!value.sourceIdentity&&old?.sourceIdentity)value.sourceIdentity=old.sourceIdentity;
         value.historyVersion=Number.isSafeInteger(old?.historyVersion)?old.historyVersion:0;
         let previousState=last?.value;
-        const add=(metadata,kind)=>{revisions.add({documentId:record.id,created:Date.now(),kind,restoredFrom:kind==='restore'?restoredFrom:null,...annotationState(metadata)});previousState=metadata;value.historyVersion++;};
+        const add=(metadata,kind)=>{addRevision(tx,{documentId:record.id,created:Date.now(),kind,restoredFrom:kind==='restore'?restoredFrom:null,...annotationState(metadata)});previousState=metadata;value.historyVersion++;};
         if(!last&&old)add(old.metadata,'baseline');
         if(!last&&!old)add(state,baseline||!checkpoint?'baseline':'edit');
         // Restoration keeps the unsnapshotted current state and the target in
@@ -177,12 +248,12 @@ export async function putDocumentRevision(record, {baseline = false, restoredFro
 export async function checkpointAnnotations(id) {
   const connection=await db();
   return new Promise((resolve,reject)=>{
-    const tx=connection.transaction(['documents','revisions'],'readwrite'),documents=tx.objectStore('documents'),revisions=tx.objectStore('revisions');
+    const tx=connection.transaction(['documents','revisions','revisionHeaders'],'readwrite'),documents=tx.objectStore('documents'),revisions=tx.objectStore('revisions');
     const current=documents.get(id),latest=revisions.index('documentId').openCursor(IDBKeyRange.only(id),'prev');let added=false,failure;
     latest.onsuccess=()=>{try{
       const record=current.result;if(!record)return;
       if(!latest.result||!sameAnnotationState(latest.result.value,record.metadata)){
-        revisions.add({documentId:id,created:Date.now(),kind:latest.result?'edit':'baseline',...annotationState(record.metadata)});
+        addRevision(tx,{documentId:id,created:Date.now(),kind:latest.result?'edit':'baseline',...annotationState(record.metadata)});
         record.historyVersion=(Number.isSafeInteger(record.historyVersion)?record.historyVersion:0)+1;documents.put(record);added=true;
       }
     }catch(error){failure=error;tx.abort();}};
@@ -195,12 +266,12 @@ export async function restoreFolderDocuments(entries) {
   if(!entries.length)return;
   const connection=await db();
   await new Promise((resolve,reject)=>{
-    const tx=connection.transaction(['documents','contents','revisions'],'readwrite');let failure;
+    const tx=connection.transaction(['documents','contents','revisions','revisionHeaders'],'readwrite');let failure;
     try {
       for(const {record,content,revisions} of entries){
         tx.objectStore('documents').add({...record,historyVersion:revisions.length});
         tx.objectStore('contents').add({documentId:record.id,...content});
-        for(const revision of revisions){const {id:oldId,...value}=revision;tx.objectStore('revisions').add({...value,documentId:record.id});}
+        for(const revision of revisions){const {id:oldId,...value}=revision;addRevision(tx,{...value,documentId:record.id});}
       }
     }catch(error){failure=error;tx.abort();}
     tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(failure||tx.error||new Error('폴더의 데이터를 복원하지 못했습니다. 기존 보관함은 유지됩니다.'));
