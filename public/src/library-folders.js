@@ -21,8 +21,19 @@ export function validateFolders(value = []) {
   for(const item of folders){const visited=new Set();let node=item;while(node){if(visited.has(node.id)||visited.size>=32)throw Error('폴더를 자기 하위로 옮길 수 없으며, 폴더 깊이는 32단계까지입니다.');visited.add(node.id);if(node.parentId&&!ids.has(node.parentId))throw Error('상위 서재 폴더를 찾지 못했습니다.');node=ids.get(node.parentId);}}
   return folders;
 }
-export function folderPath(folders,id) {
-  const byId=new Map(folders.map(f=>[f.id,f])),path=[];let current=byId.get(id);
+/** Reuse this index while traversing a validated hierarchy, even if children precede parents. */
+export function indexFolders(folders) {
+  const byId=new Map(),children=new Map();
+  for(const item of folders){byId.set(item.id,item);if(!children.has(item.parentId))children.set(item.parentId,[]);children.get(item.parentId).push(item);}
+  const ordered=[],seen=new Set();
+  for(const item of folders){
+    const path=[];for(let node=item;node&&!seen.has(node.id);node=byId.get(node.parentId))path.push(node);
+    while(path.length){const node=path.pop();seen.add(node.id);ordered.push(node);}
+  }
+  return {byId,children,ordered};
+}
+export function folderPath(folders,id,byId=new Map(folders.map(f=>[f.id,f]))) {
+  const path=[];let current=byId.get(id);
   while(current && path.length<32){path.unshift(current);current=byId.get(current.parentId);}
   return path;
 }
@@ -55,14 +66,50 @@ export function editLibraryFolders(current,records,change) {
 }
 /** Merge on reconnect without replacing local folders or orphaning their documents. */
 export function mergeLibraryFolders(local,incoming,newId) {
-  const folders=validateFolders(local),remaining=validateFolders(incoming),mapping=new Map([['','']]);
-  while(remaining.length){
-    const index=remaining.findIndex(f=>mapping.has(f.parentId)),item=remaining.splice(index,1)[0],parentId=mapping.get(item.parentId);
-    const exact=folders.find(f=>f.parentId===parentId&&nameKey(f.name)===nameKey(item.name));
+  const folders=validateFolders(local),ordered=indexFolders(validateFolders(incoming)).ordered,mapping=new Map([['','']]);
+  const ids=new Set(folders.map(f=>f.id)),siblings=new Map(folders.map(f=>[f.parentId+'\0'+nameKey(f.name),f]));
+  for(const item of ordered){
+    const parentId=mapping.get(item.parentId),key=parentId+'\0'+nameKey(item.name),exact=siblings.get(key);
     if(exact){mapping.set(item.id,exact.id);continue;}
-    const id=folders.some(f=>f.id===item.id)?newId():item.id;folders.push({...item,id,parentId});mapping.set(item.id,id);
+    const id=ids.has(item.id)?newId():item.id;
+    if(!validId(id)||ids.has(id))throw Error('새 폴더 ID가 올바르지 않습니다.');
+    const added={...item,id,parentId};folders.push(added);ids.add(id);siblings.set(key,added);mapping.set(item.id,id);
   }
   return {folders:validateFolders(folders),mapping};
+}
+const libraryCollator=new Intl.Collator('ko');
+/** Metadata only: no document bodies, persistent text index or unbounded query cache. */
+export class LibraryIndex {
+  update(records,folders,root='전용 폴더') {
+    if(this.records===records&&this.folders===folders&&this.root===root)return false;
+    this.records=records;this.folders=folders;this.root=root;
+    Object.assign(this,indexFolders(folders));
+    for(const children of this.children.values())children.sort((a,b)=>libraryCollator.compare(a.name,b.name));
+    this.paths=new Map([['',root]]);this.counts=new Map([['',records.length]]);this.documents=new Map();this.searchText=new Map();this.queries=new Map();
+    for(const record of records){
+      const parent=this.byId.has(record.folderId)?record.folderId:'';
+      if(!this.documents.has(parent))this.documents.set(parent,[]);this.documents.get(parent).push(record);
+      for(let id=parent;id;id=this.byId.get(id)?.parentId)this.counts.set(id,(this.counts.get(id)||0)+1);
+    }
+    return true;
+  }
+  label(id) {
+    if(this.paths.has(id))return this.paths.get(id);
+    const item=this.byId.get(id);if(!item)return this.root;
+    const path=this.label(item.parentId)+' / '+item.name;this.paths.set(id,path);return path;
+  }
+  select({filter='',folderId='',sort='modified',direction='desc'}={}) {
+    filter=filter.toLocaleLowerCase();const key=JSON.stringify([filter,folderId,sort,direction]);
+    if(this.queries.has(key)){const result=this.queries.get(key);this.queries.delete(key);this.queries.set(key,result);return result;}
+    const documents=filter?this.records.filter(record=>{
+      if(!this.searchText.has(record))this.searchText.set(record,`${record.title} ${record.source} ${record.name} ${this.label(record.folderId||'')}`.toLocaleLowerCase());
+      return this.searchText.get(record).includes(filter);
+    }):[...(this.documents.get(folderId)||[])];
+    const order=direction==='asc'?1:-1;
+    documents.sort((a,b)=>order*(sort==='title'?libraryCollator.compare(a.title,b.title):a[sort]-b[sort]));
+    const folders=filter?this.folders.filter(f=>this.label(f.id).toLocaleLowerCase().includes(filter)).sort((a,b)=>libraryCollator.compare(a.name,b.name)):(this.children.get(folderId)||[]);
+    const result={documents,folders};this.queries.set(key,result);while(this.queries.size>8)this.queries.delete(this.queries.keys().next().value);return result;
+  }
 }
 /** IDs prevent identically named imports from overwriting each other or external files. */
 export function documentCopyName(record,ref) {

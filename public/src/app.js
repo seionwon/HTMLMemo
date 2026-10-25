@@ -11,11 +11,12 @@ import {bundledExample} from './distribution.js';
 import { InstallController, isIOS, installableLocation, installationURL, PUBLIC_APP_URL } from './install.js';
 import { APP_VERSION } from './version.js';
 import { DataFolder } from './data-folder.js';
-import {validateFolders,folderPath,folderDescendants,editLibraryFolders} from './library-folders.js';
+import {validateFolders,folderPath,folderDescendants,editLibraryFolders,LibraryIndex} from './library-folders.js';
 
 let records = []; const tabs = []; let activeId = 'library'; let folder = null; let popoverName = ''; let sidebarMode = '';
-let libraryFolders=[],libraryFolderId='',libraryCollapsed=new Set(),libraryRefresh=0;
-let libraryFolderById=new Map(),libraryFolderChildren=new Map(),libraryFolderCounts=new Map(),libraryPathCache=new Map();
+let libraryFolders=[],libraryFolderId='',libraryCollapsed=new Set(),libraryRefresh=0,libraryRead=null,libraryReloadTimer;
+const libraryIndex=new LibraryIndex();let libraryIndexVersion=0,libraryTreeVersion=0,libraryTreeState='',libraryGridState=null;
+let libraryFolderById=new Map(),libraryFolderChildren=new Map(),libraryFolderCounts=new Map();
 let preferences=normalizePreferences(), settingsFileHandle=null, settingsFolderHint='';
 let dataFolder;
 const FOLDER_WELCOME_KEY='htmlmemo-data-folder-welcome-v1';
@@ -121,12 +122,21 @@ async function saveSettingsBackup(){
   if(savePicker()){try{const handle=await window.showSaveFilePicker({suggestedName:settingsFileHandle?.name||'HTMLMemo-settings.json',types:[{description:'HTMLMemo 설정',accept:{'application/json':['.json']}}]});const writer=await handle.createWritable();try{await writer.write(json);await writer.close();}catch(error){await writer.abort().catch(()=>{});throw error;}settingsFileHandle=handle;await setSetting('settings-file',handle);settingsDialog();toast('설정을 로컬 파일로 저장했습니다.');return;}catch(error){if(!['SecurityError','NotSupportedError'].includes(error.name))throw error;}}
   download(json,'HTMLMemo-settings.json','application/json;charset=utf-8');toast('설정 JSON 파일을 저장했습니다. 「설정 파일 불러오기」로 다시 열 수 있어요.');
 }
-async function refreshLibrary() { const refresh=++libraryRefresh;const {documents,folders}=await readLibrary();if(refresh!==libraryRefresh)return;records=documents;libraryFolders=validateFolders(folders);if(libraryFolderId&&!libraryFolders.some(f=>f.id===libraryFolderId))libraryFolderId='';renderLibrary(); }
+async function refreshLibrary() {
+  clearTimeout(libraryReloadTimer);libraryRefresh++;
+  if(!libraryRead)libraryRead=(async()=>{
+    let refresh,snapshot;
+    do{refresh=libraryRefresh;snapshot=await readLibrary();}while(refresh!==libraryRefresh);
+    records=snapshot.documents;libraryFolders=validateFolders(snapshot.folders);
+    if(libraryFolderId&&!libraryFolders.some(f=>f.id===libraryFolderId))libraryFolderId='';renderLibrary();
+  })().finally(()=>{libraryRead=null;});
+  return libraryRead;
+}
 function renderLibrary() {
   indexLibraryFolders();
-  const filter=$('#library-filter').value.toLocaleLowerCase(),sort=preferences.librarySort,direction=preferences.librarySortDirection==='asc'?1:-1;
-  const shown=records.filter(r=>filter?(r.title+' '+r.source+' '+r.name+' '+libraryPathLabel(r.folderId||'')).toLocaleLowerCase().includes(filter):(r.folderId||'')===libraryFolderId).sort((a,b)=>direction*(sort==='title'?a.title.localeCompare(b.title,'ko'):a[sort]-b[sort]));
-  const shownFolders=libraryFolders.filter(f=>filter?libraryPathLabel(f.id).toLocaleLowerCase().includes(filter):f.parentId===libraryFolderId).sort((a,b)=>a.name.localeCompare(b.name,'ko'));
+  if(activeId!=='library')return;
+  const filter=$('#library-filter').value.toLocaleLowerCase(),sort=preferences.librarySort;
+  const result=libraryIndex.select({filter,folderId:libraryFolderId,sort,direction:preferences.librarySortDirection}),{documents:shown,folders:shownFolders}=result;
   const dateField=sort==='created'?'created':'modified',dateLabel=dateField==='created'?'저장일':'수정일';
   const grid=$('#document-grid');grid.dataset.view=preferences.libraryView;
   $$('[data-library-view]').forEach(button=>{const active=button.dataset.libraryView===preferences.libraryView;button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active));});
@@ -134,40 +144,39 @@ function renderLibrary() {
   $('#empty-library h3').textContent=filter?'검색 결과가 없습니다.':libraryFolderId?'이 폴더는 비어 있습니다.':records.length||libraryFolders.length?'이 위치에는 문서가 없습니다.':'첫 HTML 문서를 보관해보세요.';
   $('#empty-library p').innerHTML=filter?'다른 제목·파일명·폴더 이름으로 찾아보세요.':libraryFolderId||records.length||libraryFolders.length?'HTML 파일을 가져오거나 문서 메뉴의 「폴더로 이동」을 사용하세요.':'웹에서 저장하거나, 가지고 있는 HTML 파일을 열면<br>이곳에서 계속 읽고 메모할 수 있어요.';
   $('#open-example').hidden=!!records.length||!!filter;
-  grid.innerHTML=shownFolders.map(item=>`<article class="library-folder-card" data-library-item="folder" data-library-id="${item.id}" data-folder-target="${item.id}" draggable="true"><button class="library-folder-open" data-library-folder="${item.id}" title="${esc(libraryPathLabel(item.id))}">${icon('folder',22)}<span><strong>${esc(item.name)}</strong><small>${folderDocumentCount(item.id)}개 문서 · ${libraryFolders.filter(f=>f.parentId===item.id).length}개 하위 폴더</small></span></button><button class="icon-button card-menu" data-folder-menu="${item.id}" aria-label="${esc(item.name)} 폴더 메뉴">${icon('more',17)}</button></article>`).join('')+shown.map(record=>{
+  // A theme/tool change or a repeated input event must not rebuild identical cards.
+  if(libraryGridState!==result){
+  grid.innerHTML=shownFolders.map(item=>`<article class="library-folder-card" data-library-item="folder" data-library-id="${item.id}" data-folder-target="${item.id}" draggable="true"><button class="library-folder-open" data-library-folder="${item.id}" title="${esc(libraryPathLabel(item.id))}">${icon('folder',22)}<span><strong>${esc(item.name)}</strong><small>${folderDocumentCount(item.id)}개 문서 · ${libraryFolderChildren.get(item.id)?.length||0}개 하위 폴더</small></span></button><button class="icon-button card-menu" data-folder-menu="${item.id}" aria-label="${esc(item.name)} 폴더 메뉴">${icon('more',17)}</button></article>`).join('')+shown.map(record=>{
     const count=record.metadata?.annotations?.length||0;const progress=record.metadata?.view?.scrollTop||0;
     const host=esc(displayHost(record.source)), title=esc(record.title), originalName=typeof record.name==='string'?esc(record.name):'', size=record.byteSize?formatBytes(record.byteSize):'HTML';
-    const date=formatDate(record[dateField]),dateTitle=esc(dateLabel+': '+new Date(record[dateField]).toLocaleString('ko-KR'));
+    const date=formatDate(record[dateField]),dateTitle=esc(dateLabel+': '+formatDate(record[dateField],true));
     // Both layouts share one title/source. A decorative preview used to repeat
     // them above the details, and list mode kept a third hidden copy.
     const place=esc(libraryPathLabel(record.folderId||'')),progressLabel=filter?place:progress?'이어서 읽기':'새 문서';
     return `<article class="document-card" data-record="${record.id}" data-library-item="document" data-library-id="${record.id}" draggable="true"><button class="card-open" data-open="${record.id}"><div class="card-details"><span class="list-file-icon" aria-hidden="true">${icon('file',16)}</span><div class="library-title"><h3 class="list-title" title="${title}">${title}</h3>${originalName?`<span class="list-filename" title="${originalName}">${originalName}</span>`:''}</div><p class="card-source"><span class="list-host" title="${host}">${host}</span><span class="list-date" title="${dateTitle}" aria-label="${dateTitle}">${date}</span></p><div class="card-meta"><span class="list-annotations" title="주석 ${count}개" aria-label="주석 ${count}개">${icon('highlight',13)} <span>${count}</span></span><span class="list-size">${size}</span><span class="list-progress" title="${progressLabel}">${progressLabel} ${icon('forward',13)}</span></div></div></button><button class="card-menu icon-button" data-card-menu="${record.id}" aria-label="${title} 문서 메뉴">${icon('more',17)}</button></article>`;
   }).join('');
-  $$('[data-open]').forEach(button=>button.onclick=safely(()=>openRecord(records.find(r=>r.id===button.dataset.open))));
-  $$('[data-card-menu]').forEach(button=>button.onclick=()=>documentMenu(records.find(r=>r.id===button.dataset.cardMenu)));
-  $$('[data-folder-menu]').forEach(button=>button.onclick=()=>libraryFolderMenu(button.dataset.folderMenu));
+  libraryGridState=result;
+  }
   renderLibraryFolders();
   if(activeId==='library')$('#status-left').textContent=`${records.length}개의 문서 · ${folder?folder.name+' 자동 저장':'이 기기에 보관'}`;
   renderFolderState();
 }
 function indexLibraryFolders() {
-  libraryFolderById=new Map(libraryFolders.map(f=>[f.id,f]));libraryFolderChildren=new Map();libraryFolderCounts=new Map([['',records.length]]);libraryPathCache=new Map([['',folder?.name||'전용 폴더']]);
-  for(const item of libraryFolders){if(!libraryFolderChildren.has(item.parentId))libraryFolderChildren.set(item.parentId,[]);libraryFolderChildren.get(item.parentId).push(item);}
-  for(const children of libraryFolderChildren.values())children.sort((a,b)=>a.name.localeCompare(b.name,'ko'));
-  for(const record of records){let id=record.folderId;for(let i=0;id&&i<32;i++){libraryFolderCounts.set(id,(libraryFolderCounts.get(id)||0)+1);id=libraryFolderById.get(id)?.parentId;}}
+  if(!libraryIndex.update(records,libraryFolders,folder?.name||'전용 폴더'))return;
+  libraryFolderById=libraryIndex.byId;libraryFolderChildren=libraryIndex.children;libraryFolderCounts=libraryIndex.counts;libraryIndexVersion++;
 }
 function folderDocumentCount(id){return libraryFolderCounts.get(id)||0;}
 function libraryPathLabel(id) {
-  if(libraryPathCache.has(id))return libraryPathCache.get(id);
-  const node=libraryFolderById.get(id);if(!node)return libraryPathCache.get('')||folder?.name||'전용 폴더';
-  const path=libraryPathLabel(node.parentId)+' / '+node.name;libraryPathCache.set(id,path);return path;
+  return libraryIndex.label(id);
 }
 function navigateLibraryFolder(id) {
   if(id&&!libraryFolderById.has(id))throw Error('폴더가 변경되었습니다. 다시 선택해주세요.');
-  libraryFolderId=id;$('#library-filter').value='';for(const item of folderPath(libraryFolders,id))libraryCollapsed.delete(item.id);renderLibrary();
+  libraryFolderId=id;$('#library-filter').value='';for(const item of folderPath(libraryFolders,id,libraryFolderById))libraryCollapsed.delete(item.id);libraryTreeVersion++;renderLibrary();
 }
 function renderLibraryFolders() {
-  const path=folderPath(libraryFolders,libraryFolderId),root=folder?.name||'전용 폴더';
+  const state=JSON.stringify([libraryIndexVersion,libraryFolderId,libraryTreeVersion,!!$('#library-filter').value]);
+  if(libraryTreeState===state)return;libraryTreeState=state;
+  const path=folderPath(libraryFolders,libraryFolderId,libraryFolderById),root=folder?.name||'전용 폴더';
   $('#library-folder-up').innerHTML=icon('back',16);$('#library-folder-up').disabled=!libraryFolderId;
   $('#library-folder-help').innerHTML=icon('info',15);
   $('#library-new-folder').innerHTML=icon('folder',15)+'<span>새 폴더</span>';
@@ -178,8 +187,6 @@ function renderLibraryFolders() {
     return `<div class="library-tree-row ${item.id===libraryFolderId?'active':''}" style="--folder-depth:${depth}" data-folder-target="${item.id}">${children?`<button class="library-tree-toggle" type="button" data-folder-toggle="${item.id}" aria-label="${esc(item.name)} ${collapsed?'펼치기':'접기'}" aria-expanded="${!collapsed}">${icon(collapsed?'forward':'down',12)}</button>`:'<span class="library-tree-spacer"></span>'}<button class="library-tree-open" type="button" data-library-folder="${item.id}" title="${esc(libraryPathLabel(item.id))}">${icon('folder',14)}<span>${esc(item.name)}</span><small>${folderDocumentCount(item.id)}</small></button></div>${!collapsed?branch(item.id,depth+1):''}`;
   }).join('');
   tree.innerHTML=`<div class="library-tree-root ${libraryFolderId?'':'active'}" data-folder-target=""><button class="library-tree-open" type="button" data-library-folder="" title="${esc(root)} · 최상위 폴더(root)">${icon('folder',15)}<span>${esc(root)}</span><small>root</small></button></div>${branch('',0)}`;
-  $$('[data-library-folder]').forEach(button=>button.onclick=safely(()=>navigateLibraryFolder(button.dataset.libraryFolder)));
-  $$('[data-folder-toggle]').forEach(button=>button.onclick=()=>{const id=button.dataset.folderToggle;if(libraryCollapsed.has(id))libraryCollapsed.delete(id);else libraryCollapsed.add(id);renderLibraryFolders();});
 }
 async function changeLibraryFolder(change) {
   await updateLibraryFolders((folders,documents)=>editLibraryFolders(folders,documents,change));
@@ -217,6 +224,14 @@ function libraryMoveDialog(type,item) {
 }
 function bindLibraryFolderDrag() {
   const library=$('#library'),mime='application/x-htmlmemo-library-item';let dragged=null;
+  library.addEventListener('click',safely(event=>{
+    const button=event.target.closest('[data-open],[data-card-menu],[data-folder-menu],[data-library-folder],[data-folder-toggle]');if(!button)return;
+    if(button.hasAttribute('data-open'))return openRecord(records.find(r=>r.id===button.dataset.open));
+    if(button.hasAttribute('data-card-menu'))return documentMenu(records.find(r=>r.id===button.dataset.cardMenu));
+    if(button.hasAttribute('data-folder-menu'))return libraryFolderMenu(button.dataset.folderMenu);
+    if(button.hasAttribute('data-library-folder'))return navigateLibraryFolder(button.dataset.libraryFolder);
+    const id=button.dataset.folderToggle;if(libraryCollapsed.has(id))libraryCollapsed.delete(id);else libraryCollapsed.add(id);libraryTreeVersion++;renderLibraryFolders();
+  }));
   const clear=()=>$$('.folder-drop-target',library).forEach(el=>el.classList.remove('folder-drop-target'));
   library.addEventListener('dragstart',event=>{const item=event.target.closest('[data-library-item]');if(!item)return;dragged={type:item.dataset.libraryItem,id:item.dataset.libraryId};event.dataTransfer.setData(mime,JSON.stringify(dragged));event.dataTransfer.effectAllowed='move';});
   library.addEventListener('dragover',event=>{const target=event.target.closest('[data-folder-target]');if(!target||!dragged||![...event.dataTransfer.types].includes(mime))return;
@@ -1357,7 +1372,7 @@ async function initialize() {
   try{preferences=loadPreferences(localStorage);}catch(error){toast('설정 일부를 읽지 못했습니다. 연결한 데이터 폴더로 복원할 수 있습니다.',true);}
   dataFolder=new DataFolder({storage:localStorage,report:state=>{if(state.handle)folder=state.handle;renderFolderState();},onRestored:async result=>{preferences=loadPreferences(localStorage);applyTheme(preferences.theme);$('#library-sort').value=preferences.librarySort+':'+preferences.librarySortDirection;for(const tab of tabs)if(tab.reader)Object.assign(tab.reader,preferences.annotation);applyToolbarPosition();await refreshLibrary();if(result.recovered)toast('이전의 온전한 폴더 저장본에서 복원했습니다. 최신 변경 일부가 빠졌을 수 있습니다.',true);}});
   applyTheme(preferences.theme);bindUI();fitHeader();$('#library-sort').value=preferences.librarySort+':'+preferences.librarySortDirection;network();folder=await getSetting('folder');settingsFileHandle=await getSetting('settings-file');settingsFolderHint=await getSetting('settings-folder-hint')||'';await refreshLibrary();activate('library');
-  onStorageChange(()=>{if(activeId==='library')refreshLibrary().catch(showError);});
+  onStorageChange(()=>{if(activeId==='library'){clearTimeout(libraryReloadTimer);libraryReloadTimer=setTimeout(()=>{if(activeId==='library')refreshLibrary().catch(showError);},30);}});
   if(folder){try{await dataFolder.connect(folder,{resume:true});await refreshLibrary();}catch(error){renderFolderState();showError(error);}}
   if(needsFolderWelcome()&&!$('#dialog').open)folderWelcomeDialog();
   if(installableLocation(location)&&'serviceWorker'in navigator)await navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'}).then(reg=>reg?.update?.().catch(()=>{})).catch(()=>toast('오프라인 준비를 완료하지 못했습니다. 다음 접속에서 다시 준비합니다.',true));

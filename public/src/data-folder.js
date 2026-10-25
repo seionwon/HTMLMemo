@@ -139,7 +139,7 @@ export class DataFolder {
     this.storage=storage;this.report=report;this.onRestored=onRestored;this.lock=lock;this.delay=delay;
     this.ops={listDocuments,getDocument,listRevisions,restoreFolderDocuments,getSetting,setSetting,readLibrary,...operations};
     if(operations.listDocuments&&!operations.readLibrary)this.ops.readLibrary=async()=>({documents:await this.ops.listDocuments(),folders:await this.ops.getSetting(LIBRARY_FOLDERS_KEY)||[]});
-    this.handle=null;this.head=null;this.state='unconnected';this.error=null;this.revision=0;this.saved=0;this.running=null;this.timer=null;this.restoring=false;this.dirty=new Set();this.allDirty=true;
+    this.handle=null;this.head=null;this.state='unconnected';this.error=null;this.revision=0;this.saved=0;this.running=null;this.timer=null;this.restoring=false;this.dirty=new Set();this.allDirty=true;this.historyVersions=new Map();
     this.unsubscribe=onStorageChange(id=>this.schedule({id}));
   }
   publish(state,error=null) { this.state=state;this.error=error;this.report(this); }
@@ -154,7 +154,7 @@ export class DataFolder {
   async connect(handle,{resume=false}={}) {
     clearTimeout(this.timer);if(this.running)await this.running.catch(()=>{});
     if(!await permission(handle)){this.handle=resume?handle:this.handle;const error=new DOMException('폴더 쓰기 권한이 필요합니다.','NotAllowedError');if(resume)this.publish('error',error);throw error;}
-    const oldHandle=this.handle,oldHead=this.head;this.restoring=true;this.publish('saving');
+    const oldHandle=this.handle,oldHead=this.head;this.historyVersions.clear();this.restoring=true;this.publish('saving');
     try{
       await this.lock(async()=>{
         const checkpoint=await this.ops.getSetting(CHECKPOINT);
@@ -217,7 +217,7 @@ export class DataFolder {
     const library=await this.ops.readLibrary(),folders=validateFolders(library.folders),folderIds=new Set(['',...folders.map(f=>f.id)]);
     const place=(entry,record)=>{const folderId=record.folderId||'';if(!folderIds.has(folderId))throw Error('문서의 서재 폴더를 찾지 못했습니다. 폴더를 다시 연결해주세요.');return {...entry,copy:{folderId,name:documentCopyName(record,entry.original||entry.source)}};};
     const checkAll=this.allDirty||!sameHead(base?.manifest,this.head?.manifest);
-    const previous=new Map((base?.manifest.documents||[]).map(e=>[e.id,e])),documents=[],checked=new Set();
+    const previous=new Map((base?.manifest.documents||[]).map(e=>[e.id,e])),documents=[],checked=new Set(),historyVersions=new Map(this.historyVersions);
     for(const summary of library.documents){
       const record=portableRecord(summary);let old=previous.get(record.id);
       if(old){try{for(const ref of [old.source,old.original,old.state,old.history].filter(Boolean)){if(!checked.has(ref.name))await objectFile(data,ref);checked.add(ref.name);}}catch(error){if(!['NotFoundError','DataIntegrityError'].includes(error.name))throw error;old=null;}}
@@ -235,12 +235,17 @@ export class DataFolder {
       }
       const annotationStamp=(await localFileIdentity(jsonBlob({annotations:record.metadata.annotations,bookmarks:record.metadata.bookmarks,historyVersion}))).digest;
       let history=old?.history;
-      if(!history||old.annotationStamp!==annotationStamp){
+      // Current notes change much more often than checkpoints. A version is
+      // trusted only for the exact history object published by this writer.
+      const versioned=Number.isSafeInteger(summary.historyVersion)&&summary.historyVersion>=0,cached=historyVersions.get(record.id);
+      const historyUnchanged=versioned&&cached?.version===historyVersion&&cached.name===history?.name;
+      if(!history||!historyUnchanged&&old.annotationStamp!==annotationStamp){
         const revisions=(await this.ops.listRevisions(record.id)).map(({id,documentId,...revision})=>revision);
         validateState({record,revisions},record.id);
         const historyBlob=jsonBlob({revisions});if(historyBlob.size>128*1024*1024)throw Error('한 문서의 주석 이력이 폴더 저장 한도(128MB)를 넘었습니다. 기존 폴더 저장본은 유지됩니다.');
         history=await storeObject(data,historyBlob,'json');
-      }
+      }else validateState({record,revisions:[]},record.id);
+      if(versioned)historyVersions.set(record.id,{version:historyVersion,name:history.name});else historyVersions.delete(record.id);
       const stateBlob=jsonBlob({record});if(stateBlob.size>128*1024*1024)throw Error('한 문서의 현재 주석이 폴더 저장 한도(128MB)를 넘었습니다.');
       const state=await storeObject(data,stateBlob,'json');
       documents.push(place({id:record.id,source,original,sourceType,state,history,stamp,annotationStamp},record));
@@ -261,6 +266,7 @@ export class DataFolder {
     if(base)await atomicWrite(this.handle,FOLDER_PREVIOUS,base.raw);
     const raw=JSON.stringify(manifest,null,2)+'\n';await atomicWrite(this.handle,FOLDER_MANIFEST,raw);
     this.head={raw,manifest};await this.ops.setSetting(CHECKPOINT,{id:manifest.id,revision:manifest.revision});
+    this.historyVersions=new Map(documents.flatMap(entry=>{const cached=historyVersions.get(entry.id);return cached?.name===entry.history.name?[[entry.id,cached]]:[];}));
     // Old snapshots use protected objects, so moving visible raw copies cannot break recovery.
     try{await cleanupFolderTree(this.handle,manifest,base?.manifest);}catch{/* Keep leftovers rather than deleting an unverified file or risking the committed backup. */}
     // Only collect our own content-addressed objects, after both manifests are durable.

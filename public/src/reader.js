@@ -1805,21 +1805,32 @@ export class Reader {
   }
   drawingTargetQuote(element) { return drawingTargetQuote(this.doc, element); }
   describeDrawingTarget(element) { return describeDrawingTarget(this.doc, element); }
-  resolveDrawingTarget(annotation) {
-    const direct = this.doc.querySelector(`[data-htmlmemo-anchor="${annotation.anchor}"]`);
+  drawingTargetContext() { return {section:currentSection(this.doc),anchors:new Map(),indexed:false,lookups:0,quotes:new WeakMap()}; }
+  resolveDrawingTarget(annotation,context=null) {
     const target = annotation.anchorTarget;
-    if (!this.annotationInSection(annotation)) return null;
-    if (!target) return direct;
+    if (!this.annotationInSection(annotation,context?.section??currentSection(this.doc))) return null;
+    const direct=()=>{
+      if(!context)return this.doc.querySelector(`[data-htmlmemo-anchor="${annotation.anchor}"]`);
+      if(context.anchors.has(annotation.anchor)||context.indexed)return context.anchors.get(annotation.anchor)||null;
+      // A few nearby notes need no whole-book walk. Batch only when many
+      // different legacy anchors actually need direct lookup in this pass.
+      if(++context.lookups<8){const node=this.doc.querySelector(`[data-htmlmemo-anchor="${annotation.anchor}"]`);context.anchors.set(annotation.anchor,node);return node;}
+      context.anchors.clear();context.indexed=true;
+      for(const node of this.doc.querySelectorAll('[data-htmlmemo-anchor]')){const key=node.getAttribute('data-htmlmemo-anchor');if(!context.anchors.has(key))context.anchors.set(key,node);}
+      return context.anchors.get(annotation.anchor)||null;
+    };
+    if (!target) return direct();
     const root = target.rootId ? this.doc.getElementById(target.rootId) : this.doc.body;
     if (!root) return null;
+    const quote=node=>{if(!context)return this.drawingTargetQuote(node);if(!context.quotes.has(node))context.quotes.set(node,this.drawingTargetQuote(node));return context.quotes.get(node);};
     const matches = node => node?.isConnected && node.localName === target.tag &&
-      (!target.id || node.id === target.id) && (!target.quote || this.drawingTargetQuote(node) === target.quote);
+      (!target.id || node.id === target.id) && (!target.quote || quote(node) === target.quote);
     this.resolvedDrawingTargets ||= new WeakMap();
     const cached = this.resolvedDrawingTargets.get(annotation);
     if (cached && root.contains(cached) && matches(cached)) return cached;
     let node = target.id ? this.doc.getElementById(target.id) : root;
     if (!target.id) for (const index of target.path) node = node?.children[index];
-    if (!matches(node) || !root.contains(node)) node = root.contains(direct) && matches(direct) ? direct : null;
+    if (!matches(node) || !root.contains(node)) {const found=direct();node=root.contains(found)&&matches(found)?found:null;}
     if (!node && target.quote) {
       const candidates = [...root.querySelectorAll(target.tag)].filter(matches);
       if (candidates.length === 1) node = candidates[0];
@@ -1996,19 +2007,24 @@ export class Reader {
     if (this.bookSearchHit) this.stepDocumentBookSearch(0,{move:false});
     this.observeDynamicDocument();
   }
-  drawingGeometry(annotation, textIndexes = null) {
-    if (!this.annotationInSection(annotation)) return {points:[],scale:1};
+  drawingGeometry(annotation, textIndexes = null,layout=null) {
+    if (!this.annotationInSection(annotation,layout?.section??currentSection(this.doc))) return {points:[],scale:1};
     if (!annotation.anchor) return {points:annotation.points,scale:1};
-    const origin = this.layerOrigin();
+    const origin = layout?.origin||this.layerOrigin();
     const scrollHost = origin.scrollHost;
-    const element = this.resolveDrawingTarget(annotation);
+    const element = this.resolveDrawingTarget(annotation,layout);
     // A delayed/absent paragraph is not the whole page. Keep its saved data,
     // and draw only once that actual target exists and has a rendered box.
-    if (!element || element.getClientRects?.().length === 0) return {points:[],scale:1};
-    if (scrollHost && !scrollHost.contains(element) && element !== this.doc.body && element !== this.doc.documentElement && !element.contains(scrollHost)) return {points:[],scale:1};
-    const box = this.anchorBox(element, origin);
+    if (!element) return {points:[],scale:1};
+    let metrics=layout?.boxes.get(element);
+    if(metrics===undefined){
+      const visible=element.getClientRects?.().length!==0&&(!scrollHost||scrollHost.contains(element)||element===this.doc.body||element===this.doc.documentElement||element.contains(scrollHost));
+      metrics=visible?{box:this.anchorBox(element,origin)}:null;layout?.boxes.set(element,metrics);
+    }
+    if(!metrics)return {points:[],scale:1};
+    const box = metrics.box;
     if (annotation.type === 'pen') {
-      const fontSize = this.drawingFontSize(element);
+      const fontSize = 'fontSize' in metrics?metrics.fontSize:(metrics.fontSize=this.drawingFontSize(element));
       let basis = annotation.penBasis;
       if (!basis && fontSize) {
         // Old files have no drawing-time font size. Preserve their first visible
@@ -2088,7 +2104,10 @@ export class Reader {
     const hostParent=scrollHost||this.doc.body;
     let layer=this.doc.getElementById(LAYER_ID);
     const drawings=this.metadata.annotations.filter(a=>!TEXT_TOOLS.includes(a.type));
-    const textIndexes=new WeakMap(),geometry=drawings.map(a=>this.drawingGeometry(a,textIndexes));
+    // These measurements are shared only within this synchronous pass. Never
+    // retain boxes across reflow, zoom, chapter replacement or font changes.
+    const layout=drawings.length?{...this.drawingTargetContext(),origin:this.layerOrigin(scrollHost),boxes:new WeakMap()}:null;
+    const textIndexes=new WeakMap(),geometry=drawings.map(a=>this.drawingGeometry(a,textIndexes,layout));
     let upgraded=false;
     drawings.forEach((a,i)=>{
       // Persist a legacy baseline only after a font change, so simply opening
@@ -2338,12 +2357,16 @@ export class Reader {
       tops ||= headings.map(h=>{const r=h.getBoundingClientRect();return r.width||r.height?r.top:NaN;});
       let found = -1; tops.forEach((value,index)=>{if(value <= top + 1)found = index;}); return found;
     };
+    const markedNodes=new Map(),drawnNodes=new Map(),context=this.drawingTargetContext();
+    for(const node of this.doc.querySelectorAll('[data-htmlmemo-id]')){
+      const id=node.getAttribute('data-htmlmemo-id');if(!drawnNodes.has(id))drawnNodes.set(id,node);
+      if(node.hasAttribute('data-htmlmemo-mark')&&!markedNodes.has(id))markedNodes.set(id,node);
+    }
     for (const annotation of this.metadata.annotations) {
       const marked = TEXT_TOOLS.includes(annotation.type);
-      const node = marked ? this.doc.querySelector(`[data-htmlmemo-mark][data-htmlmemo-id="${annotation.id}"]`)
-        : this.resolveDrawingTarget(annotation);
+      const node = marked ? markedNodes.get(annotation.id) : this.resolveDrawingTarget(annotation,context);
       let index = node?.isConnected && node !== this.doc.body ? headingBefore(node) : -1;
-      if (index < 0 && !marked) { const drawn = this.doc.querySelector(`[data-htmlmemo-id="${annotation.id}"]`); if (drawn) index = headingAbove(drawn); }
+      if (index < 0 && !marked) { const drawn = drawnNodes.get(annotation.id); if (drawn) index = headingAbove(drawn); }
       result.set(annotation.id, {quote:annotation.textAnchor?.quote || annotation.anchorTarget?.quote || (node?.isConnected ? this.drawingTargetQuote(node) : ''),
         heading:index >= 0 ? headings[index].textContent.replace(/\s+/g, ' ').trim() : '',path:index>=0?paths[index]:[]});
     }

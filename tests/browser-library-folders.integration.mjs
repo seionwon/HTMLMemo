@@ -57,3 +57,32 @@ test('real Chrome: Pages-only library folders preserve real paths, annotations a
   }catch(error){const page=(recipient||sender)?.page;if(page){await mkdir(join(root,'test-results'),{recursive:true});const diagnostic=await page.evaluate(`(async()=>{const s=await import('./src/storage.js');return {status:document.querySelector('#data-folder-status')?.textContent,dialog:document.querySelector('#dialog')?.textContent,toast:document.querySelector('#toast')?.textContent,tree:await s.getSetting('library-folders-v1'),records:(await s.listDocuments()).map(r=>({id:r.id,folderId:r.folderId,annotations:r.metadata.annotations.length}))};})()`).catch(e=>({error:e.message}));await writeFile(join(root,'test-results/pages-only-library-folders-failure.json'),JSON.stringify({message:error.message,...diagnostic},null,2));await writeFile(join(root,'test-results/pages-only-library-folders-failure.png'),await page.screenshot());}throw error;
   }finally{await recipient?.close();await sender?.close();await new Promise(resolve=>server.close(resolve));await rm(temporary,{recursive:true,force:true});}
 });
+
+test('real Chrome: Pages-only optimized library batches a large restore and reuses unchanged card and folder DOM',{timeout:120000},async()=>{
+  await prepareAssets();const temporary=await mkdtemp(join(tmpdir(),'htmlmemo-library-performance-'));await cp(join(root,'public'),temporary,{recursive:true});const server=createServer(temporary);let browser;
+  try{
+    await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const url=process.env.HTMLMEMO_SIDEBAR_TEST_URL||`http://127.0.0.1:${server.address().port}/`;browser=await launchChrome();const page=browser.page;
+    await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});await page.navigate(url);await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
+    if(await page.evaluate('!!document.querySelector("#folder-welcome-later")'))await page.click('#folder-welcome-later');
+    const seeded=await page.evaluate(`(async()=>{
+      const storage=await import('./src/storage.js'),{parseHTML}=await import('./src/document.js'),source='<!doctype html><html><head><meta charset="utf-8"><title>성능 시험</title></head><body><h1>최적화 시험 문서</h1><p>큰 서재에서도 검색과 문서 열기가 가능합니다.</p></body></html>',metadata=parseHTML(source).metadata,now=Date.now();
+      window.libraryPerformance={renders:0};window.libraryObserver=new MutationObserver(records=>{window.libraryPerformance.renders+=records.filter(record=>record.type==='childList'&&record.target.id==='document-grid').length;});window.libraryObserver.observe(document.querySelector('#document-grid'),{childList:true});
+      const folders=Array.from({length:300},(_,i)=>({id:'folder'+i,parentId:i%10?'folder'+(i-1):'',name:'시험 폴더 '+i}));
+      const entries=Array.from({length:1200},(_,i)=>({record:{id:'perf'+i,title:'성능 문서 '+i,name:'원본 '+i+'.html',source:'',created:now+i,modified:now+i,byteSize:source.length,folderId:i%2?'folder'+(i%300):'',metadata:{...structuredClone(metadata),title:'성능 문서 '+i}},content:{html:source},revisions:[]}));
+      const start=performance.now();await storage.restoreFolderDocuments(entries,folders);window.libraryPerformance.start=start;return {documents:entries.length,folders:folders.length};
+    })()`);
+    await page.waitFor('document.querySelector("#document-count").textContent==="1200"&&document.querySelectorAll(".document-card").length===600');
+    const initial=await page.evaluate(`(()=>{const p=window.libraryPerformance;p.restoreAndRenderMs=performance.now()-p.start;window.savedCard=document.querySelector('.document-card');window.savedTree=document.querySelector('.library-tree-row');return {renders:p.renders,cards:document.querySelectorAll('.document-card').length,treeRows:document.querySelectorAll('.library-tree-row').length,restoreAndRenderMs:p.restoreAndRenderMs};})()`);
+    assert.equal(initial.renders,1);assert.equal(initial.treeRows,300);
+    await page.click('#library-list-view');assert.equal(await page.evaluate('document.querySelector(".document-card")===window.savedCard&&document.querySelector(".library-tree-row")===window.savedTree'),true);
+    await page.click('#library-card-view');assert.equal(await page.evaluate('document.querySelector(".document-card")===window.savedCard'),true);
+    await page.click('#library-filter');await page.send('Input.insertText',{text:'성능 문서 12'});await page.waitFor('document.querySelectorAll(".document-card").length===11');
+    await page.evaluate('window.savedSearchTree=document.querySelector(".library-tree-row")');await page.send('Input.insertText',{text:'0'});await page.waitFor('document.querySelectorAll(".document-card").length===1');assert.equal(await page.evaluate('document.querySelector(".library-tree-row")===window.savedSearchTree'),true);
+    await page.evaluate(`(()=>{const input=document.querySelector('#library-filter');input.value='';input.dispatchEvent(new Event('input',{bubbles:true}));})()`);await page.click('[data-open="perf0"]');
+    await page.waitFor('document.querySelector(".document-host:not([hidden]) iframe")?.contentDocument?.querySelector("h1")?.textContent==="최적화 시험 문서"&&!document.querySelector(".tab.document.active .tab-dirty:not([hidden])")');
+    await page.click('#library-tab');assert.equal(await page.evaluate('document.querySelector("#document-count").textContent'),'1200');
+    await page.click('#library-list-view');await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/pages-only-optimization-library-1280.png'),await page.screenshot());
+    await writeFile(join(root,'test-results/pages-only-optimization-library.json'),JSON.stringify({seeded,initial,oneBatchedRender:true,cardViewSwitchReusesDOM:true,filterReusesFolderTree:true,documentOpens:true},null,2));assert.deepEqual(browser.errors,[]);
+  }catch(error){if(browser){await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/pages-only-optimization-failure.png'),await browser.page.screenshot());}throw error;}
+  finally{await browser?.close();await new Promise(resolve=>server.close(resolve));await rm(temporary,{recursive:true,force:true});}
+});

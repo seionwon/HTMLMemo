@@ -1,4 +1,4 @@
-import {folderPath,validateFolders} from './library-folders.js';
+import {validateFolders,indexFolders} from './library-folders.js';
 import {localFileIdentity} from './local-files.js';
 
 export const FOLDER_MARKER='HTMLMemo-folder.json';
@@ -11,27 +11,28 @@ const owns=(value,library,id)=>value?.format==='HTMLMemo.folder'&&value.version=
 const pathKey=path=>JSON.stringify(path);
 async function directoryAt(root,path) {let directory=root;for(const name of path)directory=await directory.getDirectoryHandle(name);return directory;}
 function locations(manifest) {
-  const folders=validateFolders(manifest?.folders||[]),paths=new Map([['',[]]]);
-  for(const f of folders)paths.set(f.id,folderPath(folders,f.id).map(p=>p.name));
+  const folders=indexFolders(validateFolders(manifest?.folders||[])).ordered,paths=new Map([['',[]]]);
+  for(const f of folders)paths.set(f.id,[...paths.get(f.parentId),f.name]);
   return {folders,paths};
 }
 /** Materialize app-owned directories and immutable raw copies BEFORE publishing the manifest. */
 export async function syncFolderTree(root,manifest,previous,{readOriginal,write}) {
-  const {folders,paths}=locations(manifest),directories=new Map([['',root]]),pending=[...folders];
-  while(pending.length){
-    const index=pending.findIndex(f=>directories.has(f.parentId)),folder=pending.splice(index,1)[0],parent=directories.get(folder.parentId);
+  const {folders,paths}=locations(manifest),old=locations(previous),directories=new Map([['',root]]);
+  const previousAt=new Map(old.folders.map(f=>[pathKey(old.paths.get(f.id)),f.id]));
+  for(const folder of folders){
+    const parent=directories.get(folder.parentId);
     let directory,created=false;
     try{directory=await parent.getDirectoryHandle(folder.name);}catch(error){if(error.name!=='NotFoundError')throw error;directory=await parent.getDirectoryHandle(folder.name,{create:true});created=true;}
     const found=await readMarker(directory);
     if(!owns(found,manifest.id,folder.id)){
-      const previousFolder=(previous?.folders||[]).find(f=>owns(found,manifest.id,f.id)&&pathKey(folderPath(previous.folders,f.id).map(p=>p.name))===pathKey(paths.get(folder.id)));
+      const previousId=previousAt.get(pathKey(paths.get(folder.id))),previousFolder=previousId&&owns(found,manifest.id,previousId);
       let empty=true;for await(const entry of directory.entries()){empty=false;break;}
       if(!created&&!empty&&!previousFolder)throw Error(`“${paths.get(folder.id).join('/')}” 위치에 앱이 관리하지 않는 폴더 또는 파일이 있습니다. 기존 항목을 덮어쓰지 않습니다. 서재에서 다른 폴더 이름을 사용하세요.`);
       await write(directory,FOLDER_MARKER,JSON.stringify(marker(manifest.id,folder.id))+'\n');
     }
     directories.set(folder.id,directory);
   }
-  const old=locations(previous),oldCopies=new Set((previous?.documents||[]).filter(e=>e.copy).map(e=>pathKey([...(old.paths.get(e.copy.folderId)||[]),e.copy.name,e.original?.name||e.source.name])));
+  const oldCopies=new Set((previous?.documents||[]).filter(e=>e.copy).map(e=>pathKey([...(old.paths.get(e.copy.folderId)||[]),e.copy.name,e.original?.name||e.source.name])));
   for(const entry of manifest.documents){
     const directory=directories.get(entry.copy.folderId),ref=entry.original||entry.source,name=entry.copy.name,key=pathKey([...paths.get(entry.copy.folderId),name,ref.name]);
     let file;try{file=await(await directory.getFileHandle(name)).getFile();}catch(error){if(error.name!=='NotFoundError')throw error;}

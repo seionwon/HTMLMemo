@@ -39,6 +39,25 @@ test('a history-only checkpoint updates the portable history without changing an
   backup.schedule({id:'doc'});await backup.flush();const next=await manifest(disk);
   assert.notEqual(next.documents[0].history.name,first.documents[0].history.name);assert.equal(JSON.parse(await readObject(disk,next.documents[0].history)).revisions.length,3);assert.deepEqual(next.documents[0].state,first.documents[0].state);assert.equal(lib.reads,reads);assert.ok(!control.writes.some(name=>name.endsWith('.html')));
 });
+test('frequent note edits reuse a versioned history until the next checkpoint, without weakening validation or recovery',async t=>{
+  const lib=library(),disk=memoryFolder(),backup=manager(t,lib);lib.records.get('doc').historyVersion=2;
+  let reads=0;const list=backup.ops.listRevisions;backup.ops.listRevisions=async id=>{reads++;return list(id);};
+  await backup.connect(disk);const first=await manifest(disk);assert.equal(reads,1);
+  for(let i=0;i<20;i++){lib.records.get('doc').metadata.annotations[0].text='새 메모 '+i;backup.schedule({id:'doc'});await backup.flush();}
+  const edited=await manifest(disk);assert.equal(reads,1);assert.deepEqual(edited.documents[0].history,first.documents[0].history);assert.match(await readObject(disk,edited.documents[0].state),/새 메모 19/);
+  lib.histories.get('doc').push({created:3000,kind:'edit',annotations:structuredClone(lib.records.get('doc').metadata.annotations),bookmarks:[]});lib.records.get('doc').historyVersion++;
+  backup.schedule({id:'doc'});await backup.flush();assert.equal(reads,2);assert.notEqual((await manifest(disk)).documents[0].history.name,first.documents[0].history.name);
+  const restored=library([]);await manager(t,restored).connect(disk);assert.equal(restored.records.get('doc').metadata.annotations[0].text,'새 메모 19');assert.equal(restored.histories.get('doc').length,3);
+  lib.records.get('doc').metadata.annotations[0].width=-1;backup.schedule({id:'doc'});await assert.rejects(backup.flush());assert.equal(backup.state,'error');assert.equal(reads,2);
+});
+test('a removed cached history object is reconstructed, and an interrupted checkpoint is retried completely',async t=>{
+  const lib=library(),control={},disk=memoryFolder('HTMLMemo',control),backup=manager(t,lib);lib.records.get('doc').historyVersion=2;
+  let reads=0;const list=backup.ops.listRevisions;backup.ops.listRevisions=async id=>{reads++;return list(id);};await backup.connect(disk);
+  const first=await manifest(disk),data=await disk.getDirectoryHandle(FOLDER_DATA);await data.removeEntry(first.documents[0].history.name);
+  lib.records.get('doc').metadata.annotations[0].text='복원 뒤 메모';backup.schedule({id:'doc'});await backup.flush();assert.equal(reads,2);assert.equal(JSON.parse(await readObject(disk,(await manifest(disk)).documents[0].history)).revisions.length,2);
+  lib.histories.get('doc').push({created:3000,kind:'edit',annotations:[],bookmarks:[]});lib.records.get('doc').historyVersion++;control.failClose=FOLDER_MANIFEST;backup.schedule({id:'doc'});await assert.rejects(backup.flush(),/Interrupted/);assert.equal(reads,3);
+  control.failClose=null;await backup.flush();assert.equal(reads,4);assert.equal(JSON.parse(await readObject(disk,(await manifest(disk)).documents[0].history)).revisions.length,3);
+});
 test('annotation and view edits reuse original and prepared HTML without loading or rewriting source bodies',async t=>{
   const lib=library(),control={writes:[]},disk=memoryFolder('HTMLMemo',control),backup=manager(t,lib);await backup.connect(disk);const first=await manifest(disk),reads=lib.reads;control.writes.length=0;
   lib.records.get('doc').metadata.annotations[0].text='Updated note';lib.records.get('doc').metadata.view.scrollTop=3000;backup.schedule();await backup.flush();const next=await manifest(disk);
