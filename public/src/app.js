@@ -258,7 +258,7 @@ async function openRecord(record, prepared = null, {deferReady = false, sourceId
   tabs.push(tab);activate(tab.id);
   tab.reader=new Reader(tab.host,parsed,{
     onChange:()=>{tab.queue.schedule();if(activeId===tab.id){renderToolbar();if(['annotations','bookmarks'].includes(sidebarMode))renderSidebar(sidebarMode);else updateSidebarCounts($('#sidebar'),tab.reader);tab.reader?.refreshDocumentSidebar();}},
-    onPosition:()=>{tab.queue.schedule({background:true});},onView:()=>{if(activeId===tab.id){updateChrome();updateToolbarState();}},
+    onPosition:()=>{tab.queue.schedule({background:true});renderFolderState();},onView:()=>{if(activeId===tab.id){updateChrome();updateToolbarState();}},
     onPreferenceChange:()=>dataFolder?.schedule({settingsOnly:true}),
     onTextSelection:()=>{if(activeId===tab.id)showSelectionMenu(tab.reader);},
     onSelectionDismiss:()=>{if(popoverName==='selection'||popoverName.startsWith('tool-mode-'))closePopover();},
@@ -1180,7 +1180,7 @@ function bindUI() {
   $('#open-example').onclick=safely(async()=>{let html=await bundledExample();if(html===null){const response=await fetch('./example.html');if(!response.ok)throw new Error('예제 문서를 불러오지 못했습니다.');html=await response.text();}await createDocument({html,title:'천천히 읽는다는 것',viewport:{width:960,height:800}});});
   document.addEventListener('keydown',handleKey);document.addEventListener('pointerdown',event=>{if(!event.target.closest('#toolbar,#tool-popover,[data-htmlmemo-reading-controls]')&&!$('#tool-popover').hidden)closePopover();});
   $('#dialog').addEventListener('click',event=>{if(event.target===$('#dialog'))$('#dialog').close();});
-  window.addEventListener('beforeunload',event=>{if(tabs.some(t=>t.opening||t.queue?.editsPending)||dataFolder?.pending){event.preventDefault();event.returnValue='';}});
+  window.addEventListener('beforeunload',event=>{if(tabs.some(t=>t.opening||t.queue?.editsPending||!!folder&&t.queue?.pending)||dataFolder?.pending){event.preventDefault();event.returnValue='';}});
   const savePositions=()=>{Promise.all(tabs.filter(t=>t.reader?.doc).map(tab=>{tab.reader.rememberPosition();return tab.queue.flush();})).then(()=>dataFolder?.flush()).catch(()=>{});};
   document.addEventListener('visibilitychange',()=>{if(document.hidden)savePositions();});
   window.addEventListener('pagehide',savePositions);

@@ -2169,6 +2169,8 @@ test('real Chrome: Pages-only data folder copies imported originals and restores
     await page.evaluate('document.querySelector("#appearance").value="dark";document.querySelector("#appearance").dispatchEvent(new Event("change"));document.querySelector("#dialog").close();');
     await page.click('.document-host:not([hidden]) [data-action=speak]');await page.waitFor('document.querySelector(".mstts-player")');await page.click('.mstts-player button:nth-of-type(4)');await page.click('.mstts-player button:last-of-type');
     await page.evaluate(`${doc}.querySelector('main').scrollTop=900;`);await page.waitFor(`${doc}.querySelector('main').scrollTop>=899`);
+    await page.waitFor('document.querySelector("#data-folder-status").textContent==="폴더 저장 중…"');
+    assert.equal(await page.evaluate(`(()=>{const event=new Event('beforeunload',{cancelable:true});window.dispatchEvent(event);return event.defaultPrevented;})()`),true);
     await page.evaluate(`document.dispatchEvent(new KeyboardEvent('keydown',{key:'s',ctrlKey:true,bubbles:true,cancelable:true}));`);
     await page.waitFor(`(async()=>{const record=(await(await import('./src/storage.js')).listDocuments()).find(r=>r.name==='received.html');return record.metadata.view.scrollTop>100;})()`);await page.waitFor('document.querySelector("#data-folder-status").textContent==="폴더 저장 완료"');
     // A later dropped MHTML must join the same folder automatically, preserving its original MIME bytes.

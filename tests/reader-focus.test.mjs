@@ -235,6 +235,12 @@ test('unchanged reading positions do not schedule another save',()=>{
  assert.equal(r.rememberPosition(),false);assert.equal(changes,3);assert.equal(r.metadata.view.tocWidth,300);
 });
 
+test('hidden tabs never measure zero geometry or overwrite the last visible reading position',()=>{
+ const r=Object.create(Reader.prototype),view={scrollTop:900,scrollLeft:0,zoom:.9,autoFit:true};r.host={hidden:true};r.metadata={view};r.callbacks={onPosition:()=>{throw Error('Hidden tabs must not save a position');}};
+ Object.defineProperties(r,{scrollTop:{get:()=>{throw Error('Hidden geometry');}},scrollLeft:{get:()=>{throw Error('Hidden geometry');}},doc:{get:()=>{throw Error('Hidden geometry');}}});
+ assert.equal(r.rememberPosition(),false);r.measure();r.resizeViewport();assert.strictEqual(r.metadata.view,view);
+});
+
 test('reopening at a different sidebar width restores the same document coordinates',()=>{
  const r=Object.create(Reader.prototype);r.metadata={view:{scrollTop:490,scrollLeft:49,zoom:.98}};r.zoom=1.28;
  Object.defineProperties(r,{scrollTop:{value:0,writable:true},scrollLeft:{value:0,writable:true}});

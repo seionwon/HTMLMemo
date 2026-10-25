@@ -1530,7 +1530,7 @@ export class Reader {
     this.callbacks.onDocumentFocus?.();
   }
   measure() {
-    if (!this.doc) return;
+    if (this.host?.hidden || !this.doc) return;
     const body = this.doc.body;
     if (this.nativeScroll) {
       // Keep the browsing viewport small. Expanding an iframe to a whole book
@@ -1564,6 +1564,7 @@ export class Reader {
     this.scrollLeft=(this.openingScroll?.left || (Number(view.scrollLeft)||0)/savedZoom)*this.zoom;
   }
   resizeViewport() {
+    if(this.host?.hidden || this.disposed)return;
     const top=this.scrollTop/this.zoom,left=this.scrollLeft/this.zoom;
     if(this.autoFit)this.zoom=this.fitZoom();
     if(this.nativeScroll || this.autoFit)this.applyZoom();
@@ -1705,6 +1706,8 @@ export class Reader {
     this.rememberPosition(); this.callbacks.onView?.();
   }
   rememberPosition() {
+    // Hidden tabs can report zero geometry; never replace the last visible reading position with it.
+    if(this.host?.hidden || this.disposed)return false;
     const view = {scrollTop:this.scrollTop, scrollLeft:this.scrollLeft, zoom:this.zoom, autoFit:this.autoFit, ...(Number.isFinite(this.tocResizedWidth)?{tocWidth:this.tocResizedWidth}:{})};
     const previous = this.metadata.view || {};
     if (Object.keys(previous).length === Object.keys(view).length && Object.keys(view).every(key => view[key] === previous[key])) return false;

@@ -46,3 +46,8 @@ test('failed fingerprinting disposes the unfinished reader and never saves an id
   const rejected=assert.rejects(opening,/read failed/);a.reject(Error('read failed'));await rejected;
   assert.equal(a.context.tabs.length,0);assert.equal(a.disposed,1);assert.deepEqual(a.writes,[]);
 });
+test('a reading-position change immediately updates folder status without turning it into an annotation edit',async()=>{
+  const a=setup();let reports=0;a.context.renderFolderState=()=>reports++;
+  const opening=a.context.openRecord(a.record,a.parsed,{sourceIdentity:a.fingerprint});a.resolve(identity);const tab=await opening;const before=reports;
+  tab.reader.callbacks.onPosition();assert.equal(reports,before+1);assert.equal(tab.queue.pending,true);assert.equal(tab.queue.editsPending,false);await tab.queue.flush();
+});
