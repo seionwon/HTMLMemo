@@ -146,7 +146,7 @@ export class Reader {
     });
   }
   baseEditorStyle() {
-    return 'html[data-htmlmemo-picking] [data-htmlmemo-mark],html[data-htmlmemo-picking] [data-htmlmemo-mark] *{cursor:pointer!important}html[data-htmlmemo-picking] [data-htmlmemo-hit]{pointer-events:stroke!important;cursor:pointer!important}' + this.layoutEditorStyle();
+    return 'html[data-htmlmemo-picking] [data-htmlmemo-mark],html[data-htmlmemo-picking] [data-htmlmemo-mark] *{cursor:pointer!important}html[data-htmlmemo-picking] [data-htmlmemo-hit]{pointer-events:stroke!important;cursor:pointer!important}html[data-htmlmemo-picking="select"] [data-htmlmemo-id],html[data-htmlmemo-picking="select"] [data-htmlmemo-hit]{touch-action:none!important}[data-htmlmemo-preview],[data-htmlmemo-preview] *{pointer-events:none!important}[data-htmlmemo-drag-source]{opacity:.25!important;pointer-events:none!important}html[data-htmlmemo-moving],html[data-htmlmemo-moving][data-htmlmemo-picking] *{cursor:grabbing!important;user-select:none!important;-webkit-user-select:none!important}' + this.layoutEditorStyle();
   }
   layoutEditorStyle() {
     // Keep the source book's responsive #reader-menu visibility; forcing flex
@@ -386,13 +386,15 @@ export class Reader {
     this.doc.addEventListener('wheel', event => this.forwardWheel(event), {capture:true,passive:false});
     this.doc.addEventListener('pointerdown', event => { if(this.startTocResize(event))return; if(this.startMiddleScroll(event))return;this.stopMiddleScroll();this.callbacks.onSelectionDismiss?.(); this.pointerDown(event); }, true);
     this.doc.addEventListener('mousedown', event => { if(this.startTocResize(event))return;this.selectSentenceAtClick(event); }, true);
-    this.doc.addEventListener('dragstart', event => { if(this.tocDrag||this.isTocResizeTarget(event))event.preventDefault(); }, true);
+    this.doc.addEventListener('dragstart', event => { if(this.annotationDrag||this.tocDrag||this.isTocResizeTarget(event))event.preventDefault(); }, true);
     this.doc.addEventListener('pointermove', event => { if(this.tocDrag)return; if(this.moveMiddleScroll(event))return;this.pointerMove(event); }, true);
     this.doc.addEventListener('pointerup', event => { if(this.tocDrag)return; if(this.endMiddleScroll(event))return;this.pointerUp(event); }, true);
-    this.doc.addEventListener('pointercancel', () => { this.stopMiddleScroll();this.gesture = null; this.preview?.remove(); this.preview = null; });
+    this.doc.addEventListener('pointercancel', () => { this.cancelAnnotationDrag();this.stopMiddleScroll();this.gesture = null; this.preview?.remove(); this.preview = null; });
+    this.doc.addEventListener('lostpointercapture', event => {if(this.annotationDrag?.pointerId===event.pointerId)this.cancelAnnotationDrag();});
+    this.doc.defaultView?.addEventListener?.('blur',()=>this.cancelAnnotationDrag());
     this.doc.addEventListener('auxclick', event => {if(event.button===1&&!event.target.closest?.('a,button,input,textarea,select,[contenteditable]'))event.preventDefault();}, true);
     this.doc.addEventListener('selectionchange', () => this.captureTextSelection());
-    this.doc.addEventListener('keydown', event => {if(this.handleTocKeydown(event))return; if(event.key==='Escape'&&this.middleScroll){this.stopMiddleScroll();event.preventDefault();return;}this.callbacks.onKey?.(event);}, true);
+    this.doc.addEventListener('keydown', event => {if(event.key==='Escape'&&this.annotationDrag){this.cancelAnnotationDrag();event.preventDefault();event.stopPropagation();return;}if(this.handleTocKeydown(event))return; if(event.key==='Escape'&&this.middleScroll){this.stopMiddleScroll();event.preventDefault();return;}this.callbacks.onKey?.(event);}, true);
     this.doc.addEventListener('dblclick', event => {if(this.handleTocDblClick(event))return; this.focusDocument(event);}, true);
     this.viewport.addEventListener('dblclick', event => this.focusDocument(event));
     this.viewport.addEventListener('scroll',()=>this.updateReadingControls(),{passive:true});
@@ -408,6 +410,7 @@ export class Reader {
       return true;
     };
     this.doc.addEventListener('click', event => {
+      if(this.suppressAnnotationClick&&event.detail!==0&&performance.now()<this.suppressAnnotationClick){this.suppressAnnotationClick=0;event.preventDefault();event.stopImmediatePropagation();return;}
       const target = event.target?.nodeType === 1 ? event.target : event.target?.parentElement;
       this.lastTocClickState = this.captureTocClickState(target);
       if (this.tocResizeJustEnded || this.isTocResizerNode(target)) { this.tocResizeJustEnded = false; event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation?.(); return; }
@@ -1563,6 +1566,7 @@ export class Reader {
     event.preventDefault();selection.removeAllRanges();selection.addRange(range);return true;
   }
   focusDocument(event) {
+    if(this.annotationDrag||performance.now()-(this.annotationDragEndedAt||-Infinity)<500)return;
     if (this.disposed || event.button != null && event.button !== 0) return;
     if (this.isInsideTocSidebar(event.target)) return;
     if (event.target.closest?.('a,button,input,textarea,select,img,svg,canvas,video,audio,object,embed,iframe,[role="img"],[contenteditable],[data-htmlmemo-id],[role="separator"],[data-htmlmemo-toc-resizer],[data-htmlmemo-toc-resizer-bound],[data-htmlmemo-toc-strip]')||this.textAtClick(event)) return;
@@ -1740,6 +1744,7 @@ export class Reader {
     } else this.viewport.scrollLeft = value;
   }
   setZoom(value, fit = false) {
+    this.cancelAnnotationDrag();
     const centerX = (this.scrollLeft + this.viewport.clientWidth / 2) / this.zoom;
     const centerY = (this.scrollTop + this.viewport.clientHeight / 2) / this.zoom;
     this.autoFit = fit; this.zoom = clamp(fit ? this.fitZoom() : value, .2, 8); this.applyZoom();
@@ -1757,6 +1762,7 @@ export class Reader {
     return true;
   }
   setTool(tool) {
+    this.cancelAnnotationDrag();
     this.tool = tool; this.doc.documentElement.toggleAttribute('data-htmlmemo-drawing', DRAW_TOOLS.includes(tool) || ['note','text'].includes(tool));
     this.syncAnnotationPicking();
     if (TEXT_TOOLS.includes(tool) && this.selection) this.addText(tool, this.selection);
@@ -1956,8 +1962,112 @@ export class Reader {
     return {...hit,quote:index.text.slice(hit.start,hit.end),prefix:index.text.slice(Math.max(0,hit.start-40),hit.start),suffix:index.text.slice(hit.end,hit.end+40),
       x:(rect.x-box.x)/scale,y:(rect.y-box.y)/scale,fontSize:rect.fontSize/scale};
   }
+  annotationDragTarget(event) {
+    const top=this.doc.elementFromPoint?.(event.clientX,event.clientY);
+    if(!top||this.isInteractiveControl(top)||(top.closest?.('[data-htmlmemo-ui]')&&!top.closest?.('#'+LAYER_ID)))return null;
+    return [...(this.doc.elementsFromPoint?.(event.clientX,event.clientY)||[top])].find(node=>!node.closest?.('#'+LAYER_ID+',[data-htmlmemo-ui]')&&!this.isInsideTocOrTopbar(node))||null;
+  }
+  annotationDragTextOffset(drag,event) {
+    if(!this.annotationDragTarget(event))return null;
+    const caret=this.doc.caretPositionFromPoint?.(event.clientX,event.clientY),range=caret?null:this.doc.caretRangeFromPoint?.(event.clientX,event.clientY);
+    const node=caret?.offsetNode||range?.startContainer,offset=caret?.offset??range?.startOffset,item=drag.textNodes.get(node);
+    if(!item||!drag.contentRoot.contains(node)||this.isInteractiveControl(node)||drag.index.text.slice(item.start,item.end)!==node.textContent)return null;
+    return item.start+clamp(offset,0,item.end-item.start);
+  }
+  startAnnotationDrag(event) {
+    const id=this.annotationIdAt(event.target),source=this.metadata.annotations.find(a=>a.id===id);
+    if(!source||!this.annotationInSection(source)||this.isInteractiveControl(event.target))return false;
+    if(!this.layer?.isConnected)this.renderDrawingLayer();
+    const drag={pointerId:event.pointerId,source,annotation:structuredClone(source),section:currentSection(this.doc),start:this.point(event),moved:false,delta:{x:0,y:0}};
+    if(TEXT_TOOLS.includes(source.type)){
+      drag.index=this.searchCache().get();drag.resolved=resolveTextAnchor(drag.index,source.textAnchor);
+      if(!drag.resolved)return false;
+      drag.contentRoot=this.doc.getElementById('reader-content')||this.doc.body;drag.textNodes=new WeakMap();drag.bounds={start:Infinity,end:0};
+      for(const item of drag.index.nodes){drag.textNodes.set(item.node,item);if(drag.contentRoot.contains(item.node)){drag.bounds.start=Math.min(drag.bounds.start,item.start);drag.bounds.end=Math.max(drag.bounds.end,item.end);}}
+      const offset=this.annotationDragTextOffset(drag,event);drag.grabOffset=offset==null?0:clamp(offset-drag.resolved.start,0,drag.resolved.end-drag.resolved.start-1);
+    }else{
+      drag.geometry=this.drawingGeometry(source);if(!drag.geometry.points.length)return false;
+    }
+    this.annotationDrag=drag;event.preventDefault();event.stopPropagation();return true;
+  }
+  movedTextAnnotation(drag,event) {
+    const offset=this.annotationDragTextOffset(drag,event),length=drag.resolved.end-drag.resolved.start;
+    if(offset==null||drag.bounds.end-drag.bounds.start<length)return null;
+    const start=clamp(offset-drag.grabOffset,drag.bounds.start,drag.bounds.end-length),end=start+length,text=drag.index.text;
+    const range=rangeFromOffsets(this.doc,start,end,drag.index);
+    if(!range||this.isInsideTocOrTopbar(range.startContainer)||this.isInsideTocOrTopbar(range.endContainer))return null;
+    const textAnchor=this.sectionAnchor({...drag.annotation.textAnchor,start,end,quote:text.slice(start,end),prefix:text.slice(Math.max(0,start-40),start),suffix:text.slice(end,end+40)});
+    return {...drag.annotation,textAnchor};
+  }
+  previewTextAnnotation(drag,next) {
+    if(!this.preview){this.preview=svg(this.doc,'g',{'data-htmlmemo-preview':''});this.layer.append(this.preview);}
+    this.preview.replaceChildren();if(!next)return;
+    const origin=this.layerOrigin(),a=drag.annotation,range=rangeFromOffsets(this.doc,next.textAnchor.start,next.textAnchor.end,drag.index);
+    for(const rect of range?.getClientRects?.()||[]){
+      if(!rect.width||!rect.height)continue;
+      const x=rect.left-origin.left,y=rect.top-origin.top;
+      this.preview.append(a.type==='highlight'?svg(this.doc,'rect',{x,y,width:rect.width,height:rect.height,fill:a.color,opacity:a.opacity}):svg(this.doc,'path',{d:`M${x},${y+(a.type==='underline'?rect.height:rect.height/2)}h${rect.width}`,fill:'none',stroke:a.color,'stroke-width':a.width}));
+    }
+  }
+  moveAnnotationDrag(event) {
+    const drag=this.annotationDrag;if(!drag||drag.pointerId!==event.pointerId)return false;
+    event.preventDefault();event.stopPropagation();
+    if(this.disposed||this.tool!=='select'||drag.section!==currentSection(this.doc)){this.cancelAnnotationDrag();return true;}
+    const point=this.point(event);drag.delta={x:point.x-drag.start.x,y:point.y-drag.start.y};
+    if(!drag.moved){
+      if(Math.hypot(drag.delta.x,drag.delta.y)*(this.zoom||1)<4)return true;
+      drag.moved=true;this.doc.documentElement.setAttribute('data-htmlmemo-moving','');
+      drag.sources=[...this.doc.querySelectorAll(`[data-htmlmemo-id="${drag.annotation.id}"],[data-htmlmemo-hit="${drag.annotation.id}"]`)];
+      for(const node of drag.sources)node.setAttribute('data-htmlmemo-drag-source','');
+      this.selection=null;this.doc.getSelection?.()?.removeAllRanges();
+      try{this.doc.documentElement.setPointerCapture?.(event.pointerId);}catch{/* Document listeners still handle an available pointer. */}
+      if(drag.geometry){this.preview=this.drawAnnotation(drag.annotation,false,drag.geometry);this.preview.removeAttribute('data-htmlmemo-id');this.preview.setAttribute('data-htmlmemo-preview','');this.layer.append(this.preview);}
+    }
+    this.callbacks.onAnnotationInput?.();
+    if(drag.geometry)this.preview.setAttribute('transform',`translate(${drag.delta.x} ${drag.delta.y})`);
+    else{drag.next=this.movedTextAnnotation(drag,event);this.previewTextAnnotation(drag,drag.next);}
+    return true;
+  }
+  movedDrawingAnnotation(drag,event) {
+    const target=this.annotationDragTarget(event);if(!target)return null;
+    const box=this.elementAnchor(target,true),points=drag.geometry.points.map(p=>({x:p.x+drag.delta.x,y:p.y+drag.delta.y}));
+    const next={...drag.annotation,anchor:box.key,anchorTarget:box.target};let width=box.width,height=box.height;
+    if(next.type==='pen'){
+      const scale=drag.geometry.scale||1,fontSize=box.fontSize/scale;
+      if(!Number.isFinite(fontSize)||fontSize<.1||fontSize>1000)return null;
+      const basis={width:clamp(width/scale,1,1e8),height:clamp(height/scale,1,1e8),fontSize};width=basis.width*scale;height=basis.height*scale;
+      const textAnchor=this.capturePenTextAnchor(this.resolveDrawingTarget(next),points,box,this.layerOrigin(),scale);
+      if(textAnchor)basis.textAnchor=textAnchor;next.penBasis=basis;
+    }
+    next.points=points.map(p=>({x:(p.x-box.x)/width,y:(p.y-box.y)/height}));return next;
+  }
+  cancelAnnotationDrag() {
+    const drag=this.annotationDrag;if(!drag)return false;this.annotationDrag=null;
+    if(drag.moved){this.suppressAnnotationClick=performance.now()+500;this.annotationDragEndedAt=performance.now();}
+    this.preview?.remove();this.preview=null;
+    for(const node of drag.sources||[])node.removeAttribute('data-htmlmemo-drag-source');
+    this.doc.documentElement.removeAttribute('data-htmlmemo-moving');
+    try{if(this.doc.documentElement.hasPointerCapture?.(drag.pointerId))this.doc.documentElement.releasePointerCapture(drag.pointerId);}catch{/* The pointer may already have been released. */}
+    return true;
+  }
+  finishAnnotationDrag(event) {
+    const drag=this.annotationDrag;if(!drag||drag.pointerId!==event.pointerId)return false;
+    if(drag.moved)this.moveAnnotationDrag(event);
+    if(this.annotationDrag!==drag)return true;
+    let next=null;
+    if(drag.moved&&this.metadata.annotations.includes(drag.source)&&drag.section===currentSection(this.doc)){
+      if(drag.geometry){if(Math.hypot(drag.delta.x,drag.delta.y)>.001)next=this.movedDrawingAnnotation(drag,event);}
+      else{const entry=this.searchCache().entry(this.doc.body);this.searchCache().flush(entry);if(!entry.dirty&&entry.index===drag.index)next=drag.next;if(next?.textAnchor.start===drag.resolved.start&&next?.textAnchor.end===drag.resolved.end)next=null;}
+    }
+    this.cancelAnnotationDrag();
+    if(drag.moved){event.preventDefault();event.stopPropagation();if(next)this.commit(this.metadata.annotations.map(a=>a.id===next.id?next:a));}
+    return true;
+  }
   pointerDown(event) {
     if (event.button !== 0) return;
+    this.suppressAnnotationClick=0;
+    if(this.annotationDrag){this.cancelAnnotationDrag();return;}
+    if(this.tool==='select'&&this.startAnnotationDrag(event))return;
     if (this.tool === 'eraser') {
       const id = this.annotationIdAt(event.target); if (id) { event.preventDefault(); this.remove(id); } return;
     }
@@ -1976,6 +2086,7 @@ export class Reader {
     }
   }
   pointerMove(event) {
+    if(this.moveAnnotationDrag(event))return;
     if (!this.gesture || this.gesture.pointerId !== event.pointerId) return;
     this.callbacks.onAnnotationInput?.();
     event.preventDefault();
@@ -1986,6 +2097,7 @@ export class Reader {
     if (this.preview) { this.preview.setAttribute('data-htmlmemo-preview', ''); this.layer.append(this.preview); }
   }
   async pointerUp(event) {
+    if(this.finishAnnotationDrag(event))return;
     if (this.gesture && this.gesture.pointerId === event.pointerId) {
       event.preventDefault(); const g = this.gesture; this.gesture = null; this.preview?.remove(); this.preview = null;
       const points = g.points.map(p => ({x:(p.x - g.anchor.x) / g.anchor.width, y:(p.y - g.anchor.y) / g.anchor.height}));
@@ -2018,6 +2130,7 @@ export class Reader {
     }, 0);
   }
   render() {
+    this.cancelAnnotationDrag();
     this.dynamicObserver?.disconnect();
     this.searchIndexCache?.invalidate();this.searchMarks=[];this.bookSearchMarks=[];
     cleanAnnotations(this.doc); this.selectedId = null;
@@ -2079,15 +2192,15 @@ export class Reader {
         if(!basis.textAnchor){
           // Older files do not contain a glyph reference. Pin their first visible
           // appearance without moving it or dirtying the document on open.
-          this.legacyPenTextBases ||= new Map();
-          let cached=this.legacyPenTextBases.get(annotation.id);
+          this.legacyPenTextBases ||= new WeakMap();
+          let cached=this.legacyPenTextBases.get(annotation.points);
           // A known old baseline must be measured at its drawing-time size.
           // Guessing a glyph from an already enlarged/reflowed stroke would
           // make it jump to the wrong word when the original size is restored.
           if(!cached && Math.abs(scale-1)<1e-6){
             const initialPoints=annotation.points.map(p=>({x:box.x+p.x*basis.width*scale,y:box.y+p.y*basis.height*scale}));
             const textAnchor=this.capturePenTextAnchor(element,initialPoints,box,origin,scale,getIndex());
-            cached={basis:textAnchor?{...basis,textAnchor}:basis,scale};this.legacyPenTextBases.set(annotation.id,cached);
+            cached={basis:textAnchor?{...basis,textAnchor}:basis,scale};this.legacyPenTextBases.set(annotation.points,cached);
           }
           if(cached){basis=cached.basis;textChanged=Math.abs(scale-cached.scale)>1e-6;}
         }
@@ -2112,7 +2225,8 @@ export class Reader {
     return id&&this.metadata.annotations.some(annotation=>annotation.id===id)?id:null;
   }
   syncAnnotationPicking() {
-    this.doc?.documentElement?.toggleAttribute?.('data-htmlmemo-picking',['select','eraser'].includes(this.tool||'select'));
+    const root=this.doc?.documentElement,tool=this.tool||'select';
+    if(['select','eraser'].includes(tool)){if(root?.getAttribute?.('data-htmlmemo-picking')!==tool)root?.setAttribute?.('data-htmlmemo-picking',tool);}else root?.removeAttribute?.('data-htmlmemo-picking');
     // Six screen pixels beyond either edge, independent of the reader zoom.
     const style=this.layer?.style,padding=12/(this.zoom||1)+'px';
     if(style&&style.getPropertyValue('--htmlmemo-hit-padding')!==padding)style.setProperty('--htmlmemo-hit-padding',padding);
@@ -2149,6 +2263,7 @@ export class Reader {
   }
   renderDrawingLayer() {
     if (!this.doc || this.disposed || this.preparing) return;
+    this.cancelAnnotationDrag();
     // Keep one overlay: source Mutation/ResizeObservers must not see a removed
     // and reinserted SVG every time their own layout changes.
     const scrollHost=this.ensureAnnotationLayerHost();
@@ -2477,6 +2592,7 @@ export class Reader {
   }
   stopSpeech() { this.readAloud?.close(); this.host?.ownerDocument?.defaultView?.speechSynthesis?.cancel(); }
   dispose() {
+    this.cancelAnnotationDrag();
     this.searchGeneration=(this.searchGeneration||0)+1;this.searchIndexCache?.dispose();
     this.cancelBookSearchJump?.();this.documentBookSearchObserver?.disconnect();if(this.documentBookSearchResults)this.clearDocumentBookSearchHighlight();
     this.stopMiddleScroll();this.readAloud?.dispose();this.readAloud=null;this.stopSpeech(); this.disposed=true;this.cancelOpeningWait?.();this.cancelAnnotationJump?.();this.cancelFrameOpen?.();this.runtime?.dispose(); clearTimeout(this.positionTimer);clearTimeout(this.dynamicTimer);clearTimeout(this.documentSidebarUI?.sidebarSearchTimer);this.dynamicObserver?.disconnect();this.fontObserver?.disconnect();if(this.fontFrame)this.doc.defaultView?.cancelAnimationFrame(this.fontFrame); this.resizeObserver?.disconnect(); this.hostObserver?.disconnect(); this.frame.srcdoc=''; if(this.documentURL){URL.revokeObjectURL(this.documentURL);this.documentURL=null;} this.host.remove();
