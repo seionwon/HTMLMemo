@@ -46,7 +46,7 @@ jobs:
             test-results/tts-selection-*.json
             test-results/sidebar-views-collapse-*.json
             test-results/toolbar-modes-selection-note-*.json
-            test-results/pages-only-data-folder-*.json
+            test-results/pages-only-*.json
             test-results/*.png
           if-no-files-found: ignore
       - run: npm run build
@@ -134,6 +134,6 @@ jobs:
             test-results/font-scaled-pen-*.png
             test-results/annotation-tree-*.png
             test-results/pages-only-*.png
-            test-results/pages-only-data-folder-*.json
+            test-results/pages-only-*.json
             test-results/chrome-companion-*.png
           if-no-files-found: ignore

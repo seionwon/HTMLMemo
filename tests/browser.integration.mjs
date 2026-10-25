@@ -2147,6 +2147,45 @@ test('real Chrome: sidebar view choices preserve word and sentence selection wit
   }finally{if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
 });
 
+test('real Chrome: Pages-only first-run folder welcome is automatic, readable and recoverable',{timeout:90000},async()=>{
+  await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-first-run-'));await cp(join(root,'public'),folder,{recursive:true});
+  const server=createServer(folder);let chrome,unsupported;
+  try{
+    await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));chrome=await launchChrome({firstRun:true});const page=chrome.page;
+    const url=process.env.HTMLMEMO_SIDEBAR_TEST_URL||`http://127.0.0.1:${server.address().port}/`;
+    await page.send('Page.addScriptToEvaluateOnNewDocument',{source:`window.firstRunPickerCalls=0;window.showDirectoryPicker=async options=>{window.firstRunPickerCalls++;window.firstRunOptions=options;throw new DOMException('Cancelled','AbortError');};`});
+    await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:800,deviceScaleFactor:1,mobile:false});await page.navigate(url);
+    const welcome='document.querySelector("#dialog").open&&!!document.querySelector("[data-folder-welcome]")';await page.waitFor(welcome);
+    const state=await page.evaluate(`({calls:window.firstRunPickerCalls,focus:document.activeElement.id,label:document.querySelector('#dialog').getAttribute('aria-labelledby'),steps:document.querySelectorAll('.folder-welcome-steps li').length,seen:localStorage.getItem('htmlmemo-data-folder-welcome-v1'),text:document.querySelector('[data-folder-welcome]').textContent})`);
+    assert.equal(state.calls,0);assert.equal(state.focus,'select-storage-folder');assert.equal(state.label,'dialog-title');assert.equal(state.steps,3);assert.equal(state.seen,null);
+    for(const text of ['Documents','새 폴더','원하는 이름','허용','자동 저장','이 폴더 전체','나중에 연결','브라우저 데이터를 지우면'])assert.ok(state.text.includes(text),text);
+    assert.equal(await page.evaluate(`(async()=>{return (await (await import('./src/storage.js')).listDocuments()).length;})()`),0);
+    await mkdir(join(root,'test-results'),{recursive:true});
+    for(const width of [1280,320]){
+      await page.send('Emulation.setDeviceMetricsOverride',{width,height:800,deviceScaleFactor:1,mobile:width<600});
+      await page.evaluate(`document.querySelector('#dialog').scrollTop=0`);
+      assert.equal(await page.evaluate(`(()=>{const d=document.querySelector('#dialog'),r=d.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight&&d.scrollWidth<=d.clientWidth+1;})()`),true);
+      await writeFile(join(root,`test-results/pages-only-first-run-${width}.png`),await page.screenshot());
+    }
+    await page.click('.folder-welcome-existing summary');assert.equal(await page.evaluate('document.querySelector(".folder-welcome-existing").open'),true);assert.match(await page.evaluate('document.querySelector(".folder-welcome-existing").textContent'),/새로 만들지 말고.*자동 복원/);
+    await page.click('#select-storage-folder');await page.waitFor('!document.querySelector("#select-storage-folder").disabled&&document.querySelector("#folder-connection-status").textContent.includes("취소")');assert.equal(await page.evaluate('window.firstRunPickerCalls'),1);assert.equal(await page.evaluate(welcome),true);
+    assert.deepEqual(await page.evaluate('window.firstRunOptions'),{id:'htmlmemo-storage-v2',mode:'readwrite',startIn:'documents'});
+    await page.evaluate(`window.showDirectoryPicker=async()=>{throw new DOMException('Denied','NotAllowedError');}`);await page.click('#select-storage-folder');await page.waitFor('!document.querySelector("#select-storage-folder").disabled&&document.querySelector("#folder-connection-status").textContent.includes("쓰기를 허용")');assert.equal(await page.evaluate('localStorage.getItem("htmlmemo-data-folder-welcome-v1")'),null);
+    await page.click('#folder-welcome-later');await page.waitFor('!document.querySelector("#dialog").open');assert.equal(await page.evaluate('document.activeElement.id'),'library-data-folder');assert.match(await page.evaluate('document.querySelector("#data-folder-summary").textContent'),/미연결/);
+    await page.navigate(url);await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');assert.equal(await page.evaluate('document.querySelector("#dialog").open'),false);
+    await page.click('#library-data-folder');await page.waitFor('document.querySelector("#select-storage-folder")&&document.querySelector("#dialog").open');await page.click('#dialog [data-dialog-close]');
+    await page.evaluate(`localStorage.removeItem('htmlmemo-data-folder-welcome-v1')`);await page.navigate(url);await page.waitFor(welcome);
+    await page.evaluate(`window.showDirectoryPicker=async()=> (await navigator.storage.getDirectory()).getDirectoryHandle('내 HTMLMemo 서재',{create:true})`);await page.click('#select-storage-folder');await page.waitFor('!document.querySelector("#dialog").open&&document.querySelector("#data-folder-status").textContent==="폴더 저장 완료"');
+    const saved=await page.evaluate(`(async()=>{const {getSetting}=await import('./src/storage.js'),handle=await getSetting('folder');return {name:handle.name,seen:localStorage.getItem('htmlmemo-data-folder-welcome-v1'),manifest:JSON.parse(await(await(await handle.getFileHandle('HTMLMemo-library.json')).getFile()).text())};})()`);assert.equal(saved.name,'내 HTMLMemo 서재');assert.equal(saved.seen,'1');assert.equal(saved.manifest.documents.length,0);
+    const movedSettings=await page.evaluate(`(async()=>{const handle=await(await import('./src/storage.js')).getSetting('folder'),d=await handle.getDirectoryHandle('HTMLMemo-data');return JSON.parse(await(await(await d.getFileHandle(${JSON.stringify(saved.manifest.settings.name)})).getFile()).text());})()`);assert.equal(movedSettings.entries['htmlmemo-data-folder-welcome-v1'],undefined);
+    await page.evaluate(`localStorage.removeItem('htmlmemo-data-folder-welcome-v1')`);await page.navigate(url);await page.waitFor('document.querySelector("#data-folder-status").textContent==="폴더 저장 완료"');assert.equal(await page.evaluate('document.querySelector("#dialog").open'),false);assert.equal(await page.evaluate('window.firstRunPickerCalls'),0);
+    unsupported=await launchChrome({firstRun:true});await unsupported.page.send('Page.addScriptToEvaluateOnNewDocument',{source:'window.showDirectoryPicker=undefined;'});await unsupported.page.navigate(url);await unsupported.page.waitFor(welcome);
+    assert.equal(await unsupported.page.evaluate('!!document.querySelector("#select-storage-folder")'),false);assert.match(await unsupported.page.evaluate('document.querySelector(".folder-welcome-unsupported").textContent'),/Chrome.*Edge/);await writeFile(join(root,'test-results/pages-only-first-run-unsupported.png'),await unsupported.page.screenshot());await unsupported.page.click('#folder-welcome-later');await unsupported.page.waitFor('!document.querySelector("#dialog").open');
+    assert.deepEqual(chrome.errors,[]);assert.deepEqual(unsupported.errors,[]);
+  }catch(error){if(chrome){await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/pages-only-first-run-failure.png'),await chrome.page.screenshot());await writeFile(join(root,'test-results/pages-only-first-run-failure.json'),JSON.stringify({message:error.message,state:await chrome.page.evaluate('({dialog:document.querySelector("#dialog")?.outerHTML,status:document.querySelector("#data-folder-summary")?.textContent})')},null,2));}throw error;}
+  finally{await unsupported?.close();await chrome?.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
+});
+
 test('real Chrome: Pages-only data folder copies imported originals and restores all data on a fresh device',{timeout:150000},async()=>{
   await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-data-folder-'));await cp(join(root,'public'),folder,{recursive:true});
   const server=createServer(folder);let sender,recipient;

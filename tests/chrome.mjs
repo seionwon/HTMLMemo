@@ -18,7 +18,7 @@ export class CDP {
   async screenshot(){const result=await this.send('Page.captureScreenshot',{format:'png'});return Buffer.from(result.data,'base64');}
   async close(){this.socket.close();for(const pending of this.pending.values()){clearTimeout(pending.timer);pending.reject(new Error('CDP closed'));}this.pending.clear();}
 }
-export async function launchChrome(){
+export async function launchChrome({firstRun=false}={}){
   if(process.platform==='darwin'&&(process.env.CODEX_SANDBOX==='seatbelt'||process.env.CODEMEMO_BROWSER_AUTOMATION==='unavailable'))
     throw new Error('Browser verification is unavailable in the macOS agent sandbox. Run in CI or a trusted verification environment; do not retry desktop Chrome.');
   const paths=[process.env.CHROME_PATH,'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome','/usr/bin/google-chrome','/usr/bin/chromium','/usr/bin/chromium-browser'].filter(Boolean);let executable;
@@ -33,6 +33,9 @@ export async function launchChrome(){
   catch(error){child.kill();await rm(profile,{recursive:true,force:true}).catch(()=>{});throw error;}
   const debugURL='http://'+new URL(endpoint).host;
   const targets=await fetch(debugURL+'/json/list').then(response=>response.json());const page=await CDP.connect(targets.find(t=>t.type==='page').webSocketDebuggerUrl);await page.send('Page.enable');await page.send('Runtime.enable');
+  // Keep routine reader tests independent from onboarding. The first-run test
+  // explicitly opts into an untouched profile and exercises the real welcome.
+  if(!firstRun)await page.send('Page.addScriptToEvaluateOnNewDocument',{source:"try{localStorage.setItem('htmlmemo-data-folder-welcome-v1','1')}catch{}"});
   const errors=[];page.on('Runtime.exceptionThrown',e=>errors.push(e.exceptionDetails.exception?.description||e.exceptionDetails.text));
   return {page,errors,process:child,profile,async close(){await page.close();child.kill('SIGTERM');await Promise.race([new Promise(resolve=>child.once('exit',resolve)),delay(5000)]);if(child.exitCode===null)child.kill('SIGKILL');await rm(profile,{recursive:true,force:true,maxRetries:5,retryDelay:100});}};
 }
