@@ -502,7 +502,7 @@ function focusBrowserTab(tab){
 function resumeBrowser(){
   if(document.hidden||!lastWebTab?.away||!tabs.includes(lastWebTab))return;
   lastWebTab.away=false;lastWebTab.returned=true;renderBrowserState(lastWebTab);
-  if(reader())toast('읽던 문서로 돌아왔습니다. 복사한 글은 메뉴 → 텍스트 붙여넣기로 가져오세요.');
+  if(reader())toast('읽던 문서로 돌아왔습니다. 복사한 글은 내 서재 → 텍스트 붙여넣기로 가져오세요.');
 }
 function renderExternalTab(tab){
   const search=isWebSearch(tab.url);

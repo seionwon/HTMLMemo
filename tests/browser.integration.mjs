@@ -713,8 +713,9 @@ test('real Chrome: Pages-only URL use, safe text import, app tabs and optional i
     // Obsolete extension messages must not import a page or alter navigation.
     await page.evaluate('postMessage({channel:"htmlmemo-extension-ready"},"*");postMessage({channel:"htmlmemo-extension-capture",capture:{title:"Unrequested page",html:"<p>ignored</p>"}},"*");window.pickerCalls=0;window.showSaveFilePicker=async()=>{pickerCalls++;throw Error("No picker is needed for library import");};');
     await page.click('#library-tab');await page.click('#paste-button');
+    assert.equal(await page.evaluate('document.querySelector("#paste-source").value'),'','a same-origin preview does not invent an external browsing context');
     const text='기억할 문장과 함께 읽습니다.\n둘째 줄을 유지합니다.\n\n<script>window.pastedExecuted=true</script>';
-    await page.evaluate(`document.querySelector('#paste-title').value='URL만으로 보관한 글';document.querySelector('#paste-text').value=${JSON.stringify(text)};`);
+    await page.evaluate(`document.querySelector('#paste-title').value='URL만으로 보관한 글';document.querySelector('#paste-source').value=${JSON.stringify(exampleURL)};document.querySelector('#paste-text').value=${JSON.stringify(text)};`);
     await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/pages-only-desktop.png'),await page.screenshot());
     await page.send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
     await writeFile(join(root,'test-results/pages-only-mobile.png'),await page.screenshot());

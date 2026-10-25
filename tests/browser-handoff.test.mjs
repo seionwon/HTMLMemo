@@ -55,6 +55,7 @@ test('searching from a document and returning keep the active reader, metadata a
  const a=app(),local={id:'local',type:'document',title:'책',host:a.doc.createElement('div'),reader:{metadata:{annotations:[{id:'existing'}]}}};a.context.tabs.push(local);a.context.activeId='local';
  const before=structuredClone(local.reader.metadata),tab=await a.context.openBrowser('책 검색');assert.equal(a.context.activeId,'local');
  a.context.resumeBrowser();assert.equal(a.opened.length,1);assert.equal(a.context.activeId,'local');assert.deepEqual(local.reader.metadata,before);assert.equal(tab.returned,true);assert.equal(a.context.webContext(),tab);
+ assert.match(a.notices.at(-1),/내 서재 → 텍스트 붙여넣기/);assert.doesNotMatch(a.notices.at(-1),/메뉴 →/);
  await a.context.selectTab('local');assert.equal(a.opened.length,1);
 });
 test('same-origin app preview still captures live content without a picker or remote browser tab',async()=>{
