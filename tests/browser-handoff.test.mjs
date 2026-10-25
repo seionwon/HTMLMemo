@@ -29,6 +29,7 @@ test('search and external URLs open a browser tab synchronously and never create
  const a=app(),pending=a.context.openBrowser('한글 검색');assert.equal(a.opened.length,1);const tab=await pending;
  assert.equal(tab.external,true);assert.equal(tab.frame,undefined);assert.equal(tab.host.querySelector('iframe'),null);assert.equal(a.opened[0].opener,null);assert.match(a.opened[0].location.href,/google.com\/search\?q=/);
  assert.equal(a.direct,0);assert.equal(a.captures,0);assert.match(tab.host.textContent,/검색은 Chrome/);assert.equal(tab.host.querySelector('[data-capture]').disabled,true);
+ const guide=tab.host.querySelector('[data-single-file-guide]');assert.equal(guide.querySelector('strong').textContent,'Webpage, Single File');assert.match(guide.textContent,/웹페이지, 단일 파일 · \.mhtml/);assert.ok(tab.host.querySelector('[data-browser-import]'));
 });
 test('same URL and web tab selection focus an existing browser tab without reloading its current result',async()=>{
  const a=app(),tab=await a.context.openBrowser('https://source.example/first');a.opened[0].location.href='https://source.example/result';

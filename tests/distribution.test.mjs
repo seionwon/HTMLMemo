@@ -96,7 +96,7 @@ test('MHTML import filters, installed file handlers and offline packaging includ
   assert.deepEqual(Array.from(options.types[0].accept['multipart/related']),['.mhtml','.mht']);assert.equal(options.multiple,true);
   for(const suffix of ['.html','.htm','.mhtml','.mht'])assert.ok(app.doc.querySelector('#file-input').getAttribute('accept').split(',').includes(suffix));
   const files=webFiles(assets),manifest=JSON.parse(text(files,'manifest.webmanifest'));assert.deepEqual(manifest.file_handlers[0].accept['multipart/related'],['.mhtml','.mht']);assert.ok(files.has('src/mhtml.js'));assert.match(text(files,'sw.js'),/\.\/src\/mhtml\.js/);
-  assert.match(text(files,'src/app.js'),/외부 사이트는 이 앱을 연 브라우저의 일반 탭에서 엽니다\.<br>웹 페이지를 하나의 파일로 저장한 다음, HTMLMemo에서 열면 됩니다\./);assert.doesNotMatch(text(files,'src/app.js'),/HTMLMemo 안에 넣지 않아 연결 거부 화면이 나오지 않습니다\./);
+  assert.match(text(files,'src/app.js'),/외부 사이트는 이 앱을 연 브라우저의 일반 탭에서 엽니다\.<br>브라우저의 페이지 저장에서 <strong>Webpage, Single File<\/strong>/);assert.doesNotMatch(text(files,'src/app.js'),/HTMLMemo 안에 넣지 않아 연결 거부 화면이 나오지 않습니다\./);
 });
 test('clipboard absence or denial selects the visible URL and restores the share controls',async()=>{
   for(const navigator of [{},{clipboard:{writeText:async()=>{throw new Error('Clipboard denied');}}}]){
@@ -267,11 +267,19 @@ test('library text paste is a single ordinary action that opens the editor and c
 
 test('library web import guide opens the existing help and retains import, paste and saved notes',async()=>{
   const record={id:'kept-guide',title:'기존 문서',name:'kept.html',created:1234,modified:5678,metadata:{annotations:[{id:'note',text:'보존할 주석'}],bookmarks:[{id:'mark'}]}},before=structuredClone(record),{doc}=await fileApp({documents:[record]});
-  const guide=doc.querySelector('#library #web-help-button');assert.ok(guide);assert.equal(doc.querySelectorAll('#web-help-button').length,1);assert.equal(guide.getAttribute('role'),null);assert.equal(guide.getAttribute('aria-haspopup'),'dialog');assert.equal(guide.textContent,'웹페이지 가져오기 안내');assert.ok(guide.previousElementSibling.classList.contains('hero'));
+  const guide=doc.querySelector('#library #web-help-button');assert.ok(guide);assert.equal(doc.querySelectorAll('#web-help-button').length,1);assert.equal(guide.getAttribute('role'),null);assert.equal(guide.getAttribute('aria-haspopup'),'dialog');assert.equal(guide.textContent,'웹페이지 가져오기 안내');assert.ok(guide.closest('.library-import-help').previousElementSibling.classList.contains('hero'));
   guide.onclick();assert.equal(doc.querySelector('#dialog').open,true);assert.equal(doc.querySelector('#dialog h2').textContent,'Chrome에서 탐색하고 여기서 메모하기');assert.ok(doc.querySelector('#web-help-import'));assert.ok(doc.querySelector('#web-help-paste'));
   doc.querySelector('#web-help-paste').onclick();assert.ok(doc.querySelector('#paste-form'));doc.querySelector('#dialog .dialog-actions [data-dialog-close]').onclick();
   let picked=0;doc.querySelector('#file-input').click=()=>picked++;guide.onclick();doc.querySelector('#web-help-import').onclick();await new Promise(resolve=>setImmediate(resolve));
   assert.equal(picked,1);assert.equal(doc.querySelector('#dialog').open,false);assert.equal(doc.querySelector('#library').hidden,false);assert.equal(doc.querySelectorAll('.document-card').length,1);assert.deepEqual(record,before);
+});
+
+test('single-file save guidance is visible at import and in the library, settings and execution help without restricting HTML files',async()=>{
+  const initial=new DOMParser().parseFromString(assets.app['index.html'].text,'text/html'),app=await fileApp(),doc=app.doc;
+  const check=node=>{assert.ok(node);assert.equal(node.querySelector('strong').textContent,'Webpage, Single File');assert.match(node.textContent,/브라우저.*저장/);assert.match(node.textContent,/웹페이지, 단일 파일 · \.mhtml/);};
+  for(const view of [initial,doc]){check(view.querySelector('#library [data-single-file-guide]'));assert.equal(view.querySelector('#hero-import').getAttribute('aria-describedby'),'single-file-notice');assert.ok(view.querySelector('#file-input').getAttribute('accept').includes('.html'));}
+  const openers=[()=>doc.querySelector('#web-help-button').onclick(),()=>{doc.querySelector('#settings-button').onclick();doc.querySelector('#settings-web').onclick();},()=>{openExecution(app);doc.querySelector('#execution-web').onclick();}];
+  for(const open of openers){open();check(doc.querySelector('#dialog [data-single-file-guide]'));assert.match(doc.querySelector('#dialog').textContent,/이미 가진 HTML 파일은 그대로 가져올 수 있습니다\./);assert.ok(doc.querySelector('#web-help-import'));assert.ok(doc.querySelector('#web-help-paste'));}
 });
 
 test('card and list views sort by both directions for saved date, modified date and title, and restore the selection',async()=>{

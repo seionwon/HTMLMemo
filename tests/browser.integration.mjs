@@ -702,6 +702,18 @@ test('real Chrome: Pages-only URL use, safe text import, app tabs and optional i
     await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
     await page.navigate(url);await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
     assert.equal(await page.evaluate('!!document.querySelector(\'meta[name="htmlmemo-app"],#connection-button,#execution-chrome\')'),false);
+    for(const width of [1280,390,320]){
+      await page.send('Emulation.setDeviceMetricsOverride',{width,height:width===1280?900:844,deviceScaleFactor:1,mobile:width<600});
+      const guide=await page.evaluate('(()=>{const p=document.querySelector("#single-file-notice"),r=p.getBoundingClientRect();return {format:p.querySelector("strong").textContent,text:p.textContent,described:document.querySelector("#hero-import").getAttribute("aria-describedby"),fits:r.width>0&&r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight,overflow:document.documentElement.scrollWidth>innerWidth};})()');
+      assert.equal(guide.format,'Webpage, Single File');assert.match(guide.text,/웹페이지, 단일 파일 · \.mhtml/);assert.equal(guide.described,'single-file-notice');assert.equal(guide.fits,true);assert.equal(guide.overflow,false);
+      await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,`test-results/pages-only-single-file-library-${width}.png`),await page.screenshot());
+      await page.click('#web-help-button');await page.waitFor('document.querySelector("#dialog").open&&!!document.querySelector("#dialog [data-single-file-guide]")');
+      assert.equal(await page.evaluate('document.querySelector("#dialog [data-single-file-guide] strong").textContent'),'Webpage, Single File');
+      assert.match(await page.evaluate('document.querySelector("#dialog").textContent'),/이미 가진 HTML 파일은 그대로 가져올 수 있습니다\./);
+      assert.equal(await page.evaluate('(()=>{const d=document.querySelector("#dialog"),r=d.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight&&d.scrollWidth<=d.clientWidth;})()'),true);
+      await writeFile(join(root,`test-results/pages-only-single-file-help-${width}.png`),await page.screenshot());await page.click('#dialog [data-dialog-close]');
+    }
+    await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
     await clickSettingsAction(page,'#settings-execution');
     assert.equal(await page.evaluate('document.querySelector("#install-button")'),null);
     assert.equal(await page.evaluate('document.querySelectorAll("#execution-install").length'),1);
@@ -795,7 +807,7 @@ test('real Chrome: Chrome companion search has no iframe, preserves the reader a
     await page.waitFor('document.querySelector("#dialog").open&&!!document.querySelector("#paste-source")');assert.equal(await page.evaluate('document.querySelector("#paste-source").value'),'');
     await page.click('#dialog [data-dialog-close]');
     await page.click('.tab.browser .tab-select');await page.send('Page.bringToFront');await page.waitFor('!document.querySelector(".browser-host").hidden');
-    assert.equal(await page.evaluate('document.querySelector(".handoff-heading > p:last-child").innerText'),'외부 사이트는 이 앱을 연 브라우저의 일반 탭에서 엽니다.\n웹 페이지를 하나의 파일로 저장한 다음, HTMLMemo에서 열면 됩니다.');
+    assert.equal(await page.evaluate('document.querySelector(".handoff-heading > p:last-child").innerText'),'외부 사이트는 이 앱을 연 브라우저의 일반 탭에서 엽니다.\n브라우저의 페이지 저장에서 Webpage, Single File(웹페이지, 단일 파일 · .mhtml) 형식을 선택한 다음, HTMLMemo에서 여세요.');
     assert.equal(await page.evaluate('document.querySelector(".browser-host").textContent.includes("HTMLMemo 안에 넣지 않아 연결 거부 화면이 나오지 않습니다.")'),false);
     assert.equal(await page.evaluate('document.querySelector(".browser-host").textContent.includes("돌아오면 읽던 문서에서 계속 작업할 수 있습니다.")'),false);
     assert.ok(['브라우저 탭으로 보냈습니다.','복사한 글을 붙여넣거나 저장한 HTML을 가져오세요.'].includes(await page.evaluate('document.querySelector(".browser-host [data-web-status]").textContent')));
