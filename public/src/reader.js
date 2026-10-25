@@ -1129,6 +1129,7 @@ export class Reader {
     if (persist) {
       if (resizer) resizer.setAttribute('aria-valuenow', String(width));
       try { this.storage()?.setItem(TOC_WIDTH_KEY, String(width)); } catch { /* ignore */ }
+      this.callbacks.onPreferenceChange?.();
       if (this.metadata?.view) this.metadata.view.tocWidth = width;
     }
     return width;

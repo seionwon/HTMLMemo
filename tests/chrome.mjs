@@ -41,7 +41,10 @@ export async function launchChrome(){
 export async function clickSettingsAction(page,selector){
   if(!await page.evaluate('document.querySelector("#dialog").open&&!!document.querySelector("#appearance")'))await page.click('#settings-button');
   await page.waitFor('document.querySelector("#dialog").open&&!!document.querySelector("#settings-execution")');
-  if(selector!=='#settings-button')await page.click(selector);
+  if(selector!=='#settings-button'){
+    if(['#settings-save','#settings-load','#settings-reload'].includes(selector))await page.evaluate(`document.querySelector(${JSON.stringify(selector)}).closest('details').open=true`);
+    await page.click(selector);
+  }
 }
 
 export async function clickLibraryImport(page){

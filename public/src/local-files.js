@@ -87,7 +87,7 @@ export async function readLocalHTML(input, {native = false, allowScripts = false
   const sourceIdentity=identify?await localFileIdentity(file):null;
   if(isMHTML(file)){
     const snapshot=await readMHTML(file);
-    const local={snapshot:{...snapshot,file:null,title:file.name},name:file.name,handle:null,originalHandle,sourceIdentity,diskStamp:originalHandle?{modified:file.lastModified,size:file.size}:null};
+    const local={snapshot:{...snapshot,file:null,title:file.name},name:file.name,handle:null,originalHandle,originalFile:file,sourceIdentity,diskStamp:originalHandle?{modified:file.lastModified,size:file.size}:null};
     localSources.set(local,file);return local;
   }
   // Inspect only the encoding header. Blob slices retain the original file bytes;
@@ -129,7 +129,7 @@ export async function readLocalHTML(input, {native = false, allowScripts = false
   // files still become local document tabs with a recoverable internal copy.
   const local={
     snapshot:{html,file:nativeFile,title:file.name,allowScripts}, name:file.name, handle:null,
-    originalHandle, sourceIdentity, diskStamp:originalHandle ? {modified:file.lastModified,size:file.size} : null,
+    originalHandle, originalFile:file, sourceIdentity, diskStamp:originalHandle ? {modified:file.lastModified,size:file.size} : null,
   };
   localSources.set(local,file);
   if(legacyNativeFile)nativeLegacyCopies.set(local,legacyNativeFile);

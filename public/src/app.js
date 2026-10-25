@@ -10,9 +10,11 @@ import { normalizePreferences, loadPreferences, storePreferences, serializeSetti
 import {bundledExample} from './distribution.js';
 import { InstallController, isIOS, installableLocation, installationURL, PUBLIC_APP_URL } from './install.js';
 import { APP_VERSION } from './version.js';
+import { DataFolder } from './data-folder.js';
 
 let records = []; const tabs = []; let activeId = 'library'; let folder = null; let popoverName = ''; let sidebarMode = '';
 let preferences=normalizePreferences(), settingsFileHandle=null, settingsFolderHint='';
+let dataFolder;
 let sharingApp=false, installController;
 let readerFocused=false, nativeReaderFullscreen=false, focusBusy=false;
 let tabLayout='';
@@ -78,13 +80,13 @@ function pasteTextDialog(tab=webContext()){
     $('#paste-form').onsubmit=safely(async event=>{
       event.preventDefault();if($('#paste-save').disabled)return;
       const snapshot=pastedPage({text:$('#paste-text').value,title:$('#paste-title').value,url:$('#paste-source').value.trim()}),button=$('#paste-save');button.disabled=true;
-      try{const saved=await createDocument(snapshot,await folderFile(snapshot.title));$('#dialog').close();if(!saved?.queue?.error)toast('붙여넣은 글을 서재에 저장했습니다.');}finally{button.disabled=false;}
+      try{const saved=await createDocument(snapshot);$('#dialog').close();if(!saved?.queue?.error)toast('붙여넣은 글을 서재에 저장했습니다.');}finally{button.disabled=false;}
     });
     requestAnimationFrame(()=>$('#paste-text')?.focus());
   });
 }
 function settingsDialog() {
-  modal(`<div class="dialog-heading"><h2>HTMLMemo 설정</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><div class="settings-app-actions" role="group" aria-label="앱 실행과 정보"><button id="settings-execution" class="secondary-button" type="button">${icon('external',15)} 실행과 앱 전달</button><button id="settings-about" class="secondary-button" type="button" aria-haspopup="dialog">${icon('info',15)} About</button></div><p class="local-only-note">${icon('check',15)} 모든 문서·주석·설정은 이 기기에만 저장됩니다.</p><div class="setting-row"><div><strong>자동 저장 폴더</strong><p>${folder?esc(folder.name):settingsFolderHint?'백업 폴더: '+esc(settingsFolderHint)+' · 다시 연결해주세요.':'앱 내부에 HTML 파일로 보관 중'}</p></div><button id="settings-folder" class="secondary-button">${folder?'변경':'폴더 연결'}</button></div><p class="dialog-description small">폴더 권한은 설정 파일로 옮길 수 없어 새 기기에서 한 번 연결해야 합니다.</p><div class="setting-row"><div><strong>화면 테마</strong><p>서재와 도구의 밝기를 선택하세요.</p></div><select id="appearance"><option value="light">밝게</option><option value="dark">어둡게</option><option value="system">시스템</option></select></div><div class="setting-row"><div><strong>툴바 위치</strong><p>옮긴 위치도 설정 파일에 보관합니다.</p></div><button id="reset-toolbar-position" class="secondary-button">가운데로</button></div><div class="settings-backup"><h3>설정 파일</h3><p class="dialog-description small">테마·정렬 기준과 방향·주석 색상·굵기·투명도·표시 시간·툴바 위치를 JSON 파일로 저장하고 다시 불러옵니다.</p><p id="settings-file-name" class="settings-file-name">${settingsFileHandle?esc(settingsFileHandle.name):'연결한 설정 파일이 없습니다.'}</p><div class="settings-file-actions"><button id="settings-save" class="secondary-button">${icon('save',15)} 설정 파일 저장</button><button id="settings-load" class="secondary-button">${icon('folder',15)} 설정 파일 불러오기</button><button id="settings-reload" class="secondary-button" ${settingsFileHandle?'':'disabled'}>${icon('reload',15)} 다시 불러오기</button></div></div><div class="setting-row"><div><strong>웹페이지 가져오기</strong><p>추가 설치 없이 사용하는 방법과 사이트 제한</p></div><button id="settings-web" class="secondary-button">사용 안내</button></div><div class="setting-row"><div><strong>기기 보관함 유지</strong><p>브라우저의 자동 공간 정리에서 보호 요청</p></div><button id="persist-storage" class="secondary-button">보관 유지</button></div><p class="dialog-description small">앱 데이터 삭제 시 내부 보관함도 지워집니다. 중요한 문서는 HTML 파일로 내보내주세요.</p>`,()=>{
+  modal(`<div class="dialog-heading"><h2>HTMLMemo 설정</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><div class="settings-app-actions" role="group" aria-label="앱 실행과 정보"><button id="settings-execution" class="secondary-button" type="button">${icon('external',15)} 실행과 앱 전달</button><button id="settings-about" class="secondary-button" type="button" aria-haspopup="dialog">${icon('info',15)} About</button></div><p class="local-only-note">${icon('check',15)} 문서·주석·설정은 기기에 저장하며 서버로 보내지 않습니다.</p><div class="setting-row"><div><strong>데이터 폴더</strong><p id="settings-folder-status">${esc(folderStatusText())}</p></div><button id="settings-folder" class="secondary-button">${folder?'관리':'폴더 연결'}</button></div>${dataFolderGuide()}<div class="setting-row"><div><strong>화면 테마</strong><p>서재와 도구의 밝기를 선택하세요.</p></div><select id="appearance"><option value="light">밝게</option><option value="dark">어둡게</option><option value="system">시스템</option></select></div><div class="setting-row"><div><strong>툴바 위치</strong><p>옮긴 위치도 데이터 폴더에 자동 저장합니다.</p></div><button id="reset-toolbar-position" class="secondary-button">가운데로</button></div><details class="settings-backup"><summary>이전 설정 JSON 파일 사용 (선택 사항)</summary><p class="dialog-description small">데이터 폴더를 연결했다면 설정 파일을 따로 저장하거나 불러올 필요가 없습니다. 예전에 저장한 설정 JSON을 옮길 때만 사용하세요.</p><p id="settings-file-name" class="settings-file-name">${settingsFileHandle?esc(settingsFileHandle.name):'연결한 설정 파일이 없습니다.'}</p><div class="settings-file-actions"><button id="settings-save" class="secondary-button">${icon('save',15)} 설정 파일 저장</button><button id="settings-load" class="secondary-button">${icon('folder',15)} 설정 파일 불러오기</button><button id="settings-reload" class="secondary-button" ${settingsFileHandle?'':'disabled'}>${icon('reload',15)} 다시 불러오기</button></div></details><div class="setting-row"><div><strong>웹페이지 가져오기</strong><p>추가 설치 없이 사용하는 방법과 사이트 제한</p></div><button id="settings-web" class="secondary-button">사용 안내</button></div><div class="setting-row"><div><strong>기기 보관함 유지</strong><p>브라우저의 자동 공간 정리에서 보호 요청</p></div><button id="persist-storage" class="secondary-button">보관 유지</button></div><p class="dialog-description small">브라우저 데이터가 삭제돼도 전용 폴더의 파일은 남습니다. 폴더를 다시 선택하면 복원됩니다. 폴더 자체 삭제·기기 고장까지 막는 것은 아니므로 중요한 데이터는 폴더 전체를 다른 저장장치에도 복사하세요.</p>`,()=>{
     $('#settings-execution').onclick=()=>{$('#dialog').close();activate('execution');$('#execution h1').focus({preventScroll:true});};$('#settings-about').onclick=aboutDialog;
     $('#settings-folder').onclick=safely(()=>chooseFolder({onConnected:settingsDialog}));$('#settings-web').onclick=()=>webHelpDialog();
     $('#appearance').value=preferences.theme; $('#appearance').onchange=safely(e=>changePreferences({theme:e.target.value}));
@@ -95,7 +97,7 @@ function settingsDialog() {
 }
 function applyTheme(theme) { document.documentElement.dataset.theme=theme==='system'?(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light'):theme;for(const tab of tabs)if(tab.reader?.documentSidebarUI)styleNativeSidebar(tab.reader.documentSidebarUI); }
 function applyToolbarPosition(){const bar=$('#toolbar'),p=preferences.toolbarPosition;if(!p){bar.style.left='50%';bar.style.top='';bar.style.bottom='';bar.style.transform='';return;}bar.style.transform='none';bar.style.bottom='auto';bar.style.left=(8+p.x*Math.max(0,innerWidth-bar.offsetWidth-16))+'px';bar.style.top=(8+p.y*Math.max(0,innerHeight-bar.offsetHeight-42))+'px';}
-function changePreferences(patch){preferences=storePreferences({...preferences,...patch,annotation:{...preferences.annotation,...patch.annotation}},localStorage);applyTheme(preferences.theme);$('#library-sort').value=preferences.librarySort+':'+preferences.librarySortDirection;for(const tab of tabs)if(tab.reader)Object.assign(tab.reader,preferences.annotation);applyToolbarPosition();renderLibrary();if(reader())updateToolbarState();}
+function changePreferences(patch){preferences=storePreferences({...preferences,...patch,annotation:{...preferences.annotation,...patch.annotation}},localStorage);dataFolder?.schedule({settingsOnly:true});applyTheme(preferences.theme);$('#library-sort').value=preferences.librarySort+':'+preferences.librarySortDirection;for(const tab of tabs)if(tab.reader)Object.assign(tab.reader,preferences.annotation);applyToolbarPosition();renderLibrary();if(reader())updateToolbarState();}
 async function restoreSettings(input){
   if(input?.kind==='file'&&input.queryPermission){const options={mode:'read'};if(await input.queryPermission(options)!=='granted'&&await input.requestPermission(options)!=='granted')throw new Error('설정 파일 읽기 권한이 필요합니다. 파일을 다시 선택해주세요.');}
   const backup=await readSettingsFile(input);changePreferences(backup.preferences);settingsFolderHint=backup.folderName;await setSetting('settings-folder-hint',settingsFolderHint);
@@ -133,6 +135,7 @@ function renderLibrary() {
   $$('[data-open]').forEach(button=>button.onclick=safely(()=>openRecord(records.find(r=>r.id===button.dataset.open))));
   $$('[data-card-menu]').forEach(button=>button.onclick=()=>documentMenu(records.find(r=>r.id===button.dataset.cardMenu)));
   if(activeId==='library')$('#status-left').textContent=`${records.length}개의 문서 · ${folder?folder.name+' 자동 저장':'이 기기에 보관'}`;
+  renderFolderState();
 }
 function renderTabs() {
   const container=$('#tabs'),nodes=new Map($$('[data-tab]',container).map(el=>[el.dataset.tab,el]));
@@ -248,14 +251,15 @@ async function openRecord(record, prepared = null, {deferReady = false, sourceId
     tab.record.html=html;tab.record.metadata=metadata;tab.record.title=metadata.title;tab.record.modified=Date.now();
     await saveDocumentHTML(tab.record, html, {revision:tab.restoredFrom?{restoredFrom:tab.restoredFrom}:undefined});
     tab.restoredFrom=null;
-    const {html:body,file:sourceFile,...summary}=tab.record;
+    const {html:body,file:sourceFile,originalFile,...summary}=tab.record;
     records=records.filter(r=>r.id!==record.id).concat(summary);
-    delete tab.record.html;delete tab.record.file;
-  },()=>{if(activeId===tab.id)saveStatus(tab);renderTabs();});
+    delete tab.record.html;delete tab.record.file;delete tab.record.originalFile;
+  },()=>{if(activeId===tab.id)saveStatus(tab);renderTabs();renderFolderState();});
   tabs.push(tab);activate(tab.id);
   tab.reader=new Reader(tab.host,parsed,{
     onChange:()=>{tab.queue.schedule();if(activeId===tab.id){renderToolbar();if(['annotations','bookmarks'].includes(sidebarMode))renderSidebar(sidebarMode);else updateSidebarCounts($('#sidebar'),tab.reader);tab.reader?.refreshDocumentSidebar();}},
     onPosition:()=>{tab.queue.schedule({background:true});},onView:()=>{if(activeId===tab.id){updateChrome();updateToolbarState();}},
+    onPreferenceChange:()=>dataFolder?.schedule({settingsOnly:true}),
     onTextSelection:()=>{if(activeId===tab.id)showSelectionMenu(tab.reader);},
     onSelectionDismiss:()=>{if(popoverName==='selection'||popoverName.startsWith('tool-mode-'))closePopover();},
     onLink:url=>safely(openBrowser)(url),onKey:handleKey,requestText:promptText,onError:showError,onNotice:message=>toast(message),
@@ -278,9 +282,9 @@ async function openRecord(record, prepared = null, {deferReady = false, sourceId
   renderToolbar();
   updateChrome();
   // Preserve the imported/current annotation baseline before the first new edit.
-  try{const saved=await putDocumentRevision({...tab.record,metadata:baselineMetadata},{baseline:true});tab.record.byteSize=saved.byteSize;delete tab.record.html;delete tab.record.file;}
+  try{const saved=await putDocumentRevision({...tab.record,metadata:baselineMetadata},{baseline:true});tab.record.byteSize=saved.byteSize;delete tab.record.html;delete tab.record.file;delete tab.record.originalFile;}
   catch(error){tab.queue.schedule();try{await tab.queue.flush();}catch{showError(error);}}
-  record.html=null;record.file=null;parsed.html=null;parsed.file=null;
+  record.html=null;record.file=null;record.originalFile=null;parsed.html=null;parsed.file=null;
   if(!deferReady){tab.opening=false;renderTabs();if(activeId===tab.id)updateChrome();}
   return tab;
 }
@@ -326,16 +330,16 @@ async function createDocument(snapshot, handle = null, name = null, local = {}) 
   const parsed=snapshot.file ? {...parseHTML('<html><head></head><body></body></html>',{title:snapshot.title,execution:{allowScripts:!!snapshot.allowScripts}}),file:snapshot.file,nativeScroll:true,freshAnnotations:!!local.freshAnnotations} : parseHTML(snapshot.html,{title:snapshot.title,source:snapshot.url,viewport:snapshot.viewport,warnings:snapshot.warnings},{includeMetadata:true,allowScripts:snapshot.allowScripts,freshAnnotations:!!local.freshAnnotations});
   const title=parsed.metadata.title; const record={id:uid(),title,name:name||handle?.name||filename(title),source:parsed.metadata.source,created:Date.now(),modified:Date.now(),fileHandle:handle,originalHandle:local.originalHandle||null,metadata:parsed.metadata};
   if(snapshot.file)record.file=snapshot.file;else record.html=parsed.html;
+  if(local.originalFile)record.originalFile=local.originalFile;
   if(local.sourceIdentity)record.sourceIdentity=local.sourceIdentity;
   if(local.diskStamp)record.diskStamp=local.diskStamp;
   else if(handle){const disk=await handle.getFile();record.diskStamp={modified:disk.lastModified,size:disk.size};}
-  const {html:body,file:sourceFile,...summary}=record;records=records.filter(r=>r.id!==record.id).concat(summary);let tab;
+  const {html:body,file:sourceFile,originalFile,...summary}=record;records=records.filter(r=>r.id!==record.id).concat(summary);let tab;
   try{tab=await openRecord(record,parsed,{deferReady:true,sourceIdentity:identity});}catch(error){records=records.filter(r=>r.id!==record.id);renderLibrary();throw error;}
   if(tab.closing || !tabs.includes(tab)){tab.opening=false;return tab;}
   tab.queue.schedule();
   try { await tab.queue.flush(); } catch(error) { showError(error); }
   if(tab.closing || !tabs.includes(tab)){tab.opening=false;return tab;}
-  if(handle && !local.originalHandle && !tab.queue.error && tab.reader.bookIntegrity?.complete !== false)await writeExternalHTML(tab.record,tab.reader.html());
   tab.opening=false;renderLibrary();activate(tab.id);
   if(tab.queue.error)return tab;
   if(tab.reader.bookIntegrity?.complete === false)toast(tab.reader.bookIntegrity.message, true);
@@ -343,34 +347,54 @@ async function createDocument(snapshot, handle = null, name = null, local = {}) 
   else toast(local.originalHandle||name?'로컬 HTML을 주석 탭에서 열었습니다.':'서재에 저장하고 주석 탭에서 열었습니다.');
   return tab;
 }
-function chooseFolder({onConnected} = {}) {
-  if(!window.showDirectoryPicker){toast('이 브라우저는 외부 폴더 연결을 지원하지 않습니다. 앱에 자동 저장되며 HTML 내보내기를 사용할 수 있어요.');return;}
-  modal(`<div class="dialog-heading"><h2>저장 폴더 연결</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><p class="dialog-description">문서나 다운로드 폴더 안의 <strong>HTMLMemo 전용 하위 폴더</strong>를 선택하세요.</p><p class="dialog-description"><code>문서/HTMLMemo</code> 또는 <code>다운로드/HTMLMemo</code><br>선택 창에서 HTMLMemo 폴더를 새로 만들거나 기존 하위 폴더를 선택하면 됩니다.</p><p class="dialog-description small">홈·문서·다운로드 폴더 전체와 시스템 폴더는 브라우저가 연결을 제한합니다. “Can't open this folder”가 나오면 전용 하위 폴더를 선택하세요.</p><p id="folder-connection-status" class="dialog-description" role="status">${folder?'현재 연결: '+esc(folder.name):'폴더를 연결하지 않아도 문서와 주석은 앱에 자동 저장됩니다.'}</p><div class="dialog-actions"><button class="secondary-button" data-dialog-close>닫기</button><button id="select-storage-folder" class="primary-button">폴더 선택</button></div>`,()=>{
-    const button=$('#select-storage-folder'),status=$('#folder-connection-status');
-    button.onclick=safely(async()=>{
-      if(button.disabled)return;
-      button.disabled=true;let selected;
-      try{
-        selected=await window.showDirectoryPicker({id:'htmlmemo-storage-v2',mode:'readwrite',startIn:folder||'documents'});
-        await setSetting('folder',selected);
-      }catch(error){
-        if(error?.name==='AbortError')status.textContent='폴더 연결은 변경하지 않았습니다. 연결하려면 전용 하위 폴더를 선택하세요.';
-        else if(selected)status.textContent='폴더 연결 정보를 저장하지 못했습니다. 기존 연결은 유지됩니다. 다시 시도해 주세요.';
-        else if(['NotAllowedError','SecurityError'].includes(error?.name))status.textContent='브라우저가 폴더 연결을 허용하지 않았습니다. 문서/HTMLMemo 같은 전용 하위 폴더를 선택하세요.';
-        else status.textContent='폴더를 연결하지 못했습니다. '+(error?.message||String(error));
-        return;
-      }finally{button.disabled=false;}
-      folder=selected;renderLibrary();$('#dialog').close();if(typeof onConnected==='function')onConnected();toast(folder.name+' 폴더에 새 문서를 자동 저장합니다.');
-    });
-  });
+function dataFolderGuide() {
+  return `<details class="export-guide" data-folder-guide><summary>전용 폴더 자동 저장과 새 기기로 옮기는 방법</summary><p>Documents(문서) 안에 <strong>이름을 정한 전용 하위 폴더 하나</strong>를 만들고 읽기·쓰기를 허용하세요. 예: <code>문서/HTMLMemo</code>. 브라우저 선택 창의 새 폴더 기능을 사용합니다.</p><p>연결하면 기존 서재와 앞으로 가져오는 모든 HTML·MHTML 문서의 복사본, 주석·북마크·주석 이력·읽기 위치·앱 설정을 자동 보관합니다. 원래 파일을 이동·삭제해도 보관한 문서는 열 수 있습니다. <strong>설정 파일을 따로 저장할 필요가 없습니다.</strong></p><p>평소에는 원본 복사본과 주석을 분리해 저장하며 원본에 새 주석을 합치지 않습니다. <strong>다른 사람에게 주석까지 보내려면 문서를 열고 상단의 HTML 내보내기로 .html 파일을 새로 저장한 뒤 그 파일을 보내세요.</strong> 원본 파일만 보내면 앱에서 추가한 주석은 전달되지 않습니다. 받는 분도 HTMLMemo의 HTML 파일 가져오기로 엽니다.</p><ol><li>새 기기로 옮기기 전에 <strong>폴더 자동 저장 완료</strong> 표시를 확인하고 앱을 닫습니다.</li><li><strong>전용 폴더 전체를 하위 폴더·파일 빠짐없이</strong> 새 기기의 Documents(문서) 폴더로 복사합니다. 일부 HTML만 옮기면 주석·설정이 빠집니다.</li><li>새 기기의 HTMLMemo에서 <strong>설정 → 데이터 폴더 → 폴더 연결</strong>로 옮긴 폴더를 선택하고 쓰기를 허용하면 모두 자동 복원됩니다.</li></ol><p>브라우저가 권한을 회수하거나 폴더를 옮겼다면 다시 연결해야 합니다. 권한·용량·저장 오류는 화면 아래와 서재에 계속 표시하며 변경은 앱에 남겨둡니다. 저장이 끝나기 전에 앱을 강제 종료하지 마세요. 서로 다른 기기의 동시 편집을 실시간 동기화하지는 않습니다.</p></details>`;
 }
-async function folderFile(title) {
-  if(!folder||!await permission(folder))return null;
-  const base=filename(title);let name=base;
-  for(let i=0;i<10000;i++) {
-    try {await folder.getFileHandle(name);name=base.slice(0,-5)+` (${i+1}).html`;}catch(error){if(error.name!=='NotFoundError')throw error;return folder.getFileHandle(name,{create:true});}
-  }
-  throw new Error('같은 이름의 파일이 너무 많습니다.');
+function folderStatusText() {
+  if(!folder)return '데이터 폴더 미연결 · 브라우저 데이터 삭제 시 잃을 수 있습니다.';
+  if(dataFolder?.state==='error')return '폴더 저장 중단 · '+folder.name+' · 다시 연결 필요';
+  if(tabs.some(t=>t.queue?.error))return '앱 저장 실패 · 폴더가 최신 상태가 아닙니다.';
+  if(dataFolder?.pending||tabs.some(t=>t.opening||t.queue?.pending))return '폴더 자동 저장 중… · '+folder.name;
+  return '폴더 자동 저장 완료 · '+folder.name;
+}
+function renderFolderState() {
+  const status=folderStatusText(),error=!!folder&&(dataFolder?.state==='error'||tabs.some(t=>t.queue?.error)),button=$('#data-folder-status'),summary=$('#data-folder-summary');
+  if(!button||!summary)return;
+  button.textContent=folder?(error?'폴더 저장 중단':dataFolder?.pending||tabs.some(t=>t.opening||t.queue?.pending)?'폴더 저장 중…':'폴더 저장 완료'):'폴더 미연결';
+  button.title=status;button.setAttribute('aria-label',status+' · 저장 위치 관리');button.classList.toggle('save-error',error||!!folder&&tabs.some(t=>t.queue?.error));
+  $('#data-folder-card').dataset.state=error?'error':folder?'connected':'unconnected';summary.textContent=status;
+  $('#data-folder-description').textContent=error?(dataFolder.failureMessage||'저장 오류를 확인하고 다시 시도해주세요. 폴더가 최신 상태가 아닐 수 있습니다.'):folder?'새 기기로 옮길 때는 전용 폴더 전체를 복사한 뒤 한 번 연결하세요. 문서·주석·설정이 자동 복원됩니다.':'Documents(문서) 안에 전용 폴더를 한 번 연결하세요. 기존 서재와 앞으로 가져오는 모든 문서·주석·설정을 자동 보관합니다.';
+  $('#library-data-folder').textContent=folder?'저장 위치 관리':'데이터 폴더 연결';
+  if($('#settings-folder-status'))$('#settings-folder-status').textContent=status;
+}
+async function flushInternalDocuments() { for(const tab of tabs)if(tab.reader){await tab.reader.ready;tab.reader.rememberPosition();await tab.queue.flush();} }
+async function connectDataFolder(selected,onConnected) {
+  await flushInternalDocuments();
+  await dataFolder.connect(selected);folder=dataFolder.handle;await refreshLibrary();
+  $('#dialog').close();if(typeof onConnected==='function')onConnected();toast('문서·주석·설정을 '+folder.name+' 폴더에 자동 저장했습니다. 새 기기로는 폴더 전체를 옮기세요.');
+}
+function chooseFolder({onConnected} = {}) {
+  if(!window.showDirectoryPicker){toast('이 브라우저는 외부 폴더 연결을 지원하지 않습니다. 최신 데스크톱 Chrome 또는 Edge에서 연결하세요. 현재 변경은 앱 내부에만 저장됩니다.',true);return;}
+  modal(`<div class="dialog-heading"><h2>저장 폴더 연결</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><p class="dialog-description">Documents(문서) 안의 <strong>HTMLMemo 전용 하위 폴더</strong>를 선택하세요. 선택 창에서 <strong>원하는 이름의 새 폴더</strong>를 만들 수 있습니다. 예: <code>문서/HTMLMemo</code>.</p><p class="dialog-description small">홈·문서·다운로드 폴더 전체와 시스템 폴더는 브라우저가 연결을 제한합니다. “Can't open this folder”가 나오면 전용 하위 폴더를 선택하세요. 읽기·쓰기 권한을 허용하며, “방문할 때마다 허용” 선택지가 있으면 선택하세요.</p><p class="dialog-description">기존 서재도 이곳에 복사하며 이후 가져오는 문서·주석·설정은 자동 저장합니다. <strong>옮겨 온 데이터 폴더를 선택하면 자동 복원</strong>합니다. 기존 문서와 충돌하는 복원본은 별도 사본으로 남겨 덮어쓰지 않습니다.</p><p class="dialog-description"><strong>새 기기로는 이 폴더 전체를 옮기세요.</strong> 설정 JSON을 별도로 저장할 필요가 없습니다. 모든 하위 파일을 함께 복사해야 합니다.</p>${dataFolderGuide()}<p id="folder-connection-status" class="dialog-description" role="status">${esc(folderStatusText())}</p><div class="dialog-actions"><button class="secondary-button" data-dialog-close>닫기</button>${folder?'<button id="resume-data-folder" class="secondary-button">다시 연결</button>':''}<button id="select-storage-folder" class="primary-button">${folder?'다른 폴더 선택':'폴더 선택'}</button></div>`,()=>{
+    const button=$('#select-storage-folder'),status=$('#folder-connection-status');
+    const connect=async(usePrevious=false)=>{
+      if(button.disabled)return;
+      button.disabled=true;const resume=$('#resume-data-folder');if(resume)resume.disabled=true;let selected;
+      try{
+        // The native picker/permission request must be the first operation in the user's click.
+        if(usePrevious){selected=folder;await selected.requestPermission?.({mode:'readwrite'});}
+        else selected=await window.showDirectoryPicker({id:'htmlmemo-storage-v2',mode:'readwrite',startIn:folder||'documents'});
+        status.textContent='문서·주석·설정을 복원하고 폴더에 저장하는 중… 앱을 닫지 마세요.';
+        await connectDataFolder(selected,onConnected);
+      }catch(error){
+        folder=dataFolder.handle||folder;renderFolderState();
+        if(error?.name==='AbortError')status.textContent='폴더 연결은 변경하지 않았습니다. 연결하려면 전용 하위 폴더를 선택하세요.';
+        else if(['NotAllowedError','SecurityError'].includes(error?.name))status.textContent='브라우저가 폴더 연결을 허용하지 않았습니다. 문서/HTMLMemo 같은 전용 하위 폴더를 선택하고 쓰기를 허용하세요.';
+        else status.textContent='폴더에 저장하지 못했습니다. 기존 문서는 유지됩니다. '+(error?.message||String(error));
+      }finally{button.disabled=false;if(resume)resume.disabled=false;}
+    };
+    button.onclick=safely(()=>connect());if($('#resume-data-folder'))$('#resume-data-folder').onclick=safely(()=>connect(true));
+  });
 }
 async function importFiles() {
   if(!openPicker()){$('#file-input').click();return;}
@@ -445,7 +469,7 @@ async function capturePage(tab) {
     }
     // The app's own library is sufficient. A file picker is only needed for
     // an explicit export; a previously chosen folder remains optional.
-    const saved=await createDocument(snapshot,await folderFile(snapshot.title));return !saved?.queue?.error;
+    const saved=await createDocument(snapshot);return !saved?.queue?.error;
   })();
   tab.capturing=saving;renderBrowserState(tab);if(active()===tab)updateChrome();
   try{return await saving;}finally{tab.capturing=null;renderBrowserState(tab);if(active()===tab)updateChrome();}
@@ -1087,7 +1111,7 @@ function handleKey(event) {
   const isField=/^(INPUT|TEXTAREA|SELECT)$/.test(event.target?.tagName)||event.target?.isContentEditable;
   if((event.ctrlKey||event.metaKey)&&event.shiftKey&&event.key.toLowerCase()==='v'&&!isField&&!$('#dialog').open){event.preventDefault();pasteTextDialog();return;}
   if(event.key==='Escape') {if(reader()?.readAloud?.escape()){event.preventDefault();return;}reader()?.stopSpeech();if($('#dialog').open)return;if(!$('#tool-popover').hidden)closePopover();else if(!$('#sidebar').hidden)closeSidebar();else if(reader()?.documentSidebarUI&&reader().documentSidebarMode!=='outline')reader().showDocumentSidebarView('outline');else if(readerFocused)void leaveReaderFocus();else if(reader())reader().setTool('select');return;}
-  if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='s'){event.preventDefault();if(reader())safely(()=>{const tab=active();tab.reader.rememberPosition();return tab.queue.flush();})();else safely(savePage)();return;}
+  if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='s'){event.preventDefault();if(reader())safely(async()=>{const tab=active();tab.reader.rememberPosition();await tab.queue.flush();await dataFolder?.flush();})();else safely(savePage)();return;}
   if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='l'){event.preventDefault();focusAddress();return;}
   if(!reader()||isField||$('#dialog').open)return;
   if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='z'){event.preventDefault();event.shiftKey?reader().redo():reader().undo();return;}
@@ -1137,6 +1161,7 @@ function bindUI() {
   setIconButton('#library-tab','library','내 서재');
   setIconButton('#settings-button','settings','설정');bindTabs();
   $('#execution-export-guide').innerHTML=annotationExportGuide();
+  $('#library-data-folder').onclick=()=>chooseFolder();$('#data-folder-status').onclick=()=>chooseFolder();
   $('#library-tab').onclick=()=>activate('library');$('#browse-start').onclick=focusAddress;
   $('#execution-web').onclick=()=>webHelpDialog();
   $('#share-url').value=PUBLIC_APP_URL;$('#shared-app-link').href=PUBLIC_APP_URL;
@@ -1152,15 +1177,16 @@ function bindUI() {
   $('#file-input').onchange=safely(async event=>{const files=[...event.target.files];event.target.value='';for(const file of files)await openLocalFile(file);});
   $('#settings-file-input').onchange=safely(async event=>{const file=event.target.files[0];event.target.value='';if(file){await restoreSettings(file);settingsDialog();}});
   $('#library-filter').oninput=renderLibrary;$('#library-sort').onchange=safely(e=>{const [librarySort,librarySortDirection]=e.target.value.split(':');changePreferences({librarySort,librarySortDirection});});$$('[data-library-view]').forEach(button=>button.onclick=safely(()=>changePreferences({libraryView:button.dataset.libraryView})));$('#settings-button').onclick=settingsDialog;$('#web-help-button').onclick=()=>webHelpDialog();$('#paste-button').onclick=()=>pasteTextDialog();
-  $('#open-example').onclick=safely(async()=>{let html=await bundledExample();if(html===null){const response=await fetch('./example.html');if(!response.ok)throw new Error('예제 문서를 불러오지 못했습니다.');html=await response.text();}await createDocument({html,title:'천천히 읽는다는 것',viewport:{width:960,height:800}},await folderFile('천천히 읽는다는 것'));});
+  $('#open-example').onclick=safely(async()=>{let html=await bundledExample();if(html===null){const response=await fetch('./example.html');if(!response.ok)throw new Error('예제 문서를 불러오지 못했습니다.');html=await response.text();}await createDocument({html,title:'천천히 읽는다는 것',viewport:{width:960,height:800}});});
   document.addEventListener('keydown',handleKey);document.addEventListener('pointerdown',event=>{if(!event.target.closest('#toolbar,#tool-popover,[data-htmlmemo-reading-controls]')&&!$('#tool-popover').hidden)closePopover();});
   $('#dialog').addEventListener('click',event=>{if(event.target===$('#dialog'))$('#dialog').close();});
-  window.addEventListener('beforeunload',event=>{if(tabs.some(t=>t.opening||t.queue?.editsPending)){event.preventDefault();event.returnValue='';}});
-  const savePositions=()=>{for(const tab of tabs)if(tab.reader?.doc){tab.reader.rememberPosition();tab.queue.flush().catch(()=>{});}};
+  window.addEventListener('beforeunload',event=>{if(tabs.some(t=>t.opening||t.queue?.editsPending)||dataFolder?.pending){event.preventDefault();event.returnValue='';}});
+  const savePositions=()=>{Promise.all(tabs.filter(t=>t.reader?.doc).map(tab=>{tab.reader.rememberPosition();return tab.queue.flush();})).then(()=>dataFolder?.flush()).catch(()=>{});};
   document.addEventListener('visibilitychange',()=>{if(document.hidden)savePositions();});
   window.addEventListener('pagehide',savePositions);
   window.addEventListener('online',network);window.addEventListener('offline',network);
   window.addEventListener('focus',resumeBrowser);document.addEventListener('visibilitychange',resumeBrowser);
+  window.addEventListener('storage',()=>{try{preferences=loadPreferences(localStorage);applyTheme(preferences.theme);renderLibrary();dataFolder?.schedule({settingsOnly:true});}catch(error){showError(error);}});
   window.addEventListener('resize',()=>{closePopover();applyToolbarPosition();requestAnimationFrame(revealActiveTab);});
   window.addEventListener('dragover',event=>{if([...event.dataTransfer.types].includes('Files'))event.preventDefault();});window.addEventListener('drop',safely(async event=>{if(![...(event.dataTransfer.types||[])].includes('Files'))return;event.preventDefault();for(const file of await droppedHTMLFiles(event.dataTransfer))await openLocalFile(file);}));
 }
@@ -1180,7 +1206,10 @@ function fitHeader() {
   document.fonts?.ready?.then(update);window.addEventListener('resize',update);update();
 }
 async function initialize() {
-  try{preferences=loadPreferences(localStorage);}catch(error){toast('설정 일부를 읽지 못했습니다. 설정 파일로 복원할 수 있습니다.',true);}applyTheme(preferences.theme);bindUI();fitHeader();$('#library-sort').value=preferences.librarySort+':'+preferences.librarySortDirection;network();folder=await getSetting('folder');settingsFileHandle=await getSetting('settings-file');settingsFolderHint=await getSetting('settings-folder-hint')||'';await refreshLibrary();activate('library');
+  try{preferences=loadPreferences(localStorage);}catch(error){toast('설정 일부를 읽지 못했습니다. 연결한 데이터 폴더로 복원할 수 있습니다.',true);}
+  dataFolder=new DataFolder({storage:localStorage,report:state=>{if(state.handle)folder=state.handle;renderFolderState();},onRestored:async result=>{preferences=loadPreferences(localStorage);applyTheme(preferences.theme);$('#library-sort').value=preferences.librarySort+':'+preferences.librarySortDirection;for(const tab of tabs)if(tab.reader)Object.assign(tab.reader,preferences.annotation);applyToolbarPosition();await refreshLibrary();if(result.recovered)toast('이전의 온전한 폴더 저장본에서 복원했습니다. 최신 변경 일부가 빠졌을 수 있습니다.',true);}});
+  applyTheme(preferences.theme);bindUI();fitHeader();$('#library-sort').value=preferences.librarySort+':'+preferences.librarySortDirection;network();folder=await getSetting('folder');settingsFileHandle=await getSetting('settings-file');settingsFolderHint=await getSetting('settings-folder-hint')||'';await refreshLibrary();activate('library');
+  if(folder){try{await dataFolder.connect(folder,{resume:true});await refreshLibrary();}catch(error){renderFolderState();showError(error);}}
   if(installableLocation(location)&&'serviceWorker'in navigator)await navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'}).then(reg=>reg?.update?.().catch(()=>{})).catch(()=>toast('오프라인 준비를 완료하지 못했습니다. 다음 접속에서 다시 준비합니다.',true));
   if('launchQueue'in window)window.launchQueue.setConsumer(safely(async params=>{for(const handle of params.files||[])await openLocalFile(handle);}));
 }

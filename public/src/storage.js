@@ -1,5 +1,13 @@
 const DB_NAME = 'HTMLMemo-v1';
 let database;
+const storageListeners = new Set();
+let storageChannel;
+export function onStorageChange(listener) {
+  storageListeners.add(listener);
+  if(!storageChannel&&typeof BroadcastChannel!=='undefined'){storageChannel=new BroadcastChannel('htmlmemo-storage');storageChannel.onmessage=event=>changed(event.data,false);}
+  return () => {storageListeners.delete(listener);if(!storageListeners.size){storageChannel?.close();storageChannel=null;}};
+}
+function changed(id,broadcast=true) { if(broadcast)storageChannel?.postMessage(id);for (const listener of storageListeners) { try { listener(id); } catch { /* A mirror must not undo a committed internal save. */ } } }
 async function db() {
   if (!database) database = new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, 3);
@@ -39,7 +47,7 @@ async function withContent(record) {
   if(!record || typeof record.html === 'string')return record;
   const content=await transaction('contents','readonly',store=>store.get(record.id));
   if(!content)throw new Error('보관한 HTML 본문을 찾지 못했습니다.');
-  return {...record,html:content.html,file:content.file};
+  return {...record,html:content.html,file:content.file,originalFile:content.originalFile};
 }
 // Library cards never load book bodies; getDocument is the explicit lazy read.
 export const listDocuments = () => transaction('documents','readonly',store=>store.getAll());
@@ -57,7 +65,7 @@ export async function putDocumentSourceIdentity(id, sourceIdentity) {
       try{saved=request.result;if(saved){saved.sourceIdentity=identity;store.put(saved);}}
       catch(error){failure=error;tx.abort();}
     };
-    tx.oncomplete=()=>resolve(saved);
+    tx.oncomplete=()=>{if(saved)changed(id);resolve(saved);};
     tx.onerror=()=>reject(tx.error);
     tx.onabort=()=>reject(failure||tx.error||new Error('파일 확인 결과를 보관하지 못했습니다.'));
   });
@@ -76,7 +84,7 @@ export async function putDocumentView(id, view) {
         store.put(saved);
       } catch (error) { failure = error; tx.abort(); }
     };
-    tx.oncomplete = () => resolve(saved);
+    tx.oncomplete = () => { changed(id); resolve(saved); };
     tx.onerror = () => reject(tx.error);
     tx.onabort = () => reject(failure || tx.error || new Error('읽기 위치를 저장하지 못했습니다.'));
   });
@@ -90,6 +98,7 @@ export async function deleteDocument(id) {
     tx.oncomplete=resolve;tx.onabort=()=>reject(tx.error);tx.onerror=()=>reject(tx.error);
   });
   try { const root = await navigator.storage.getDirectory(); await root.removeEntry(id + '.html'); } catch { /* IndexedDB also contains the complete HTML. */ }
+  changed(id);
 }
 export async function permission(handle, request = false) {
   if (!handle) return false;
@@ -132,7 +141,7 @@ export async function listRevisionSummaries(id, before = Infinity, limit = 50) {
 export async function putDocumentRevision(record, {baseline = false, restoredFrom = null} = {}) {
   const connection=await db();
   const state={annotations:record.metadata?.annotations || [],bookmarks:record.metadata?.bookmarks || []};
-  const {html,file,...value}=record;value.diskPending=false;value.diskError=null;
+  const {html,file,originalFile,...value}=record;value.diskPending=false;value.diskError=null;
   if(!value.byteSize)value.byteSize=file?.size || (typeof html==='string'?new Blob([html]).size:0);
   return new Promise((resolve,reject)=>{
     const tx=connection.transaction(['documents','contents','revisions'],'readwrite');
@@ -149,12 +158,30 @@ export async function putDocumentRevision(record, {baseline = false, restoredFro
         if(!value.sourceIdentity&&old?.sourceIdentity)value.sourceIdentity=old.sourceIdentity;
         if (!last && old && !sameAnnotationState(old.metadata,state)) revisions.add({documentId:record.id,created:Date.now(),kind:'baseline',...annotationState(old.metadata)});
         if (!last || !sameAnnotationState(old?.metadata,state)) revisions.add({documentId:record.id,created:Date.now(),kind:restoredFrom?'restore':baseline?'baseline':'edit',restoredFrom,...state});
-        if(!content.result){if(file instanceof Blob)contents.add({documentId:record.id,file});else{const source=old?.html ?? html;if(typeof source!=='string')throw Error('HTML 본문을 보관하지 못했습니다. 문서를 다시 열어주세요.');contents.add({documentId:record.id,html:source});}}
+        if(!content.result){const original=originalFile instanceof Blob?{originalFile}:{};if(file instanceof Blob)contents.add({documentId:record.id,file,...original});else{const source=old?.html ?? html;if(typeof source!=='string')throw Error('HTML 본문을 보관하지 못했습니다. 문서를 다시 열어주세요.');contents.add({documentId:record.id,html:source,...original});}}
         documents.put(value);
       } catch(error){failure=error;tx.abort();}
     };
-    tx.oncomplete=()=>resolve(value);tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(failure || tx.error || new Error('주석과 이력을 저장하지 못했습니다.'));
+    tx.oncomplete=()=>{changed(record.id);resolve(value);};tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(failure || tx.error || new Error('주석과 이력을 저장하지 못했습니다.'));
   });
+}
+
+/** Import an already validated folder snapshot without replacing any existing document. */
+export async function restoreFolderDocuments(entries) {
+  if(!entries.length)return;
+  const connection=await db();
+  await new Promise((resolve,reject)=>{
+    const tx=connection.transaction(['documents','contents','revisions'],'readwrite');let failure;
+    try {
+      for(const {record,content,revisions} of entries){
+        tx.objectStore('documents').add(record);
+        tx.objectStore('contents').add({documentId:record.id,...content});
+        for(const revision of revisions){const {id:oldId,...value}=revision;tx.objectStore('revisions').add({...value,documentId:record.id});}
+      }
+    }catch(error){failure=error;tx.abort();}
+    tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(failure||tx.error||new Error('폴더의 데이터를 복원하지 못했습니다. 기존 보관함은 유지됩니다.'));
+  });
+  for(const entry of entries)changed(entry.record.id);
 }
 
 /** Autosave never writes the imported file. HTML is retained once; edits are separate metadata. */

@@ -80,7 +80,7 @@ jobs:
         run: |
           node --input-type=module <<'NODE'
           import {readFile} from 'node:fs/promises';
-          const files=['index.html','src/app.js','src/utils.js','src/web.js','src/reader.js','src/read-aloud.js','src/search-index.js','src/model.js','src/document.js','src/local-files.js','src/mhtml.js','src/storage.js','manifest.webmanifest','styles.css'];
+          const files=['index.html','src/app.js','src/utils.js','src/web.js','src/reader.js','src/read-aloud.js','src/search-index.js','src/model.js','src/document.js','src/local-files.js','src/mhtml.js','src/storage.js','src/data-folder.js','manifest.webmanifest','styles.css'];
           const expected=await Promise.all(files.map(file=>readFile('public/'+file,'utf8')));
           let matched=false;
           for(let attempt=0;attempt<30;attempt++){

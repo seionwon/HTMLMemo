@@ -18,7 +18,7 @@ function setup(){
   const parsed={file:new Blob(['<body>Book</body>']),metadata,nativeScroll:true};
   const record={id:'book',title:'Book',file:parsed.file,metadata};
   const context=vm.createContext({Reader,SaveQueue,structuredClone,uid:()=> 'tab',createHost:()=>({}),activate:()=>{},renderTabs:()=>{},renderToolbar:()=>{},updateChrome:()=>{},preferences:{annotation:{}},
-    promptText:()=>{},handleKey:()=>{},showError:()=>{},
+    promptText:()=>{},handleKey:()=>{},showError:()=>{},renderFolderState:()=>{},dataFolder:null,
     putDocumentRevision:async value=>{writes.push({kind:'baseline',record:structuredClone(value)});return {byteSize:parsed.file.size};},
     putDocumentView:async(id,view)=>{writes.push({kind:'view'});return {...record,sourceIdentity:identity,metadata:{...metadata,view}};},
     saveDocumentHTML:async value=>{writes.push({kind:'edit',record:structuredClone(value)});},

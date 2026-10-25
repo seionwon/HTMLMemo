@@ -92,7 +92,7 @@ export function createReadAloud(reader) {
   var RATE_KEY = 'msuite_tts_rate', LANG_KEY = 'htmlmemo_tts_lang_' + reader.metadata.id;
   var voiceKey = function (l) { return 'msuite_tts_voice_' + l; };
   var ls = function (k) { try { return W.localStorage.getItem(k); } catch (e) { return null; } };
-  var lsSet = function (k, v) { try { W.localStorage.setItem(k, v); } catch (e) { /* private mode */ } };
+  var lsSet = function (k, v) { try { W.localStorage.setItem(k, v); reader.callbacks?.onPreferenceChange?.(); } catch (e) { /* private mode */ } };
 
   // ── Voice quality gate (twin of MemoReadAloud) ──
   var JUNK = /espeak|eloquence|\bdesktop\b|compact|albert|bad news|bahh|bells|boing|bubbles|cellos|wobble|good news|jester|organ|superstar|trinoids|whisper|zarvox|junior|kathy|ralph|fred|grandma|grandpa|rocko|shelley|\beddy\b|\bflo\b|\breed\b|\bsandy\b/i;

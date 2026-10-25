@@ -33,6 +33,7 @@
             <div class="hero-art" aria-hidden="true"><div class="art-page art-back"></div><div class="art-page art-front"><div class="art-kicker">A LITTLE THOUGHT, KEPT.</div><div class="art-heading">좋은 생각은<br>다시 읽을 때 자란다.</div><div class="art-line"></div><div class="art-line short"></div><div class="art-highlight"></div><div class="art-line"></div><div class="art-line medium"></div><div class="art-note">이 문장, 기억해두기.</div><svg viewBox="0 0 200 80"><path d="M10 58 Q55 5 104 49 Q130 77 177 21" fill="none" stroke="#dd8655" stroke-width="2.5" stroke-linecap="round"/><path d="m161 24 17-4-1 17" fill="none" stroke="#dd8655" stroke-width="2.5"/></svg><div class="art-footer">Saved to HTMLMemo <span>↗</span></div></div><span class="art-badge">생각을 더하는 작은 도구들 <span>✦</span></span></div>
           </div>
           <div class="library-import-help"><p id="single-file-notice" class="library-import-note" data-single-file-guide>브라우저에서 웹페이지를 저장할 때는 <strong>Webpage, Single File</strong>(웹페이지, 단일 파일 · .mhtml) 형식을 선택하세요.</p><button id="web-help-button" class="text-button library-help" type="button" aria-haspopup="dialog">웹페이지 가져오기 안내</button></div>
+          <section id="data-folder-card" class="data-folder-card" aria-label="데이터 폴더 자동 저장"><div><strong id="data-folder-summary" role="status">데이터 폴더 미연결 · 브라우저 데이터 삭제 시 잃을 수 있습니다.</strong><p id="data-folder-description">Documents(문서) 안에 전용 폴더를 한 번 연결하면 문서·주석·설정을 자동 보관합니다.</p></div><button id="library-data-folder" class="secondary-button" type="button">데이터 폴더 연결</button></section>
           <div class="library-heading"><div><h2>내 서재 <span id="document-count">0</span></h2><p>저장한 페이지와 생각들이 모이는 곳</p></div><div class="library-controls"><div class="library-search"><span id="library-search-icon"></span><input id="library-filter" placeholder="제목, 주소로 찾기" aria-label="서재 검색"></div><select id="library-sort" aria-label="서재 정렬" title="저장일: 서재에 처음 저장한 시각. 최신순은 내림차순, 오래된순은 오름차순입니다."><option value="modified:desc">수정일 · 최신순</option><option value="modified:asc">수정일 · 오래된순</option><option value="created:desc">저장일 · 최신순</option><option value="created:asc">저장일 · 오래된순</option><option value="title:asc">제목 · 가나다순</option><option value="title:desc">제목 · 역순</option></select><div class="library-view-switch" role="group" aria-label="서재 보기 방식"><button id="library-card-view" class="library-view-button" type="button" data-library-view="card" aria-pressed="true"></button><button id="library-list-view" class="library-view-button" type="button" data-library-view="list" aria-pressed="false"></button></div></div></div>
           <div id="document-grid" class="document-grid"></div>
           <div id="empty-library" class="empty-library"><span class="empty-icon" id="empty-icon"></span><h3>첫 HTML 문서를 보관해보세요.</h3><p>웹에서 저장하거나, 가지고 있는 HTML 파일을 열면<br>이곳에서 계속 읽고 메모할 수 있어요.</p><button id="open-example" class="text-button">예제 문서로 도구 둘러보기 <span>→</span></button></div>
@@ -51,7 +52,7 @@
       <section id="workspace" hidden><div id="workspaces"></div></section>
     </main>
     </div>
-    <footer class="statusbar"><div id="status-left">서재 준비 중…</div><div><span id="network-status">온라인</span><span class="status-divider">·</span><span>HTMLMemo</span></div></footer>
+    <footer class="statusbar"><div id="status-left">서재 준비 중…</div><div><button id="data-folder-status" class="text-button" type="button" title="데이터 폴더 연결">폴더 미연결</button><span id="network-status">온라인</span><span class="status-divider">·</span><span>HTMLMemo</span></div></footer>
     <div id="toolbar" class="floating-toolbar" role="toolbar" aria-label="주석 도구" hidden></div>
     <div id="tool-popover" class="tool-popover" hidden></div>
     <aside id="sidebar" class="sidebar" hidden></aside>
@@ -59,9 +60,11 @@
     <dialog id="dialog"><div id="dialog-content"></div></dialog>
     <template id="about-content"><div class="about-brand"><img src="./icons/icon.svg" alt="" width="48" height="48"><div><h3>HTMLMemo</h3><p>나만의 웹 서재</p></div></div><p class="about-version">버전 <strong id="app-version"></strong></p><p class="dialog-description">웹 페이지를 한 파일로 보관하고, 읽고, 주석을 남깁니다.</p><p class="local-only-note">문서·주석·설정은 이 기기에 저장됩니다.</p></template>
     <template id="export-guide-content">
-      <p>본문과 현재 주석(펜·형광펜·밑줄·메모 등), 북마크를 <strong>HTML 파일 하나</strong>에 함께 저장합니다. 별도의 주석 파일은 필요하지 않습니다.</p>
+      <p>평소에는 문서 원본 복사본과 주석을 <strong>분리해 자동 저장</strong>하며 원본 HTML에 새 주석을 합치지 않습니다. <strong>다른 사람에게 주석까지 보내려면 HTML 내보내기로 새 .html 파일을 저장하는 작업이 반드시 필요합니다.</strong></p>
+      <p>HTML 내보내기는 본문과 현재 주석(펜·형광펜·밑줄·메모 등), 북마크를 <strong>HTML 파일 하나</strong>에 함께 저장합니다. 별도의 주석 파일은 필요하지 않습니다.</p>
       <ol><li>문서를 열고 상단 첫째 줄의 <strong>HTML 내보내기</strong> 버튼을 눌러 <strong>.html 파일</strong>로 저장합니다. 저장 창을 지원하지 않는 브라우저에서는 다운로드됩니다.</li><li>원래 가져왔던 파일이 아니라 <strong>방금 내보낸 .html 파일</strong>을 이메일·메신저 등에 첨부해 보냅니다.</li><li>받는 분은 <a href="https://seionwon.github.io/HTMLMemo/" target="_blank" rel="noopener noreferrer">HTMLMemo</a>의 <strong>내 서재 → HTML 파일 가져오기</strong>로 파일을 열면 주석을 확인하고 계속 작업할 수 있습니다. 이미 불러온 파일 안내가 나오면 <strong>기존의 주석 파일로 가기</strong>를 선택하세요. <strong>새롭게 열기</strong>는 주석 없는 사본을 만듭니다.</li></ol>
-      <p>자동 저장과 <kbd>Ctrl/⌘ S</kbd>는 이 기기의 보관함에 저장합니다. 원본이나 이미 내보낸 파일은 자동 갱신되지 않으므로 <strong>주석을 더 수정했다면 다시 내보내세요.</strong></p>
+      <p>자동 저장과 <kbd>Ctrl/⌘ S</kbd>는 이 기기의 보관함에 저장하며 데이터 폴더를 연결했다면 폴더에도 자동 보관합니다. 원본이나 이미 내보낸 파일은 자동 갱신되지 않으므로 <strong>주석을 더 수정했다면 다시 내보내세요.</strong></p>
+      <p>새 기기로 <strong>전체 서재·주석·설정</strong>을 옮길 때는 HTML을 하나씩 내보내지 말고 <strong>자동 저장 완료 후 데이터 폴더 전체</strong>를 복사하세요. 새 기기에서 그 폴더를 한 번 연결하면 자동 복원됩니다.</p>
       <p>앱 URL만 보내면 문서·주석은 전달되지 않습니다. 브라우저의 페이지 저장 대신 <strong>HTMLMemo의 HTML 내보내기</strong>를 사용하세요. 파일을 브라우저에서 직접 열면 문서에 따라 일부 주석이 보이지 않을 수 있으므로 받는 분도 HTMLMemo에서 가져오세요.</p>
       <p>파일에는 현재 주석이 포함되며 이전 주석 저장 이력과 앱 설정은 포함되지 않습니다. 외부 이미지·스타일을 새로 수집하지는 않으므로 웹페이지는 처음 가져올 때 단일 파일로 저장하세요.</p>
     </template>
