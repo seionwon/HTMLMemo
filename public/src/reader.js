@@ -1,8 +1,9 @@
 import { createReadAloud } from './read-aloud.js';
 import { SearchIndexCache } from './search-index.js';
+import { IsolatedRuntime } from './isolated-runtime.js';
 import { clamp, uid, icon } from './utils.js';
 import { History, TEXT_TOOLS, DRAW_TOOLS } from './model.js';
-import { LAYER_ID, prepareLoadedHTML, cleanAnnotations, textIndex, selectionAnchor, resolveTextAnchor, wrapOffsets, rangeFromOffsets, sentenceOffsets, serializeHTML, inspectBookDocument, drawingTargetQuote, describeDrawingTarget, currentSection } from './document.js';
+import { LAYER_ID, LOCAL_CSP, parseHTML, savedMainFrame, prepareLoadedHTML, cleanAnnotations, textIndex, selectionAnchor, resolveTextAnchor, wrapOffsets, rangeFromOffsets, sentenceOffsets, serializeHTML, inspectBookDocument, drawingTargetQuote, describeDrawingTarget, currentSection } from './document.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const TOC_WIDTH_KEY = 'htmlmemo-doc-toc-width-v1', TOC_EXPANDED_WIDTH_KEY = 'htmlmemo-doc-toc-expanded-width-v1', TOC_MIN = 8, TOC_STRIP_SNAP = 48, TOC_MAX = 640, TOC_DEFAULT = 260;
@@ -26,7 +27,7 @@ export class Reader {
     this.frame.setAttribute('aria-hidden', 'true');
     // Local documents explicitly enable scripts; captures retain static mode.
     // Forms, popups and top-level navigation remain sandboxed.
-    this.frame.setAttribute('sandbox', this.metadata.execution?.allowScripts ? 'allow-same-origin allow-scripts' : 'allow-same-origin'); this.frame.referrerPolicy = 'no-referrer';
+    this.frame.setAttribute('sandbox', 'allow-same-origin'); this.frame.referrerPolicy = 'no-referrer';
     this.naturalWidth = this.metadata.viewport.width; this.frame.style.height = '100%'; this.frame.style.width = this.naturalWidth + 'px';
     this.sizer.append(this.frame); this.viewport.append(this.sizer); host.append(this.viewport);
     this.loading = document.createElement('div'); this.loading.className = 'reader-loading';
@@ -37,6 +38,11 @@ export class Reader {
         try {
           this.doc = this.frame.contentDocument;
           if (!this.doc?.body) throw new Error('HTML 문서를 표시하지 못했습니다.');
+          if(this.metadata.execution?.allowScripts){
+            this.runtime=new IsolatedRuntime({host:this.host,doc:this.doc,source:parsed.file||new Blob([parsed.html],{type:'text/html;charset=utf-8'}),onError:error=>this.callbacks.onError?.(error)});
+            await this.runtime.start();
+          }
+          await this.adoptSavedMainFrame();
           this.bookIntegrity = inspectBookDocument(this.doc);
           await this.waitForBookContent();
           if (this.disposed) { resolve(this); return; }
@@ -92,10 +98,31 @@ export class Reader {
         } catch (error) { reject(error); }
       }, {once:true});
     });
+    const displaySource=new Blob(['<!doctype html><head><meta http-equiv="Content-Security-Policy" content="'+LOCAL_CSP+'">',parsed.file||parsed.html],{type:'text/html;charset=utf-8'});
     if (this.nativeScroll) {
-      this.documentURL = URL.createObjectURL(parsed.file || new Blob([parsed.html], {type:'text/html;charset=utf-8'}));
+      this.documentURL = URL.createObjectURL(displaySource);
       this.frame.src = this.documentURL;
-    } else this.frame.srcdoc = parsed.html;
+    } else this.frame.srcdoc = '<!doctype html><head><meta http-equiv="Content-Security-Policy" content="'+LOCAL_CSP+'">'+parsed.html;
+  }
+  async adoptSavedMainFrame() {
+    for(let depth=0;depth<3;depth++){
+      const frame=savedMainFrame(this.doc);if(!frame)return;
+      // Legacy saved copies used an opaque subframe. Sanitize it before giving
+      // the app DOM access; never grant scripts and same-origin together.
+      const tokens=(frame.getAttribute('sandbox')||'').split(/\s+/),reload=!tokens.includes('allow-same-origin')||tokens.includes('allow-scripts');
+      const ready=()=>frame.contentDocument?.body&&frame.contentDocument.URL==='about:srcdoc'&&frame.contentDocument.readyState==='complete';
+      if(reload||!ready())await new Promise((resolve,reject)=>{
+        let timer;const finish=error=>{clearTimeout(timer);frame.removeEventListener('load',loaded);this.cancelFrameOpen=null;error?reject(error):resolve();};
+        const loaded=()=>{if(ready())finish();};this.cancelFrameOpen=()=>finish(new DOMException('문서 열기가 취소되었습니다.','AbortError'));
+        frame.addEventListener('load',loaded);timer=setTimeout(()=>finish(Error('저장된 본문 프레임을 열지 못했습니다.')),15000);
+        frame.loading='eager';
+        if(reload){const prepared=parseHTML(frame.getAttribute('srcdoc'),{source:this.metadata.source},{allowScripts:false,includeMetadata:true});frame.setAttribute('sandbox','allow-same-origin');frame.removeAttribute('src');frame.setAttribute('srcdoc',prepared.html);}
+        else if(ready())finish();
+      });
+      for(const node of [this.doc.documentElement,this.doc.body])for(const [key,value] of Object.entries({margin:'0',padding:'0',width:'100%',height:'100%',overflow:'hidden'}))node.style.setProperty(key,value,'important');
+      for(const [key,value] of Object.entries({position:'fixed',inset:'0',width:'100%',height:'100%',border:'0',margin:'0',padding:'0',display:'block'}))frame.style.setProperty(key,value,'important');
+      this.doc=frame.contentDocument;this.nativeScroll=true;
+    }
   }
   waitForBookContent() {
     if (!this.bookIntegrity?.complete) return Promise.resolve();
@@ -2427,6 +2454,6 @@ export class Reader {
   dispose() {
     this.searchGeneration=(this.searchGeneration||0)+1;this.searchIndexCache?.dispose();
     this.cancelBookSearchJump?.();this.documentBookSearchObserver?.disconnect();if(this.documentBookSearchResults)this.clearDocumentBookSearchHighlight();
-    this.stopMiddleScroll();this.readAloud?.dispose();this.readAloud=null;this.stopSpeech(); this.disposed=true;this.cancelOpeningWait?.();this.cancelAnnotationJump?.(); clearTimeout(this.positionTimer);clearTimeout(this.dynamicTimer);clearTimeout(this.documentSidebarUI?.sidebarSearchTimer);this.dynamicObserver?.disconnect();this.fontObserver?.disconnect();if(this.fontFrame)this.doc.defaultView?.cancelAnimationFrame(this.fontFrame); this.resizeObserver?.disconnect(); this.hostObserver?.disconnect(); this.frame.srcdoc=''; if(this.documentURL){URL.revokeObjectURL(this.documentURL);this.documentURL=null;} this.host.remove();
+    this.stopMiddleScroll();this.readAloud?.dispose();this.readAloud=null;this.stopSpeech(); this.disposed=true;this.cancelOpeningWait?.();this.cancelAnnotationJump?.();this.cancelFrameOpen?.();this.runtime?.dispose(); clearTimeout(this.positionTimer);clearTimeout(this.dynamicTimer);clearTimeout(this.documentSidebarUI?.sidebarSearchTimer);this.dynamicObserver?.disconnect();this.fontObserver?.disconnect();if(this.fontFrame)this.doc.defaultView?.cancelAnimationFrame(this.fontFrame); this.resizeObserver?.disconnect(); this.hostObserver?.disconnect(); this.frame.srcdoc=''; if(this.documentURL){URL.revokeObjectURL(this.documentURL);this.documentURL=null;} this.host.remove();
   }
 }

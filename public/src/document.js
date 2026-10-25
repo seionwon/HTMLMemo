@@ -5,7 +5,8 @@ export const DATA_ID = 'htmlmemo-data';
 // Sanitization admits only recursively cleaned srcdoc frames. Permit their
 // inherited origin, not live external websites; keep each frame sandboxed.
 export const LOCAL_CSP = "default-src 'none'; frame-src 'self'; img-src data: blob:; style-src 'unsafe-inline' data:; font-src data:; media-src data:; script-src 'none'; connect-src 'none'; form-action 'none'; base-uri 'none'";
-export const SCRIPT_CSP = "default-src 'none'; frame-src 'self'; img-src data: blob:; style-src 'unsafe-inline' data:; font-src data:; media-src data: blob:; script-src 'unsafe-inline' 'unsafe-eval' data: blob: https: http:; worker-src data: blob:; connect-src data: blob:; form-action 'none'; base-uri 'none'";
+// Executable source belongs ONLY in an opaque-origin runner, never the reader.
+export const SCRIPT_CSP = "default-src 'none'; frame-src 'self'; img-src data: blob:; style-src 'unsafe-inline' data:; font-src data:; media-src data: blob:; script-src 'unsafe-inline' 'unsafe-eval' data: blob:; worker-src data: blob:; connect-src data: blob:; form-action 'none'; base-uri 'none'";
 export const BOOK_DATA_MISSING = '이 파일에는 책의 목차 제목만 남아 있고 본문 데이터 또는 실행 코드가 빠져 있습니다. 완전한 원본 HTML 파일을 가져와 주세요. 기존 문서와 주석은 보관함에 유지됩니다.';
 export function inspectBookDocument(doc) {
   const data = doc.getElementById('book-manifest');
@@ -18,7 +19,7 @@ export function inspectBookDocument(doc) {
   const complete = manifest?.format === 'memosuite-book-html-v1' &&
     Array.isArray(manifest.volumes) && manifest.volumes.length > 0 &&
     manifest.volumes.every((volume, index) => Array.isArray(volume?.sections) && volume.sections.length > 0 &&
-      doc.getElementById('book-volume-' + index)?.textContent.trim()) && executable;
+      doc.getElementById('book-volume-' + index)?.textContent.trim()) && (executable || doc.documentElement.hasAttribute('data-htmlmemo-isolated-runtime'));
   return {complete: !!complete, message: complete ? '' : BOOK_DATA_MISSING};
 }
 
@@ -113,16 +114,33 @@ function clearReaderSidebarArtifacts(root) {
     if (element.hasAttribute?.('style') && !element.getAttribute('style')?.trim()) element.removeAttribute('style');
   }
 }
-function* sanitizeTree(root, source, depth = 0, allowScripts = false) {
+/** Only a saved, otherwise empty frame shell may become the reading document. */
+export function savedMainFrame(doc) {
+  if(!doc?.body)return null;
+  const hidden=node=>node.hasAttribute('hidden')||node.getAttribute('aria-hidden')==='true'||/display\s*:\s*none|visibility\s*:\s*hidden/.test(node.getAttribute('style')||'')||['width','height'].some(key=>node.hasAttribute(key)&&/^0(?:px)?$/.test(node.getAttribute(key)));
+  const frames=[...doc.body.querySelectorAll('iframe')].filter(node=>!hidden(node));
+  if(frames.length!==1||!frames[0].getAttribute('srcdoc'))return null;
+  const frame=frames[0],stack=[...doc.body.childNodes];let count=0;
+  while(stack.length){const node=stack.pop();if(++count>2048)return null;
+    if(node===frame||node.nodeType!==1&&node.nodeType!==3)continue;
+    if(node.nodeType===3){if(node.textContent.trim())return null;continue;}
+    if(hidden(node)||node.hasAttribute('data-htmlmemo-ui')||['script','style','noscript','template','meta','link'].includes(node.localName))continue;
+    if(['iframe','img','svg','canvas','video','audio','object','embed','input','textarea','select'].includes(node.localName))return null;
+    stack.push(...node.childNodes);
+  }
+  return frame;
+}
+function* sanitizeTree(root, source, depth = 0, allowScripts = false, preserveData = false) {
+  const mainFrame=savedMainFrame(root);
   for (const element of root.querySelectorAll('*')) {
     yield;
     const tag = element.localName;
-    if ((!allowScripts && tag === 'script') || ['object','embed','frame','frameset','base'].includes(tag)) { element.remove(); continue; }
+    if ((!allowScripts && tag === 'script' && !(preserveData&&/^(?:application\/json|application\/octet-stream)$/.test(element.type))) || ['object','embed','frame','frameset','base'].includes(tag)) { element.remove(); continue; }
     if (tag === 'iframe') {
       const html=element.getAttribute('srcdoc');
       if(!html||depth>=3){element.remove();continue;}
-      const nested=new DOMParser().parseFromString(html,'text/html');yield* sanitizeTree(nested,source,depth+1,allowScripts);
-      element.setAttribute('srcdoc',nested.documentElement.outerHTML);element.setAttribute('sandbox',allowScripts?'allow-scripts':'');element.removeAttribute('src');element.removeAttribute('allow');
+      const nested=new DOMParser().parseFromString(html,'text/html'),main=element===mainFrame;yield* sanitizeTree(nested,source,depth+1,main?false:allowScripts,preserveData);
+      element.setAttribute('srcdoc',nested.documentElement.outerHTML);element.setAttribute('sandbox',main?'allow-same-origin':allowScripts?'allow-scripts':'');element.removeAttribute('src');element.removeAttribute('allow');
     }
     if (tag === 'meta' && /^(refresh|content-security-policy)$/i.test(element.getAttribute('http-equiv') || '')) { element.remove(); continue; }
     for (const attr of [...element.attributes]) {
@@ -137,8 +155,15 @@ function* sanitizeTree(root, source, depth = 0, allowScripts = false) {
     }
     element.removeAttribute('contenteditable');
     if (tag === 'form') { element.removeAttribute('action'); if (!allowScripts) element.setAttribute('inert', ''); }
-    if (tag === 'template') yield* sanitizeTree(element.content, source, depth,allowScripts);
+    if (tag === 'template') yield* sanitizeTree(element.content, source, depth,allowScripts,preserveData);
   }
+}
+/** Runtime messages are hostile HTML, not executable instructions or app metadata. */
+export function sanitizeRuntimeHTML(html) {
+  const doc=new DOMParser().parseFromString(html,'text/html'),work=sanitizeTree(doc,'',0,false,true);
+  while(!work.next().done){}
+  doc.querySelectorAll('#htmlmemo-data').forEach(node=>node.remove());
+  return doc;
 }
 export function parseHTML(html, defaults = {}, options = {}) {
   const work = prepareHTML(html, defaults, options);

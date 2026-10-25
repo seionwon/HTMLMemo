@@ -1,0 +1,67 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import {documentFor,installDOM} from './dom.mjs';
+import {savedMainFrame,parseHTML,sanitizeRuntimeHTML,LOCAL_CSP,SCRIPT_CSP} from '../public/src/document.js';
+import {IsolatedRuntime} from '../public/src/isolated-runtime.js';
+installDOM();
+const frame=content=>`<iframe id="mainFrame" srcdoc="${content.replaceAll('&','&amp;').replaceAll('"','&quot;')}"></iframe>`;
+const page=body=>'<html><head></head><body>'+body+'</body></html>';
+test('only an otherwise empty saved frame shell is adopted, never a normal page with embedded media',()=>{
+  const child=page('<p>Saved article</p>');
+  assert.equal(savedMainFrame(documentFor(page(frame(child)))).id,'mainFrame');
+  assert.ok(savedMainFrame(documentFor(page('<div>'+frame(child)+'</div><iframe hidden srcdoc=""></iframe>'))));
+  for(const other of ['<p>Outer article</p>','<img src="data:,">','<svg></svg>',frame(child),'<input>'])assert.equal(savedMainFrame(documentFor(page(frame(child)+other))),null);
+  assert.equal(savedMainFrame(documentFor(page('<iframe src="https://remote.invalid"></iframe>'))),null);
+});
+test('a main saved frame gets readable DOM but never script permission, including executable HTML imports',()=>{
+  const html=page(frame(page('<p onclick="parent.attack()">Article</p><script>parent.attack()</script><iframe src="https://remote.invalid"></iframe>')));
+  for(const allowScripts of [false,true]){
+    const prepared=parseHTML(html,{}, {allowScripts}),outer=documentFor(prepared.html),saved=outer.querySelector('iframe'),child=documentFor(saved.getAttribute('srcdoc'));
+    assert.equal(saved.getAttribute('sandbox'),'allow-same-origin');assert.equal(child.querySelector('script,[onclick],iframe'),null);
+  }
+});
+test('ordinary embedded frames retain their own isolation rather than receiving access to the app',()=>{
+  const prepared=parseHTML(page('<p>Outer article</p>'+frame(page('<p>Embedded</p>'))));
+  assert.equal(documentFor(prepared.html).querySelector('iframe').getAttribute('sandbox'),'');
+});
+test('hostile runtime HTML is inert, strips navigations and cannot supply app annotation metadata',()=>{
+  const safe=sanitizeRuntimeHTML(page('<p onclick="attack()">Text</p><script>attack()</script><script id="htmlmemo-data" type="application/json">{"annotations":["fake"]}</script><meta http-equiv="refresh" content="0;url=https://remote.invalid"><iframe src="https://remote.invalid"></iframe><form action="https://remote.invalid"><input></form><a href="javascript:attack()">Link</a>'));
+  assert.equal(safe.querySelector('script,meta[http-equiv],iframe,[onclick],form[action],a[href]'),null);assert.ok(safe.querySelector('form').hasAttribute('inert'));assert.equal(safe.querySelector('p').textContent,'Text');
+});
+function runtime(){
+  const doc=documentFor('<html><head><script id="htmlmemo-data" type="application/json">{"annotations":["original private notes"]}</script></head><body><script id="book-volume-0" type="application/octet-stream">original compressed bytes</script></body></html>'),r=new IsolatedRuntime({host:{ownerDocument:doc},doc,source:new Blob(['source'])});let ready=0;r.resolve=()=>ready++;return {doc,r,get ready(){return ready;}};
+}
+const initial='<html data-htmlmemo-runtime-id="r1"><head data-htmlmemo-runtime-id="r2"></head><body data-htmlmemo-runtime-id="r3"><article data-htmlmemo-runtime-id="r4" data-section="first"><p data-htmlmemo-runtime-id="r5">Current text</p></article></body></html>';
+test('first isolated snapshot preserves original private notes and opaque payloads only in the app reader',async()=>{
+  const a=runtime(),payload=a.doc.getElementById('book-volume-0');await a.r.accept({type:'initial',html:initial});assert.equal(a.ready,1);
+  assert.strictEqual(a.doc.getElementById('book-volume-0'),payload);assert.match(a.doc.getElementById('htmlmemo-data').textContent,/original private notes/);assert.equal(a.doc.querySelector('p').textContent,'Current text');assert.ok(a.doc.documentElement.hasAttribute('data-htmlmemo-isolated-runtime'));
+});
+test('content patches keep document containers, sanitize source and retain app-owned overlays',async()=>{
+  const a=runtime();await a.r.accept({type:'initial',html:initial});const article=a.doc.querySelector('article'),overlay=a.doc.createElement('aside');overlay.dataset.htmlmemoUi='';article.append(overlay);
+  await a.r.accept({type:'patches',patches:[{id:'r4',kind:'content',html:'<article data-htmlmemo-runtime-id="r4" data-section="second"><p data-htmlmemo-runtime-id="r6" onclick="parent.attack()">Next text</p><script>parent.attack()</script></article>'}]});
+  assert.strictEqual(a.doc.querySelector('article'),article);assert.equal(article.dataset.section,'second');assert.equal(article.querySelector('p').textContent,'Next text');assert.strictEqual(article.querySelector('aside'),overlay);assert.equal(article.querySelector('script,[onclick]'),null);assert.strictEqual(a.r.nodes.get('r6'),article.querySelector('p'));assert.ok(!a.r.nodes.has('r5'));
+});
+test('root and content attributes update loading/section state without modifying app-owned runtime state',async()=>{
+  const a=runtime();await a.r.accept({type:'initial',html:initial});
+  await a.r.accept({type:'patches',patches:[{id:'r1',kind:'attributes',tag:'html',attributes:[['data-htmlmemo-runtime-id','r1'],['data-reader-ready','true'],['onclick','attack()']]},{id:'r4',kind:'attributes',tag:'article',attributes:[['data-htmlmemo-runtime-id','r4'],['data-section','second']]}]});
+  assert.equal(a.doc.documentElement.dataset.readerReady,'true');assert.equal(a.doc.documentElement.hasAttribute('onclick'),false);assert.ok(a.doc.documentElement.hasAttribute('data-htmlmemo-isolated-runtime'));assert.equal(a.doc.querySelector('article').dataset.section,'second');
+});
+test('unsupported RPC operations, malformed selectors and oversized patch lists cannot modify the reader',async()=>{
+  const a=runtime();await a.r.accept({type:'initial',html:initial});const before=a.doc.documentElement.outerHTML;
+  await a.r.accept({type:'eval',code:'parent.attack()'});await a.r.accept({type:'file-write',path:'../outside',value:'attack'});
+  await a.r.accept({type:'patches',patches:[{id:'r4"] body',kind:'content',html:'<body>attack</body>'},{id:'r9999',kind:'content',html:'<article>attack</article>'}]});
+  await a.r.accept({type:'patches',patches:Array.from({length:10001},()=>({id:'r4',kind:'content',html:'<article>attack</article>'}))});assert.equal(a.doc.documentElement.outerHTML,before);
+});
+test('source nodes cannot replace metadata or append executable content via attribute patches',async()=>{
+  const a=runtime();await a.r.accept({type:'initial',html:initial});
+  await a.r.accept({type:'patches',patches:[{id:'r5',kind:'attributes',tag:'script',attributes:[['src','https://remote.invalid/run.js'],['data-htmlmemo-runtime-id','r5']]},{id:'r5',kind:'content',html:'<script data-htmlmemo-runtime-id="r5">attack()</script>'}]});
+  assert.equal(a.doc.querySelector('p').textContent,'Current text');assert.equal(a.doc.querySelector('script[src]'),null);assert.match(a.doc.getElementById('htmlmemo-data').textContent,/original private notes/);
+});
+test('the source CSP cannot fetch or load external scripts and the display policy prohibits execution',()=>{
+  assert.match(LOCAL_CSP,/script-src 'none'/);assert.match(SCRIPT_CSP,/connect-src data: blob:/);const scripts=SCRIPT_CSP.match(/script-src ([^;]+)/)[1];assert.ok(!/https?:/.test(scripts));
+});
+test('reader and migration never give an imported document scripts together with the app origin',async()=>{
+  for(const path of ['reader.js','migrate.js']){const source=await readFile(new URL('../public/src/'+path,import.meta.url),'utf8');assert.doesNotMatch(source,/setAttribute\('sandbox',\s*'[^']*allow-scripts[^']*allow-same-origin|setAttribute\('sandbox',\s*'[^']*allow-same-origin[^']*allow-scripts/);assert.match(source,/new IsolatedRuntime/);}
+  const source=await readFile(new URL('../public/src/isolated-runtime.js',import.meta.url),'utf8');assert.match(source,/setAttribute\('sandbox','allow-scripts'\)/);assert.match(source,/event\.source!==frame\.contentWindow/);assert.match(source,/value\?\.channel!==this\.channel/);
+});

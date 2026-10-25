@@ -18,7 +18,7 @@
     "build": "node scripts/build.mjs",
     "check": "node scripts/check.mjs",
     "test": "node --test --test-concurrency=1 tests/*.test.mjs",
-    "test:browser": "node -e \"require('node:fs').mkdirSync('test-results',{recursive:true})\" && node --test --test-concurrency=1 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/browser-results.xml tests/browser.integration.mjs tests/browser-tts.integration.mjs tests/browser-library-folders.integration.mjs tests/browser-annotation-jump.integration.mjs"
+    "test:browser": "node -e \"require('node:fs').mkdirSync('test-results',{recursive:true})\" && node --test --test-concurrency=1 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/browser-results.xml tests/browser.integration.mjs tests/browser-tts.integration.mjs tests/browser-library-folders.integration.mjs tests/browser-annotation-jump.integration.mjs tests/browser-security.integration.mjs"
   },
   "devDependencies": {
     "linkedom": "0.18.12",

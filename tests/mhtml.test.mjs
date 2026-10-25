@@ -61,7 +61,7 @@ test('MHTML keeps existing data URLs in srcset and SVG fragments in CSS resource
 });
 test('MHTML restores saved iframe documents and their local assets without live remote frames',async()=>{
   const result=await read(archive([textPart('<iframe src="cid:child"></iframe>'),part('text/html',base64(html('<p>보관된 프레임</p><img src="picture.png">')),'Content-Transfer-Encoding: base64\r\nContent-ID: <child>\r\nContent-Location: https://archive.example/frame/index.html\r\n'),part('image/png','IMAGE','Content-Location: https://archive.example/frame/picture.png\r\n')]));
-  const doc=documentFor(parseHTML(result.html,{source:result.url}).html),frame=doc.querySelector('iframe');assert.equal(frame.hasAttribute('src'),false);assert.equal(frame.getAttribute('sandbox'),'');const nested=documentFor(frame.getAttribute('srcdoc'));assert.equal(nested.querySelector('p').textContent,'보관된 프레임');assert.match(nested.querySelector('img').getAttribute('src'),/^data:image\/png/);assert.deepEqual(result.warnings,[]);
+  const doc=documentFor(parseHTML(result.html,{source:result.url}).html),frame=doc.querySelector('iframe');assert.equal(frame.hasAttribute('src'),false);assert.equal(frame.getAttribute('sandbox'),'allow-same-origin');assert.ok(!frame.getAttribute('sandbox').includes('allow-scripts'));const nested=documentFor(frame.getAttribute('srcdoc'));assert.equal(nested.querySelector('p').textContent,'보관된 프레임');assert.match(nested.querySelector('img').getAttribute('src'),/^data:image\/png/);assert.deepEqual(result.warnings,[]);
   assert.match(doc.querySelector('meta[http-equiv="Content-Security-Policy"]').content,/frame-src 'self';/);
 });
 test('Chrome CID Content-Location styles resolve without Content-ID and keep each referring document base',async()=>{

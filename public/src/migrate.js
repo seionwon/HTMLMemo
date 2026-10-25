@@ -3,7 +3,8 @@
 // removed. An annotation follows its text (or the paragraph it was drawn on) to wherever that text
 // now is, survives small rewording, and is dropped only when its text is gone from the new edition.
 import { TEXT_TOOLS } from './model.js';
-import { textIndex, rangeFromOffsets, describeDrawingTarget, drawingTargetQuote, SCRIPT_CSP } from './document.js';
+import { textIndex, rangeFromOffsets, describeDrawingTarget, drawingTargetQuote, LOCAL_CSP } from './document.js';
+import { IsolatedRuntime } from './isolated-runtime.js';
 
 const CONTEXT = 40;
 // Below these, a changed text is treated as a different text rather than an edited one.
@@ -176,12 +177,11 @@ function blockOf(doc, node) {
 // ── Opening the new edition off-screen, with its own scripts (books render a section per hash).
 export async function openEditionProbe(snapshot, {timeout = 60000} = {}) {
   const frame = document.createElement('iframe');
-  frame.setAttribute('sandbox', 'allow-same-origin allow-scripts'); frame.setAttribute('aria-hidden', 'true'); frame.tabIndex = -1;
+  frame.setAttribute('sandbox', 'allow-same-origin'); frame.setAttribute('aria-hidden', 'true'); frame.tabIndex = -1;
   frame.style.cssText = 'position:fixed;left:-10000px;top:0;width:1280px;height:900px;border:0;visibility:hidden;pointer-events:none';
-  const source = snapshot.file || new Blob([String(snapshot.html || '').replace(/<meta\b[^>]*http-equiv\s*=\s*["']?content-security-policy\b[^>]*>/gi,
-    `<meta http-equiv="Content-Security-Policy" content="${SCRIPT_CSP}">`)], {type: 'text/html;charset=utf-8'});
-  const url = URL.createObjectURL(source);
-  const dispose = () => { frame.remove(); URL.revokeObjectURL(url); };
+  const source = snapshot.file || new Blob([String(snapshot.html || '')], {type:'text/html;charset=utf-8'});
+  const url = URL.createObjectURL(new Blob(['<!doctype html><head><meta http-equiv="Content-Security-Policy" content="'+LOCAL_CSP+'">',source],{type:'text/html;charset=utf-8'}));
+  let runtime;const dispose = () => { runtime?.dispose();frame.remove(); URL.revokeObjectURL(url); };
   const until = (test, message) => new Promise((resolve, reject) => {
     const started = Date.now();
     const check = () => { try { if (test()) return resolve(); } catch (error) { if (error?.section) return reject(error); } if (Date.now() - started > timeout) reject(new Error(message)); else setTimeout(check, 40); };
@@ -191,6 +191,7 @@ export async function openEditionProbe(snapshot, {timeout = 60000} = {}) {
     await new Promise((resolve, reject) => { frame.onload = resolve; frame.onerror = () => reject(new Error('새 판 문서를 열지 못했습니다.')); frame.src = url; document.body.append(frame); });
     const doc = frame.contentDocument;
     if (!doc?.body) throw new Error('새 판 문서를 열지 못했습니다.');
+    if(snapshot.allowScripts!==false){runtime=new IsolatedRuntime({host:document.body,doc,source});await runtime.start();}
     const book = bookManifest(doc), content = () => doc.getElementById('reader-content');
     const status = () => doc.getElementById('reader-status')?.textContent.trim() || '';
     const settled = key => content()?.dataset.section === key && !status();

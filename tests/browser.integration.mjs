@@ -214,7 +214,7 @@ test('real Chrome: reading controls provide one app TTS, wait for Play and keep 
       assert.equal(await page.evaluate(`${doc}.querySelectorAll('[data-action=speak]').length`),1);
       assert.equal(await page.evaluate(`${nativeZoom}.closest('[data-htmlmemo-doc-topbar]')!==null`),true);
       assert.equal(await page.evaluate(`(()=>{const b=${upperTTS},font=${doc}.querySelector('#book-font'),r=b.getBoundingClientRect(),f=font.getBoundingClientRect();return !!b.querySelector('svg')&&b.textContent===''&&font.previousElementSibling.contains(b)&&r.right<=f.left&&Math.abs(r.top+r.height/2-f.top-f.height/2)<2;})()`),true,'speaker icon sits immediately left of A− in the same row');
-      const fontClicks=await page.evaluate(`${doc}.defaultView.bookFontClicks||0`);await clickNative(doc+'.querySelector("#book-font")');assert.equal(await page.evaluate(`${doc}.defaultView.bookFontClicks`),fontClicks+1);
+      const fontClicks=await page.scriptEvaluate('window.bookFontClicks||0');await clickNative(doc+'.querySelector("#book-font")');await page.scriptWaitFor(`window.bookFontClicks===${fontClicks+1}`);
       const before=await page.evaluate('window.__ttsUtterances.length');await clickNative(upperTTS);await page.waitFor(playerReady);
       assert.equal(await page.evaluate('window.__ttsUtterances.length'),before,'opening the toolbar never starts speech');
       assert.equal(await page.evaluate(`${frame}.contentWindow.CSS.highlights.has('mstts')`),false);
@@ -1034,7 +1034,7 @@ test('real Chrome: browsing, capture, local annotation, file writes, reopen and 
       await page.send('Network.emulateNetworkConditions',{offline:false,latency:0,downloadThroughput:-1,uploadThroughput:-1});
       await page.evaluate(`(()=>{const file=new File(['<html><head><title>Native large book</title>', '<script id="htmlmemo-data" type="application/json">'+JSON.stringify({version:${FORMAT_VERSION},view:{zoom:.5,scrollTop:0,scrollLeft:0},annotations:[]})+'<'+'/script>', '</head><body><p id="first">Native first paragraph</p><script>window.localScriptExecuted=true<\\/script><div>'+ 'Book text '.repeat(500000)+'</div><p id="last">Last paragraph</p></body></html>'],'native-large.html',{type:'text/html'});file.arrayBuffer=()=>{throw Error('Whole file read is forbidden');};file.text=()=>{throw Error('Whole text read is forbidden');};const transfer=new DataTransfer();transfer.items.add(file);const input=document.querySelector('#file-input');input.files=transfer.files;input.dispatchEvent(new Event('change',{bubbles:true}));})()`);
       await page.waitFor('document.querySelector(".document-host:not([hidden]) iframe")?.contentDocument?.title === "Native large book" && !document.querySelector("#toolbar").hidden',30000);
-      assert.equal(await page.evaluate('document.querySelector(".document-host:not([hidden]) iframe").contentWindow.localScriptExecuted'),true);
+      assert.equal(await page.scriptEvaluate('window.localScriptExecuted'),true);assert.equal(await page.evaluate('document.querySelector(".document-host:not([hidden]) iframe").contentWindow.localScriptExecuted'),undefined);
       assert.equal(await page.evaluate('document.querySelector(".document-host:not([hidden]) iframe").contentDocument.querySelector("#last").textContent'),'Last paragraph');
       const height=await page.evaluate('document.querySelector("#toolbar").getBoundingClientRect().height');assert.ok(height>=20&&height<=22);
       await page.waitFor(`document.querySelector('#status-left').textContent.includes('자동 저장됨')`);
@@ -1782,7 +1782,7 @@ test('real Chrome: annotation tree follows book TOC, prunes empty branches, reme
     await clickNative('[data-sidebar-view=annotations]');
     assert.deepEqual(await page.evaluate(`[...${panel}.querySelectorAll('.annotation-tree>[data-annotation-group]')].map(g=>[g.querySelector('.annotation-group-title').textContent,g.querySelector('.annotation-group-count').textContent,g.open])`),[['입문','3',false],['실전','1',false]]);
     assert.equal(await page.evaluate(`${panel}.textContent.includes('주석 없는')||${panel}.textContent.includes('빈 분류')`),false);
-    assert.deepEqual(await page.evaluate(`${frame}.contentWindow.renderedSections`),['v0:one']);
+    assert.deepEqual(await page.scriptEvaluate('window.renderedSections'),['v0:one']);
     assert.equal(await page.evaluate(`${doc}.querySelectorAll('#reader-tree details[open]').length`),0);
     const intro=await openGroup('입문');await openGroup('기초');await openGroup('시작');const first=await openGroup('첫 장');
     assert.equal(await page.evaluate(`${doc}.querySelector(${JSON.stringify(first)}).querySelectorAll('[data-annotation]').length`),2);
@@ -1791,7 +1791,7 @@ test('real Chrome: annotation tree follows book TOC, prunes empty branches, reme
     assert.equal(await page.evaluate(`${doc}.querySelector(${JSON.stringify(first)}).open`),true);
     await openGroup('실전');await openGroup('응용');await openGroup('도구');await openGroup('실전의 장');
     await clickNative('[data-annotation=practice-note]');await page.waitFor(`${doc}.querySelector('#reader-content').dataset.section==='v1:one'&&${doc}.querySelector('[data-htmlmemo-id=practice-note]')&&${doc}.querySelector('#reader-main').scrollTop>500`);
-    assert.deepEqual(await page.evaluate(`${frame}.contentWindow.renderedSections`),['v0:one','v1:one']);
+    assert.deepEqual(await page.scriptEvaluate('window.renderedSections'),['v0:one','v1:one']);
     await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/annotation-tree-desktop.png'),await page.screenshot());
     await clickNative('[data-delete-annotation=practice-note]');await page.waitFor(`${panel}.querySelectorAll('.annotation-tree>[data-annotation-group]').length===1`);
     assert.equal(await page.evaluate(`${doc}.querySelector(${JSON.stringify(intro)}).open`),true);
@@ -1848,7 +1848,7 @@ test('real Chrome: annotation tree keeps the confirmed opening and the deepest k
     const ancestorTitles=id=>page.evaluate(`(()=>{const titles=[];let e=${panel}.querySelector('[data-annotation="'+${JSON.stringify(id)}+'"]');for(e=e.parentElement;e;e=e.parentElement)if(e.matches('details[data-annotation-group]'))titles.unshift(e.querySelector(':scope>summary>.annotation-group-title').textContent);return titles;})()`);
     assert.deepEqual(await ancestorTitles('old-note'),['입문','1부 · 준비','1부 앞부분']);assert.deepEqual(await ancestorTitles('old-highlight'),['입문','1부 · 준비','1부 앞부분']);
     assert.deepEqual(await ancestorTitles('exact-note'),['입문','1부 · 준비','첫걸음','(1.2) 다음 장']);assert.deepEqual(await ancestorTitles('partial-note'),['실전','1부 · 활용','세부 위치 미확인']);
-    assert.equal(await page.evaluate(`${panel}.textContent.includes('목차 위치 미확인')`),false);assert.deepEqual(await page.evaluate(`${frame}.contentWindow.renderedSections`),['v0:opening']);
+    assert.equal(await page.evaluate(`${panel}.textContent.includes('목차 위치 미확인')`),false);assert.deepEqual(await page.scriptEvaluate('window.renderedSections'),['v0:opening']);
     await revealAnnotation(page,doc,'exact-note');await clickNative('[data-annotation=exact-note]');await page.waitFor(`${doc}.querySelector('#reader-content').dataset.section==='v0:two'&&${doc}.querySelector('[data-htmlmemo-id=exact-note]')`);
     assert.equal(await page.evaluate(`!!${doc}.querySelector('[data-htmlmemo-id=old-highlight],[data-htmlmemo-id=old-note]')`),false,'repeated wording must not repeat the opening annotations in a later chapter');
     assert.deepEqual(await ancestorTitles('old-note'),['입문','1부 · 준비','1부 앞부분']);
@@ -1892,7 +1892,7 @@ test('real Chrome: whole-book search shows live results and jumps to highlighted
       await page.waitFor(`${doc}.querySelector('#reader-search-status').textContent==='3개 장 검색됨'&&${doc}.querySelectorAll('.sidebar-book-results #reader-tree a').length===3`);
       assert.equal(await page.evaluate(`${doc}.querySelector('.sidebar-book-results #reader-tree').getBoundingClientRect().height>0`),true);
       assert.equal(await page.evaluate(`[...${doc}.querySelectorAll('.sidebar-book-results details')].every(d=>d.open)`),true);
-      if(width===1280){assert.deepEqual(await page.evaluate(`${doc}.defaultView.renderedSections`),['v0:opening']);assert.deepEqual(await page.evaluate(`${doc}.defaultView.decodedVolumes`),[0]);}
+      if(width===1280){assert.deepEqual(await page.scriptEvaluate('window.renderedSections'),['v0:opening']);assert.deepEqual(await page.scriptEvaluate('window.decodedVolumes'),[0]);}
       await writeFile(join(root,`test-results/book-search-results-${width}.png`),await page.screenshot());
       await clickNative('.sidebar-book-results a[href="#v1%3Aone"]');
       await page.waitFor(`${doc}.querySelector('#reader-content').dataset.section==='v1:one'&&${doc}.querySelector('.sidebar-book-results [role=status]').textContent==='이 장에서 1 / 2'`);
@@ -1915,7 +1915,7 @@ test('real Chrome: whole-book search shows live results and jumps to highlighted
       await clickNative('[data-sidebar-view=outline]');assert.equal(await page.evaluate(`${doc}.querySelector('#reader-tree').parentElement.id`),'reader-nav');assert.equal(await page.evaluate(`[...${doc}.querySelectorAll('#reader-tree details')].every(d=>!d.open)`),true);
       assert.deepEqual(await page.evaluate(`(async()=>{const {getDocument}=await import('./src/storage.js');return (await getDocument('whole-book-search')).metadata.annotations;})()`),original);
     }
-    assert.ok(await page.evaluate(`${doc}.defaultView.nativeResultClicks`)>0,'native delegated result handlers are preserved');assert.deepEqual(await page.evaluate(`${doc}.defaultView.decodedVolumes`),[0,1]);
+    assert.ok(await page.scriptEvaluate('window.nativeResultClicks')>0,'native delegated result handlers are preserved');assert.deepEqual(await page.scriptEvaluate('window.decodedVolumes'),[0,1]);
     await clickNative('[data-sidebar-view=search]');await enterQuery('바람');await page.waitFor(`${doc}.querySelector('#reader-search-status').textContent==='3개 장 검색됨'`);
     await page.evaluate(`window.showSaveFilePicker=async()=>{const root=await navigator.storage.getDirectory();return root.getFileHandle('book-search-export.html',{create:true});}`);await page.click('#save-page');
     await page.waitFor(`(async()=>{try{const root=await navigator.storage.getDirectory();return (await(await root.getFileHandle('book-search-export.html')).getFile()).size>0;}catch{return false;}})()`);

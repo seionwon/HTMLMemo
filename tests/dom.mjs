@@ -1,7 +1,9 @@
 import { DOMParser as Parser } from 'linkedom';
 export const NodeFilter={SHOW_TEXT:4,FILTER_ACCEPT:1,FILTER_REJECT:2,FILTER_SKIP:3};
 export function documentFor(html,url='https://example.test/article') {
-  const doc=new Parser().parseFromString(html,'text/html');
+  // Browser DOMParser always creates an HTML document, including blank srcdoc.
+  let doc=new Parser().parseFromString(html,'text/html');
+  if(!doc.documentElement)doc=new Parser().parseFromString('<html><head></head><body></body></html>','text/html');
   Object.defineProperty(doc,'baseURI',{value:url,configurable:true});
   Object.defineProperty(doc,'location',{value:{href:url},configurable:true});
   Object.defineProperty(doc.documentElement,'clientWidth',{value:960,configurable:true});

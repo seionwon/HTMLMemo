@@ -336,7 +336,7 @@ async function openRecord(record, prepared = null, {deferReady = false, sourceId
   // should parse it once in the iframe, not clone the entire book in DOMParser first.
   const parsed=prepared || (record.file ? {file:record.file,metadata:structuredClone(record.metadata),nativeScroll:true,savedMetadata:true} : record.metadata ? (() => {
     const metadata = structuredClone(record.metadata);
-    metadata.execution = {...(metadata.execution || {}), allowScripts: true};
+    metadata.execution = {...(metadata.execution || {}), allowScripts: metadata.execution?.allowScripts===true};
     const html = typeof record.html === 'string'
       ? record.html.replace(/<meta\b[^>]*http-equiv\s*=\s*["']?content-security-policy\b[^>]*>/gi, `<meta http-equiv="Content-Security-Policy" content="${SCRIPT_CSP}">`)
       : record.html;
@@ -647,7 +647,7 @@ async function openBrowser(input,forceNew=true){
     renderExternalTab(tab);if(!current?.reader)activate(tab.id);else{renderTabs();updateChrome();}
     focusBrowserTab(tab);return tab;
   }
-  tab.host.innerHTML=`<div class="browser-note"><span>${icon('globe',15)} 앱 문서 미리보기</span><a class="text-button" data-open-external href="${esc(url)}" target="_blank" rel="noopener noreferrer">새 탭에서 열기 ${icon('external',13)}</a><button class="text-button" data-capture>페이지 저장 ${icon('save',13)}</button><button class="text-button" data-web-help>가져오기 안내</button></div><div class="web-status" data-web-status role="status"></div><iframe class="browser-frame" title="앱 문서 미리보기" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads" referrerpolicy="no-referrer"></iframe>`;
+  tab.host.innerHTML=`<div class="browser-note"><span>${icon('globe',15)} 앱 문서 미리보기</span><a class="text-button" data-open-external href="${esc(url)}" target="_blank" rel="noopener noreferrer">새 탭에서 열기 ${icon('external',13)}</a><button class="text-button" data-capture>페이지 저장 ${icon('save',13)}</button><button class="text-button" data-web-help>가져오기 안내</button></div><div class="web-status" data-web-status role="status"></div><iframe class="browser-frame" title="앱 문서 미리보기" sandbox="allow-same-origin" referrerpolicy="no-referrer"></iframe>`;
   tab.frame=$('iframe',tab.host);
   tab.frame.addEventListener('load',()=>{
     tab.loading=false;const doc=browserDocument(tab);tab.readable=!!doc;

@@ -4,14 +4,25 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 export class CDP {
-  constructor(socket){this.socket=socket;this.serial=0;this.pending=new Map();this.listeners=new Map();socket.addEventListener('message',event=>{
+  constructor(socket){this.socket=socket;this.serial=0;this.pending=new Map();this.listeners=new Map();this.contexts=new Map();socket.addEventListener('message',event=>{
     const message=JSON.parse(event.data);if(message.id){const pending=this.pending.get(message.id);if(!pending)return;clearTimeout(pending.timer);this.pending.delete(message.id);message.error?pending.reject(new Error(message.error.message)):pending.resolve(message.result);}
-    else for(const listener of this.listeners.get(message.method)||[])listener(message.params);
+    else {if(message.method==='Runtime.executionContextCreated')this.contexts.set(message.params.context.id,message.params.context);if(message.method==='Runtime.executionContextDestroyed')this.contexts.delete(message.params.executionContextId);if(message.method==='Runtime.executionContextsCleared')this.contexts.clear();for(const listener of this.listeners.get(message.method)||[])listener(message.params);}
   });}
   static async connect(url){const socket=new WebSocket(url);await new Promise((resolve,reject)=>{socket.addEventListener('open',resolve,{once:true});socket.addEventListener('error',reject,{once:true});});return new CDP(socket);}
   send(method,params={},sessionId){return new Promise((resolve,reject)=>{const id=++this.serial;const timer=setTimeout(()=>{this.pending.delete(id);reject(new Error('CDP timeout: '+method));},20000);this.pending.set(id,{resolve,reject,timer});this.socket.send(JSON.stringify({id,method,params,...(sessionId?{sessionId}:{})}));});}
   on(method,listener){if(!this.listeners.has(method))this.listeners.set(method,[]);this.listeners.get(method).push(listener);}
   async evaluate(expression){const result=await this.send('Runtime.evaluate',{expression,awaitPromise:true,returnByValue:true,userGesture:true});if(result.exceptionDetails)throw new Error(result.exceptionDetails.exception?.description||result.exceptionDetails.text);return result.result.value;}
+  // Read test instrumentation in the opaque source, never copy source globals
+  // into the app or grant production RPC access to arbitrary properties.
+  async scriptEvaluate(expression){
+    const {result:owner}=await this.send('Runtime.evaluate',{expression:'document.querySelector(".document-host:not([hidden]) iframe[data-htmlmemo-runtime-runner]")'});
+    if(!owner.objectId)throw Error('No active isolated runtime');
+    const {node}=await this.send('DOM.describeNode',{objectId:owner.objectId});await this.send('Runtime.releaseObject',{objectId:owner.objectId});
+    const context=[...this.contexts.values()].find(c=>c.auxData?.frameId===node.frameId&&c.auxData?.isDefault);
+    if(!context)throw Error('Isolated runtime context is not ready');
+    const result=await this.send('Runtime.evaluate',{expression,contextId:context.id,awaitPromise:true,returnByValue:true,userGesture:true});if(result.exceptionDetails)throw Error(result.exceptionDetails.exception?.description||result.exceptionDetails.text);return result.result.value;
+  }
+  async scriptWaitFor(expression,timeout=15000){const start=Date.now();while(Date.now()-start<timeout){try{if(await this.scriptEvaluate(expression))return;}catch{}await delay(100);}throw Error('Timed out waiting for isolated source: '+expression);}
   async waitFor(expression,timeout=15000){const start=Date.now();while(Date.now()-start<timeout){try{if(await this.evaluate(expression))return;}catch{/* Execution contexts disappear during navigation. */}await delay(100);}throw new Error('Timed out waiting for: '+expression);}
   async navigate(url){await this.send('Page.navigate',{url});await this.waitFor('document.readyState === "complete"');}
   async click(selector){const rect=await this.evaluate(`(async()=>{const element=document.querySelector(${JSON.stringify(selector)});if(!element||element.hidden)throw Error('Missing element: '+${JSON.stringify(selector)});element.scrollIntoView({block:'nearest',inline:'nearest'});await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));const r=element.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);await this.send('Input.dispatchMouseEvent',{type:'mousePressed',x:rect.x,y:rect.y,button:'left',clickCount:1});await this.send('Input.dispatchMouseEvent',{type:'mouseReleased',x:rect.x,y:rect.y,button:'left',clickCount:1});}
