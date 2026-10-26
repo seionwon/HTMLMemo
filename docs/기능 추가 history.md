@@ -2940,11 +2940,11 @@ CodeMemo 임시 브라우저에서 0.1 두께의 선 근처를 눌러 주석 편
 
 
 <a id="hist-20261026-010"></a>
-### 2026-10-26 21:00:40 +09:00 — 설정의 툴바 위치 초기화 항목 제거
+### 2026-10-26 21:10:43 +09:00 — 설정의 툴바 위치 초기화 항목 제거
 
 | ID | change-kind | status |
 |---|---|---|
-| hist-20261026-010 | 설정 화면 정리 | 구현·로컬 검사·제한된 실제 브라우저 확인 완료, Pages 게시 대기 |
+| hist-20261026-010 | 설정 화면 정리 | 구현·전체/공개 Chrome·GitHub Pages 게시 확인 완료 |
 
 **목적·사용:** 상단 오른쪽 **설정**을 열었을 때 표시하던 **툴바 위치 / 가운데로** 줄과 자동 저장 설명을 제거했습니다. 자주 사용하지 않는 위치 초기화 항목을 없애 설정 화면을 줄였습니다. 해당 버튼의 클릭 처리도 제거해 없는 요소 때문에 다른 설정이 열리지 않는 오류가 생기지 않도록 했습니다.
 
@@ -2952,4 +2952,11 @@ CodeMemo 임시 브라우저에서 0.1 두께의 선 근처를 눌러 주석 편
 
 **검증:** 기존 단위 **527개**, JavaScript **105개·JSON**, Tailwind CSS **4.3.3** 빌드, git diff --check를 통과했습니다. 신뢰된 CodeMemo 브라우저에서 **1280×900 / 390×844** 설정 화면을 직접 확인했습니다. 두 경우 모두 HTTP **200**, 예외 **0개**이며 해당 줄은 사라지고 데이터 폴더·화면 테마·설정 JSON·사용 안내·앱 정보가 남아 있습니다. 첫 화면 확인 요청은 앱 초기화 전에 버튼을 찾아 실패했으며, 초기 안내 버튼이 나타날 때까지 기다린 다음 같은 경로를 확인했습니다. 최초 실패 응답과 후속 성공 화면을 보존합니다. Chrome을 로컬에서 직접 실행하지 않았으며 이 제한된 확인을 전체 Chrome 검사로 기록하지 않습니다. 검증용 임시 서버는 종료했습니다.
 
-**게시 상태·증거:** 정식 주소는 https://seionwon.github.io/HTMLMemo/ 이며, 현재는 로컬 구현·검증 단계입니다. 소스를 게시한 뒤 실제 Actions·공개 화면 확인 결과를 같은 항목에 보충합니다. 증거는 `test-results/settings-toolbar-remove-unit.log`, `test-results/settings-toolbar-remove-check.log`, `test-results/settings-toolbar-remove-build.log`, `test-results/settings-toolbar-remove-preview`에 보관합니다.
+**게시 상태·증거:** 정식 주소는 https://seionwon.github.io/HTMLMemo/ 이며, 초기 기록(21:00:40) 시점에는 로컬 구현·검증 단계였으며, 아래에 실제 게시 결과를 보충합니다. 증거는 `test-results/settings-toolbar-remove-unit.log`, `test-results/settings-toolbar-remove-check.log`, `test-results/settings-toolbar-remove-build.log`, `test-results/settings-toolbar-remove-preview`에 보관합니다.
+
+
+**최종 검증·게시 완료 (21:10:43 +09:00):** 소스 `07e790ef7ab7b270c1b742593c96c980cb478d6c`의 [Actions 40319298625](https://github.com/seionwon/HTMLMemo/actions/runs/40319298625)에서 전체 Chrome **66개**, 실제 [공개 URL](https://seionwon.github.io/HTMLMemo/)의 Chrome **41개**가 모두 통과했습니다. Pages 게시 완료는 **21:06:23**, 공개 Chrome 완료는 **21:09:22 +09:00**입니다. CI 단위는 **527개 중 526개 통과·실패 0·건너뜀 1**이며, Linux에서 실행 대상이 아닌 제한된 macOS의 Chrome 실행 보호 검사만 건너뛰었습니다. 해당 검사는 로컬 macOS에서 통과했습니다. CI JavaScript **86개·JSON**, Tailwind CSS **4.3.3** 빌드도 통과했습니다.
+
+공개 Chrome에서 설정 열기·닫기, About·실행과 앱 전달의 키보드/버튼 접근, 작은 화면에서 설정 창이 화면 안에 들어오는 동작을 확인했습니다. 공개 **1280px·320px** 설정 화면을 직접 확인했고, 기존 **390px** 화면도 아티팩트에 보관했습니다. CI Ubuntu의 한글 글꼴 부재로 공개 스크린샷의 일부 한글은 네모로 보이며, 한글 표시와 삭제 문구는 앞서 신뢰된 로컬 브라우저의 실제 텍스트·화면 및 공개 앱 파일 일치로 확인했습니다. 주석·TTS·팔레트·검색·서재/폴더·보안 격리의 기존 검사도 통과했습니다.
+
+공개 파일 **32개(1,486,665바이트)** 모두 HTTP **200**이며 해당 CI의 실제 Pages 아티팩트와 바이트·SHA-256이 일치했습니다. 신뢰된 CodeMemo 브라우저는 외부 URL을 허용하지 않아 공개 URL 직접 요청을 거부했으며 재시도하거나 우회하지 않았습니다. 공개 화면 확인은 기존 GitHub Actions의 허용된 실제 Chrome 검사와 그 스크린샷으로 완료했습니다. 결과는 `test-results/settings-toolbar-remove-ci`, `test-results/settings-toolbar-remove-published`, `test-results/settings-toolbar-remove-build-ci.log`, `test-results/settings-toolbar-remove-published-ci.log`, `test-results/settings-toolbar-remove-actions.json`, `test-results/settings-toolbar-remove-pages`, `test-results/settings-toolbar-remove-online-files.json`에 보관했습니다. 정식 서비스는 GitHub Pages이며 이 기록만 보충하는 후속 커밋은 앱 파일을 바꾸지 않습니다. 앱을 새로고침하면 적용됩니다.
