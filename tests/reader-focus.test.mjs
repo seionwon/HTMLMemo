@@ -65,9 +65,11 @@ test('floating toolbar stays compact without duplicate TTS or relocated zoom con
  const summary=a.doc.querySelector('#toolbar [data-action=palette]'),activate=summary.onclick;
  for(const [color,width,opacity,penTTL] of [['#edcf67',3,.35,0],['#000000',1,.1,3],['#ffffff',18,.9,30],['#3b82f6',7,.55,10]]){
   Object.assign(a.r,{color,width,opacity,penTTL});a.context.updateToolbarState();
-  assert.deepEqual([...summary.querySelectorAll('[data-pen-setting]')].map(node=>node.textContent),[width+'px',Math.round(opacity*100)+'%',penTTL?penTTL+'초':'∞']);
+  assert.equal(summary.textContent,'');assert.ok(summary.querySelector('.pen-settings-stroke'));assert.ok(summary.querySelector('.pen-settings-duration .pen-settings-alpha'));
+  assert.equal(summary.querySelector('svg,[data-pen-setting]'),null);
+  assert.equal(summary.style.getPropertyValue('--tool-time-preview'),({0:'100%',3:'25%',10:'50%',30:'75%'})[penTTL]);
   assert.equal(summary.style.getPropertyValue('--tool-color'),color);assert.equal(Number(summary.style.getPropertyValue('--tool-opacity')),opacity);
-  assert.ok(summary.title.includes(color.toUpperCase()));assert.ok(summary.title.includes(penTTL?penTTL+'초':'영구 저장'));assert.equal(summary.getAttribute('aria-label'),summary.title);assert.strictEqual(summary.onclick,activate);
+  assert.ok(summary.title.includes(color.toUpperCase()));assert.ok(summary.title.includes(width+'px'));assert.ok(summary.title.includes(Math.round(opacity*100)+'%'));assert.ok(summary.title.includes(penTTL?penTTL+'초':'영구 저장'));assert.equal(summary.getAttribute('aria-label'),summary.title);assert.strictEqual(summary.onclick,activate);
  }
  const css=await readFile(new URL('../public/design.tailwind.css',import.meta.url),'utf8');
  assert.match(css,/\.floating-toolbar\{height:auto;min-height:0;padding:0 1px;gap:0/);
