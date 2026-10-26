@@ -3039,11 +3039,11 @@ CodeMemo 임시 브라우저에서 0.1 두께의 선 근처를 눌러 주석 편
 
 
 <a id="hist-20261026-014"></a>
-### 2026-10-26 22:44:54 +09:00 — 펜과 색상의 선 표시 폭을 옆 아이콘과 통일
+### 2026-10-26 22:55:50 +09:00 — 펜과 색상의 선 표시 폭을 옆 아이콘과 통일
 
 | ID | change-kind | status |
 |---|---|---|
-| hist-20261026-014 | 툴바 선 아이콘 폭·공통 버튼 여백 | 구현·로컬 검사·제한된 실제 브라우저 확인 완료, Pages 게시 대기 |
+| hist-20261026-014 | 툴바 선 아이콘 폭·공통 버튼 여백 | 구현·전체/공개 Chrome·GitHub Pages 게시 확인 완료 |
 
 **목적·사용:** 문서를 열면 플로팅 툴바의 **펜과 색상** 두 선이 옆 도구 아이콘과 같은 폭으로 표시됩니다. 기존 클릭 영역은 다른 도구와 같았지만 내부 선은 버튼 안쪽 전체 폭(데스크톱 24px·작은 화면 21px)을 차지해 더 넓어 보였습니다. 두 선의 최대 폭을 일반 SVG 아이콘과 같은 **18px / 17px**로 줄이고, 이 버튼에만 있던 좌우 4px 여백을 제거해 일반 도구 버튼과 같은 기본 스타일을 사용합니다.
 
@@ -3051,4 +3051,11 @@ CodeMemo 임시 브라우저에서 0.1 두께의 선 근처를 눌러 주석 편
 
 **로컬 검증:** 기존 단위 **530개**, JavaScript **105개·JSON**, Tailwind CSS **4.3.3** 빌드, git diff --check를 통과했습니다. 신뢰된 CodeMemo 브라우저의 **1280px·390px** 실제 앱 화면을 HTTP **200**, 예외 **0개**로 확인하고 직접 보았습니다. 이 제한된 확인은 전체 Chrome 검사와 구분합니다. 기존 팔레트 Chrome 검사에는 버튼 상자뿐 아니라 **두 선의 최대 폭과 실제 옆 SVG 폭의 일치**, 툴바의 모든 도구 버튼 폭 일치를 함께 검증하도록 보완했습니다. 임시 검증 서버는 종료했습니다.
 
-**게시 상태·증거:** 정식 주소는 https://seionwon.github.io/HTMLMemo/ 이며 현재는 로컬 구현·검증을 마친 게시 대기 단계입니다. 실제 Actions·공개 화면·측정 결과는 같은 항목에 보충합니다. 증거는 `test-results/pen-button-width-unit.log`, `test-results/pen-button-width-check.log`, `test-results/pen-button-width-build.log`, `test-results/pen-button-width-preview`에 보관했습니다.
+**게시 상태·증거:** 정식 주소는 https://seionwon.github.io/HTMLMemo/ 이며 초기 기록(22:44:54) 시점에는 로컬 구현·검증을 마친 게시 대기 단계였습니다. 실제 Actions·공개 화면·측정 결과는 같은 항목에 보충합니다. 증거는 `test-results/pen-button-width-unit.log`, `test-results/pen-button-width-check.log`, `test-results/pen-button-width-build.log`, `test-results/pen-button-width-preview`에 보관했습니다.
+
+
+**최종 검증·게시 완료 (22:55:50 +09:00):** 소스 `bff45d0e6973f90e2586bf99b7d8941d0248d060`의 [Actions 40333311873](https://github.com/seionwon/HTMLMemo/actions/runs/40333311873)에서 전체 Chrome **66개**, 실제 [공개 URL](https://seionwon.github.io/HTMLMemo/)의 Chrome **41개**가 모두 통과했습니다. Pages 게시 완료는 **22:50:56**, 공개 Chrome 완료는 **22:54:16 +09:00**입니다. CI 단위는 **530개 중 529개 통과·실패 0·건너뜀 1**이며, Linux에서 실행 대상이 아닌 제한된 macOS의 Chrome 실행 보호 검사만 건너뛰었습니다. 해당 검사는 로컬 macOS에서 통과했습니다. CI JavaScript **86개·JSON**, Tailwind CSS **4.3.3** 빌드도 통과했습니다.
+
+전체/공개 Chrome 양쪽에서 **1280px 화면의 두 선과 옆 SVG가 각각 18px**, **390·320px 화면에서는 각각 17px**로 실측되어 정확히 일치했습니다. 모든 일반 도구 버튼의 클릭 영역도 각각 **32px / 29px**로 같았고 높이는 **19px**를 유지했습니다. 두 선이 버튼 안에 들어가며 네 가지 시간의 길이 비율, 색상·투명도·굵기 변경과 새로고침 복원도 통과했습니다. 공개 **1280px·320px 어두운 화면**을 직접 확인했습니다. CI Ubuntu의 일부 한글은 글꼴 부재로 네모로 보이므로 문구는 DOM으로 확인했고, 앞서 신뢰된 로컬 브라우저에서는 한글 화면도 확인했습니다. 기존 주석·검색·TTS·서재/폴더·팔레트 이동·보안 격리 검사도 통과했습니다.
+
+공개 파일 **32개(1,485,050바이트)** 모두 HTTP **200**이며 해당 CI의 실제 Pages 아티팩트와 바이트·SHA-256이 일치했습니다. 증거는 `test-results/pen-button-width-ci`, `test-results/pen-button-width-published`, 각 폴더의 `pages-only-pen-settings-summary.json`·화면, `test-results/pen-button-width-build-ci.log`, `test-results/pen-button-width-published-ci.log`, `test-results/pen-button-width-actions.json`, `test-results/pen-button-width-pages`, `test-results/pen-button-width-online-files.json`에 보관했습니다. 정식 서비스는 GitHub Pages이며 이 기록만 보충하는 후속 커밋은 앱 파일을 바꾸지 않습니다. 새로고침하면 적용됩니다.
