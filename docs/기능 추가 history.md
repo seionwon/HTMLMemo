@@ -2890,11 +2890,11 @@ CodeMemo 임시 브라우저에서 0.1 두께의 선 근처를 눌러 주석 편
 
 
 <a id="hist-20261026-008"></a>
-### 2026-10-26 14:26:36 +09:00 — TTS 다이어그램 낭독 표시의 글자 가림 수정
+### 2026-10-26 14:37:30 +09:00 — TTS 다이어그램 낭독 표시의 글자 가림 수정
 
 | ID | change-kind | status |
 |---|---|---|
-| hist-20261026-008 | SVG 낭독 표시·화면 기준 선 두께·위치 갱신·내보내기 정리 | 구현·로컬/신뢰된 브라우저 확인 완료 / 전체·공개 Chrome·Pages 게시 확인 전 |
+| hist-20261026-008 | SVG 낭독 표시·화면 기준 선 두께·위치 갱신·내보내기 정리 | 구현·전체/공개 Chrome·GitHub Pages 게시 확인 완료 |
 
 **목적·사용:** 문서를 열고 상단 스피커 버튼 → 낭독 툴바의 ▶를 누릅니다. SVG 다이어그램의 글자와 SVG 안 HTML 라벨(foreignObject)을 읽을 때 글자가 두꺼운 표시로 가려지지 않도록, 글자 영역의 옅은 보라색 배경(약 12%)과 화면 기준 약 1픽셀의 얇은 선으로 위치를 표시합니다. 일반 본문은 기존 배경색과 2픽셀 밑줄을 유지합니다. 한 문장 안에 일반 글자와 SVG가 섞여 있어도 각 부분에 맞는 표시를 적용하며 낭독 순서·범위·음성·재생 조작은 유지합니다.
 
@@ -2905,3 +2905,9 @@ CodeMemo 임시 브라우저에서 0.1 두께의 선 근처를 눌러 주석 편
 **로컬 검증:** 단위 **527개**, JavaScript **105개·JSON**, 빌드(Tailwind CSS **4.3.3**), git diff --check를 통과했습니다. 추가 단위 2개는 혼합 문장의 본문 범위 분리, SVG/foreignObject의 Custom Highlight 제외, SVG 원본 보존, 임시 표시의 내보내기 제외와 정지/닫기/종료 정리를 확인합니다. 신뢰된 CodeMemo 브라우저의 합성 문서에서 수정 전 글자 가림과 수정 후 SVG·HTML 라벨의 전체 글자 표시, 1픽셀 선·약 12% 배경·포인터 통과를 HTTP 200·예외 없이 확인하고 화면을 직접 보았습니다. 음성 출력만 검증용 발화로 대체하고 실제 렌더링과 버튼 경로를 사용했습니다. 이 제한된 검사와 전체 앱 Chrome 검사는 구분합니다. 검증 포트 4173의 임시 서버는 종료했습니다.
 
 기존 전체/공개 Chrome 파일에는 50%·100%·200% 확대와 390px 화면의 33% 표시, SVG/tspan·foreignObject·혼합 문장, 내부 스크롤과 글자 크기 변경, 일시정지/재개·문장 이동·정지/닫기, 재생 중 HTML 내보내기와 원본/주석 보존 검사를 추가했습니다. 실제 결과·게시 상태는 같은 항목에 보충합니다. 로컬 로그와 수정 전후 화면은 `test-results/tts-diagram-unit.log`, `test-results/tts-diagram-check.log`, `test-results/tts-diagram-build.log`, `test-results/tts-diagram-preview`에 보관했습니다.
+
+**최종 검증·게시 완료 (14:37:30 +09:00):** 초기 구현·로컬 검사는 14:26:36에 기록했습니다. 소스 `d2c68ab18547b83231def538b807c81f5e97d94a`의 [Actions 40274309429](https://github.com/seionwon/HTMLMemo/actions/runs/40274309429)에서 전체 Chrome **66개**, 실제 [공개 URL](https://seionwon.github.io/HTMLMemo/)의 Chrome **41개**가 모두 통과했습니다. Pages 게시 완료는 **14:33:40**, 공개 Chrome 완료는 **14:36:47 +09:00**입니다. 실제 CI 단위는 **527개 중 526개 통과·실패 0·건너뜀 1**이며, Linux에서 실행 대상이 아닌 제한된 macOS의 Chrome 실행 보호 검사만 건너뛰었습니다. 해당 검사는 로컬 macOS에서 통과했습니다. CI JavaScript **86개·JSON**, Tailwind CSS **4.3.3** 빌드도 통과했습니다.
+
+전체/공개 Chrome 양쪽에서 1280px 화면의 **50%·100%·200%**, 390px 화면의 **33%** 네 경우 모두 선 두께가 화면 기준 약 **1픽셀**(**1 / 1 / 1 / 0.999999px**)로 측정됐습니다. SVG와 그 안 HTML 라벨이 Custom Highlight 범위에서 제외되고, 혼합 문장에서는 본문 앞뒤 범위만 기존 밑줄을 사용하는 것을 확인했습니다. 내부 스크롤·SVG 글자 크기 변경 후 글자 영역과 표시의 위치·폭이 맞으며, 일반 본문 2픽셀 밑줄, 일시정지/재개·문장 이동, 정지/닫기 정리도 통과했습니다. 재생 중 실제 HTML 내보내기에 임시 레이어가 없고, SVG 원본·본문 텍스트·저장 원본·주석·북마크는 보존됐습니다. 브라우저 예외는 **0개**였습니다. 공개 100% 데스크톱과 390px의 라벨 화면을 직접 확인했습니다. 기존 TTS 조작·검색·주석·서재/폴더·MHTML·보안 격리 검사도 통과했습니다.
+
+공개 파일 **32개(1,483,057바이트)** 모두 HTTP 200이며 해당 CI의 실제 Pages 아티팩트와 바이트·SHA-256이 일치했습니다. 증거는 `test-results/tts-diagram-ci`, `test-results/tts-diagram-published`, `test-results/tts-diagram-build-ci.log`, `test-results/tts-diagram-published-ci.log`, `test-results/tts-diagram-pages`, `test-results/tts-diagram-online-files.json`에 보관했습니다. 정식 서비스는 GitHub Pages이며, 이 기록만 보충하는 후속 커밋은 게시 앱 파일을 바꾸지 않습니다. 앱을 새로고침하고 문서를 열어 TTS를 시작하면 적용됩니다.
