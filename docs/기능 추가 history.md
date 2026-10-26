@@ -2985,3 +2985,19 @@ CodeMemo 임시 브라우저에서 0.1 두께의 선 근처를 눌러 주석 편
 전체/공개 Chrome 양쪽에서 **실제 OPFS 폴더 저장을 사용하는 연결 경로**에 보호 권한 **거부 응답만 모의**하여 확인했습니다. 실제 폴더 저장 완료 후 조회 **1회·요청 1회**, 반복 재연결 뒤에도 같은 횟수, 폴더 상태 **폴더 저장 완료**, 브라우저 예외 **0개**였습니다. 첫 실행·선택 취소·권한 거부·자동 재연결 때 요청하지 않는 동작과 삭제된 설정 항목·통합 안내도 통과했습니다. 이 결과는 실제 브라우저가 지속 보관 권한을 허용했다는 뜻이 아니며, 허용/미지원/예외/미응답 분기는 단위 검사로 확인했습니다. 공개 **1280px·390px** 설정 화면을 직접 확인했습니다. CI Ubuntu의 한글 글꼴 부재로 일부 글자는 네모로 표시되므로 문구는 DOM 검사로 확인했고, 신뢰된 로컬 브라우저에서는 한글 화면도 확인했습니다. 기존 검색·주석·팔레트·TTS·서재/폴더·보안 격리 검사도 통과했습니다.
 
 공개 파일 **32개(1,487,226바이트)** 모두 HTTP **200**이며 해당 CI의 실제 Pages 아티팩트와 바이트·SHA-256이 일치했습니다. 증거는 `test-results/storage-protection-ci`, `test-results/storage-protection-published`, 각 폴더의 `pages-only-storage-protection.json`·1280/390px 화면, `test-results/storage-protection-build-ci.log`, `test-results/storage-protection-published-ci.log`, `test-results/storage-protection-actions.json`, `test-results/storage-protection-pages`, `test-results/storage-protection-online-files.json`에 보관했습니다. 정식 서비스는 GitHub Pages이며, 이 기록만 보충하는 후속 커밋은 앱 파일을 바꾸지 않습니다. 앱을 새로고침한 뒤 다음 폴더 연결·다시 연결부터 통합 처리를 사용합니다.
+
+
+<a id="hist-20261026-012"></a>
+### 2026-10-26 21:31:13 +09:00 — 설정에서 중복 웹페이지 가져오기 안내 제거
+
+| ID | change-kind | status |
+|---|---|---|
+| hist-20261026-012 | 중복 설정 항목 정리 | 구현·로컬 검사·제한된 실제 브라우저 확인 완료, Pages 게시 대기 |
+
+**목적·사용:** 설정의 **웹페이지 가져오기 → 사용 안내**와 내 서재의 **웹페이지 가져오기 안내**는 동일한 안내 창을 여는 중복 기능이었습니다. 설정의 해당 줄과 클릭 처리를 제거했습니다. 앞으로 안내가 필요하면 **내 서재 → 웹페이지 가져오기 안내**를 누릅니다. 단일 파일 저장 형식 설명과 안내 창의 **HTML 파일 가져오기 / 텍스트 붙여넣기** 기능은 그대로 이용할 수 있습니다.
+
+**동작·범위:** 안내 창 자체와 서재의 가져오기·붙여넣기 동작, 기존 제한 상황의 안내 경로는 유지합니다. 데이터 폴더 연결·브라우저 보관 보호 자동 요청·화면 테마·설정 파일 처리와 문서·주석 저장 형식은 바꾸지 않았습니다. 삭제된 버튼을 찾던 설정 이벤트도 정리했으며, 기존 단일 파일 안내 검사의 설정 진입 경로와 검사 이름을 실제 남은 진입 경로에 맞췄습니다.
+
+**검증:** 기존 단위 **530개**, JavaScript **105개·JSON**, Tailwind CSS **4.3.3** 빌드, git diff --check를 통과했습니다. 신뢰된 CodeMemo 브라우저에서 **1280×900 / 390×844** 설정 화면의 항목 제거와 다른 설정 유지, 모바일에서 **내 서재 → 웹페이지 가져오기 안내**의 실제 열림·저장 형식 설명·두 작업 버튼을 확인했습니다. 세 요청 모두 HTTP **200**, 예외 **0개**이며 화면도 직접 확인했습니다. 이 제한된 확인은 전체 Chrome 검사와 구분합니다. 검증용 임시 서버는 종료했습니다.
+
+**게시 상태·증거:** 현재는 로컬 구현·검증을 완료한 게시 대기 단계이며 정식 주소는 https://seionwon.github.io/HTMLMemo/ 입니다. 실제 Actions·공개 화면·게시 결과를 같은 항목에 보충합니다. 증거는 `test-results/settings-web-remove-unit.log`, `test-results/settings-web-remove-check.log`, `test-results/settings-web-remove-build.log`, `test-results/settings-web-remove-preview`에 보관했습니다.

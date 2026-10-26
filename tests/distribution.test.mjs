@@ -299,11 +299,11 @@ test('library web import guide opens the existing help and retains import, paste
   assert.equal(picked,1);assert.equal(doc.querySelector('#dialog').open,false);assert.equal(doc.querySelector('#library').hidden,false);assert.equal(doc.querySelectorAll('.document-card').length,1);assert.deepEqual(record,before);
 });
 
-test('single-file save guidance is visible at import and in the library, settings and execution help without restricting HTML files',async()=>{
+test('single-file save guidance is visible at import and in the library and execution help without restricting HTML files',async()=>{
   const initial=new DOMParser().parseFromString(assets.app['index.html'].text,'text/html'),app=await fileApp(),doc=app.doc;
   const check=node=>{assert.ok(node);assert.equal(node.querySelector('strong').textContent,'Webpage, Single File');assert.match(node.textContent,/브라우저.*저장/);assert.match(node.textContent,/웹페이지, 단일 파일 · \.mhtml/);};
   for(const view of [initial,doc]){check(view.querySelector('#library [data-single-file-guide]'));assert.equal(view.querySelector('#hero-import').getAttribute('aria-describedby'),'single-file-notice');assert.ok(view.querySelector('#file-input').getAttribute('accept').includes('.html'));}
-  const openers=[()=>doc.querySelector('#web-help-button').onclick(),()=>{doc.querySelector('#settings-button').onclick();doc.querySelector('#settings-web').onclick();},()=>{openExecution(app);doc.querySelector('#execution-web').onclick();}];
+  const openers=[()=>doc.querySelector('#web-help-button').onclick(),()=>{openExecution(app);doc.querySelector('#execution-web').onclick();}];
   for(const open of openers){open();check(doc.querySelector('#dialog [data-single-file-guide]'));assert.match(doc.querySelector('#dialog').textContent,/이미 가진 HTML 파일은 그대로 가져올 수 있습니다\./);assert.ok(doc.querySelector('#web-help-import'));assert.ok(doc.querySelector('#web-help-paste'));}
 });
 
