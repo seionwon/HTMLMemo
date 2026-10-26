@@ -8,7 +8,8 @@ test('a backup contains no document data, file handles or arbitrary properties',
 test('sidebar width migrates old settings, round-trips with portable preferences and rejects invalid values',()=>{
   const local=storage();assert.equal(loadPreferences(local).sidebarWidth,300);assert.equal(normalizePreferences({}).sidebarWidth,300);
   const preferences=storePreferences({sidebarWidth:420.4},local);assert.equal(loadPreferences(local).sidebarWidth,420);assert.equal(parseSettings(serializeSettings(preferences)).preferences.sidebarWidth,420);
-  for(const sidebarWidth of [NaN,Infinity,179,641,'420',{},-1])assert.throws(()=>normalizePreferences({sidebarWidth}),/사이드바 폭/);
+  for(const sidebarWidth of [8,179,640]){storePreferences({sidebarWidth},local);assert.equal(loadPreferences(local).sidebarWidth,sidebarWidth);assert.equal(parseSettings(serializeSettings(loadPreferences(local))).preferences.sidebarWidth,sidebarWidth);}
+  for(const sidebarWidth of [NaN,Infinity,0,7,641,'420',{},-1])assert.throws(()=>normalizePreferences({sidebarWidth}),/사이드바 폭/);
 });
 test('library view defaults to cards, persists lists and rejects unknown modes',()=>{const local=storage();assert.equal(loadPreferences(local).libraryView,'card');storePreferences({libraryView:'list'},local);assert.equal(loadPreferences(local).libraryView,'list');assert.throws(()=>normalizePreferences({libraryView:'tiles'}));});
 test('damaged, future, oversized and remote-storage settings are rejected before applying',()=>{const base=JSON.parse(serializeSettings({}));for(const input of [{...base,storage:'cloud'},{...base,version:2},{...base,preferences:{theme:'invalid'}},{...base,preferences:{annotation:{width:100}}},{...base,preferences:{toolbarPosition:{x:NaN,y:2}}}])assert.throws(()=>parseSettings(JSON.stringify(input)));assert.throws(()=>parseSettings('bad json'));assert.throws(()=>parseSettings(' '.repeat(131073)));});

@@ -132,9 +132,10 @@ body[data-codememo-design]{margin:0;font-family:var(--app-font);background:var(-
 .about-brand p{font-size:12px;color:var(--muted);margin:0}
 .about-version{font-size:13px;margin:18px 0}
 .sidebar{top:var(--chrome-height,25px)}
-#sidebar.sidebar{left:0;right:auto;width:var(--app-sidebar-width,var(--spacing-app-sidebar));max-width:calc(100% - 40px);border-left:0;border-right:1px solid var(--line);box-shadow:8px 0 30px #1439210b}
-.sidebar-resizer{position:absolute;top:0;right:-5px;bottom:0;width:10px;z-index:2;cursor:col-resize;touch-action:none;user-select:none}
-.sidebar-resizer::after{content:'';position:absolute;top:0;bottom:0;left:4px;width:2px;background:transparent}
+#sidebar.sidebar{left:0;right:auto;width:var(--app-sidebar-width,var(--spacing-app-sidebar));min-width:8px;max-width:calc(100% - 40px);overflow:hidden;border-left:0;border-right:1px solid var(--line);box-shadow:8px 0 30px #1439210b}
+#sidebar.sidebar[data-app-sidebar-strip]>:not(.sidebar-resizer){visibility:hidden;pointer-events:none}
+.sidebar-resizer{position:absolute;top:0;right:0;bottom:0;width:10px;max-width:100%;z-index:2;cursor:col-resize;touch-action:none;user-select:none}
+.sidebar-resizer::after{content:'';position:absolute;top:0;bottom:0;right:0;width:2px;background:transparent}
 .sidebar-resizer:hover::after,.sidebar-resizer:focus-visible::after{background:var(--green)}
 .sidebar-resizer:focus-visible{outline:2px solid var(--green);outline-offset:-4px}
 html[data-app-sidebar-resizing],html[data-app-sidebar-resizing] *{cursor:col-resize!important;user-select:none!important;-webkit-user-select:none!important}

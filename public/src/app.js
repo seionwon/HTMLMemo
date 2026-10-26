@@ -1045,11 +1045,12 @@ function closeSidebar({remember=true,clearSearch=true}={}) {
   clearTimeout(panel.sidebarSearchTimer);panel.sidebarMode='';sidebarMode='';panel.hidden=true;$('#workspace')?.removeAttribute('data-app-sidebar');
   if(wasOpen&&r){if(remember)r.appSidebarClosed=true;if(clearSearch&&r.documentSidebarMode!=='search'){r.sidebarSearchQuery='';r.search('');}}
 }
-function appSidebarMaxWidth() {return Math.max(180,Math.min(640,innerWidth-(innerWidth>720?240:40)));}
+function appSidebarMaxWidth() {return Math.max(8,Math.min(640,innerWidth-(innerWidth>720?240:40)));}
 function applyAppSidebarWidth(value=preferences.sidebarWidth) {
-  const width=Math.round(Math.max(180,Math.min(appSidebarMaxWidth(),Number(value)||300))),root=document.documentElement,handle=$('#sidebar-resizer');
+  const width=Math.round(Math.max(8,Math.min(appSidebarMaxWidth(),Number(value)||300))),root=document.documentElement,handle=$('#sidebar-resizer');
   if(root.style.getPropertyValue('--app-sidebar-width')!==width+'px')root.style.setProperty('--app-sidebar-width',width+'px');
-  if(handle)for(const [name,value] of Object.entries({'aria-valuemin':180,'aria-valuemax':appSidebarMaxWidth(),'aria-valuenow':width,'aria-valuetext':width+'픽셀'}))handle.setAttribute(name,String(value));
+  $('#sidebar')?.toggleAttribute('data-app-sidebar-strip',width===8);
+  if(handle)for(const [name,value] of Object.entries({'aria-valuemin':8,'aria-valuemax':appSidebarMaxWidth(),'aria-valuenow':width,'aria-valuetext':width+'픽셀'}))handle.setAttribute(name,String(value));
   return width;
 }
 function saveAppSidebarWidth(width) {
@@ -1081,7 +1082,7 @@ function bindAppSidebarResize(panel) {
     if(event.key==='Escape'&&panel.sidebarResize){event.preventDefault();event.stopPropagation();stopAppSidebarResize();return;}
     if(!['ArrowLeft','ArrowRight','Home','End','Enter'].includes(event.key))return;
     event.preventDefault();event.stopPropagation();stopAppSidebarResize();
-    const width=applyAppSidebarWidth(),next=event.key==='Home'?180:event.key==='End'?appSidebarMaxWidth():event.key==='Enter'?300:Math.max(180,Math.min(appSidebarMaxWidth(),width+(event.key==='ArrowRight'?1:-1)*(event.shiftKey?40:10)));
+    const width=applyAppSidebarWidth(),next=event.key==='Home'?8:event.key==='End'?appSidebarMaxWidth():event.key==='Enter'?300:Math.max(8,Math.min(appSidebarMaxWidth(),width+(event.key==='ArrowRight'?1:-1)*(event.shiftKey?40:10)));
     saveAppSidebarWidth(next);applyAppSidebarWidth();
   };
   handle.ondblclick=event=>{event.preventDefault();event.stopPropagation();stopAppSidebarResize();saveAppSidebarWidth(300);applyAppSidebarWidth();};

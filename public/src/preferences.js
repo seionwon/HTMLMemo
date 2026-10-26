@@ -103,7 +103,7 @@ export function normalizePreferences(value = {}) {
   let toolbarPosition=null;
   if(value.toolbarPosition!==null&&value.toolbarPosition!==undefined){const p=value.toolbarPosition;if(!object(p)||![p.x,p.y].every(n=>Number.isFinite(n)&&n>=0&&n<=1))throw new Error('툴바 위치 설정이 올바르지 않습니다.');toolbarPosition={x:p.x,y:p.y};}
   const sidebarWidth=value.sidebarWidth??DEFAULT_PREFERENCES.sidebarWidth;
-  if(!Number.isFinite(sidebarWidth)||sidebarWidth<180||sidebarWidth>640)throw new Error('사이드바 폭 설정이 올바르지 않습니다.');
+  if(!Number.isFinite(sidebarWidth)||sidebarWidth<8||sidebarWidth>640)throw new Error('사이드바 폭 설정이 올바르지 않습니다.');
   return {theme,librarySort,librarySortDirection,libraryView,annotation,toolbarPosition,sidebarWidth:Math.round(sidebarWidth)};
 }
 export function loadPreferences(storage) {
