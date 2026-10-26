@@ -7,6 +7,7 @@
   --spacing-library-row:28px;
   --spacing-library-card:96px;
   --radius-library:8px;
+  --spacing-app-sidebar:300px;
 }
 
 .folder-welcome{font-size:13px;line-height:1.75;overflow-wrap:anywhere}.folder-welcome .dialog-heading{margin-bottom:10px}.folder-welcome-intro{margin:0 0 18px;color:var(--muted)}.folder-welcome-intro strong{color:var(--text)}.folder-welcome-steps{list-style:none;counter-reset:folder-step;padding:0;margin:0;display:grid;gap:14px}.folder-welcome-steps li{counter-increment:folder-step;position:relative;padding-left:34px}.folder-welcome-steps li:before{content:counter(folder-step);position:absolute;left:0;top:0;display:grid;place-items:center;width:25px;height:25px;border-radius:50%;background:var(--green-light);color:var(--green);font-weight:650}.folder-welcome-steps strong{font-size:13px}.folder-welcome-steps p{color:var(--muted);font-size:12px;line-height:1.75;margin:3px 0 0}.folder-welcome-steps b{font-weight:550;color:var(--text)}.folder-welcome-existing{font-size:12px;margin:18px 0 0;padding:11px 0;border-block:1px solid var(--line)}.folder-welcome-existing summary{cursor:pointer;color:var(--green)}.folder-welcome-existing p{color:var(--muted);margin:8px 0 0}.folder-welcome-move{font-size:12px;margin:14px 0 0}.folder-welcome-status{font-size:11px;color:var(--muted);margin:10px 0;min-height:1.75em}.folder-welcome-actions{margin-top:12px;justify-content:flex-start}.folder-welcome-actions .primary-button{flex:1;white-space:normal}.folder-welcome-warning{color:var(--muted);font-size:11px;line-height:1.75;margin:13px 0 0}.folder-welcome-unsupported{padding:13px;border:1px solid var(--line);border-radius:8px;background:var(--bg);font-size:12px;line-height:1.9}@media(max-width:480px){dialog:has(.folder-welcome){padding:20px}.folder-welcome .dialog-heading h2{font-size:17px}.folder-welcome-steps{gap:12px}.folder-welcome-steps li{padding-left:31px}.folder-welcome-actions{position:sticky;bottom:-20px;background:var(--surface);padding:10px 0;margin-inline:0;z-index:1}.folder-welcome-actions .secondary-button{white-space:normal}}
@@ -131,6 +132,13 @@ body[data-codememo-design]{margin:0;font-family:var(--app-font);background:var(-
 .about-brand p{font-size:12px;color:var(--muted);margin:0}
 .about-version{font-size:13px;margin:18px 0}
 .sidebar{top:var(--chrome-height,25px)}
+#sidebar.sidebar{left:0;right:auto;width:var(--app-sidebar-width,var(--spacing-app-sidebar));max-width:calc(100% - 40px);border-left:0;border-right:1px solid var(--line);box-shadow:8px 0 30px #1439210b}
+.sidebar-resizer{position:absolute;top:0;right:-5px;bottom:0;width:10px;z-index:2;cursor:col-resize;touch-action:none;user-select:none}
+.sidebar-resizer::after{content:'';position:absolute;top:0;bottom:0;left:4px;width:2px;background:transparent}
+.sidebar-resizer:hover::after,.sidebar-resizer:focus-visible::after{background:var(--green)}
+.sidebar-resizer:focus-visible{outline:2px solid var(--green);outline-offset:-4px}
+html[data-app-sidebar-resizing],html[data-app-sidebar-resizing] *{cursor:col-resize!important;user-select:none!important;-webkit-user-select:none!important}
+html[data-app-sidebar-resizing] iframe{pointer-events:none!important}
 .sidebar-heading,.sidebar-views{flex-shrink:0}
 .sidebar-views{display:flex;flex-wrap:nowrap;align-items:center;gap:3px;box-sizing:border-box;height:25px;min-height:25px;margin:0;padding:0 8px;border-bottom:1px solid var(--line);overflow-x:auto}
 .sidebar-views button{display:flex;flex:1 0 auto;align-items:center;justify-content:center;gap:4px;min-width:28px;height:24px;min-height:24px;max-height:24px;margin:0;padding:0 5px;border-radius:5px;color:var(--muted);font-size:10px;line-height:1;white-space:nowrap}
@@ -141,8 +149,7 @@ body[data-codememo-design]{margin:0;font-family:var(--app-font);background:var(-
 .sidebar-views button:focus-visible{outline-offset:-2px}
 .sidebar-content{min-height:0}
 /* A document need not supply its own TOC to expose reading tools. */
-@media(min-width:721px){#workspace[data-app-sidebar] #workspaces{width:calc(100% - 300px)}}
-@media(min-width:721px) and (max-width:1000px){#workspace[data-app-sidebar] #workspaces{width:calc(100% - 280px)}}
+@media(min-width:721px){#workspace[data-app-sidebar] #workspaces{width:calc(100% - var(--app-sidebar-width,var(--spacing-app-sidebar)));margin-left:var(--app-sidebar-width,var(--spacing-app-sidebar))}}
 @media(max-width:720px){.sidebar{top:calc(var(--chrome-height,25px) + 24px)}}
 .floating-toolbar .tool-has-modes{position:relative}
 .floating-toolbar .tool-has-modes::after{content:'';position:absolute;right:1px;bottom:1px;width:0;height:0;border-left:3px solid transparent;border-top:3px solid transparent;border-bottom:3px solid currentColor;opacity:.65;pointer-events:none}

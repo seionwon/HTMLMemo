@@ -14,14 +14,14 @@ const sidebarCode=source.slice(source.indexOf('function closeSidebar('),source.i
 
 function sidebar() {
   const doc=new DOMParser().parseFromString('<html><body><section id="workspace"></section><aside id="sidebar" hidden></aside></body></html>','text/html');
-  const calls={search:[],next:[],headings:[],annotations:[],saved:0},timers=new Map();let timerId=0;
+  const calls={search:[],next:[],headings:[],annotations:[],saved:0,sizes:[],errors:[]},timers=new Map();let timerId=0;
   const r={zoom:2,metadata:{bookmarks:[{id:'b1',title:'읽던 곳',top:240,left:12}],annotations:[{id:'a1',type:'note',color:'#334155',text:'남겨 둔 메모'}]},
     outline:()=>[{node:'heading-1',level:1,title:'첫 번째 절'}],jump:node=>calls.headings.push(node),jumpAnnotation:id=>calls.annotations.push(id),
     search(query){this.searchQuery=query;calls.search.push(query);this.searchResults=query?[{quote:'찾은 문장: '+query}]:[];this.searchPosition=this.searchResults.length?0:-1;return this.searchResults;},nextSearch(direction){calls.next.push(direction);if(this.searchResults?.length)this.searchPosition=Math.max(0,Math.min(this.searchResults.length-1,this.searchPosition+direction));}};
   let current=r;
   const context=vm.createContext({ANNOTATION_LABELS,document:doc,$:(selector,root=doc)=>$(selector,root),$$:(selector,root=doc)=>$$(selector,root),icon,esc:escapeHTML,
-    reader:()=>current,active:()=>({queue:{schedule(){calls.saved++;}}}),closePopover(){},toolAction(){},
-    getComputedStyle:()=>({getPropertyValue:()=>''}),
+    reader:()=>current,active:()=>({queue:{schedule(){calls.saved++;}}}),closePopover(){},toolAction(){},innerWidth:1280,window:doc.createElement('div'),preferences:{sidebarWidth:300},changePreferences(patch){Object.assign(context.preferences,patch);calls.sizes.push(patch.sidebarWidth);context.applyAppSidebarWidth();},
+    getComputedStyle:()=>({getPropertyValue:()=>''}),showError:error=>calls.errors.push(error.message),
     setTimeout(fn){const id=++timerId;timers.set(id,fn);return id;},clearTimeout(id){timers.delete(id);}});
   // All sidebar interactions use the app's real renderer and handlers.
   vm.runInContext('var sidebarMode="",readerFocused=false;\n'+sidebarCode,context);
@@ -29,6 +29,44 @@ function sidebar() {
     choose:mode=>doc.querySelector(`[data-sidebar-view="${mode}"]`).onclick(),
     flush(){for(const [id,fn] of [...timers]){timers.delete(id);fn();}},setReader:reader=>current=reader};
 }
+
+function resizePointer(a){
+  const handle=a.doc.querySelector('#sidebar-resizer');let captured=false;
+  handle.setPointerCapture=()=>{captured=true;};handle.hasPointerCapture=()=>captured;handle.releasePointerCapture=()=>{captured=false;};
+  const event=(type,x,pointerId=1,target=a.doc,extra={})=>{const e=a.doc.createEvent('Event');e.initEvent(type,true,true);Object.assign(e,{button:0,clientX:x,pointerId,pointerType:'mouse',...extra});target.dispatchEvent(e);};
+  handle.onpointerdown({button:0,pointerId:1,clientX:300,preventDefault(){},stopPropagation(){}});
+  return {handle,event,get captured(){return captured;}};
+}
+test('shared sidebar resize previews width, saves once and keeps its search input and document data',()=>{
+  const a=sidebar();a.open('search');const panel=a.doc.querySelector('#sidebar'),input=a.doc.querySelector('#document-search'),metadata=structuredClone(a.r.metadata),p=resizePointer(a);
+  input.value='보존할 검색어';input.oninput();p.event('pointermove',460);assert.equal(a.doc.documentElement.style.getPropertyValue('--app-sidebar-width'),'460px');assert.equal(p.handle.getAttribute('aria-valuenow'),'460');assert.equal(p.captured,true);assert.deepEqual(a.calls.sizes,[]);assert.strictEqual(a.doc.querySelector('#document-search'),input);assert.equal(input.value,'보존할 검색어');
+  p.event('pointerup',460);assert.deepEqual(a.calls.sizes,[460]);assert.equal(a.context.preferences.sidebarWidth,460);assert.equal(p.captured,false);assert.equal(panel.sidebarResize,null);assert.equal(a.doc.documentElement.hasAttribute('data-app-sidebar-resizing'),false);assert.deepEqual(a.r.metadata,metadata);assert.equal(a.calls.saved,0);
+  p.event('pointermove',520);assert.equal(a.doc.documentElement.style.getPropertyValue('--app-sidebar-width'),'460px');a.choose('annotations');assert.strictEqual(a.doc.querySelector('#sidebar-resizer'),p.handle);a.context.closeSidebar({clearSearch:false});a.open('search');assert.equal(a.doc.documentElement.style.getPropertyValue('--app-sidebar-width'),'460px');assert.equal(a.doc.querySelector('#document-search').value,'보존할 검색어');
+});
+test('Escape, pointer cancellation, blur, lost capture, view changes and close roll back a preview without saving',()=>{
+  for(const action of ['escape','cancel','blur','capture','view','close']){
+    const a=sidebar();a.open('search');const p=resizePointer(a);p.event('pointermove',430);
+    if(action==='escape')p.handle.onkeydown({key:'Escape',preventDefault(){},stopPropagation(){}});
+    if(action==='cancel')p.event('pointercancel',430);
+    if(action==='blur')p.event('blur',430,undefined,a.context.window,{pointerId:undefined});
+    if(action==='capture')p.event('lostpointercapture',430,1,p.handle);
+    if(action==='view')a.choose('bookmarks');
+    if(action==='close')a.context.closeSidebar();
+    assert.equal(a.doc.documentElement.style.getPropertyValue('--app-sidebar-width'),'300px',action);assert.deepEqual(a.calls.sizes,[],action);assert.equal(a.doc.querySelector('#sidebar').sidebarResize,null,action);assert.equal(p.captured,false,action);p.event('pointermove',500);assert.equal(a.doc.documentElement.style.getPropertyValue('--app-sidebar-width'),'300px',action);
+  }
+});
+test('sidebar keyboard controls and double click preserve bounds and reset the portable default',()=>{
+  const a=sidebar();a.open('search');const h=a.doc.querySelector('#sidebar-resizer'),key=(key,shiftKey=false)=>h.onkeydown({key,shiftKey,preventDefault(){},stopPropagation(){}});
+  assert.equal(h.getAttribute('role'),'separator');assert.equal(h.getAttribute('aria-orientation'),'vertical');assert.equal(h.getAttribute('tabindex'),'0');key('ArrowRight');assert.equal(a.context.preferences.sidebarWidth,310);key('ArrowLeft',true);assert.equal(a.context.preferences.sidebarWidth,270);key('Home');assert.equal(a.context.preferences.sidebarWidth,180);key('ArrowLeft');assert.equal(a.context.preferences.sidebarWidth,180);key('End');assert.equal(a.context.preferences.sidebarWidth,640);key('Enter');assert.equal(a.context.preferences.sidebarWidth,300);key('ArrowRight');h.ondblclick({preventDefault(){},stopPropagation(){}});assert.equal(a.context.preferences.sidebarWidth,300);assert.equal(h.getAttribute('aria-valuenow'),'300');
+});
+test('responsive clamping leaves reading space without overwriting a wider saved sidebar preference',()=>{
+  const a=sidebar();a.context.preferences.sidebarWidth=600;a.open('search');const h=a.doc.querySelector('#sidebar-resizer');
+  for(const [viewport,width] of [[1280,600],[800,560],[721,481],[720,600],[390,350],[320,280],[1280,600]]){a.context.innerWidth=viewport;assert.equal(a.context.applyAppSidebarWidth(),width);assert.equal(h.getAttribute('aria-valuenow'),String(width));assert.equal(a.context.preferences.sidebarWidth,600);}
+  assert.deepEqual(a.calls.sizes,[]);
+});
+test('a sidebar preference write failure restores the saved width and reports the storage error',()=>{
+  const a=sidebar();a.open('search');const p=resizePointer(a);a.context.changePreferences=()=>{throw Error('저장 공간 오류');};p.event('pointermove',440);p.event('pointerup',440);assert.equal(a.doc.documentElement.style.getPropertyValue('--app-sidebar-width'),'300px');assert.equal(a.context.preferences.sidebarWidth,300);assert.equal(a.doc.querySelector('#sidebar').sidebarResize,null);assert.equal(p.captured,false);assert.deepEqual(a.calls.errors,['저장 공간 오류']);assert.equal(a.calls.saved,0);
+});
 
 test('sidebar switches four icon-only views with tooltip labels and total counts without changing document data',()=>{
   const a=sidebar(),before=structuredClone(a.r.metadata);a.open('outline');

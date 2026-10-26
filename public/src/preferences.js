@@ -28,7 +28,7 @@ export const PRESET_PALETTES = Object.freeze([
   Object.freeze({id:'preset-19',name:'미니멀 잉크',colors:Object.freeze(['#111827','#374151','#dc2626','#2563eb','#16a34a','#d97706','#7c3aed','#0891b2'])}),
   Object.freeze({id:'preset-20',name:'레인보우 컬렉션',colors:Object.freeze(['#ef4444','#f97316','#f59e0b','#eab308','#84cc16','#22c55e','#06b6d4','#3b82f6','#6366f1','#a855f7'])}),
 ]);
-export const DEFAULT_PREFERENCES = Object.freeze({theme:'light',librarySort:'modified',librarySortDirection:'desc',libraryView:'card',annotation:Object.freeze({color:'#edcf67',width:3,opacity:.35,penTTL:0}),toolbarPosition:null});
+export const DEFAULT_PREFERENCES = Object.freeze({theme:'light',librarySort:'modified',librarySortDirection:'desc',libraryView:'card',annotation:Object.freeze({color:'#edcf67',width:3,opacity:.35,penTTL:0}),toolbarPosition:null,sidebarWidth:300});
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 export function normalizeHexColor(value) {
   if (typeof value !== 'string') return null;
@@ -102,7 +102,9 @@ export function normalizePreferences(value = {}) {
   }
   let toolbarPosition=null;
   if(value.toolbarPosition!==null&&value.toolbarPosition!==undefined){const p=value.toolbarPosition;if(!object(p)||![p.x,p.y].every(n=>Number.isFinite(n)&&n>=0&&n<=1))throw new Error('툴바 위치 설정이 올바르지 않습니다.');toolbarPosition={x:p.x,y:p.y};}
-  return {theme,librarySort,librarySortDirection,libraryView,annotation,toolbarPosition};
+  const sidebarWidth=value.sidebarWidth??DEFAULT_PREFERENCES.sidebarWidth;
+  if(!Number.isFinite(sidebarWidth)||sidebarWidth<180||sidebarWidth>640)throw new Error('사이드바 폭 설정이 올바르지 않습니다.');
+  return {theme,librarySort,librarySortDirection,libraryView,annotation,toolbarPosition,sidebarWidth:Math.round(sidebarWidth)};
 }
 export function loadPreferences(storage) {
   const saved=storage.getItem(PREFERENCES_KEY);
