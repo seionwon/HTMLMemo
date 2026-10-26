@@ -2963,11 +2963,11 @@ CodeMemo 임시 브라우저에서 0.1 두께의 선 근처를 눌러 주석 편
 
 
 <a id="hist-20261026-011"></a>
-### 2026-10-26 21:17:47 +09:00 — 브라우저 보관 보호 요청을 데이터 폴더 연결에 통합
+### 2026-10-26 21:28:08 +09:00 — 브라우저 보관 보호 요청을 데이터 폴더 연결에 통합
 
 | ID | change-kind | status |
 |---|---|---|
-| hist-20261026-011 | 폴더 연결·선택적 브라우저 저장 보호·설정 정리 | 구현·로컬 검사·제한된 실제 브라우저 확인 완료, Pages 게시 대기 |
+| hist-20261026-011 | 폴더 연결·선택적 브라우저 저장 보호·설정 정리 | 구현·전체/공개 Chrome·GitHub Pages 게시 확인 완료 |
 
 **목적·사용:** 설정의 **기기 보관함 유지 / 보관 유지** 항목을 없앴습니다. 사용자가 **첫 실행 폴더 선택 / 내 서재 → 데이터 폴더 연결 / 설정 → 데이터 폴더 → 폴더 연결·다시 연결**을 진행하면, 실제 폴더 저장이 성공한 뒤 브라우저 내부 데이터의 자동 삭제 방지도 함께 요청합니다. 별도 보관 버튼을 누를 필요가 없습니다. 기존 **전용 폴더 자동 저장과 새 기기로 옮기는 방법** 안내 안에 이 동작과 폴더 저장의 독립성을 설명했습니다.
 
@@ -2977,4 +2977,11 @@ CodeMemo 임시 브라우저에서 0.1 두께의 선 근처를 눌러 주석 편
 
 **로컬 검증:** 기존 검사와 의미 있는 조건 검사 3개를 포함한 단위 **530개**, JavaScript **105개·JSON**, Tailwind CSS **4.3.3** 빌드, git diff --check를 통과했습니다. 실제 앱의 폴더 연결 경로에서 이미 허용/새 허용/거부, 반복 연결, API 미지원·조회 없는 환경·예외·미응답, 실제 저장 이후 호출, 시작/취소/권한 거부/저장 실패 시 호출 없음과 이전 연결 보존을 확인했습니다. 신뢰된 CodeMemo 브라우저에서는 **1280×900 / 390×844** 설정 화면을 직접 확인했고 두 경우 HTTP **200**, 예외 **0개**입니다. 별도 항목이 사라지고 통합 안내가 남습니다. 이 제한된 UI 확인은 전체 앱 Chrome 및 실제 OS 권한 허용 검사와 구분합니다. 검증용 임시 서버는 종료했습니다.
 
-기존 전체/공개 Chrome의 첫 실행 폴더 시나리오에는 실제 OPFS 폴더 저장, 보호 거부를 모의한 상태의 자동 요청·성공 안내·재연결 중복 방지·앱 시작 시 요청 없음, 설정 항목 제거와 안내를 추가했습니다. 실제 결과와 게시 상태는 같은 항목에 보충합니다. 로컬 증거는 `test-results/storage-protection-unit.log`, `test-results/storage-protection-check.log`, `test-results/storage-protection-build.log`, `test-results/storage-protection-preview`에 보관했습니다. 정식 주소는 https://seionwon.github.io/HTMLMemo/ 이며 현재는 게시 대기입니다.
+기존 전체/공개 Chrome의 첫 실행 폴더 시나리오에는 실제 OPFS 폴더 저장, 보호 거부를 모의한 상태의 자동 요청·성공 안내·재연결 중복 방지·앱 시작 시 요청 없음, 설정 항목 제거와 안내를 추가했습니다. 실제 결과와 게시 상태는 같은 항목에 보충합니다. 로컬 증거는 `test-results/storage-protection-unit.log`, `test-results/storage-protection-check.log`, `test-results/storage-protection-build.log`, `test-results/storage-protection-preview`에 보관했습니다. 정식 주소는 https://seionwon.github.io/HTMLMemo/ 이며 초기 기록(21:17:47) 시점에는 게시 대기였습니다.
+
+
+**최종 검증·게시 완료 (21:28:08 +09:00):** 소스 `03351cd089d180d43807db64215cba9469793366`의 [Actions 40321463745](https://github.com/seionwon/HTMLMemo/actions/runs/40321463745)에서 전체 Chrome **66개**, 실제 [공개 URL](https://seionwon.github.io/HTMLMemo/)의 Chrome **41개**가 모두 통과했습니다. Pages 게시 완료는 **21:23:31**, 공개 Chrome 완료는 **21:26:30 +09:00**입니다. CI 단위는 **530개 중 529개 통과·실패 0·건너뜀 1**이며, Linux에서 실행 대상이 아닌 제한된 macOS의 Chrome 실행 보호 검사만 건너뛰었습니다. 해당 검사는 로컬 macOS에서 통과했습니다. CI JavaScript **86개·JSON**, Tailwind CSS **4.3.3** 빌드도 통과했습니다.
+
+전체/공개 Chrome 양쪽에서 **실제 OPFS 폴더 저장을 사용하는 연결 경로**에 보호 권한 **거부 응답만 모의**하여 확인했습니다. 실제 폴더 저장 완료 후 조회 **1회·요청 1회**, 반복 재연결 뒤에도 같은 횟수, 폴더 상태 **폴더 저장 완료**, 브라우저 예외 **0개**였습니다. 첫 실행·선택 취소·권한 거부·자동 재연결 때 요청하지 않는 동작과 삭제된 설정 항목·통합 안내도 통과했습니다. 이 결과는 실제 브라우저가 지속 보관 권한을 허용했다는 뜻이 아니며, 허용/미지원/예외/미응답 분기는 단위 검사로 확인했습니다. 공개 **1280px·390px** 설정 화면을 직접 확인했습니다. CI Ubuntu의 한글 글꼴 부재로 일부 글자는 네모로 표시되므로 문구는 DOM 검사로 확인했고, 신뢰된 로컬 브라우저에서는 한글 화면도 확인했습니다. 기존 검색·주석·팔레트·TTS·서재/폴더·보안 격리 검사도 통과했습니다.
+
+공개 파일 **32개(1,487,226바이트)** 모두 HTTP **200**이며 해당 CI의 실제 Pages 아티팩트와 바이트·SHA-256이 일치했습니다. 증거는 `test-results/storage-protection-ci`, `test-results/storage-protection-published`, 각 폴더의 `pages-only-storage-protection.json`·1280/390px 화면, `test-results/storage-protection-build-ci.log`, `test-results/storage-protection-published-ci.log`, `test-results/storage-protection-actions.json`, `test-results/storage-protection-pages`, `test-results/storage-protection-online-files.json`에 보관했습니다. 정식 서비스는 GitHub Pages이며, 이 기록만 보충하는 후속 커밋은 앱 파일을 바꾸지 않습니다. 앱을 새로고침한 뒤 다음 폴더 연결·다시 연결부터 통합 처리를 사용합니다.
