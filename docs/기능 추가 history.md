@@ -2988,11 +2988,11 @@ CodeMemo 임시 브라우저에서 0.1 두께의 선 근처를 눌러 주석 편
 
 
 <a id="hist-20261026-012"></a>
-### 2026-10-26 21:31:13 +09:00 — 설정에서 중복 웹페이지 가져오기 안내 제거
+### 2026-10-26 21:41:45 +09:00 — 설정에서 중복 웹페이지 가져오기 안내 제거
 
 | ID | change-kind | status |
 |---|---|---|
-| hist-20261026-012 | 중복 설정 항목 정리 | 구현·로컬 검사·제한된 실제 브라우저 확인 완료, Pages 게시 대기 |
+| hist-20261026-012 | 중복 설정 항목 정리 | 구현·전체/공개 Chrome·GitHub Pages 게시 확인 완료 |
 
 **목적·사용:** 설정의 **웹페이지 가져오기 → 사용 안내**와 내 서재의 **웹페이지 가져오기 안내**는 동일한 안내 창을 여는 중복 기능이었습니다. 설정의 해당 줄과 클릭 처리를 제거했습니다. 앞으로 안내가 필요하면 **내 서재 → 웹페이지 가져오기 안내**를 누릅니다. 단일 파일 저장 형식 설명과 안내 창의 **HTML 파일 가져오기 / 텍스트 붙여넣기** 기능은 그대로 이용할 수 있습니다.
 
@@ -3000,4 +3000,11 @@ CodeMemo 임시 브라우저에서 0.1 두께의 선 근처를 눌러 주석 편
 
 **검증:** 기존 단위 **530개**, JavaScript **105개·JSON**, Tailwind CSS **4.3.3** 빌드, git diff --check를 통과했습니다. 신뢰된 CodeMemo 브라우저에서 **1280×900 / 390×844** 설정 화면의 항목 제거와 다른 설정 유지, 모바일에서 **내 서재 → 웹페이지 가져오기 안내**의 실제 열림·저장 형식 설명·두 작업 버튼을 확인했습니다. 세 요청 모두 HTTP **200**, 예외 **0개**이며 화면도 직접 확인했습니다. 이 제한된 확인은 전체 Chrome 검사와 구분합니다. 검증용 임시 서버는 종료했습니다.
 
-**게시 상태·증거:** 현재는 로컬 구현·검증을 완료한 게시 대기 단계이며 정식 주소는 https://seionwon.github.io/HTMLMemo/ 입니다. 실제 Actions·공개 화면·게시 결과를 같은 항목에 보충합니다. 증거는 `test-results/settings-web-remove-unit.log`, `test-results/settings-web-remove-check.log`, `test-results/settings-web-remove-build.log`, `test-results/settings-web-remove-preview`에 보관했습니다.
+**게시 상태·증거:** 초기 기록(21:31:13) 시점에는 로컬 구현·검증을 완료한 게시 대기 단계였으며 정식 주소는 https://seionwon.github.io/HTMLMemo/ 입니다. 실제 Actions·공개 화면·게시 결과를 같은 항목에 보충합니다. 증거는 `test-results/settings-web-remove-unit.log`, `test-results/settings-web-remove-check.log`, `test-results/settings-web-remove-build.log`, `test-results/settings-web-remove-preview`에 보관했습니다.
+
+
+**최종 검증·게시 완료 (21:41:45 +09:00):** 소스 `0e5d291179a7ef75d5e1a712499e67f07b00b795`의 [Actions 40323164572](https://github.com/seionwon/HTMLMemo/actions/runs/40323164572)에서 전체 Chrome **66개**, 실제 [공개 URL](https://seionwon.github.io/HTMLMemo/)의 Chrome **41개**가 모두 통과했습니다. Pages 게시 완료는 **21:37:13**, 공개 Chrome 완료는 **21:40:38 +09:00**입니다. CI 단위는 **530개 중 529개 통과·실패 0·건너뜀 1**이며, Linux에서 실행 대상이 아닌 제한된 macOS의 Chrome 실행 보호 검사만 건너뛰었습니다. 해당 검사는 로컬 macOS에서 통과했습니다. CI JavaScript **86개·JSON**, Tailwind CSS **4.3.3** 빌드도 통과했습니다.
+
+공개 **1280px·390px** 설정 화면과 **320px** 내 서재의 가져오기 안내 화면을 직접 확인했습니다. 설정 열기/닫기·앱 정보·화면 안 표시, 내 서재의 안내 진입·단일 파일 저장 설명·가져오기/붙여넣기 버튼 경로가 기존 전체/공개 Chrome에서 통과했습니다. CI Ubuntu의 한글 글꼴 부재로 일부 글자는 네모로 보이므로 문구는 DOM 검사와 공개 앱 파일 일치로 확인했고, 신뢰된 로컬 브라우저에서는 한글 화면도 확인했습니다. 기존 폴더 연결과 보호 자동 요청·검색·주석·TTS·팔레트·보안 격리 검사도 통과했습니다.
+
+공개 파일 **32개(1,486,678바이트)** 모두 HTTP **200**이며 해당 CI의 실제 Pages 아티팩트와 바이트·SHA-256이 일치했습니다. 증거는 `test-results/settings-web-remove-ci`, `test-results/settings-web-remove-published`, `test-results/settings-web-remove-build-ci.log`, `test-results/settings-web-remove-published-ci.log`, `test-results/settings-web-remove-actions.json`, `test-results/settings-web-remove-pages`, `test-results/settings-web-remove-online-files.json`에 보관했습니다. 정식 서비스는 GitHub Pages이며 이 기록만 보충하는 후속 커밋은 앱 파일을 바꾸지 않습니다. 새로고침하면 정리된 설정이 적용됩니다.
