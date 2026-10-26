@@ -402,6 +402,60 @@ test('folder setup guides users to a subfolder and saves a handle only after an 
   assert.equal(app.settings.get('folder'),selected);assert.equal(doc.querySelector('#dialog').open,true);assert.equal(doc.querySelector('#dialog h2').textContent,'HTMLMemo 설정');assert.equal(doc.querySelector('#settings-folder').textContent,'관리');assert.match(doc.querySelector('#status-left').textContent,/HTMLMemo 자동 저장/);assert.match(doc.querySelector('#settings-folder-status').textContent,/폴더 자동 저장 완료/);
 });
 
+test('folder setup requests browser storage protection once after saving and skips an existing grant',async()=>{
+  for(const [already,granted] of [[true,true],[false,true],[false,false]]){
+    const selected=memoryFolder(),calls={checks:0,requests:0},saved=[];
+    const app=await fileApp({directoryPicker:async()=>selected,navigator:{storage:{
+      persisted:async()=>{calls.checks++;saved.push(selected.children.has('HTMLMemo-library.json'));return already;},
+      persist:async()=>{calls.requests++;saved.push(selected.children.has('HTMLMemo-library.json'));return granted;}
+    }}}),doc=app.doc;
+    assert.deepEqual(calls,{checks:0,requests:0});doc.querySelector('#settings-button').onclick();
+    assert.equal(doc.querySelector('#persist-storage'),null);assert.doesNotMatch(doc.querySelector('#dialog').textContent,/기기 보관함 유지/);
+    doc.querySelector('#settings-folder').onclick();assert.deepEqual(calls,{checks:0,requests:0});
+    doc.querySelector('#select-storage-folder').onclick();await settleUntil(()=>doc.querySelector('#dialog h2').textContent==='HTMLMemo 설정');
+    assert.deepEqual(calls,{checks:1,requests:already?0:1});assert.deepEqual(saved,already?[true]:[true,true]);assert.equal(app.settings.get('folder'),selected);
+    assert.equal(doc.querySelector('#data-folder-status').textContent,'폴더 저장 완료');
+    assert.match(doc.querySelector('[data-folder-guide]').textContent,/브라우저가 허용하지 않아도 전용 폴더 자동 저장은 계속/);
+    doc.querySelector('#settings-folder').onclick();doc.querySelector('#resume-data-folder').onclick();
+    await settleUntil(()=>doc.querySelector('#dialog h2').textContent==='HTMLMemo 설정');
+    assert.deepEqual(calls,{checks:1,requests:already?0:1},'a second connection does not repeat a prompt or a denied request');
+  }
+});
+
+test('unsupported, rejected or unresolved browser protection never blocks a successful folder backup',async()=>{
+  const denied=()=>Promise.reject(new DOMException('Unavailable','SecurityError'));
+  for(const mode of ['unsupported','no-check','check-error','request-error','check-pending','request-pending']){
+    let finish;const pending=new Promise(resolve=>{finish=resolve;}),selected=memoryFolder();
+    const storage=mode==='unsupported'?{}:{
+      ...(mode==='no-check'?{}:{persisted:mode==='check-error'?denied:mode==='check-pending'?()=>pending:async()=>false}),
+      persist:mode==='request-error'?denied:mode==='request-pending'?()=>pending:async()=>true
+    };
+    const app=await fileApp({directoryPicker:async()=>selected,navigator:{storage}}),doc=app.doc;
+    doc.querySelector('#library-data-folder').onclick();doc.querySelector('#select-storage-folder').onclick();
+    await settleUntil(()=>!doc.querySelector('#dialog').open);
+    assert.equal(app.settings.get('folder'),selected,mode);assert.ok(selected.children.has('HTMLMemo-library.json'),mode);
+    assert.equal(doc.querySelector('#data-folder-status').textContent,'폴더 저장 완료',mode);
+    assert.match(doc.querySelector('#toast').textContent,/자동 저장했습니다/);assert.equal(doc.querySelector('#toast').classList.contains('error'),false);
+    finish(false);await new Promise(resolve=>setImmediate(resolve));
+  }
+});
+
+test('browser protection is not requested on startup, picker cancellation, denied access or failed folder writes',async()=>{
+  const previous=memoryFolder('Previous'),calls={checks:0,requests:0};let fail='AbortError';
+  const app=await fileApp({settings:[['folder',previous]],directoryPicker:async()=>{throw new DOMException('Cancelled',fail);},navigator:{storage:{persisted:async()=>{calls.checks++;return false;},persist:async()=>{calls.requests++;return true;}}}}),doc=app.doc;
+  await settleUntil(()=>doc.querySelector('#data-folder-status').textContent==='폴더 저장 완료');
+  assert.deepEqual(calls,{checks:0,requests:0});doc.querySelector('#library-data-folder').onclick();
+  for(const mode of ['AbortError','NotAllowedError']){
+    fail=mode;doc.querySelector('#select-storage-folder').onclick();await settleUntil(()=>!doc.querySelector('#select-storage-folder').disabled);
+    assert.deepEqual(calls,{checks:0,requests:0});assert.equal(app.settings.get('folder'),previous);
+  }
+  const selected=memoryFolder('Failed');app.context.window.showDirectoryPicker=async()=>selected;
+  const set=app.settings.set.bind(app.settings);app.settings.set=()=>{throw Error('Storage unavailable');};
+  doc.querySelector('#select-storage-folder').onclick();await settleUntil(()=>!doc.querySelector('#select-storage-folder').disabled);
+  assert.deepEqual(calls,{checks:0,requests:0});assert.equal(app.settings.get('folder'),previous);
+  app.settings.set=set;
+});
+
 test('folder cancellation, blocked access and failed persistence preserve the previous connection and allow retry',async()=>{
   const previous=memoryFolder('Previous'),next=memoryFolder('New HTMLMemo'),app=await fileApp({settings:[['folder',previous]]}),doc=app.doc;
   await settleUntil(()=>doc.querySelector('#data-folder-status').textContent==='폴더 저장 완료');
