@@ -694,6 +694,7 @@ async function navigate(tab,url){
   tab.readable=false;tab.loading=true;tab.frame.src=url;renderBrowserState(tab);renderTabs();updateChrome();
 }
 function toolbarButton(action,name,label,extra='') {return `<button class="tool-button" data-action="${action}" aria-label="${label}" title="${label}" ${extra}>${icon(name,18)}</button>`;}
+function penSettingsButton() {return `<button type="button" class="tool-button pen-settings-summary" data-action="palette" aria-label="펜과 색상" title="펜과 색상"><span class="pen-settings-sample" aria-hidden="true"><span class="pen-settings-solid"></span><span class="pen-settings-alpha"></span><span class="pen-settings-stroke"></span></span><span class="pen-settings-values" aria-hidden="true"><span class="pen-settings-metrics"><span data-pen-setting="width"></span><span data-pen-setting="opacity"></span></span><span class="pen-settings-lifetime">${icon('history',9)}<span data-pen-setting="time"></span></span></span></button>`;}
 function annotationToolFamily(tool) {return {area:'highlight','area-underline':'underline',text:'note','rect-filled':'rect'}[tool]||tool;}
 function annotationToolMode(r) {return r.tool==='rect'&&r.rectFill?'rect-filled':r.tool;}
 function annotationToolModes(group) {
@@ -725,7 +726,7 @@ function showAnnotationToolModes(group, keyboard = false) {
 function renderToolbar() {
   const r=reader();if(!r||!r.doc)return;
   $('#toolbar').hidden=false;
-  $('#toolbar').innerHTML=`<button class="toolbar-grip" aria-label="툴바 이동">${icon('grip',14)}</button><span class="tool-group">${toolbarButton('select','select','선택 / 읽기 (V) · 주석을 드래그해 이동')}${toolbarButton('pen','pen','펜 (P)')}${toolbarButton('highlight','highlight','형광펜 (H)')}${toolbarButton('underline','underline','밑줄 (U)')}${toolbarButton('rect','rect','사각형 (R)')}${toolbarButton('eraser','eraser','지우개 (E)')}${toolbarButton('note','note','메모 (N)')}</span><span class="toolbar-divider"></span>${toolbarButton('palette','palette','색상 · 굵기 · 투명도 설정','class="tool-button palette-button"')}<span class="tool-group toolbar-history">${toolbarButton('undo','undo','실행 취소 (Ctrl/⌘ Z)')}${toolbarButton('redo','redo','다시 실행 (Ctrl/⌘ Shift Z)')}</span><span class="toolbar-divider"></span>${toolbarButton('more','more','더 많은 도구')}`;
+  $('#toolbar').innerHTML=`<button class="toolbar-grip" aria-label="툴바 이동">${icon('grip',14)}</button><span class="tool-group">${toolbarButton('select','select','선택 / 읽기 (V) · 주석을 드래그해 이동')}${toolbarButton('pen','pen','펜 (P)')}${toolbarButton('highlight','highlight','형광펜 (H)')}${toolbarButton('underline','underline','밑줄 (U)')}${toolbarButton('rect','rect','사각형 (R)')}${toolbarButton('eraser','eraser','지우개 (E)')}${toolbarButton('note','note','메모 (N)')}</span><span class="toolbar-divider"></span>${penSettingsButton()}<span class="tool-group toolbar-history">${toolbarButton('undo','undo','실행 취소 (Ctrl/⌘ Z)')}${toolbarButton('redo','redo','다시 실행 (Ctrl/⌘ Shift Z)')}</span><span class="toolbar-divider"></span>${toolbarButton('more','more','더 많은 도구')}`;
   $$('[data-action]',$('#toolbar')).forEach(button=>{
     const action=button.dataset.action,modes=annotationToolModes(action);
     button.onpointerdown=e=>{const selection=action==='note'?r.doc.getSelection?.():null;if(e.pointerType==='mouse'||(selection?.rangeCount&&!selection.isCollapsed))e.preventDefault();};
@@ -762,7 +763,15 @@ function updateToolbarState() {
   const undo=$('[data-action="undo"]',$('#toolbar'));if(undo)undo.disabled=!r.history.canUndo;
   const redo=$('[data-action="redo"]',$('#toolbar'));if(redo)redo.disabled=!r.history.canRedo;
   r.updateReadingControls?.();
-  const palette=$('[data-action="palette"]',$('#toolbar'));if(palette)palette.style.setProperty('--tool-color',r.color);
+  const palette=$('[data-action="palette"]',$('#toolbar'));
+  if(palette){
+    palette.style.setProperty('--tool-color',r.color);palette.style.setProperty('--tool-opacity',r.opacity);palette.style.setProperty('--tool-width-preview',(1+(Math.min(18,Math.max(1,r.width))-1)*5/17).toFixed(2)+'px');
+    for(const [name,value] of Object.entries({width:r.width+'px',opacity:Math.round(r.opacity*100)+'%',time:r.penTTL?r.penTTL+'초':'∞'})){
+      const text=$(`[data-pen-setting="${name}"]`,palette);if(text)text.textContent=value;
+    }
+    palette.title=`펜과 색상 · 색상 ${r.color.toUpperCase()} · 굵기 ${r.width}px · 형광펜/채움 투명도 ${Math.round(r.opacity*100)}% · 펜 표시 시간 ${r.penTTL?r.penTTL+'초':'영구 저장'}`;
+    palette.setAttribute('aria-label',palette.title);
+  }
 }
 function closePopover() {popoverName='';$('#tool-popover').cancelPaletteDrag?.();$('#tool-popover').hidden=true;$('#tool-popover').onkeydown=null;$$('.tool-has-modes',$('#toolbar')).forEach(button=>button.setAttribute('aria-expanded','false'));}
 function positionPopover() {

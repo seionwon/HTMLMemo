@@ -462,6 +462,9 @@ test('real Chrome: palette controls stay above palettes and retain their setting
     })()`);
     const expected={order:['pen-width','pen-opacity','pen-ttl','palette-preset'],unique:true,above:true,visible:true,contained:true};
     const values=()=>page.evaluate(`['#pen-width','#pen-opacity','#pen-ttl','#width-output','#opacity-output'].map(id=>{const n=document.querySelector(id);return n.value||n.textContent;})`);
+    const summary=()=>page.evaluate(`(()=>{const b=document.querySelector('#toolbar [data-action=palette]'),r=b.getBoundingClientRect(),solid=getComputedStyle(b.querySelector('.pen-settings-solid')),alpha=getComputedStyle(b.querySelector('.pen-settings-alpha')),nodes=[...b.querySelectorAll('[data-pen-setting]')];return {values:nodes.map(n=>n.textContent),color:b.style.getPropertyValue('--tool-color'),solid:solid.backgroundColor,opacity:Number(alpha.opacity),title:b.title,label:b.getAttribute('aria-label'),width:r.width,height:r.height,fits:nodes.every(n=>{const s=n.getBoundingClientRect();return s.left>=r.left&&s.right<=r.right&&s.top>=r.top&&s.bottom<=r.bottom;}),toolbarHeight:document.querySelector('#toolbar').getBoundingClientRect().height};})()`);
+    const checkSummary=async(expectedValues,color,opacity)=>{const s=await summary();assert.deepEqual(s.values,expectedValues);assert.equal(s.color,color);assert.equal(s.opacity,opacity);assert.ok(s.title.includes(color.toUpperCase()));assert.equal(s.label,s.title);assert.equal(s.height,19);assert.equal(s.width,72);assert.equal(s.fits,true);assert.ok(s.toolbarHeight<=22);return s;};
+    await checkSummary(['3px','35%','∞'],'#edcf67',.35);const summaryMetrics=[];
     await mkdir(join(root,'test-results'),{recursive:true});
     for(const width of [1280,390,320]){
       await page.send('Emulation.setDeviceMetricsOverride',{width,height:800,deviceScaleFactor:1,mobile:width<600});
@@ -476,14 +479,18 @@ test('real Chrome: palette controls stay above palettes and retain their setting
       if(width===1280){
         await page.evaluate(`(()=>{for(const [id,value,event] of [['pen-width','7','input'],['pen-opacity','55','input'],['pen-ttl','10','change']]){const n=document.getElementById(id);n.value=value;n.dispatchEvent(new Event(event,{bubbles:true}));}})()`);
         assert.deepEqual(await values(),['7','55','10','7px','55%']);
+        for(const ttl of [0,3,30,10]){await page.evaluate(`(()=>{const n=document.getElementById('pen-ttl');n.value='${ttl}';n.dispatchEvent(new Event('change',{bubbles:true}));})()`);await checkSummary(['7px','55%',ttl?ttl+'초':'∞'],'#edcf67',.55);}
+        await page.evaluate(`(()=>{const n=document.querySelector('#color-hex');n.value='#3B82F6';n.dispatchEvent(new Event('input',{bubbles:true}));})()`);await checkSummary(['7px','55%','10초'],'#3b82f6',.55);
         await page.evaluate(`(()=>{const n=document.querySelector('#palette-preset');n.value='preset-2';n.dispatchEvent(new Event('change',{bubbles:true}));})()`);
         assert.deepEqual(await layout(),expected);assert.deepEqual(await values(),['7','55','10','7px','55%']);
         await page.click('#add-custom-color');assert.deepEqual(await layout(),expected);assert.deepEqual(await values(),['7','55','10','7px','55%']);
       }else assert.deepEqual(await values(),['7','55','10','7px','55%']);
       await page.click('[data-popover-close]');
+      summaryMetrics.push({viewport:width,...await checkSummary(['7px','55%','10초'],'#3b82f6',.55)});await writeFile(join(root,`test-results/palette-controls-summary-${width}.png`),await page.screenshot());
     }
     await page.navigate(url);await page.waitFor('document.querySelector("[data-open]")');await page.click('[data-open]');
     await page.waitFor('!document.querySelector("#toolbar").hidden');await page.click('[data-action=palette]');
+    await checkSummary(['7px','55%','10초'],'#3b82f6',.55);await writeFile(join(root,'test-results/pages-only-pen-settings-summary.json'),JSON.stringify({cases:summaryMetrics,allLifetimes:true,liveColorWidthOpacity:true,reload:true},null,2));
     assert.deepEqual(await layout(),expected);assert.deepEqual(await values(),['7','55','10','7px','55%']);
     assert.equal(await page.evaluate(`document.querySelector('#palette-preset').value`),'preset-2');
     await page.click('[data-popover-close]');await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:800,deviceScaleFactor:1,mobile:false});await page.click('[data-action=palette]');
