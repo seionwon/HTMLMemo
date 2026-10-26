@@ -1802,6 +1802,15 @@ test('real Chrome: annotation tree follows book TOC, prunes empty branches, reme
       if(!await page.evaluate(`${doc}.querySelector(${JSON.stringify(selector)}).open`))await clickNative(selector+'>summary');
       await page.waitFor(`${doc}.querySelector(${JSON.stringify(selector)}).open`);return selector;
     };
+    const collapseMetrics=[],foldAnnotations=async width=>{
+      const state=()=>page.evaluate(`(()=>{const d=${doc},p=${panel};return {open:p.querySelectorAll('[data-annotation-group][open]').length,groups:p.querySelectorAll('[data-annotation-group]').length,ids:[...p.querySelectorAll('[data-annotation]')].map(n=>n.dataset.annotation),count:p.querySelector('[data-sidebar-count=annotations]').textContent,mode:d.querySelector('#reader-nav').dataset.htmlmemoSidebarView,section:d.querySelector('#reader-content').dataset.section,toc:[...d.querySelectorAll('#reader-tree details')].map(n=>n.open)};})()`);
+      const before=await state(),stored=()=>page.evaluate(`(async()=>{const r=await(await import('./src/storage.js')).getDocument('annotation-tree-document');return {annotations:r.metadata.annotations,bookmarks:r.metadata.bookmarks};})()`),saved=await stored();assert.ok(before.open>0);
+      await clickNative('[data-sidebar-view=annotations]');await page.waitFor(`${panel}.querySelectorAll('[data-annotation-group][open]').length===0`);
+      const after=await state();assert.deepEqual(after,{...before,open:0});assert.deepEqual(await stored(),saved);
+      await clickNative('[data-sidebar-view=annotations]');assert.equal((await state()).open,0,'a folded list stays folded');
+      await clickNative('[data-sidebar-view=search]');await clickNative('[data-sidebar-view=annotations]');assert.equal((await state()).open,0,'folded state survives switching views');
+      await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,`test-results/pages-only-annotation-collapse-${width}.png`),await page.screenshot());collapseMetrics.push({width,before,after,notesPreserved:true,repeatStaysFolded:true,viewSwitchStaysFolded:true});
+    };
     await clickNative('[data-sidebar-view=annotations]');
     assert.deepEqual(await page.evaluate(`[...${panel}.querySelectorAll('.annotation-tree>[data-annotation-group]')].map(g=>[g.querySelector('.annotation-group-title').textContent,g.querySelector('.annotation-group-count').textContent,g.open])`),[['입문','3',false],['실전','1',false]]);
     assert.equal(await page.evaluate(`${panel}.textContent.includes('주석 없는')||${panel}.textContent.includes('빈 분류')`),false);
@@ -1812,6 +1821,7 @@ test('real Chrome: annotation tree follows book TOC, prunes empty branches, reme
     await clickNative(first+'>summary');await page.waitFor(`!${doc}.querySelector(${JSON.stringify(first)}).open`);await openGroup('첫 장');
     await clickNative('[data-sidebar-view=search]');await clickNative('[data-sidebar-view=annotations]');
     assert.equal(await page.evaluate(`${doc}.querySelector(${JSON.stringify(first)}).open`),true);
+    await foldAnnotations(1280);await openGroup('입문');await openGroup('기초');await openGroup('시작');await openGroup('첫 장');
     await openGroup('실전');await openGroup('응용');await openGroup('도구');await openGroup('실전의 장');
     await clickNative('[data-annotation=practice-note]');await page.waitFor(`${doc}.querySelector('#reader-content').dataset.section==='v1:one'&&${doc}.querySelector('[data-htmlmemo-id=practice-note]')&&${doc}.querySelector('#reader-main').scrollTop>500`);
     assert.deepEqual(await page.scriptEvaluate('window.renderedSections'),['v0:one','v1:one']);
@@ -1828,7 +1838,9 @@ test('real Chrome: annotation tree follows book TOC, prunes empty branches, reme
     await page.waitFor(`(async()=>{try{const root=await navigator.storage.getDirectory();return (await(await root.getFileHandle('annotation-tree-export.html')).getFile()).size>0;}catch{return false;}})()`);
     const exported=await page.evaluate(`(async()=>{const root=await navigator.storage.getDirectory(),html=await(await(await root.getFileHandle('annotation-tree-export.html')).getFile()).text(),d=new DOMParser().parseFromString(html,'text/html'),metadata=JSON.parse(d.getElementById('htmlmemo-data').textContent);return {ids:metadata.annotations.map(a=>a.id),ui:!!d.querySelector('[data-annotation-group],[data-htmlmemo-doc-sidebar-ui]'),volumes:[0,1,2].every(i=>!!d.getElementById('book-volume-'+i))};})()`);
     assert.deepEqual(exported,{ids:['practice-note','intro-note','intro-pen'],ui:false,volumes:true});
-    await page.send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await writeFile(join(root,'test-results/annotation-tree-mobile.png'),await page.screenshot());
+    await page.send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await page.evaluate('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');await writeFile(join(root,'test-results/annotation-tree-mobile.png'),await page.screenshot());
+    await openGroup('입문');await openGroup('기초');await openGroup('시작');await openGroup('첫 장');await foldAnnotations(390);
+    await writeFile(join(root,'test-results/pages-only-annotation-collapse.json'),JSON.stringify({cases:collapseMetrics,errors:chrome.errors},null,2));
     await page.navigate(url);await page.waitFor('!!document.querySelector("[data-open=annotation-tree-document]")');await page.click('[data-open=annotation-tree-document]');await page.waitFor(`${panel}?.querySelector('[data-sidebar-view=annotations]')&&!${frame}.hasAttribute('aria-hidden')`);
     await clickNative('[data-sidebar-view=annotations]');
     assert.deepEqual(await page.evaluate(`[...${panel}.querySelectorAll('.annotation-tree>[data-annotation-group]')].map(g=>[g.querySelector('.annotation-group-title').textContent,g.querySelector('.annotation-group-count').textContent,g.open])`),[['입문','2',false],['실전','1',false]]);

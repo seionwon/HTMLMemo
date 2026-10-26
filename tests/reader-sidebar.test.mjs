@@ -439,6 +439,35 @@ test('annotation disclosure state survives view changes and deletion without sav
   assert.deepEqual(before.annotations[0],{id:'a1',type:'note',color:'#334155',text:'남겨 둔 메모'});
 });
 
+test('reselecting annotations folds every level in either sidebar without changing notes, source TOC or body details',()=>{
+  for(const native of [false,true]){
+    const a=native?collapsibleSidebar():sidebar(),before=structuredClone(a.r.metadata);
+    a.r.annotationTree=()=>[{id:'book',title:'책',count:1,annotations:[],children:[{id:'chapter',title:'장',count:1,annotations:a.r.metadata.annotations,children:[]}]}];
+    if(native)a.choose('annotations');else a.open('annotations');
+    const panel=native?a.r.documentSidebarUI:a.doc.querySelector('#sidebar'),groups=[...panel.querySelectorAll('[data-annotation-group]')];
+    for(const group of groups){group.open=true;group.setAttribute('open','');group.ontoggle();}
+    a.choose('search');a.choose('annotations');assert.equal(panel.querySelectorAll('[data-annotation-group][open]').length,2,'switching into annotations keeps disclosure state');
+    if(native)a.r.refreshDocumentSidebar();else a.open('annotations');
+    assert.equal(panel.querySelectorAll('[data-annotation-group][open]').length,2,'automatic rendering keeps disclosure state');
+    const current=[...panel.querySelectorAll('[data-annotation-group]')];a.choose('annotations');
+    assert.equal(panel.querySelectorAll('[data-annotation-group][open]').length,0);assert.ok(current.every(group=>!group.open));
+    assert.deepEqual([...panel.querySelectorAll('[data-annotation-group]')],current,'folding keeps the existing nodes and event handlers');
+    assert.equal(panel.hidden,false);assert.equal(panel.sidebarMode,'annotations');assert.equal(panel.querySelector('[data-sidebar-view=annotations]').getAttribute('aria-pressed'),'true');
+    a.choose('annotations');assert.equal(panel.querySelectorAll('[data-annotation-group][open]').length,0,'an already folded list stays folded');
+    a.choose('search');a.choose('annotations');assert.equal(panel.querySelectorAll('[data-annotation-group][open]').length,0,'folded state survives view changes');
+    if(native){assert.equal(a.tree.querySelectorAll('details[open]').length,2);assert.equal(a.doc.querySelector('#body-detail').hasAttribute('open'),true);}
+    assert.deepEqual(a.r.metadata,before);assert.equal(a.calls.saved,0);assert.deepEqual(a.calls.annotations,[]);
+  }
+});
+
+test('annotation reselection folds only the document currently shown by the shared sidebar',()=>{
+  const a=sidebar();a.open('annotations');const first=a.doc.querySelector('[data-annotation-group]');first.open=true;first.ontoggle();
+  const other={...a.r,metadata:structuredClone(a.r.metadata),annotationTreeOpen:new Map([['document',true]])};a.setReader(other);a.open('annotations');
+  assert.equal(a.doc.querySelector('[data-annotation-group]').hasAttribute('open'),true);a.choose('annotations');
+  assert.equal(a.doc.querySelector('[data-annotation-group]').hasAttribute('open'),false);assert.equal(a.r.annotationTreeOpen.get('document'),true);assert.equal(other.annotationTreeOpen.get('document')||false,false);
+  a.setReader(a.r);a.open('annotations');assert.equal(a.doc.querySelector('[data-annotation-group]').hasAttribute('open'),true);assert.equal(a.calls.saved,0);
+});
+
 test('annotation tree escapes source titles and annotation text',()=>{
   const a=sidebar();a.r.annotationTree=()=>[{id:'a"<',title:'<img src=x onerror=bad()>',count:1,children:[],annotations:a.r.metadata.annotations}];
   a.r.metadata.annotations[0].text='<script>bad()</script>';a.open('annotations');

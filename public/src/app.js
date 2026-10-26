@@ -1157,6 +1157,11 @@ function renderSidebar(mode,{panel=$('#sidebar'),embedded=false,documentReader=r
       const view=button.dataset.sidebarView;
       // Only an explicit re-click collapses the TOC, never a view change or restore.
       if(view==='outline'&&panel.sidebarMode==='outline'){panel.annotationReader?.collapseDocumentToc?.();return;}
+      if(view==='annotations'&&panel.sidebarMode==='annotations'){
+        panel.annotationReader?.annotationTreeOpen?.clear();
+        for(const group of $$('[data-annotation-group]',panel)){group.open=false;group.removeAttribute('open');}
+        return;
+      }
       return embedded?panel.annotationReader.showDocumentSidebarView(view):renderSidebar(view);
     });
   }

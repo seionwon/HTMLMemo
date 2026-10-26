@@ -3059,3 +3059,21 @@ CodeMemo 임시 브라우저에서 0.1 두께의 선 근처를 눌러 주석 편
 전체/공개 Chrome 양쪽에서 **1280px 화면의 두 선과 옆 SVG가 각각 18px**, **390·320px 화면에서는 각각 17px**로 실측되어 정확히 일치했습니다. 모든 일반 도구 버튼의 클릭 영역도 각각 **32px / 29px**로 같았고 높이는 **19px**를 유지했습니다. 두 선이 버튼 안에 들어가며 네 가지 시간의 길이 비율, 색상·투명도·굵기 변경과 새로고침 복원도 통과했습니다. 공개 **1280px·320px 어두운 화면**을 직접 확인했습니다. CI Ubuntu의 일부 한글은 글꼴 부재로 네모로 보이므로 문구는 DOM으로 확인했고, 앞서 신뢰된 로컬 브라우저에서는 한글 화면도 확인했습니다. 기존 주석·검색·TTS·서재/폴더·팔레트 이동·보안 격리 검사도 통과했습니다.
 
 공개 파일 **32개(1,485,050바이트)** 모두 HTTP **200**이며 해당 CI의 실제 Pages 아티팩트와 바이트·SHA-256이 일치했습니다. 증거는 `test-results/pen-button-width-ci`, `test-results/pen-button-width-published`, 각 폴더의 `pages-only-pen-settings-summary.json`·화면, `test-results/pen-button-width-build-ci.log`, `test-results/pen-button-width-published-ci.log`, `test-results/pen-button-width-actions.json`, `test-results/pen-button-width-pages`, `test-results/pen-button-width-online-files.json`에 보관했습니다. 정식 서비스는 GitHub Pages이며 이 기록만 보충하는 후속 커밋은 앱 파일을 바꾸지 않습니다. 새로고침하면 적용됩니다.
+
+
+<a id="hist-20261027-001"></a>
+### 2026-10-27 00:10:44 +09:00 — 주석 버튼을 다시 눌러 펼친 목록 모두 접기
+
+| ID | change-kind | status |
+|---|---|---|
+| hist-20261027-001 | 사이드바 주석 분류 접기 | 구현·로컬 검사·제한된 실제 브라우저 확인 완료, Pages 게시 대기 |
+
+**목적·사용:** 사이드바에서 **주석** 보기를 사용 중일 때 같은 **주석 아이콘**을 다시 누르면 펼친 주석 분류를 모든 단계에서 접습니다. 접힌 분류는 제목 줄을 눌러 원하는 부분만 다시 펼칩니다. 모두 접힌 상태에서 주석 아이콘을 다시 눌러도 펼치지 않으며 사이드바와 주석 보기는 열어 둡니다.
+
+**상태·범위:** 검색·목차·북마크에서 주석으로 전환할 때는 기존 펼침 상태를 유지합니다. 자동 목록 갱신도 일괄 접기를 수행하지 않습니다. 명시적으로 접은 상태는 보기를 오가도 유지되며, 같은 문서의 앱 공통 사이드바와 책 안 사이드바에 동일하게 적용합니다. 현재 패널의 문서에만 적용하고 다른 문서의 펼침 상태, 원본 목차·본문의 접힘 영역, 주석·북마크·개수·읽는 장은 바꾸지 않습니다. 목록 노드를 새로 만들지 않고 UI 펼침 정보만 갱신하며 주석 저장/이력을 만들지 않습니다. 기존 디자인·아이콘·색상과 저장 형식은 유지합니다.
+
+**로컬 검증:** 단위 **532개**(관련 사이드바 **47개**), JavaScript **105개·JSON**, Tailwind CSS **4.3.3** 빌드, git diff --check를 통과했습니다. 추가 상태 검사 2개는 공통/책 내부 패널의 모든 단계 접기, 반복 클릭, 전환·자동 갱신 시 펼침 유지, 접힘 보존, DOM·목차·본문·메모 보존과 현재 문서만 접는 동작을 확인합니다. 초기 추가 검사는 패널을 먼저 렌더링하지 않아 준비 오류가 있었으며 준비 단계만 보완했습니다. 최초 실패 로그 `test-results/annotation-collapse-targeted-first.log`는 보존했습니다.
+
+신뢰된 CodeMemo 브라우저에서는 예제 문서에 검증용 메모를 직접 만들고 분류 제목을 눌러 펼친 화면과, 주석 아이콘을 다시 눌러 접힌 화면을 **1280px**, HTTP **200**, 예외 **0개**로 확인하고 직접 보았습니다. 본문 메모와 주석 1개 표시는 유지됩니다. 이 제한된 확인은 전체 Chrome 검사와 구분하며 임시 검증 서버는 종료했습니다.
+
+**게시 상태·증거:** 기존 전체/공개 Chrome의 목차별 주석 검사에는 **1280px·390px**의 전체 접기·반복 클릭·보기 전환 뒤 접힘 유지와 주석/북마크·주석 개수·현재 장·원래 목차 상태 보존을 추가했습니다. 실제 결과와 게시 상태는 같은 항목에 보충합니다. 정식 주소는 https://seionwon.github.io/HTMLMemo/ 이며 현재는 게시 대기입니다. 로컬 로그와 화면은 `test-results/annotation-collapse-unit.log`, `test-results/annotation-collapse-check.log`, `test-results/annotation-collapse-build.log`, `test-results/annotation-collapse-preview`에 보관했습니다.
