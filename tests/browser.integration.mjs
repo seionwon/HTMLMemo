@@ -15,6 +15,10 @@ const appVersion=JSON.parse(await readFile(new URL('../package.json',import.meta
 async function revealAnnotation(page,doc,id){
   await page.evaluate(`(()=>{let node=${doc}.querySelector('[data-annotation="'+${JSON.stringify(id)}+'"]');if(!node)throw Error('Missing annotation');for(node=node.parentElement;node;node=node.parentElement)if(node.matches('details[data-annotation-group]'))node.open=true;})()`);
 }
+async function revealBookmark(page,doc,id,click){
+  const selectors=await page.evaluate(`(()=>{const a=[];let n=${doc}.querySelector(${JSON.stringify('[data-bookmark='+JSON.stringify(id)+']')});if(!n)throw Error('Missing bookmark');for(n=n.parentElement;n;n=n.parentElement)if(n.matches('[data-bookmark-group]'))a.unshift('[data-bookmark-group='+JSON.stringify(n.dataset.bookmarkGroup)+']');return a;})()`);
+  for(const selector of selectors)if(!await page.evaluate(`${doc}.querySelector(${JSON.stringify(selector)}).open`)){await click(selector+'>summary');await page.waitFor(`${doc}.querySelector(${JSON.stringify(selector)}).open`);}
+}
 async function verifyLoadedSearchEnds(page,doc,prefix,total,click,screenshotName){
   const state=()=>page.evaluate(`(()=>{const d=${doc};return {count:d.querySelector('#${prefix}search-count').textContent,prev:d.querySelector('#${prefix}search-prev').disabled,next:d.querySelector('#${prefix}search-next').disabled};})()`);
   const expected=position=>({count:`${position} / ${total}개 결과`,prev:position===1,next:position===total});
@@ -870,7 +874,7 @@ test('real Chrome: Pages-only URL use, safe text import, app tabs and optional i
     await page.evaluate(`(()=>{const d=${frame}.contentDocument,r=d.createRange();r.selectNodeContents(d.querySelector('article>p'));const s=d.getSelection();s.removeAllRanges();s.addRange(r);d.dispatchEvent(new Event('selectionchange'));})()`);
     await page.click('#toolbar [data-action=highlight]');
     await page.waitFor(`${frame}.contentDocument.querySelector('[data-htmlmemo-mark]')&&document.querySelector('#status-left').textContent.includes('자동 저장됨')`);
-    await page.click('.tab.document.active .tab-close');await page.click('#library-tab');await page.click('[data-open]');
+    await page.click('.tab.document.active .tab-close');await page.waitFor('document.querySelectorAll(".tab.document").length===0');await page.click('#library-tab');await page.click('[data-open]');
     await page.waitFor(`${frame}.contentDocument.querySelector('[data-htmlmemo-mark]')&&!document.querySelector('#toolbar').hidden`);
     assert.equal(await page.evaluate('document.querySelectorAll(".tab.browser").length'),1);
     assert.equal(await page.evaluate('window.pickerCalls'),0);assert.deepEqual(chrome.errors,[]);
@@ -1865,7 +1869,7 @@ test('real Chrome: Pages-only bookmark tree follows TOC positions, navigates cha
       await page.send('Input.dispatchMouseEvent',{type:'mousePressed',...point,button:'left',clickCount:1});await page.send('Input.dispatchMouseEvent',{type:'mouseReleased',...point,button:'left',clickCount:1});
     };
     const ancestors=async id=>page.evaluate(`(()=>{const a=[];let n=${panel}.querySelector(${JSON.stringify('[data-bookmark='+JSON.stringify(id)+']')});if(!n)throw Error('Missing bookmark');for(n=n.parentElement;n;n=n.parentElement)if(n.matches('[data-bookmark-group]'))a.unshift({selector:'[data-bookmark-group='+JSON.stringify(n.dataset.bookmarkGroup)+']',title:n.querySelector(':scope>summary>.annotation-group-title').textContent});return a;})()`);
-    const reveal=async id=>{for(const {selector} of await ancestors(id))if(!await page.evaluate(`${doc}.querySelector(${JSON.stringify(selector)}).open`)){await clickNative(selector+'>summary');await page.waitFor(`${doc}.querySelector(${JSON.stringify(selector)}).open`);}};
+    const reveal=id=>revealBookmark(page,doc,id,clickNative);
     const titles=async id=>(await ancestors(id)).map(n=>n.title);
     const stored=()=>page.evaluate(`(async()=>{const r=await(await import('./src/storage.js')).getDocument('bookmark-tree-document');return {annotations:r.metadata.annotations,bookmarks:r.metadata.bookmarks};})()`);
     const original=await stored(),metrics=[];
@@ -1882,7 +1886,9 @@ test('real Chrome: Pages-only bookmark tree follows TOC positions, navigates cha
     assert.deepEqual(await titles('first'),['입문','1부','1장','1.1절']);assert.deepEqual(await titles('second'),['입문','1부','2장','2.1절']);assert.deepEqual(await titles('practice'),['실전','2부','1장','1.1절']);assert.deepEqual(await titles('legacy'),['목차 위치 미확인']);
     assert.equal(await page.evaluate(`${panel}.textContent.includes('빈 분류')||${panel}.textContent.includes('주석 없는')`),false);assert.deepEqual(await page.scriptEvaluate('window.renderedSections'),['v0:one']);assert.deepEqual(await stored(),original);
     await reveal('practice');await clickNative('[data-bookmark=practice]');await page.waitFor(`${doc}.querySelector('#reader-content').dataset.section==='v1:one'&&Math.abs(${doc}.querySelector('#reader-main').scrollTop-400)<2`);
-    await clickNative('#htmlmemo-native-add-bookmark');await page.waitFor('document.querySelector("#dialog").open&&document.querySelector("#note-text")');await page.evaluate('document.querySelector("#note-text").value="새 장에서 저장한 북마크"');await page.click('#dialog button[value=save]');await page.waitFor('!document.querySelector("#dialog").open&&document.querySelectorAll(".tab-dirty:not([hidden])").length===0');
+    await clickNative('#htmlmemo-native-add-bookmark');await page.waitFor('document.querySelector("#dialog").open&&document.querySelector("#note-text")');await page.evaluate('document.querySelector("#note-text").value="새 장에서 저장한 북마크"');await page.click('#dialog button[value=save]');
+    await page.waitFor(`${panel}.querySelector('[data-sidebar-count=bookmarks]').textContent==='5'&&!document.querySelector('#dialog').open`);
+    await page.waitFor(`(async()=>{const r=await(await import('./src/storage.js')).getDocument('bookmark-tree-document');return r.metadata.bookmarks.some(n=>n.title==='새 장에서 저장한 북마크')&&!document.querySelector('.tab-dirty:not([hidden])');})()`);
     const saved=await stored(),created=saved.bookmarks.find(n=>n.title==='새 장에서 저장한 북마크');assert.ok(created);assert.equal(created.section,'v1:one');assert.ok(Math.abs(created.top-400)<2);assert.deepEqual(saved.annotations,original.annotations);assert.deepEqual(saved.bookmarks.filter(n=>n.id!==created.id),original.bookmarks);assert.deepEqual(await titles(created.id),['실전','2부','1장','1.1절']);
     await clickNative('[data-sidebar-view=annotations]');await clickNative('[data-sidebar-view=bookmarks]');assert.ok(await page.evaluate(`${panel}.querySelectorAll('[data-bookmark-group][open]').length>0`));await fold(1280);
     await reveal('second');await clickNative('[data-bookmark=second]');await page.waitFor(`${doc}.querySelector('#reader-content').dataset.section==='v0:two'`);await reveal(created.id);await clickNative('[data-bookmark='+JSON.stringify(created.id)+']');await page.waitFor(`${doc}.querySelector('#reader-content').dataset.section==='v1:one'&&Math.abs(${doc}.querySelector('#reader-main').scrollTop-400)<2`);
@@ -2149,6 +2155,7 @@ test('real Chrome: native sidebar view choices are visible on open and preserve 
     await page.evaluate('document.querySelector("#note-text").value="목차에서 남긴 북마크"');await page.click('#dialog button[value=save]');
     await page.waitFor(`${doc}.querySelectorAll('[data-bookmark]').length===1&&document.querySelector('#status-left').textContent.includes('자동 저장됨')`);
     assert.equal(await page.evaluate(`${doc}.querySelector('[data-sidebar-count=bookmarks]').textContent`),'1');assert.equal(await page.evaluate('document.querySelector("#sidebar").hidden'),true);
+    const bookmarkId=await page.evaluate(`${doc}.querySelector('[data-bookmark]').dataset.bookmark`);await revealBookmark(page,doc,bookmarkId,clickNative);
     await writeFile(join(root,'test-results/sidebar-views-bookmarks-native.png'),await page.screenshot());
     await clickNative('[data-delete-bookmark]');await page.waitFor(`${doc}.querySelectorAll('[data-bookmark]').length===0`);assert.equal(await page.evaluate(`${doc}.querySelector('[data-sidebar-count=bookmarks]').textContent`),'0');await clickNative('[data-sidebar-view=outline]');
     await clickNative('#reader-tree details:last-child summary');await page.waitFor(`${doc}.querySelector('#reader-tree details:last-child a')`);
@@ -2256,7 +2263,7 @@ test('real Chrome: sidebar view choices stay available for HTML without a TOC or
       if(width===1280)assert.equal(await page.evaluate('document.querySelector("#workspaces").getBoundingClientRect().left>=document.querySelector("#sidebar").getBoundingClientRect().right-1'),true);
       await page.click('#sidebar [data-sidebar-view=search]');await page.evaluate('(()=>{const i=document.querySelector("#document-search");i.value="검색어";i.dispatchEvent(new Event("input"));})()');await page.waitFor('document.querySelectorAll("#sidebar [data-search-index]").length===2');await verifyLoadedSearchEnds(page,'document','',2,selector=>page.click(selector),'no-toc-'+width);
       await page.click('#sidebar [data-sidebar-view=annotations]');await revealAnnotation(page,'document','no-toc-note');await page.click('[data-annotation=no-toc-note]');assert.equal(await page.evaluate('document.querySelector("[data-annotation=no-toc-note] .annotation-main").textContent'),'목차가 없어도 남아 있는 메모');
-      await writeFile(join(root,`test-results/sidebar-views-no-toc-${width}.png`),await page.screenshot());await page.click('#sidebar [data-sidebar-view=bookmarks]');assert.ok(await page.evaluate('document.querySelector("[data-bookmark=no-toc-mark]")'));await page.click('[data-bookmark=no-toc-mark]');
+      await writeFile(join(root,`test-results/sidebar-views-no-toc-${width}.png`),await page.screenshot());await page.click('#sidebar [data-sidebar-view=bookmarks]');assert.ok(await page.evaluate('document.querySelector("[data-bookmark=no-toc-mark]")'));await revealBookmark(page,'document','no-toc-mark',selector=>page.click(selector));await page.click('[data-bookmark=no-toc-mark]');
     }
     const unchanged=await page.evaluate(`(async()=>{const r=await(await import('./src/storage.js')).getDocument(${JSON.stringify(record.id)});return {html:r.html,annotations:r.metadata.annotations,bookmarks:r.metadata.bookmarks};})()`);assert.deepEqual(unchanged,original);
     await page.click('#close-sidebar');await input('<html><head><title>다른 문서</title></head><body><h1>다른 문서의 제목</h1><p>본문</p></body></html>','with-heading.html');await page.waitFor('document.querySelectorAll(".tab.document").length===2&&'+ready+'&&!document.querySelector("#sidebar").hidden');
@@ -2317,7 +2324,7 @@ test('real Chrome: sidebar view choices preserve search drafts, navigate saved n
     await page.click('[data-sidebar-view=bookmarks]');await page.click('#add-bookmark');await page.evaluate(`document.querySelector('#note-text').value='새 북마크'`);await page.click('#dialog button[value=save]');
     await page.waitFor('document.querySelectorAll("[data-bookmark]").length===2&&document.querySelector("#status-left").textContent.includes("자동 저장됨")');
     assert.equal(await page.evaluate('document.querySelector("[data-sidebar-count=bookmarks]").textContent'),'2');
-    await page.click('[data-delete-bookmark=sidebar-bookmark]');await page.click('[data-sidebar-view=annotations]');await revealAnnotation(page,'document','sidebar-note');await page.click('[data-delete-annotation=sidebar-note]');
+    await revealBookmark(page,'document','sidebar-bookmark',selector=>page.click(selector));await page.click('[data-delete-bookmark=sidebar-bookmark]');await page.waitFor('!document.querySelector("[data-bookmark=sidebar-bookmark]")');await page.click('[data-sidebar-view=annotations]');await revealAnnotation(page,'document','sidebar-note');await page.click('[data-delete-annotation=sidebar-note]');
     await page.waitFor('document.querySelector("#sidebar .panel-empty")?.textContent.includes("아직 주석")&&document.querySelector("#status-left").textContent.includes("자동 저장됨")');
     const saved=await page.evaluate(`(async()=>{const {getDocument}=await import('./src/storage.js');const record=await getDocument('sidebar-document');return {html:record.html,annotations:record.metadata.annotations.length,bookmarks:record.metadata.bookmarks.map(mark=>mark.title)};})()`);
     assert.equal(saved.html,original.html);assert.equal(saved.annotations,0);assert.deepEqual(saved.bookmarks,['새 북마크']);
