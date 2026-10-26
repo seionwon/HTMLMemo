@@ -483,6 +483,8 @@ test('real Chrome: palette controls stay above palettes and retain their setting
         await page.evaluate(`(()=>{const n=document.querySelector('#color-hex');n.value='#3B82F6';n.dispatchEvent(new Event('input',{bubbles:true}));})()`);await checkSummary(['7px','55%','10초'],'#3b82f6',.55);
         await page.evaluate(`(()=>{const n=document.querySelector('#palette-preset');n.value='preset-2';n.dispatchEvent(new Event('change',{bubbles:true}));})()`);
         assert.deepEqual(await layout(),expected);assert.deepEqual(await values(),['7','55','10','7px','55%']);
+        await checkSummary(['7px','55%','10초'],'#edcf67',.55);
+        await page.evaluate(`(()=>{const n=document.querySelector('#color-hex');n.value='#3B82F6';n.dispatchEvent(new Event('input',{bubbles:true}));})()`);await checkSummary(['7px','55%','10초'],'#3b82f6',.55);
         await page.click('#add-custom-color');assert.deepEqual(await layout(),expected);assert.deepEqual(await values(),['7','55','10','7px','55%']);
       }else assert.deepEqual(await values(),['7','55','10','7px','55%']);
       await page.click('[data-popover-close]');
