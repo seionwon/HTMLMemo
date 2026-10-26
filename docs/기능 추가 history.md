@@ -3087,11 +3087,11 @@ CodeMemo 임시 브라우저에서 0.1 두께의 선 근처를 눌러 주석 편
 
 
 <a id="hist-20261027-002"></a>
-### 2026-10-27 00:40:14 +09:00 — 북마크를 목차 위치별로 나열하고 다시 눌러 접기
+### 2026-10-27 01:03:08 +09:00 — 북마크를 목차 위치별로 나열하고 다시 눌러 접기
 
 | ID | change-kind | status |
 |---|---|---|
-| hist-20261027-002 | 북마크 목차 분류·현재 장 저장·목록 접기 | 구현·로컬 검증 완료, 전체 Chrome·Pages 게시 대기 |
+| hist-20261027-002 | 북마크 목차 분류·현재 장 저장·목록 접기 | 구현·전체/공개 Chrome·GitHub Pages 게시 확인 완료 |
 
 **목적·사용:** 사이드바의 **북마크**를 누르면 주석과 같은 접이식 목록으로 책의 권·부·장·절 위치에 따라 표시합니다. 북마크가 있는 분류와 그 상위 분류만 나타내며, 분류 오른쪽에 포함된 북마크 개수를 표시합니다. 같은 분류의 북마크는 저장된 본문 위치 순서로 정렬합니다. 분류 제목을 눌러 펼치고 항목을 누르면 그 위치로 이동합니다. 북마크 보기를 사용하는 중에 **북마크 아이콘을 다시 누르면 모든 단계가 접힙니다**. 이미 접혀 있으면 그대로 두며, 다른 보기에서 북마크로 전환하거나 목록을 자동 갱신할 때는 기존 펼침 상태를 유지합니다.
 
@@ -3103,7 +3103,14 @@ CodeMemo 임시 브라우저에서 0.1 두께의 선 근처를 눌러 주석 편
 
 신뢰된 CodeMemo 브라우저에서 예제 문서에 북마크를 실제로 생성하고 **1280px 펼친 화면**, **390px에서 아이콘을 다시 눌러 접힌 화면**을 HTTP **200**, 예외 **0개**로 확인하고 직접 보았습니다. 북마크 1개 표시와 현재 위치 저장 버튼이 유지됩니다. 이 제한된 확인은 전체 Chrome 검사와 구분하며 임시 검증 서버는 종료했습니다.
 
-**게시 상태·증거:** 기존 전체/공개 Chrome 목록에 실제 부·장·절별 북마크 검사 1개를 추가했습니다. **1280px·390px**에서 분류/빈 분류 제외·현재 장 저장·다른 장으로 이동/돌아오기·접기/반복 클릭/보기 전환·기존 주석 보존·새로고침 복원·삭제 후 빈 분류 제거·HTML 내보내기 재해석을 확인합니다. 실제 결과와 게시 상태는 같은 항목에 보충합니다. 정식 주소는 https://seionwon.github.io/HTMLMemo/ 이며 이 초기 기록 시점에는 게시 대기입니다. 로컬 로그와 화면은 `test-results/bookmark-tree-unit.log`, `test-results/bookmark-tree-check.log`, `test-results/bookmark-tree-build.log`, `test-results/bookmark-tree-targeted.log`, `test-results/bookmark-tree-preview`에 보관했습니다.
+**게시 상태·증거:** 기존 전체/공개 Chrome 목록에 실제 부·장·절별 북마크 검사 1개를 추가했습니다. **1280px·390px**에서 분류/빈 분류 제외·현재 장 저장·다른 장으로 이동/돌아오기·접기/반복 클릭/보기 전환·기존 주석 보존·새로고침 복원·삭제 후 빈 분류 제거·HTML 내보내기 재해석을 확인합니다. 실제 결과와 게시 상태는 같은 항목에 보충합니다. 정식 주소는 https://seionwon.github.io/HTMLMemo/ 이며 초기 기록(00:40:14) 시점에는 게시 대기였습니다. 로컬 로그와 화면은 `test-results/bookmark-tree-unit.log`, `test-results/bookmark-tree-check.log`, `test-results/bookmark-tree-build.log`, `test-results/bookmark-tree-targeted.log`, `test-results/bookmark-tree-preview`에 보관했습니다.
 
 
-**첫 전체 Chrome 결과·검사 준비 보완 (00:50:59 +09:00):** 소스 `847c2ae63fdc4c25b68e8e1412938c215a5c15ad`의 [Actions 40351709064](https://github.com/seionwon/HTMLMemo/actions/runs/40351709064)에서 전체 **67개 중 63개**가 통과했고 **4개**가 실패했습니다. 새 북마크 검사는 권·부·장·절 분류, 빈 분류 제외, 기존 북마크/주석 유지와 다른 장의 저장 좌표(400px) 이동까지 통과한 뒤 새 북마크의 실제 내부 저장 완료를 기다리지 않고 조회해 실패했습니다. 기존 북마크 편집 검사 2개는 새로 생긴 접이식 분류를 펼치지 않은 채 숨겨진 삭제 버튼을 누르려 했고, 별도의 기존 붙여넣기/재열기 검사 1개는 비동기 탭 닫기 완료 전에 다시 열어 실패했습니다. 각각 실제 항목 분류 제목을 눌러 펼치기, 내부 저장에서 새 북마크 확인하기, 탭 제거 완료 기다리기를 검사 준비에 반영했습니다. 기존 목차별 주석·검색·TTS·보안 격리 검사는 통과했습니다. 이 실행은 **게시되지 않았고**, 앱의 북마크 구현은 바꾸지 않았습니다. XML·화면·로그·상태는 `test-results/bookmark-tree-first-ci`, `test-results/bookmark-tree-first-build-ci.log`, `test-results/bookmark-tree-first-actions.json`에 보존하며 후속 결과는 같은 항목에 보충합니다.
+**첫 전체 Chrome 결과·검사 준비 보완 (00:50:59 +09:00):** 소스 `847c2ae63fdc4c25b68e8e1412938c215a5c15ad`의 [Actions 40351709064](https://github.com/seionwon/HTMLMemo/actions/runs/40351709064)에서 전체 **67개 중 63개**가 통과했고 **4개**가 실패했습니다. 새 북마크 검사는 권·부·장·절 분류, 빈 분류 제외, 기존 북마크/주석 유지와 다른 장의 저장 좌표(400px) 이동까지 통과한 뒤 내부 저장 조회에서 새 북마크를 찾지 못해 실패했습니다. 기존 북마크 편집 검사 2개는 새로 생긴 접이식 분류를 펼치지 않은 채 숨겨진 삭제 버튼을 누르려 했고, 별도의 기존 붙여넣기/재열기 검사 1개는 비동기 탭 닫기 완료 전에 다시 열어 실패했습니다. 각각 실제 항목 분류 제목을 눌러 펼치기, 내부 저장에서 새 북마크 확인하기, 탭 제거 완료 기다리기를 검사 준비에 반영했습니다. 기존 목차별 주석·검색·TTS·보안 격리 검사는 통과했습니다. 이 실행은 **게시되지 않았고**, 앱의 북마크 구현은 바꾸지 않았습니다. XML·화면·로그·상태는 `test-results/bookmark-tree-first-ci`, `test-results/bookmark-tree-first-build-ci.log`, `test-results/bookmark-tree-first-actions.json`에 보존하며 후속 결과는 같은 항목에 보충합니다.
+
+
+**최종 검증·게시 완료 (01:03:08 +09:00):** 후속 소스 `08bae8300f8ed3920976dc704d615058299d8427`의 [Actions 40353469409](https://github.com/seionwon/HTMLMemo/actions/runs/40353469409)에서 전체 Chrome **67개**, 실제 [공개 URL](https://seionwon.github.io/HTMLMemo/)의 Chrome **42개**가 모두 통과했습니다. Pages 게시 완료는 **00:57:34**, 공개 Chrome 완료는 **01:01:36 +09:00**입니다. 앞의 실패 실행은 게시되지 않았으며 기록을 유지합니다. CI 단위는 **539개 중 538개 통과·실패 0·건너뜀 1**이며, Linux에서 실행 대상이 아닌 제한된 macOS의 Chrome 실행 보호 검사만 건너뛰었습니다. 해당 검사는 로컬 macOS에서 통과했습니다. CI JavaScript **86개·JSON**, Tailwind CSS **4.3.3** 빌드도 통과했습니다.
+
+전체/공개 Chrome 양쪽에서 권·부·장·절의 실제 경로와 빈 분류 제외가 확인됐습니다. **1280px의 펼친 분류 4개가 0개**, **390px의 10개가 0개**로 바뀌었으며 전체 분류 11개와 북마크 ID·개수 5개·주석 저장 내용·현재 장·본문 스크롤 400px·원래 목차 상태가 유지됐습니다. 이미 접힌 상태의 반복 클릭과 검색을 거쳐 돌아온 뒤에도 접힘을 유지했습니다. 실제 현재 위치 저장으로 만든 북마크의 장 `v1:one`과 좌표 400px가 내부 저장에 기록됐고, 다른 장으로 갔다가 그 북마크를 눌러 되돌아오는 동작, 새로고침 복원, 삭제 후 빈 분류 제거, 주석 포함 HTML 내보내기·재해석 시 위치 정보 보존이 모두 통과했습니다. 브라우저 예외는 **0개**였습니다.
+
+공개 **1280px 펼친 화면·390px 접힌 화면**을 직접 확인했습니다. CI Ubuntu의 일부 한글은 글꼴 부재로 네모로 보이므로 문구는 DOM으로 확인했고, 앞서 신뢰된 로컬 브라우저에서는 한글 화면도 확인했습니다. 기존 주석 목록/접기·검색·TTS·팔레트·서재/폴더·보안 격리 검사도 통과했습니다. 공개 파일 **32개(1,495,955바이트)** 모두 HTTP **200**이며 해당 CI의 실제 Pages 아티팩트와 바이트·SHA-256이 일치했습니다. 증거는 `test-results/bookmark-tree-ci`, `test-results/bookmark-tree-published`, 각 폴더의 `pages-only-bookmark-tree.json`·1280/390px 화면, `test-results/bookmark-tree-build-ci.log`, `test-results/bookmark-tree-published-ci.log`, `test-results/bookmark-tree-actions.json`, `test-results/bookmark-tree-pages`, `test-results/bookmark-tree-online-files.json`에 보관했습니다. 정식 서비스는 GitHub Pages이며 이 기록만 보충하는 후속 커밋은 앱 파일을 바꾸지 않습니다. 새로고침하면 적용됩니다.
