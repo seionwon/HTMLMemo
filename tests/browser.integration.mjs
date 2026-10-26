@@ -2600,6 +2600,8 @@ test('real Chrome: Pages-only TTS diagram paint stays thin and leaves SVG glyphs
     const metrics=[];await mkdir(join(root,'test-results'),{recursive:true});
     for(const [width,zoom] of [[1280,.5],[1280,1],[1280,2],[390,.33]]){
       await page.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
+      // The app closes popovers on resize. Let that event finish before opening zoom.
+      await settle();
       await page.evaluate(`document.querySelector('.document-host:not([hidden]) > [data-htmlmemo-reading-controls] [data-action=zoom]').click()`);await page.waitFor('document.querySelector("#zoom-value")&&!document.querySelector("#tool-popover").hidden');await page.evaluate(`(()=>{const input=document.querySelector('#zoom-value');input.value=${JSON.stringify(String(zoom*100))};input.dispatchEvent(new Event('change',{bubbles:true}));document.querySelector('[data-popover-close]').click();${doc}.querySelector('main').scrollTop=0;})()`);await settle();
       await page.click('.document-host:not([hidden]) > [data-htmlmemo-reading-controls] [data-action=speak]');await play();assert.equal(await last(),'Normal paragraph before diagram.');assert.equal(await page.evaluate(`${doc}.defaultView.getComputedStyle(${doc}.querySelector('#before'),'::highlight(mstts)').textDecorationLine`),'underline');assert.equal(await page.evaluate(`${doc}.defaultView.getComputedStyle(${doc}.querySelector('#before'),'::highlight(mstts)').textDecorationThickness`),'2px');
       await next();assert.equal(await last(),'Native diagram label.');const native=await check('#native-label');await writeFile(join(root,`test-results/pages-only-tts-diagram-native-${width}-${zoom}.png`),await page.screenshot());
