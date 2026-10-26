@@ -3062,11 +3062,11 @@ CodeMemo 임시 브라우저에서 0.1 두께의 선 근처를 눌러 주석 편
 
 
 <a id="hist-20261027-001"></a>
-### 2026-10-27 00:10:44 +09:00 — 주석 버튼을 다시 눌러 펼친 목록 모두 접기
+### 2026-10-27 00:23:00 +09:00 — 주석 버튼을 다시 눌러 펼친 목록 모두 접기
 
 | ID | change-kind | status |
 |---|---|---|
-| hist-20261027-001 | 사이드바 주석 분류 접기 | 구현·로컬 검사·제한된 실제 브라우저 확인 완료, Pages 게시 대기 |
+| hist-20261027-001 | 사이드바 주석 분류 접기 | 구현·전체/공개 Chrome·GitHub Pages 게시 확인 완료 |
 
 **목적·사용:** 사이드바에서 **주석** 보기를 사용 중일 때 같은 **주석 아이콘**을 다시 누르면 펼친 주석 분류를 모든 단계에서 접습니다. 접힌 분류는 제목 줄을 눌러 원하는 부분만 다시 펼칩니다. 모두 접힌 상태에서 주석 아이콘을 다시 눌러도 펼치지 않으며 사이드바와 주석 보기는 열어 둡니다.
 
@@ -3076,4 +3076,11 @@ CodeMemo 임시 브라우저에서 0.1 두께의 선 근처를 눌러 주석 편
 
 신뢰된 CodeMemo 브라우저에서는 예제 문서에 검증용 메모를 직접 만들고 분류 제목을 눌러 펼친 화면과, 주석 아이콘을 다시 눌러 접힌 화면을 **1280px**, HTTP **200**, 예외 **0개**로 확인하고 직접 보았습니다. 본문 메모와 주석 1개 표시는 유지됩니다. 이 제한된 확인은 전체 Chrome 검사와 구분하며 임시 검증 서버는 종료했습니다.
 
-**게시 상태·증거:** 기존 전체/공개 Chrome의 목차별 주석 검사에는 **1280px·390px**의 전체 접기·반복 클릭·보기 전환 뒤 접힘 유지와 주석/북마크·주석 개수·현재 장·원래 목차 상태 보존을 추가했습니다. 실제 결과와 게시 상태는 같은 항목에 보충합니다. 정식 주소는 https://seionwon.github.io/HTMLMemo/ 이며 현재는 게시 대기입니다. 로컬 로그와 화면은 `test-results/annotation-collapse-unit.log`, `test-results/annotation-collapse-check.log`, `test-results/annotation-collapse-build.log`, `test-results/annotation-collapse-preview`에 보관했습니다.
+**게시 상태·증거:** 기존 전체/공개 Chrome의 목차별 주석 검사에는 **1280px·390px**의 전체 접기·반복 클릭·보기 전환 뒤 접힘 유지와 주석/북마크·주석 개수·현재 장·원래 목차 상태 보존을 추가했습니다. 실제 결과와 게시 상태는 같은 항목에 보충합니다. 정식 주소는 https://seionwon.github.io/HTMLMemo/ 이며 초기 기록(00:10:44) 시점에는 게시 대기였습니다. 로컬 로그와 화면은 `test-results/annotation-collapse-unit.log`, `test-results/annotation-collapse-check.log`, `test-results/annotation-collapse-build.log`, `test-results/annotation-collapse-preview`에 보관했습니다.
+
+
+**최종 검증·게시 완료 (00:23:00 +09:00):** 소스 `17eb0843ba0de8923c239e8b3f41d7a589dfb84a`의 [Actions 40346766337](https://github.com/seionwon/HTMLMemo/actions/runs/40346766337)에서 전체 Chrome **66개**, 실제 [공개 URL](https://seionwon.github.io/HTMLMemo/)의 Chrome **41개**가 모두 통과했습니다. Pages 게시 완료는 **00:16:59**, 공개 Chrome 완료는 **00:20:25 +09:00**입니다. CI 단위는 **532개 중 531개 통과·실패 0·건너뜀 1**이며, Linux에서 실행 대상이 아닌 제한된 macOS의 Chrome 실행 보호 검사만 건너뛰었습니다. 해당 검사는 로컬 macOS에서 통과했습니다. CI JavaScript **86개·JSON**, Tailwind CSS **4.3.3** 빌드도 통과했습니다.
+
+전체/공개 Chrome 양쪽에서 **1280px의 펼친 분류 4개가 0개**, **390px의 8개가 0개**로 바뀌었습니다. 전체 분류 수 10/8개는 유지되고 각 경우의 주석 ID·개수·주석/북마크 저장 내용·현재 장·원래 목차 상태가 그대로였습니다. 주석 보기도 유지되며, 이미 접힌 상태에서 다시 클릭해도 펼치지 않고 검색을 거쳐 돌아와도 모두 접혀 있습니다. 다시 분류 제목을 눌러 펼친 뒤 주석으로 이동하는 기존 동작도 통과했습니다. 브라우저 예외는 **0개**였습니다. 공개 1280px·390px의 접힌 화면을 직접 확인했습니다. CI Ubuntu의 일부 한글은 글꼴 부재로 네모로 보이므로 문구는 DOM으로 확인했고, 앞서 신뢰된 로컬 브라우저에서는 한글 화면도 확인했습니다. 기존 주석 삭제/복원·검색·TTS·팔레트·서재/폴더·보안 격리 검사도 통과했습니다.
+
+공개 파일 **32개(1,485,585바이트)** 모두 HTTP **200**이며 해당 CI의 실제 Pages 아티팩트와 바이트·SHA-256이 일치했습니다. 증거는 `test-results/annotation-collapse-ci`, `test-results/annotation-collapse-published`, 각 폴더의 `pages-only-annotation-collapse.json`·1280/390px 화면, `test-results/annotation-collapse-build-ci.log`, `test-results/annotation-collapse-published-ci.log`, `test-results/annotation-collapse-actions.json`, `test-results/annotation-collapse-pages`, `test-results/annotation-collapse-online-files.json`에 보관했습니다. 정식 서비스는 GitHub Pages이며 이 기록만 보충하는 후속 커밋은 앱 파일을 바꾸지 않습니다. 새로고침하면 적용됩니다.
