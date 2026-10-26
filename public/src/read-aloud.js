@@ -73,7 +73,11 @@ export function createReadAloud(reader) {
   const mount = U.getElementById('app') || U.body;
   if (!U.getElementById('htmlmemo-tts-ui-style')) { const style=U.createElement('style');style.id='htmlmemo-tts-ui-style';style.textContent=PLAYER_CSS;U.head.append(style); }
   let highlightSheet;
-  try { highlightSheet = new R.CSSStyleSheet();highlightSheet.replaceSync('::highlight(mstts){background:#7b61ff33;text-decoration:underline 2px #7b61ff66;}');D.adoptedStyleSheets=[...D.adoptedStyleSheets,highlightSheet]; } catch {}
+  try {
+    highlightSheet = new R.CSSStyleSheet();
+    highlightSheet.replaceSync('::highlight(mstts){background:#7b61ff33;text-decoration:underline 2px #7b61ff66;}');
+    D.adoptedStyleSheets=[...D.adoptedStyleSheets,highlightSheet];
+  } catch {}
   function visibleRect(rect) {const frame=reader.frame.getBoundingClientRect();return {top:frame.top+rect.top*reader.zoom,bottom:frame.top+rect.bottom*reader.zoom,height:rect.height*reader.zoom};}
   function viewBounds() {return reader.viewport.getBoundingClientRect();}
 
@@ -411,7 +415,7 @@ export function createReadAloud(reader) {
       if (prevBlock && blk !== prevBlock) text += '\n';   // block boundary = sentence boundary
       prevBlock = blk;
       if (pe2 && pe2.closest('annotation')) mathRanges.push({ start: text.length, end: text.length + data.length, tex: data });
-      parts.push({ node: n, start: text.length, offset:from, length:to-from });
+      parts.push({ node: n, start: text.length, offset:from, length:to-from, diagram:!!pe2.closest('svg') });
       text += data;
     }
     return { text: text, parts: parts, mathRanges: mathRanges };
@@ -423,10 +427,10 @@ export function createReadAloud(reader) {
     for (var i = parts.length - 1; i >= 0; i--) {
       var pt = parts[i];
       if (isEnd ? offset > pt.start : offset >= pt.start) {
-        return { node: pt.node, offset: pt.offset + Math.max(0, Math.min(offset - pt.start, pt.length)) };
+        return { node: pt.node, offset: pt.offset + Math.max(0, Math.min(offset - pt.start, pt.length)), part:i };
       }
     }
-    return parts.length ? { node: parts[0].node, offset: parts[0].offset } : null;
+    return parts.length ? { node: parts[0].node, offset: parts[0].offset, part:0 } : null;
   }
   function splitSentences(text, allowShort = false) {
     var seg = [], re = /[^.!?…。\n]+[.!?…。]*\s*/g, m;
@@ -488,7 +492,58 @@ export function createReadAloud(reader) {
     }
     return list.length ? list[0] : null;
   }
-  function clearPaint() { try { if (CSS && CSS.highlights) CSS.highlights['delete']('mstts'); } catch (e) { /* ignore */ } }
+  let diagramPaint=null, diagramRanges=[], diagramResize=null, diagramFrame=null;
+  function clearPaint() {
+    try { if (CSS && CSS.highlights) CSS.highlights['delete']('mstts'); } catch (e) { /* ignore */ }
+    if(diagramFrame!==null)R.cancelAnimationFrame?.(diagramFrame);diagramFrame=null;
+    diagramResize?.disconnect();diagramResize=null;diagramPaint?.remove();diagramPaint=null;diagramRanges=[];
+  }
+  function drawDiagramPaint() {
+    diagramFrame=null;if(!diagramPaint)return;
+    const boxes=[],seen=new Set(),zoom=Math.max(.2,Number(reader.zoom)||1);
+    for(const range of diagramRanges){
+      if(!range.startContainer.isConnected||!range.endContainer.isConnected)continue;
+      for(const rect of range.getClientRects()){
+        if(!(rect.width>0&&rect.height>0))continue;
+        const key=[rect.left,rect.top,rect.width,rect.height].join(',');if(seen.has(key))continue;seen.add(key);
+        const box=D.createElement('div');
+        box.style.cssText=`all:initial!important;display:block!important;position:fixed!important;left:${rect.left}px!important;top:${rect.top}px!important;width:${rect.width}px!important;height:${rect.height+2/zoom}px!important;box-sizing:border-box!important;background:#7b61ff1f!important;box-shadow:inset 0 -${1/zoom}px 0 #7b61ff99!important;pointer-events:none!important;`;
+        boxes.push(box);
+      }
+    }
+    diagramPaint.replaceChildren(...boxes);
+  }
+  function refreshDiagramPaint() {
+    if(!diagramPaint||diagramFrame!==null)return;
+    if(R.requestAnimationFrame)diagramFrame=R.requestAnimationFrame(drawDiagramPaint);else drawDiagramPaint();
+  }
+  function paintSentence(start, end) {
+    const groups=[], ranges=[[],[]];
+    let from=start, diagram=idx.parts[start.part].diagram;
+    for (let i=start.part+1;i<=end.part;i++) {
+      const part=idx.parts[i];
+      if (part.diagram===diagram) continue;
+      const previous=idx.parts[i-1];
+      groups.push({from,to:{node:previous.node,offset:previous.offset+previous.length},diagram});
+      from={node:part.node,offset:part.offset};diagram=part.diagram;
+    }
+    groups.push({from,to:end,diagram});
+    for (const group of groups) {
+      const range=D.createRange();range.setStart(group.from.node,group.from.offset);range.setEnd(group.to.node,group.to.offset);
+      ranges[Number(group.diagram)].push(range);
+    }
+    clearPaint();
+    if(ranges[0].length)CSS.highlights.set('mstts',new R.Highlight(...ranges[0]));
+    if(ranges[1].length){
+      // Native SVG Custom Highlights can paint over/clip glyphs even without a
+      // decoration. Draw outside SVG so viewBox scaling cannot thicken the line.
+      diagramRanges=ranges[1];diagramPaint=D.createElement('div');diagramPaint.setAttribute('data-htmlmemo-ui','');diagramPaint.setAttribute('data-htmlmemo-tts-paint','');diagramPaint.setAttribute('aria-hidden','true');
+      diagramPaint.style.cssText='all:initial!important;position:fixed!important;inset:0!important;pointer-events:none!important;z-index:2147483646!important;';D.documentElement.append(diagramPaint);drawDiagramPaint();
+      if(R.ResizeObserver){diagramResize=new R.ResizeObserver(refreshDiagramPaint);const targets=new Set(diagramRanges.flatMap(range=>[range.startContainer.parentElement,range.endContainer.parentElement]));for(const target of targets)diagramResize.observe(target);}
+    }
+  }
+  listen(D,'scroll',refreshDiagramPaint,true);
+  if(R.addEventListener)listen(R,'resize',refreshDiagramPaint);
 
   // ── Player DOM ──
   var bar = null, panel = null, btnPlay = null, cnt = null, btnRate = null, savedPosition = null;
@@ -790,7 +845,7 @@ export function createReadAloud(reader) {
         if (s && e) {
           var r = D.createRange();
           r.setStart(s.node, s.offset); r.setEnd(e.node, e.offset);
-          CSS.highlights.set('mstts', new R.Highlight(r));
+          paintSentence(s,e);
           // The FIRST client rect (the sentence's first line), not the union: a union spanning a
           // block boundary is hundreds of pixels tall and would scroll to somewhere nobody is reading.
           var rl = r.getClientRects();
@@ -934,10 +989,11 @@ export function createReadAloud(reader) {
   listen(W,'pagehide',close);
   const dismissSettings = e => {if(panel && !e.target.closest?.('[data-tts-panel],[data-tts-gear],[role=listbox]'))closePanel();};
   listen(U,'pointerdown',dismissSettings,true);listen(D,'pointerdown',dismissSettings,true);
-  listen(W,'resize',()=>{if(!bar)return;const r=bar.getBoundingClientRect();bar.style.left=Math.max(4,Math.min(r.left,W.innerWidth-r.width-4))+'px';bar.style.top=Math.max(4,Math.min(r.top,W.innerHeight-r.height-4))+'px';bar.style.bottom='auto';if(panel)placePanel();});
+  listen(W,'resize',()=>{refreshDiagramPaint();if(!bar)return;const r=bar.getBoundingClientRect();bar.style.left=Math.max(4,Math.min(r.left,W.innerWidth-r.width-4))+'px';bar.style.top=Math.max(4,Math.min(r.top,W.innerHeight-r.height-4))+'px';bar.style.bottom='auto';if(panel)placePanel();});
   return {
     toggle() { if(state !== 'idle') {close();return;} buildBar();state='ready';render(); },
     openSelection,
+    refreshPaint:refreshDiagramPaint,
     close,
     escape() {if(state==='idle')return false;if(panel)closePanel();else close();return true;},
     dispose() {close();events.abort();if(highlightSheet)D.adoptedStyleSheets=D.adoptedStyleSheets.filter(s=>s!==highlightSheet);},

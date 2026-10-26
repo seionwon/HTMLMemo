@@ -1625,6 +1625,7 @@ export class Reader {
     set(this.sizer.style,'height',(this.nativeScroll?Math.max(200*this.zoom,this.viewport.clientHeight):(this.naturalHeight||800)*this.zoom)+'px');
     this.syncAnnotationPicking();
     this.updateReadingControls();
+    this.readAloud?.refreshPaint?.();
   }
   rootScrollTop() { return this.doc?.defaultView?.scrollY || this.doc?.scrollingElement?.scrollTop || this.doc?.documentElement?.scrollTop || 0; }
   rootScrollLeft() { return this.doc?.defaultView?.scrollX || this.doc?.scrollingElement?.scrollLeft || this.doc?.documentElement?.scrollLeft || 0; }

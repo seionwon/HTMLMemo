@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createReadAloud} from '../public/src/read-aloud.js';
 import {documentFor,NodeFilter,installDOM} from './dom.mjs';
-import {textIndex,selectionAnchor,currentSection} from '../public/src/document.js';
+import {textIndex,selectionAnchor,currentSection,serializeHTML} from '../public/src/document.js';
 
 function fixture({gap=500,html,stored=[],voices=[],paint=false}={}){
   installDOM();
@@ -11,7 +11,7 @@ function fixture({gap=500,html,stored=[],voices=[],paint=false}={}){
   const DomEvent=doc.defaultView.Event,spoken=[],settings=new Map(stored),timers=new Map(),notices=[];let selection={isCollapsed:true,rangeCount:0},point=null,cancels=0,resumes=0,time=0,timerId=0;
   const engine={paused:false,getVoices:()=>voices,speak:utterance=>spoken.push(utterance),cancel:()=>{cancels++;},resume:()=>{resumes++;engine.paused=false;}};
   const win=new EventTarget();Object.assign(win,{AbortController,SpeechSynthesisUtterance:class{constructor(text){if(win.failUtterance)throw Error('Unavailable utterance');this.text=text;}},speechSynthesis:engine,setTimeout:(fn,ms)=>{const id=++timerId;timers.set(id,{fn,at:time+ms});return id;},clearTimeout:id=>timers.delete(id),localStorage:{getItem:key=>settings.get(key)||null,setItem:(key,value)=>settings.set(key,value)},innerWidth:1000,innerHeight:700});
-  const paints=new Map();Object.defineProperty(ui,'defaultView',{value:win});Object.defineProperty(doc,'defaultView',{value:{NodeFilter,...(paint?{CSS:{highlights:paints},Highlight:class{constructor(range){this.range=range;}}}:{})}});
+  const paints=new Map();Object.defineProperty(ui,'defaultView',{value:win});Object.defineProperty(doc,'defaultView',{value:{NodeFilter,...(paint?{CSS:{highlights:paints},Highlight:class{constructor(...ranges){this.range=ranges[0];this.ranges=ranges;}}}:{})}});
   const reader={host:ui.querySelector('#host'),doc,metadata:{id:'resume-test'},callbacks:{onNotice:message=>notices.push(message)},zoom:1,scrollTop:0,scrollLeft:0,frame:{getBoundingClientRect:()=>({top:0})},viewport:{getBoundingClientRect:()=>({top:0,bottom:600,height:600})}};
   // The shared DOM adapter yields a boolean; TTS uses the browser's returned text node.
   const createWalker=doc.createTreeWalker.bind(doc);doc.createTreeWalker=(...args)=>{const walker=createWalker(...args);return {get currentNode(){return walker.currentNode;},nextNode:()=>walker.nextNode()?walker.currentNode:null};};
@@ -42,6 +42,23 @@ test('paused Play repeats the current sentence when the reading position has not
   const a=fixture();a.play();a.clickButton('다음 문장');assert.equal(a.spoken.at(-1).text,'두 번째 문장입니다.');a.pause();
   const count=a.spoken.length;a.spoken.at(-1).onend();a.spoken.at(-1).onerror();assert.equal(a.spoken.length,count);
   a.play();assert.equal(a.spoken.at(-1).text,'두 번째 문장입니다.');assert.ok(a.button('일시정지'));
+});
+test('mixed prose and SVG sentences keep prose highlights outside diagrams and export no temporary paint',()=>{
+  const a=fixture({paint:true,html:'<html><head><title>Diagram</title></head><body><main><p>Prose before.</p><div><span id="lead">Mixed </span><svg viewBox="0 0 100 20"><text id="label">diagram</text></svg><span id="tail"> sentence.</span></div><p>Prose after.</p></main></body></html>'}),original=a.doc.querySelector('svg').outerHTML;
+  a.play();assert.equal(a.paints.get('mstts').ranges.length,1);a.clickButton('다음 문장');assert.equal(a.spoken.at(-1).text,'Mixed diagram sentence.');
+  const ranges=a.paints.get('mstts').ranges;assert.equal(ranges.length,2);assert.strictEqual(ranges[0].startContainer,a.doc.querySelector('#lead').firstChild);assert.strictEqual(ranges[0].endContainer,ranges[0].startContainer);assert.strictEqual(ranges[1].startContainer,a.doc.querySelector('#tail').firstChild);assert.strictEqual(ranges[1].endContainer,ranges[1].startContainer);
+  assert.ok(a.doc.querySelector('[data-htmlmemo-tts-paint][data-htmlmemo-ui][aria-hidden=true]'));assert.equal(a.doc.querySelector('svg').outerHTML,original);
+  assert.doesNotMatch(serializeHTML(a.doc,{annotations:[],bookmarks:[]}),/data-htmlmemo-tts-paint/);
+  a.clickButton('다음 문장');assert.equal(a.spoken.at(-1).text,'Prose after.');assert.equal(a.doc.querySelector('[data-htmlmemo-tts-paint]'),null);assert.equal(a.paints.get('mstts').ranges.length,1);a.player.dispose();
+});
+test('SVG and foreignObject reading never use Custom Highlights and release diagram paint on stop, close or dispose',()=>{
+  for(const action of ['stop','close','dispose']){
+    const a=fixture({paint:true,html:'<html><head></head><body><main><svg><text>Native diagram.</text><foreignObject><div><p>HTML diagram.</p></div></foreignObject></svg></main></body></html>'});
+    a.doc.querySelector('text').getBoundingClientRect=()=>({top:100,bottom:120,height:20});
+    a.play();assert.equal(a.spoken.at(-1).text,'Native diagram.');assert.equal(a.paints.size,0);assert.ok(a.doc.querySelector('[data-htmlmemo-tts-paint]'));
+    a.clickButton('다음 문장');assert.equal(a.spoken.at(-1).text,'HTML diagram.');assert.equal(a.paints.size,0);assert.ok(a.doc.querySelector('[data-htmlmemo-tts-paint]'));
+    if(action==='stop')a.clickButton('정지');else a.player[action]();assert.equal(a.doc.querySelector('[data-htmlmemo-tts-paint]'),null);assert.equal(a.paints.size,0);if(action!=='dispose')a.player.dispose();
+  }
 });
 test('scrolling down while paused reads the new visible sentence only after Play',()=>{
   const a=fixture();a.play();const old=a.spoken[0];a.pause();a.reader.scrollTop=1000;assert.equal(a.spoken.length,1);
