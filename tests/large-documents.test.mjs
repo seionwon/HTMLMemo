@@ -49,6 +49,8 @@ test('a fifty-million-pixel book uses a bounded iframe and restores reading posi
   assert.equal(r.frame.style.height, '350px');assert.equal(r.sizer.style.height, '700px');
   assert.equal(r.doc.defaultView.scrollY, 20175);
   assert.equal(r.metadata.view.scrollTop, 40350);assert.equal(r.metadata.view.zoom, 2);
+  // This geometry-only document has no manifest or headings to classify.
+  r.doc.getElementById=()=>null;r.outline=()=>[];
   r.addBookmark('읽던 곳');assert.equal(r.metadata.bookmarks[0].top, 20175);
   r.scrollTop = 0;r.scrollTop = r.metadata.bookmarks[0].top*r.zoom;
   assert.equal(r.doc.defaultView.scrollY, 20175);

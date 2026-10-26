@@ -1143,8 +1143,10 @@ function renderSidebar(mode,{panel=$('#sidebar'),embedded=false,documentReader=r
   const outline=embedded?[]:r.outline();
   if(!embedded&&mode==='outline'&&!outline.length)mode='search';
   if(embedded&&$('#sidebar').annotationReader===r)closeSidebar({remember:false,clearSearch:false});
-  r.annotationTreeOpen ||= new Map();
-  if(panel.annotationReader===r)$$('[data-annotation-group]',panel).forEach(group=>r.annotationTreeOpen.set(group.dataset.annotationGroup,!!(group.open||group.hasAttribute('open'))));
+  for(const type of ['annotation','bookmark']){
+    r[type+'TreeOpen'] ||= new Map();
+    if(panel.annotationReader===r)$$(`[data-${type}-group]`,panel).forEach(group=>r[type+'TreeOpen'].set(group.getAttribute(`data-${type}-group`),!!(group.open||group.hasAttribute('open'))));
+  }
   panel.annotationReader=r;
   clearTimeout(panel.sidebarSearchTimer);panel.sidebarMode=mode;if(!embedded){sidebarMode=mode;r.appSidebarMode=mode;r.appSidebarClosed=false;$('#workspace')?.setAttribute('data-app-sidebar','');closePopover();}else styleNativeSidebar(panel);panel.hidden=false;
   const id=name=>(embedded?'htmlmemo-native-':'')+name,q=name=>$('#'+id(name),panel);
@@ -1157,9 +1159,10 @@ function renderSidebar(mode,{panel=$('#sidebar'),embedded=false,documentReader=r
       const view=button.dataset.sidebarView;
       // Only an explicit re-click collapses the TOC, never a view change or restore.
       if(view==='outline'&&panel.sidebarMode==='outline'){panel.annotationReader?.collapseDocumentToc?.();return;}
-      if(view==='annotations'&&panel.sidebarMode==='annotations'){
-        panel.annotationReader?.annotationTreeOpen?.clear();
-        for(const group of $$('[data-annotation-group]',panel)){group.open=false;group.removeAttribute('open');}
+      if(['annotations','bookmarks'].includes(view)&&panel.sidebarMode===view){
+        const type=view==='annotations'?'annotation':'bookmark';
+        panel.annotationReader?.[type+'TreeOpen']?.clear();
+        for(const group of $$(`[data-${type}-group]`,panel)){group.open=false;group.removeAttribute('open');}
         return;
       }
       return embedded?panel.annotationReader.showDocumentSidebarView(view):renderSidebar(view);
@@ -1188,9 +1191,12 @@ function renderSidebar(mode,{panel=$('#sidebar'),embedded=false,documentReader=r
     content.innerHTML=embedded?'':outline.length?outline.map((item,index)=>`<button class="outline-item" style="padding-left:${12+(item.level-1)*12}px" data-heading="${index}">${esc(item.title)}</button>`).join(''):'<p class="panel-empty">이 문서에 제목 목차가 없습니다.</p>';
     $$('[data-heading]',panel).forEach(button=>button.onclick=()=>r.jump(outline[Number(button.dataset.heading)].node));
   }else if(mode==='bookmarks'){
-    const marks=`${r.metadata.bookmarks.map(mark=>`<div class="bookmark-row"><button class="outline-item" data-bookmark="${esc(mark.id)}">${icon('bookmark',14)} ${esc(mark.title)}</button><button class="icon-button" data-delete-bookmark="${esc(mark.id)}" aria-label="북마크 삭제">${icon('close',13)}</button></div>`).join('')}<button id="${id('add-bookmark')}" class="text-button">+ 현재 위치 저장</button>`;
-    content.innerHTML=`${r.metadata.bookmarks.length?'':'<p class="panel-empty">저장한 북마크가 없습니다.</p>'}<div class="sidebar-bookmark-list">${marks}</div>`;
-    $$('[data-bookmark]',panel).forEach(button=>button.onclick=()=>{const mark=r.metadata.bookmarks.find(m=>m.id===button.dataset.bookmark);r.scrollTop=mark.top*r.zoom;r.scrollLeft=mark.left*r.zoom;});
+    const row=mark=>`<div class="bookmark-row"><button class="outline-item" data-bookmark="${esc(mark.id)}" title="${esc(mark.title)}">${icon('bookmark',14)} ${esc(mark.title)}</button><button class="icon-button" data-delete-bookmark="${esc(mark.id)}" aria-label="북마크 삭제">${icon('close',13)}</button></div>`;
+    const tree=r.bookmarkTree?.()||[{id:'document',title:'문서 전체',count:r.metadata.bookmarks.length,bookmarks:r.metadata.bookmarks,children:[]}];
+    const branch=group=>`<details class="annotation-group" data-bookmark-group="${esc(group.id)}"${r.bookmarkTreeOpen.get(group.id)?' open':''}><summary><span class="annotation-group-title">${esc(group.title)}</span><span class="annotation-group-count" aria-label="${group.count}개 북마크">${group.count}</span></summary><div class="annotation-group-body">${group.children.map(branch).join('')}${group.bookmarks.map(row).join('')}</div></details>`;
+    content.innerHTML=`<div class="sidebar-bookmark-list">${r.metadata.bookmarks.length?`<div class="annotation-tree bookmark-tree" aria-label="목차별 북마크">${tree.map(branch).join('')}</div>`:'<p class="panel-empty">저장한 북마크가 없습니다.</p>'}<button id="${id('add-bookmark')}" class="text-button">+ 현재 위치 저장</button></div>`;
+    $$('[data-bookmark-group]',panel).forEach(group=>group.ontoggle=()=>{if(group.isConnected)r.bookmarkTreeOpen.set(group.dataset.bookmarkGroup,!!(group.open||group.hasAttribute('open')));});
+    $$('[data-bookmark]',panel).forEach(button=>button.onclick=()=>r.jumpBookmark(button.dataset.bookmark));
     $$('[data-delete-bookmark]',panel).forEach(button=>button.onclick=()=>{r.metadata.bookmarks=r.metadata.bookmarks.filter(m=>m.id!==button.dataset.deleteBookmark);active().queue.schedule();if(embedded)r.showDocumentSidebarView('bookmarks');else renderSidebar('bookmarks');});q('add-bookmark').onclick=()=>toolAction('bookmark');
   }else{
     const contexts=r.annotationContexts?.()||new Map();

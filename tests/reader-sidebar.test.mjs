@@ -16,7 +16,7 @@ function sidebar() {
   const doc=new DOMParser().parseFromString('<html><body><section id="workspace"></section><aside id="sidebar" hidden></aside></body></html>','text/html');
   const calls={search:[],next:[],headings:[],annotations:[],saved:0,sizes:[],errors:[]},timers=new Map();let timerId=0;
   const r={zoom:2,metadata:{bookmarks:[{id:'b1',title:'읽던 곳',top:240,left:12}],annotations:[{id:'a1',type:'note',color:'#334155',text:'남겨 둔 메모'}]},
-    outline:()=>[{node:'heading-1',level:1,title:'첫 번째 절'}],jump:node=>calls.headings.push(node),jumpAnnotation:id=>calls.annotations.push(id),
+    outline:()=>[{node:'heading-1',level:1,title:'첫 번째 절'}],jump:node=>calls.headings.push(node),jumpAnnotation:id=>calls.annotations.push(id),jumpBookmark(id){const mark=this.metadata.bookmarks.find(m=>m.id===id);this.scrollTop=mark.top*this.zoom;this.scrollLeft=mark.left*this.zoom;},
     search(query){this.searchQuery=query;calls.search.push(query);this.searchResults=query?[{quote:'찾은 문장: '+query}]:[];this.searchPosition=this.searchResults.length?0:-1;return this.searchResults;},nextSearch(direction){calls.next.push(direction);if(this.searchResults?.length)this.searchPosition=Math.max(0,Math.min(this.searchResults.length-1,this.searchPosition+direction));}};
   let current=r;
   const context=vm.createContext({ANNOTATION_LABELS,document:doc,$:(selector,root=doc)=>$(selector,root),$$:(selector,root=doc)=>$$(selector,root),icon,esc:escapeHTML,
@@ -378,6 +378,44 @@ test('ordinary HTML annotation tree keeps nested headings in document order and 
   assert.equal(JSON.stringify(tree).includes('빈 절'),false);assert.equal(JSON.stringify(tree).includes('주석 없는 장'),false);
 });
 
+test('bookmark tree follows the full book TOC, prunes empty branches and keeps legacy locations honest',()=>{
+  installDOM();const {r,doc}=partialBook();
+  const payload=doc.createElement('script');payload.id='book-volume-0';Object.defineProperty(payload,'textContent',{get(){throw Error('Unopened book body read');}});doc.body.append(payload);
+  r.metadata.bookmarks=[{id:'later',title:'나중에 저장',top:120,left:0,section:'v0:two'},{id:'earlier',title:'먼저 읽을 곳',top:20,left:0,section:'v0:two'},
+    {id:'opening',title:'첫머리',top:0,left:0,section:'v0:opening'},{id:'other',title:'다른 권',top:0,left:0,section:'v1:opening'},
+    {id:'partial',title:'장 키 일부만 남음',top:50,left:0,section:'v1:removed'},{id:'legacy',title:'예전 위치',top:20,left:0}];
+  const before=structuredClone(r.metadata),tree=r.bookmarkTree(),leaf=tree[0].children[0].children.find(n=>n.title==='첫걸음').children[0];
+  assert.deepEqual(tree.map(n=>[n.title,n.count]),[['입문',3],['실전',2],['목차 위치 미확인',1]]);
+  assert.equal(leaf.title,'(1.2) 다음 장');assert.deepEqual(leaf.bookmarks.map(n=>n.id),['earlier','later']);
+  assert.equal(tree[1].children[0].children[0].title,'세부 위치 미확인');assert.deepEqual(tree.at(-1).bookmarks.map(n=>n.id),['legacy']);
+  assert.equal(JSON.stringify(tree).includes('(1.1) 첫 장'),false);assert.equal(JSON.stringify(tree).includes('2부 시작'),false);assert.equal(JSON.stringify(tree).includes('1부 앞부분'),false,'annotation-specific legacy opening must not be guessed for bookmarks');
+  doc.getElementById('reader-content').dataset.section='v0:two';assert.deepEqual(r.bookmarkTree(),tree);assert.deepEqual(r.metadata,before);
+});
+
+function ordinaryBookmarks(){
+  installDOM();const doc=documentFor('<html><head></head><body><nav><h2>목차</h2></nav><main><h1 id="part">1부</h1><h2>1장</h2><h3>같은 절</h3><p>첫 절 내용</p><h2>2장</h2><h3>같은 절</h3><p>다음 절 내용</p><h2>빈 장</h2></main><section data-htmlmemo-ui><h2>앱 메뉴</h2></section></body></html>');
+  const r=Object.create(Reader.prototype);r.doc=doc;r.zoom=2;r.viewport={scrollTop:840,scrollLeft:24};r.layerOrigin=()=>({top:-100,left:0});r.metadata={annotations:[],bookmarks:[]};r.callbacks={};
+  [...doc.querySelectorAll('main h1,main h2,main h3')].forEach((node,i)=>{node.getBoundingClientRect=()=>({top:[0,120,160,300,400,600][i]-100,height:30,width:100});});
+  return {r,doc};
+}
+test('ordinary HTML bookmarks use nested heading positions, preserve duplicate titles and remember new heading assignments',()=>{
+  const {r,doc}=ordinaryBookmarks();r.metadata.bookmarks=[{id:'two',title:'두 번째 절',top:420,left:0},{id:'one',title:'첫 절',top:180,left:0},{id:'front',title:'머리말',top:-10,left:0}];
+  const before=structuredClone(r.metadata),tree=r.bookmarkTree(),part=tree[1];assert.equal(part.title,'1부');assert.equal(part.count,2);
+  assert.deepEqual(part.children.map(n=>n.title),['1장','2장']);assert.equal(part.children[0].children[0].title,'같은 절');assert.equal(part.children[1].children[0].title,'같은 절');assert.notEqual(part.children[0].children[0].id,part.children[1].children[0].id);
+  assert.deepEqual(part.children[0].children[0].bookmarks.map(n=>n.id),['one']);assert.deepEqual(part.children[1].children[0].bookmarks.map(n=>n.id),['two']);assert.equal(tree[0].title,'목차 밖 북마크');assert.equal(JSON.stringify(tree).includes('빈 장'),false);assert.equal(JSON.stringify(tree).includes('앱 메뉴'),false);assert.deepEqual(r.metadata,before);
+  let changed=0;r.callbacks.onChange=()=>changed++;r.addBookmark('새로 저장');const mark=r.metadata.bookmarks.at(-1);assert.equal(mark.top,420);assert.equal(mark.left,12);assert.equal(mark.heading,part.children[1].children[0].id);assert.equal(mark.section,undefined);assert.equal(changed,1);
+  for(const node of doc.querySelectorAll('main h1,main h2,main h3'))node.getBoundingClientRect=()=>({top:900,height:30,width:100});
+  const after=r.bookmarkTree(),savedPart=after.find(n=>n.title==='1부');assert.equal(savedPart.children[0].children[0].title,'같은 절');assert.ok(savedPart.children[0].children[0].bookmarks.some(n=>n.id===mark.id),'new bookmark retains its heading after reflow');
+  const reopened=parseHTML(serializeHTML(doc,r.metadata));assert.deepEqual(reopened.metadata.bookmarks,r.metadata.bookmarks);
+});
+test('new book bookmarks save their chapter and survive export/import without loading other chapters',()=>{
+  installDOM();const {r,doc}=partialBook();r.zoom=2;r.viewport={scrollTop:250,scrollLeft:10};let changes=0;r.callbacks={onChange:()=>changes++};r.metadata.bookmarks=[];
+  doc.head.insertAdjacentHTML('beforeend','<script id="book-volume-0" type="application/octet-stream">original volume one</script><script id="book-volume-1" type="application/octet-stream">original volume two</script><script>window.readerReady=true;</script>');
+  r.addBookmark('첫머리');doc.getElementById('reader-content').dataset.section='v0:two';r.addBookmark('다음 장');
+  assert.deepEqual(r.metadata.bookmarks.map(n=>[n.title,n.section,n.top,n.left]),[['첫머리','v0:opening',125,5],['다음 장','v0:two',125,5]]);assert.equal(changes,2);
+  assert.deepEqual(parseHTML(serializeHTML(doc,r.metadata),{},{allowScripts:true}).metadata.bookmarks,r.metadata.bookmarks);
+});
+
 function partialBook(){
   const manifest={format:'memosuite-book-html-v1',volumes:[{label:'입문',sections:[
     {key:'v0:opening',id:'opening',title:'1부 시작',category:'1부 · 준비'},
@@ -468,6 +506,28 @@ test('annotation reselection folds only the document currently shown by the shar
   a.setReader(a.r);a.open('annotations');assert.equal(a.doc.querySelector('[data-annotation-group]').hasAttribute('open'),true);assert.equal(a.calls.saved,0);
 });
 
+test('bookmark reselection folds every level in common and native sidebars and keeps annotation, TOC and data state',()=>{
+  for(const native of [false,true]){
+    const a=native?collapsibleSidebar():sidebar(),panel=native?a.r.documentSidebarUI:a.doc.querySelector('#sidebar'),before=structuredClone(a.r.metadata);
+    a.r.bookmarkTree=()=>[{id:'part',title:'1부',count:1,bookmarks:[],children:[{id:'chapter',title:'1장',count:1,bookmarks:a.r.metadata.bookmarks,children:[]}]}];
+    if(native)a.choose('bookmarks');else a.open('bookmarks');
+    for(const group of panel.querySelectorAll('[data-bookmark-group]')){group.open=true;group.setAttribute('open','');group.ontoggle();}
+    a.choose('annotations');for(const group of panel.querySelectorAll('[data-annotation-group]')){group.open=true;group.setAttribute('open','');group.ontoggle();}
+    a.choose('bookmarks');assert.equal(panel.querySelectorAll('[data-bookmark-group][open]').length,2,'view transitions retain disclosure state');
+    if(native)a.r.refreshDocumentSidebar();else a.open('bookmarks');assert.equal(panel.querySelectorAll('[data-bookmark-group][open]').length,2,'automatic updates keep disclosure state');
+    const nodes=[...panel.querySelectorAll('[data-bookmark-group]')];a.choose('bookmarks');assert.equal(panel.querySelectorAll('[data-bookmark-group][open]').length,0);assert.deepEqual([...panel.querySelectorAll('[data-bookmark-group]')],nodes);
+    assert.equal(panel.hidden,false);assert.equal(panel.sidebarMode,'bookmarks');assert.equal(panel.querySelector('[data-sidebar-view=bookmarks]').getAttribute('aria-pressed'),'true');a.choose('bookmarks');assert.equal(panel.querySelectorAll('[data-bookmark-group][open]').length,0);
+    a.choose('annotations');assert.equal(panel.querySelectorAll('[data-annotation-group][open]').length,1,'bookmark collapse leaves annotation expansion alone');a.choose('search');a.choose('bookmarks');assert.equal(panel.querySelectorAll('[data-bookmark-group][open]').length,0);
+    assert.equal(panel.querySelector('[data-sidebar-count=bookmarks]').textContent,'1');assert.deepEqual(a.r.metadata,before);assert.equal(a.calls.saved,0);
+    if(native){assert.equal(a.tree.querySelectorAll('details[open]').length,2);assert.equal(a.doc.querySelector('#body-detail').hasAttribute('open'),true);}
+  }
+});
+test('bookmark folding targets the current document and escapes source titles and bookmark text',()=>{
+  const a=sidebar();a.r.bookmarkTree=()=>[{id:'part"<',title:'<img src=x onerror=bad()>',count:1,bookmarks:a.r.metadata.bookmarks,children:[]}];a.r.metadata.bookmarks[0].title='<script>bad()</script>';a.open('bookmarks');
+  const first=a.doc.querySelector('[data-bookmark-group]');first.open=true;first.ontoggle();assert.equal(first.dataset.bookmarkGroup,'part"<');assert.equal(first.querySelector('.annotation-group-title').textContent,'<img src=x onerror=bad()>');assert.equal(a.doc.querySelector('img,script'),null);assert.equal(a.doc.querySelector('[data-bookmark]').title,'<script>bad()</script>');
+  const other={...a.r,bookmarkTreeOpen:new Map([['part"<',true]])};a.setReader(other);a.open('bookmarks');a.choose('bookmarks');assert.equal(a.doc.querySelector('[data-bookmark-group]').hasAttribute('open'),false);assert.equal(a.r.bookmarkTreeOpen.get('part"<'),true);a.setReader(a.r);a.open('bookmarks');assert.equal(a.doc.querySelector('[data-bookmark-group]').hasAttribute('open'),true);
+});
+
 test('annotation tree escapes source titles and annotation text',()=>{
   const a=sidebar();a.r.annotationTree=()=>[{id:'a"<',title:'<img src=x onerror=bad()>',count:1,children:[],annotations:a.r.metadata.annotations}];
   a.r.metadata.annotations[0].text='<script>bad()</script>';a.open('annotations');
@@ -495,6 +555,23 @@ test('cancelled and timed-out annotation navigation never deletes annotations or
   const cancelled=r.jumpAnnotation('there');assert.equal(await r.jumpAnnotation('here'),true);assert.equal(await cancelled,false);assert.equal(errors.length,0);assert.equal(jumps,1);
   const timedOut=r.jumpAnnotation('there');t.mock.timers.tick(15000);assert.equal(await timedOut,false);assert.match(errors[0],/불러오지 못했습니다/);
   assert.ok(observers.every(observer=>!observer.connected));assert.equal(r.metadata.annotations.length,2);assert.equal(jumps,1);assert.equal(r.cancelAnnotationJump,null);
+});
+
+test('bookmark navigation waits for the requested chapter before applying its saved zoom-independent coordinates',async()=>{
+  installDOM();const {r,doc}=partialBook();let callback,refreshed=0;const errors=[];
+  Object.defineProperty(doc,'defaultView',{value:{MutationObserver:class{constructor(fn){callback=fn;}observe(){}disconnect(){}},location:{set hash(value){doc.getElementById('reader-content').dataset.section=decodeURIComponent(value);queueMicrotask(callback);}}}});
+  r.zoom=2;r.viewport={scrollTop:0,scrollLeft:0};r.metadata.bookmarks=[{id:'next',title:'다음 장',section:'v0:two',top:320,left:15}];r.callbacks={onError:error=>errors.push(error.message)};r.refreshDynamicDocument=async()=>{refreshed++;};
+  const before=structuredClone(r.metadata);assert.equal(await r.jumpBookmark('next'),true);assert.equal(doc.getElementById('reader-content').dataset.section,'v0:two');assert.equal(refreshed,1);assert.equal(r.scrollTop,640);assert.equal(r.scrollLeft,30);assert.deepEqual(r.metadata,before);assert.deepEqual(errors,[]);
+  r.zoom=.5;r.viewport.scrollTop=0;assert.equal(await r.jumpBookmark('next'),true);assert.equal(r.scrollTop,160);assert.equal(refreshed,1,'same chapter does not reload');
+});
+test('bookmark navigation cancels stale work, preserves missing or timed-out bookmarks and explains legacy chapter limits',async t=>{
+  t.mock.timers.enable({apis:['setTimeout']});installDOM();const {r,doc}=partialBook(),errors=[],notices=[],observers=[];
+  Object.defineProperty(doc,'defaultView',{value:{MutationObserver:class{constructor(){observers.push(this);}observe(){this.connected=true;}disconnect(){this.connected=false;}},location:{hash:''}}});
+  r.zoom=1;r.viewport={scrollTop:0,scrollLeft:0};r.callbacks={onError:error=>errors.push(error.message),onNotice:value=>notices.push(value)};r.metadata.bookmarks=[{id:'there',title:'다른 장',section:'v0:two',top:320,left:0},{id:'here',title:'현재 장',section:'v0:opening',top:50,left:0},{id:'missing',title:'없는 장',section:'removed',top:10,left:0},{id:'legacy',title:'이전 북마크',top:20,left:0}];
+  const before=structuredClone(r.metadata),cancelled=r.jumpBookmark('there');assert.equal(await r.jumpBookmark('here'),true);assert.equal(await cancelled,false);assert.equal(r.scrollTop,50);assert.deepEqual(errors,[]);
+  const timed=r.jumpBookmark('there');t.mock.timers.tick(15000);assert.equal(await timed,false);assert.match(errors.at(-1),/불러오지 못했습니다/);assert.equal(r.scrollTop,50);
+  assert.equal(await r.jumpBookmark('missing'),false);assert.match(errors.at(-1),/목차에서 찾지 못했습니다/);assert.equal(r.scrollTop,50);assert.equal(await r.jumpBookmark('legacy'),true);assert.equal(r.scrollTop,20);assert.match(notices.at(-1),/장 정보가 없어/);
+  assert.deepEqual(r.metadata,before);assert.ok(observers.every(observer=>!observer.connected));assert.equal(r.cancelAnnotationJump,null);
 });
 
 test('the visible source TOC gets inline choices without moving its tree, listeners or text anchors',()=>{

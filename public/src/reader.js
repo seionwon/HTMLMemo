@@ -2334,7 +2334,7 @@ export class Reader {
       if(navigate){
         if(!this.annotationBookPaths().has(section))throw new Error('이 주석의 장을 현재 책 목차에서 찾지 못했습니다. 주석은 보관됩니다.');
       }
-      const result=await this.waitForAnnotationTarget(annotation,{section,location,navigate,generation});
+      const result=await this.waitForLocationTarget(annotation,{section,location,navigate,generation});
       if(this.disposed||generation!==this.annotationJumpGeneration||result.cancelled)return false;
       if(result.error)throw result.error;
       if(!result.ready)throw new Error(result.sectionReady?'이 주석의 원문 위치를 찾지 못했습니다. 주석은 보관됩니다.':'주석이 있는 장을 불러오지 못했습니다. 원본 책 목차에서 다시 열어 주세요. 주석은 보관됩니다.');
@@ -2349,7 +2349,28 @@ export class Reader {
       this.jump(element);this.selectedId=id;this.callbacks.onView?.();if(result.noticeShown)this.callbacks.onNotice?.('주석 위치로 이동했습니다.');return true;
     }catch(error){if(!this.disposed&&generation===this.annotationJumpGeneration)this.callbacks.onError?.(error);return false;}
   }
-  waitForAnnotationTarget(annotation,{section,location,navigate,generation}) {
+  async jumpBookmark(id) {
+    this.cancelAnnotationJump?.();
+    const generation=this.annotationJumpGeneration=(this.annotationJumpGeneration||0)+1;
+    const mark=this.metadata.bookmarks.find(item=>item.id===id);if(!mark)return false;
+    try{
+      if(this.preparing&&this.ready)await this.ready;
+      if(this.disposed||generation!==this.annotationJumpGeneration)return false;
+      const saved=typeof mark.section==='string'?mark.section:'',section=(saved&&this.annotationLocation({textAnchor:{section:saved}})?.section)||saved,navigate=!!section&&currentSection(this.doc)!==section;
+      if(navigate){
+        if(!this.annotationBookPaths().has(section))throw new Error('이 북마크의 장을 현재 책 목차에서 찾지 못했습니다. 북마크는 보관됩니다.');
+        const result=await this.waitForLocationTarget(mark,{section,navigate,generation,bookmark:true});
+        if(this.disposed||generation!==this.annotationJumpGeneration||result.cancelled)return false;
+        if(result.error)throw result.error;
+        if(!result.ready)throw new Error('북마크가 있는 장을 불러오지 못했습니다. 원본 책 목차에서 다시 열어 주세요. 북마크는 보관됩니다.');
+        if(result.noticeShown)this.callbacks.onNotice?.('북마크 위치로 이동했습니다.');
+      }
+      this.scrollTop=mark.top*this.zoom;this.scrollLeft=mark.left*this.zoom;this.callbacks.onView?.();
+      if(!section&&this.annotationBookPaths().size)this.callbacks.onNotice?.('이전 북마크에 장 정보가 없어 현재 장의 저장된 화면 위치로 이동했습니다.');
+      return true;
+    }catch(error){if(!this.disposed&&generation===this.annotationJumpGeneration)this.callbacks.onError?.(error);return false;}
+  }
+  waitForLocationTarget(annotation,{section,location,navigate,generation,bookmark=false}) {
     return new Promise(resolve=>{
       let settled=false,busy=false,scheduled=null,timer=null,notice=null,noticeShown=false,refresh=navigate;
       const cancelled=()=>this.disposed||generation!==this.annotationJumpGeneration;
@@ -2369,6 +2390,7 @@ export class Reader {
             await this.refreshDynamicDocument();refresh=false;
           }
           if(settled||cancelled()){cancel();return;}if(!sectionReady())return;
+          if(bookmark){finish({ready:true});return;}
           // Exact IDs can contain quotes in legacy imports; compare attributes,
           // not an interpolated selector. Never guess another matching sentence.
           const find=()=>[...this.doc.querySelectorAll('[data-htmlmemo-id]')].find(node=>node.getAttribute('data-htmlmemo-id')===annotation.id);
@@ -2381,7 +2403,7 @@ export class Reader {
       };
       this.cancelAnnotationJump=cancel;observe();
       timer=setTimeout(()=>finish({ready:false,sectionReady:sectionReady()}),15000);
-      notice=setTimeout(()=>{if(!settled){noticeShown=true;this.callbacks.onNotice?.('주석이 있는 본문과 위치를 준비하는 중…');}},250);
+      notice=setTimeout(()=>{if(!settled){noticeShown=true;this.callbacks.onNotice?.(bookmark?'북마크가 있는 본문을 준비하는 중…':'주석이 있는 본문과 위치를 준비하는 중…');}},250);
       try{if(navigate)this.doc.defaultView.location.hash=encodeURIComponent(section);void attempt();}catch(error){finish({error});}
     });
   }
@@ -2482,9 +2504,9 @@ export class Reader {
     return !saved||saved===section;
   }
   annotationTree(contexts=this.annotationContexts()) {
-    const paths=this.annotationBookPaths(),roots=[],nodes=new Map();
+    const paths=this.annotationBookPaths();
     const preamble=this.outline().some(item=>!this.isInsideTocOrTopbar(item.node))?'목차 밖 주석':'문서 전체';
-    for(const annotation of this.metadata.annotations){
+    return this.locationTree(this.metadata.annotations,'annotations',annotation=>{
       const section=annotation.textAnchor?.section||annotation.anchorTarget?.section;
       let path=this.annotationLocation(annotation)?.path;
       if(!path?.length){
@@ -2492,28 +2514,67 @@ export class Reader {
           :contexts.get(annotation.id)?.path;
         if(!path?.length)path=[{id:'preamble',title:preamble,order:-1,kind:'other'}];
       }
+      return path;
+    });
+  }
+  bookmarkTree() {
+    const paths=this.annotationBookPaths(),contexts=paths.size?new Map():this.bookmarkContexts();
+    const preamble=this.outline().some(item=>!this.isInsideTocOrTopbar(item.node))?'목차 밖 북마크':'문서 전체';
+    return this.locationTree([...this.metadata.bookmarks].sort((a,b)=>a.top-b.top||a.left-b.left),'bookmarks',mark=>{
+      // Old bookmarks saved only coordinates. Never assign them to whichever
+      // chapter happens to be open, or to the annotation-only legacy opening.
+      const section=typeof mark.section==='string'?mark.section:'';
+      const path=section?this.annotationLocation({textAnchor:{section}})?.path:contexts.get(mark.id);
+      const unresolved=!!(paths.size||section);
+      return path?.length?path:[{id:unresolved?'unlocated':'preamble',title:unresolved?'목차 위치 미확인':preamble,order:unresolved?Number.MAX_SAFE_INTEGER:-1,kind:'other'}];
+    });
+  }
+  locationTree(items,field,pathFor) {
+    const roots=[],nodes=new Map();
+    for(const item of items){
       let children=roots,node;
+      const path=pathFor(item);
       for(const part of path){
         node=nodes.get(part.id);
-        if(!node){node={...part,children:[],annotations:[],count:0};nodes.set(part.id,node);children.push(node);}
+        if(!node){node={...part,children:[],[field]:[],count:0};nodes.set(part.id,node);children.push(node);}
         node.count++;children=node.children;
       }
-      node.annotations.push(annotation);
+      node[field].push(item);
     }
     const sort=list=>{list.sort((a,b)=>(a.kind==='section')-(b.kind==='section')||a.order-b.order);for(const node of list)sort(node.children);};
     sort(roots);return roots;
   }
-  // The annotation list shows more than the tool name: the text an annotation marks or was drawn on,
-  // and the heading it sits under. Headings are in document order, so the last one at or before the
-  // annotation is found by binary search. A drawing on empty space falls back to its drawn position.
-  annotationContexts() {
-    const outline=this.outline().filter(item=>!this.isInsideTocOrTopbar(item.node)),headings=outline.map(item=>item.node),result=new Map();
+  headingContexts() {
+    const outline=this.outline().filter(item=>!this.isInsideTocOrTopbar(item.node));
     const paths=[],stack=[];
     outline.forEach((item,index)=>{
       while(stack.length&&stack.at(-1).level>=item.level)stack.pop();
       stack.push({id:JSON.stringify(['heading',currentSection(this.doc),index,item.node.id||'']),title:item.title,level:item.level,order:index,kind:'heading'});
       paths.push([...stack]);
     });
+    return {outline,paths};
+  }
+  bookmarkContexts(marks=this.metadata.bookmarks) {
+    const {outline,paths}=this.headingContexts(),result=new Map();if(!outline.length)return result;
+    const origin=this.layerOrigin(),section=currentSection(this.doc);
+    const positions=outline.map(({node},index)=>({top:node.getBoundingClientRect?.().top-origin.top,index})).filter(item=>Number.isFinite(item.top)).sort((a,b)=>a.top-b.top||a.index-b.index);
+    const savedPaths=new Map(paths.map(path=>[path.at(-1).id,path]));
+    for(const mark of marks){
+      if(mark.section&&mark.section!==section)continue;
+      let path=savedPaths.get(mark.heading),lo=0,hi=positions.length-1,found=-1;
+      if(!path){
+        while(lo<=hi){const mid=(lo+hi)>>1;if(positions[mid].top<=mark.top+1){found=mid;lo=mid+1;}else hi=mid-1;}
+        path=found>=0?paths[positions[found].index]:[];
+      }
+      result.set(mark.id,path);
+    }
+    return result;
+  }
+  // The annotation list shows more than the tool name: the text an annotation marks or was drawn on,
+  // and the heading it sits under. Headings are in document order, so the last one at or before the
+  // annotation is found by binary search. A drawing on empty space falls back to its drawn position.
+  annotationContexts() {
+    const {outline,paths}=this.headingContexts(),headings=outline.map(item=>item.node),result=new Map();
     const headingBefore = node => {
       let lo = 0, hi = headings.length - 1, found = -1;
       while (lo <= hi) {
@@ -2582,7 +2643,12 @@ export class Reader {
     this.callbacks?.onSearchChange?.(this);return true;
   }
   outline() { return [...this.doc.querySelectorAll('h1,h2,h3,h4,h5,h6')].filter(n=>n.textContent.trim()&&!n.closest('[data-htmlmemo-ui]')).map(node=>({node,level:Number(node.localName[1]),title:node.textContent.trim()})); }
-  addBookmark(title) { this.metadata.bookmarks.push({id:uid(),title,top:this.scrollTop/this.zoom,left:this.scrollLeft/this.zoom}); this.callbacks.onChange?.(); }
+  addBookmark(title) {
+    const mark={id:uid(),title,top:this.scrollTop/this.zoom,left:this.scrollLeft/this.zoom},section=currentSection(this.doc);
+    if(section)mark.section=section;
+    if(!this.annotationBookPaths().size){const path=this.bookmarkContexts([mark]).get(mark.id);if(path?.length)mark.heading=path.at(-1).id;}
+    this.metadata.bookmarks.push(mark);this.callbacks.onChange?.();
+  }
   readAloudPlayer() {
     if(this.disposed||this.host.hidden)return null;
     if(!this.host.ownerDocument.defaultView.speechSynthesis){this.callbacks.onError?.(new Error('기기의 음성 읽기를 지원하지 않습니다.'));return null;}
