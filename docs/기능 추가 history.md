@@ -3117,11 +3117,11 @@ CodeMemo 임시 브라우저에서 0.1 두께의 선 근처를 눌러 주석 편
 
 
 <a id="hist-20261027-003"></a>
-### 2026-10-27 09:47:19 +09:00 — 사이드바 목차의 실제 본문 이동 복구
+### 2026-10-27 09:59:04 +09:00 — 사이드바 목차의 실제 본문 이동 복구
 
 | ID | change-kind | status |
 |---|---|---|
-| hist-20261027-003 | 원본 목차 앵커·장 이동 복구 | 구현·로컬 검증 완료, 전체 Chrome·Pages 게시 대기 |
+| hist-20261027-003 | 원본 목차 앵커·장 이동 복구 | 구현·전체/공개 Chrome·GitHub Pages 게시 확인 완료 |
 
 **문제·사용:** 사이드바의 책 목차 항목을 눌러도 보이는 본문이 해당 위치로 이동하지 않는 경로를 재현했습니다. 원본 실행 코드를 격리하는 연결은 클릭을 원본에 전달하면서 기본 탐색을 막는데, 표시 화면의 목차 이동 처리까지 취소된 것으로 판단하고 있었습니다. 원본 목차가 가리키는 본문 위치는 실제 표시 화면에서 이동하도록 복구했습니다. 같은 절을 다시 눌러도 이동하며 한글·공백이 인코딩된 목적지도 처리합니다. 원본의 클릭 처리와 코드 격리는 유지합니다.
 
@@ -3131,4 +3131,11 @@ CodeMemo 임시 브라우저에서 0.1 두께의 선 근처를 눌러 주석 편
 
 신뢰된 CodeMemo 브라우저에서는 검증용 원본 HTML의 목차 링크를 실제로 눌러 **이전 게시 코드에서 본문이 처음에 머무르는 화면**, **수정 코드에서 첫 절로 이동한 화면**을 같은 **1280px** 조건으로 확인하고 직접 보았습니다. 각 요청은 HTTP **200**, 예외 **0개**였습니다. 브라우저의 제한된 클릭 기능으로 원본 목차 링크를 누를 수 있도록 링크를 화면 중앙에 배치한 검증용 문서를 사용했으며, 앱의 실제 격리 실행과 클릭 전달 경로를 사용했습니다. 일반 예제 문서의 제목 목차 이동도 확인했습니다. 임시 검증 서버는 종료했고 빌드 폴더의 검증용 예제 문서는 원래 예제로 되돌렸습니다. 검증 문서는 개인 자료가 아니며 공개 앱에 포함하지 않습니다.
 
-**게시 상태·증거:** 전체/공개 Chrome에 실제 화면의 목적지가 보이는지 검증하는 시나리오 1개를 추가했습니다. 데스크톱·모바일에서 북마크 보기를 거친 뒤 펜 도구를 고른 상태로 첫 절/한글 절/같은 절 재선택을 반복하고, 원본 클릭 횟수와 주석·북마크 보존을 확인합니다. 기존 목차별 북마크 시나리오에도 400px 아래에서 현재 장의 원본 목차를 다시 눌러 스크롤 0으로 돌아오는 검증을 추가했습니다. 이 초기 기록 시점에는 게시 대기이며 실제 결과는 같은 항목에 보충합니다. 정식 주소는 https://seionwon.github.io/HTMLMemo/ 입니다. 로컬 증거는 `test-results/toc-navigation-unit.log`, `test-results/toc-navigation-check.log`, `test-results/toc-navigation-build.log`, `test-results/toc-navigation-before.log`, `test-results/toc-navigation-targeted.log`, `test-results/toc-navigation-preview`에 보관했습니다.
+**게시 상태·증거:** 전체/공개 Chrome에 실제 화면의 목적지가 보이는지 검증하는 시나리오 1개를 추가했습니다. 데스크톱·모바일에서 북마크 보기를 거친 뒤 펜 도구를 고른 상태로 첫 절/한글 절/같은 절 재선택을 반복하고, 원본 클릭 횟수와 주석·북마크 보존을 확인합니다. 기존 목차별 북마크 시나리오에도 400px 아래에서 현재 장의 원본 목차를 다시 눌러 스크롤 0으로 돌아오는 검증을 추가했습니다. 초기 기록(09:47:19) 시점에는 게시 대기였으며 실제 결과를 아래에 보충합니다. 정식 주소는 https://seionwon.github.io/HTMLMemo/ 입니다. 로컬 증거는 `test-results/toc-navigation-unit.log`, `test-results/toc-navigation-check.log`, `test-results/toc-navigation-build.log`, `test-results/toc-navigation-before.log`, `test-results/toc-navigation-targeted.log`, `test-results/toc-navigation-preview`에 보관했습니다.
+
+
+**최종 검증·게시 완료 (09:59:04 +09:00):** 소스 `7d998db3f17c214cd0cb740f77df43ce17e1743a`의 [Actions 40428709743](https://github.com/seionwon/HTMLMemo/actions/runs/40428709743)에서 전체 Chrome **68개**, 실제 [공개 URL](https://seionwon.github.io/HTMLMemo/)의 Chrome **43개**가 모두 통과했습니다. Pages 게시 완료는 **09:54:22**, 공개 Chrome 완료는 **09:57:50 +09:00**입니다. CI 단위는 **542개 중 541개 통과·실패 0·건너뜀 1**이며, Linux에서 실행 대상이 아닌 제한된 macOS의 Chrome 실행 보호 검사만 건너뛰었습니다. 해당 검사는 로컬 macOS에서 통과했습니다. CI JavaScript **87개·JSON**, Tailwind CSS **4.3.3** 빌드도 통과했습니다.
+
+전체/공개 Chrome 양쪽에서 **1280px·390px**의 첫 절 이동은 실제 스크롤 **688px**, 한글 목적지 이동은 **1708px**로 확인됐으며, 각 목적지 제목의 위·아래 경계가 표시 영역(0~822px) 안에 들어왔습니다. 같은 한글 절을 다시 눌러도 같은 위치로 이동했고, 원본 클릭 처리 횟수는 너비별 3회/합계 6회로 유지됐습니다. 북마크 보기를 거친 상태와 펜 도구를 선택한 상태에서도 동작하며 기존 문서 HTML·주석·북마크가 보존됐습니다. 기존 책의 북마크 400px 위치에서 같은 장의 원본 목차를 다시 눌러 스크롤 0으로 돌아오는 검사도 통과했습니다. 브라우저 예외는 **0개**였습니다. 기존 목차 분류·책 전체 검색의 키워드 이동·주석/북마크 목록과 접기·TTS·폴더/파일·보안 격리 검사도 통과했습니다.
+
+공개 **1280px·390px의 실제 목적지 화면**을 직접 확인했습니다. CI Ubuntu의 일부 한글은 글꼴 부재로 네모로 보이므로 문구는 DOM으로 확인했고, 신뢰된 로컬 브라우저에서는 한글 전후 화면도 확인했습니다. 공개 파일 **32개(1,499,968바이트)** 모두 HTTP **200**이며 해당 CI의 실제 Pages 아티팩트와 바이트·SHA-256이 일치했습니다. 증거는 `test-results/toc-navigation-ci`, `test-results/toc-navigation-published`, 각 폴더의 `pages-only-toc-navigation.json`·1280/390px 화면, `test-results/toc-navigation-build-ci.log`, `test-results/toc-navigation-published-ci.log`, `test-results/toc-navigation-actions.json`, `test-results/toc-navigation-pages`, `test-results/toc-navigation-online-files.json`에 보관했습니다. 정식 서비스는 GitHub Pages이며 이 기록만 보충하는 후속 커밋은 앱 파일을 바꾸지 않습니다. 새로고침하면 수정 버전이 적용됩니다.
