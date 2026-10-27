@@ -11,7 +11,7 @@ import {bundledExample} from './distribution.js';
 import { InstallController, isIOS, installableLocation, installationURL, PUBLIC_APP_URL } from './install.js';
 import { APP_VERSION } from './version.js';
 import { openDeviceSync } from './sync-ui.js';
-import { DataFolder, supportsDataFolder } from './data-folder.js';
+import { DataFolder, supportsDataFolder, CHROME_REQUIRED_MESSAGE } from './data-folder.js';
 import {validateFolders,folderPath,folderDescendants,editLibraryFolders,LibraryIndex} from './library-folders.js';
 
 let records = []; const tabs = []; let activeId = 'library'; let folder = null; let popoverName = ''; let sidebarMode = '';
@@ -106,8 +106,7 @@ function deviceSyncDialog() {
   });
 }
 function settingsDialog() {
-  const folderSupport=supportsDataFolder(window,navigator);
-  modal(`<div class="dialog-heading"><h2>HTMLMemo 설정</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><div class="settings-app-actions" role="group" aria-label="앱 실행과 정보"><button id="settings-execution" class="secondary-button" type="button">${icon('external',15)} 실행과 앱 전달</button><button id="settings-about" class="secondary-button" type="button" aria-haspopup="dialog">${icon('info',15)} About</button></div><p class="local-only-note">${icon('check',15)} 문서·주석·설정은 기기에 저장합니다. 기기 간 동기화를 선택할 때만 암호화해 중계합니다.</p><div class="setting-row"><div><strong>${folderSupport?'데이터 폴더':'기기 저장소'}</strong><p id="settings-folder-status">${esc(folderStatusText())}</p></div><button id="settings-folder" class="secondary-button">${folderSupport?(folder?'관리':'폴더 연결'):'저장 안내'}</button></div>${dataFolderGuide()}<div class="setting-row"><div><strong>기기 간 동기화</strong><p>로그인 없이 문서·주석·휴지통·설정을 주고받습니다.</p></div><button id="settings-sync" class="secondary-button">연결</button></div><div class="setting-row"><div><strong>화면 테마</strong><p>서재와 도구의 밝기를 선택하세요.</p></div><select id="appearance"><option value="light">밝게</option><option value="dark">어둡게</option><option value="system">시스템</option></select></div><details class="settings-backup"><summary>이전 설정 JSON 파일 사용 (선택 사항)</summary><p class="dialog-description small">데이터 폴더를 연결했다면 설정 파일을 따로 저장하거나 불러올 필요가 없습니다. 예전에 저장한 설정 JSON을 옮길 때만 사용하세요.</p><p id="settings-file-name" class="settings-file-name">${settingsFileHandle?esc(settingsFileHandle.name):'연결한 설정 파일이 없습니다.'}</p><div class="settings-file-actions"><button id="settings-save" class="secondary-button">${icon('save',15)} 설정 파일 저장</button><button id="settings-load" class="secondary-button">${icon('folder',15)} 설정 파일 불러오기</button><button id="settings-reload" class="secondary-button" ${settingsFileHandle?'':'disabled'}>${icon('reload',15)} 다시 불러오기</button></div></details><p class="dialog-description small">${folderSupport?'브라우저 데이터가 삭제돼도 전용 폴더의 파일은 남습니다. 폴더를 다시 선택하면 복원됩니다. 폴더 자체 삭제·기기 고장까지 막는 것은 아니므로 중요한 데이터는 폴더 전체를 다른 저장장치에도 복사하세요.':'브라우저 데이터 삭제나 기기 초기화 전에는 기기 간 동기화 또는 HTML 내보내기로 중요한 문서를 다른 곳에도 보관하세요. 계정이나 영구 저장 서버는 사용하지 않습니다.'}</p>`,()=>{
+  modal(`<div class="dialog-heading"><h2>HTMLMemo 설정</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><div class="settings-app-actions" role="group" aria-label="앱 실행과 정보"><button id="settings-execution" class="secondary-button" type="button">${icon('external',15)} 실행과 앱 전달</button><button id="settings-about" class="secondary-button" type="button" aria-haspopup="dialog">${icon('info',15)} About</button></div><p class="local-only-note">${icon('check',15)} 문서·주석·설정은 기기에 저장합니다. 기기 간 동기화를 선택할 때만 암호화해 중계합니다.</p><div class="setting-row"><div><strong>데이터 폴더</strong><p id="settings-folder-status">${esc(folderStatusText())}</p></div><button id="settings-folder" class="secondary-button">${folder?'관리':'폴더 연결'}</button></div>${dataFolderGuide()}<div class="setting-row"><div><strong>기기 간 동기화</strong><p>로그인 없이 문서·주석·휴지통·설정을 주고받습니다.</p></div><button id="settings-sync" class="secondary-button">연결</button></div><div class="setting-row"><div><strong>화면 테마</strong><p>서재와 도구의 밝기를 선택하세요.</p></div><select id="appearance"><option value="light">밝게</option><option value="dark">어둡게</option><option value="system">시스템</option></select></div><details class="settings-backup"><summary>이전 설정 JSON 파일 사용 (선택 사항)</summary><p class="dialog-description small">데이터 폴더를 연결했다면 설정 파일을 따로 저장하거나 불러올 필요가 없습니다. 예전에 저장한 설정 JSON을 옮길 때만 사용하세요.</p><p id="settings-file-name" class="settings-file-name">${settingsFileHandle?esc(settingsFileHandle.name):'연결한 설정 파일이 없습니다.'}</p><div class="settings-file-actions"><button id="settings-save" class="secondary-button">${icon('save',15)} 설정 파일 저장</button><button id="settings-load" class="secondary-button">${icon('folder',15)} 설정 파일 불러오기</button><button id="settings-reload" class="secondary-button" ${settingsFileHandle?'':'disabled'}>${icon('reload',15)} 다시 불러오기</button></div></details><p class="dialog-description small">브라우저 데이터가 삭제돼도 전용 폴더의 파일은 남습니다. 폴더를 다시 선택하면 복원됩니다. 폴더 자체 삭제·기기 고장까지 막는 것은 아니므로 중요한 데이터는 폴더 전체를 다른 저장장치에도 복사하세요.</p>`,()=>{
     $('#settings-execution').onclick=()=>{$('#dialog').close();activate('execution');$('#execution h1').focus({preventScroll:true});};$('#settings-about').onclick=aboutDialog;
     $('#settings-sync').onclick=deviceSyncDialog;
     $('#settings-folder').onclick=safely(()=>chooseFolder({onConnected:settingsDialog}));
@@ -492,11 +491,9 @@ async function createDocument(snapshot, handle = null, name = null, local = {}) 
   return tab;
 }
 function dataFolderGuide() {
-  if(!supportsDataFolder(window,navigator))return '<details class="export-guide" data-folder-guide><summary>이 기기에서 저장하고 다른 기기로 옮기기</summary><p>문서·주석·북마크·읽기 위치·저장 이력은 이 브라우저의 기기 내부 저장소에 자동 보관합니다. 폴더 선택이나 로그인 없이 사용할 수 있습니다.</p><p><strong>설정 → 기기 간 동기화 → 연결</strong>에서 다른 기기와 주고받으세요. 휴지통도 함께 옮깁니다. 문서 하나를 파일로 보관하거나 보내려면 <strong>HTML 내보내기</strong>를 사용하세요.</p><p>이 브라우저는 전용 폴더 연결을 제공하지 않습니다. 브라우저 데이터를 지우거나 기기를 초기화하면 내부 자료가 사라질 수 있으므로 중요한 문서는 다른 기기나 파일에도 보관하세요.</p></details>';
   return `<details class="export-guide" data-folder-guide><summary>전용 폴더 자동 저장과 새 기기로 옮기는 방법</summary><p>Documents(문서) 안에 <strong>이름을 정한 전용 하위 폴더 하나</strong>를 만들고 읽기·쓰기를 허용하세요. 예: <code>문서/HTMLMemo</code>. 브라우저 선택 창의 새 폴더 기능을 사용합니다.</p><p>연결하면 기존 서재와 앞으로 가져오는 모든 HTML·MHTML 문서의 복사본, 주석·북마크·주석 이력·읽기 위치·앱 설정을 자동 보관합니다. 원래 파일을 이동·삭제해도 보관한 문서는 열 수 있습니다. <strong>설정 파일을 따로 저장할 필요가 없습니다.</strong></p><p>폴더 연결 시 브라우저 내부 데이터의 자동 삭제 방지도 함께 요청합니다. 브라우저가 허용하지 않아도 전용 폴더 자동 저장은 계속됩니다.</p><p>평소에는 원본 복사본과 주석을 분리해 저장하며 원본에 새 주석을 합치지 않습니다. <strong>다른 사람에게 주석까지 보내려면 문서를 열고 상단의 HTML 내보내기로 .html 파일을 새로 저장한 뒤 그 파일을 보내세요.</strong> 원본 파일만 보내면 앱에서 추가한 주석은 전달되지 않습니다. 받는 분도 HTMLMemo의 HTML 파일 가져오기로 엽니다.</p><ol><li>새 기기로 옮기기 전에 <strong>폴더 자동 저장 완료</strong> 표시를 확인하고 앱을 닫습니다.</li><li><strong>전용 폴더 전체를 하위 폴더·파일 빠짐없이</strong> 새 기기의 Documents(문서) 폴더로 복사합니다. 일부 HTML만 옮기면 주석·설정이 빠집니다.</li><li>새 기기의 HTMLMemo에서 <strong>설정 → 데이터 폴더 → 폴더 연결</strong>로 옮긴 폴더를 선택하고 쓰기를 허용하면 모두 자동 복원됩니다.</li></ol><p>브라우저가 권한을 회수하거나 폴더를 옮겼다면 다시 연결해야 합니다. 권한·용량·저장 오류는 화면 아래와 설정에 계속 표시하며 변경은 앱에 남겨둡니다. 저장이 끝나기 전에 앱을 강제 종료하지 마세요. 서로 다른 기기의 동시 편집을 실시간 동기화하지는 않습니다.</p></details>`;
 }
 function folderStatusText() {
-  if(!supportsDataFolder(window,navigator))return '문서·주석을 이 브라우저의 기기 내부 저장소에 자동 저장합니다.';
   if(!folder)return '데이터 폴더 미연결 · 브라우저 데이터 삭제 시 잃을 수 있습니다.';
   if(dataFolder?.state==='error')return '폴더 저장 중단 · '+folder.name+' · 다시 연결 필요';
   if(tabs.some(t=>t.queue?.error))return '앱 저장 실패 · 폴더가 최신 상태가 아닙니다.';
@@ -506,7 +503,7 @@ function folderStatusText() {
 function renderFolderState() {
   const status=folderStatusText(),error=!!folder&&(dataFolder?.state==='error'||tabs.some(t=>t.queue?.error)),button=$('#data-folder-status');
   if(!button)return;
-  button.textContent=folder?(error?'폴더 저장 중단':dataFolder?.pending||tabs.some(t=>t.opening||t.queue?.pending)?'폴더 저장 중…':'폴더 저장 완료'):supportsDataFolder(window,navigator)?'폴더 미연결':'기기 저장';
+  button.textContent=folder?(error?'폴더 저장 중단':dataFolder?.pending||tabs.some(t=>t.opening||t.queue?.pending)?'폴더 저장 중…':'폴더 저장 완료'):'폴더 미연결';
   button.title=status;button.setAttribute('aria-label',status+' · 저장 위치 관리');button.classList.toggle('save-error',error||!!folder&&tabs.some(t=>t.queue?.error));
   if($('#settings-folder-status'))$('#settings-folder-status').textContent=status;
 }
@@ -531,17 +528,22 @@ async function connectDataFolder(selected,onConnected) {
 }
 function rememberFolderWelcome() { try{localStorage.setItem(FOLDER_WELCOME_KEY,'1');}catch{/* The unconnected reminder remains visible if this device cannot retain the choice. */} }
 function needsFolderWelcome() { if(folder)return false;try{return !localStorage.getItem(FOLDER_WELCOME_KEY);}catch{return true;} }
-function browserStorageDialog({welcome=false}={}) {
-  modal(`<section class="folder-welcome mobile-storage" data-browser-storage><div class="dialog-heading"><h2>${welcome?'이 기기에서 바로 시작하세요':'이 기기에 자동 저장합니다'}</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><p class="folder-welcome-intro">문서·주석·북마크·읽기 위치·저장 이력을 <strong>이 브라우저의 기기 내부 저장소</strong>에 보관합니다. 폴더 선택이나 로그인 없이 사용할 수 있습니다.</p><ol class="setup-steps"><li><strong>HTML 파일 가져오기</strong>로 폰에 있는 문서를 엽니다.</li><li><strong>기기 간 동기화</strong>로 다른 기기의 서재·휴지통을 가져오거나 보냅니다.</li><li><strong>HTML 내보내기</strong>로 주석을 포함한 파일을 보관하거나 공유합니다.</li></ol><p class="folder-welcome-warning">브라우저 데이터를 지우거나 기기를 초기화하면 내부 자료가 사라질 수 있습니다. 중요한 문서는 다른 기기나 파일에도 보관하세요.</p><div class="dialog-actions folder-welcome-actions"><button id="storage-sync" class="secondary-button" type="button">기기 간 동기화</button><button id="storage-start" class="primary-button" type="button">${welcome?'시작하기':'확인'}</button></div></section>`,dialog=>{
-    if(welcome)dialog.addEventListener('close',rememberFolderWelcome,{once:true});
-    $('#storage-start').onclick=()=>{if(welcome)rememberFolderWelcome();dialog.close();$('#hero-import').focus({preventScroll:true});};
-    if(welcome)dialog.oncancel=()=>rememberFolderWelcome();
-    $('#storage-sync').onclick=()=>{if(welcome)rememberFolderWelcome();deviceSyncDialog();};
-    $('#storage-start').focus({preventScroll:true});
+function chromeRequiredDialog() {
+  $('#status-left').textContent='Chrome에서 실행해주세요.';
+  modal(`<section class="folder-welcome" data-chrome-required><div class="dialog-heading"><h2>Google Chrome에서 실행해주세요</h2></div><p id="chrome-required-message" class="folder-welcome-intro"><strong>${esc(CHROME_REQUIRED_MESSAGE)}</strong></p><p class="dialog-description">Chrome에서 아래 앱 주소를 열어주세요. 전용 저장 폴더를 지원하는 최신 Chrome이 필요합니다.</p><label class="paste-label" for="chrome-app-url">HTMLMemo 주소</label><input id="chrome-app-url" class="paste-title" type="url" readonly value="${esc(PUBLIC_APP_URL)}"><p id="chrome-copy-status" class="dialog-description small" role="status" aria-live="polite"></p><div class="dialog-actions folder-welcome-actions"><button id="chrome-copy-url" class="primary-button" type="button">앱 주소 복사</button><a class="secondary-button" href="https://www.google.com/chrome/" target="_blank" rel="noopener noreferrer">Chrome 다운로드</a></div></section>`,dialog=>{
+    dialog.setAttribute('aria-describedby','chrome-required-message');dialog.oncancel=event=>event.preventDefault();
+    const button=$('#chrome-copy-url'),input=$('#chrome-app-url'),status=$('#chrome-copy-status');
+    button.onclick=async()=>{
+      if(button.disabled)return;button.disabled=true;
+      try{await navigator.clipboard.writeText(PUBLIC_APP_URL);status.textContent='앱 주소를 복사했습니다. Chrome 주소창에 붙여넣어 실행해주세요.';}
+      catch{input.focus();input.select();status.textContent='선택된 앱 주소를 직접 복사해 Chrome 주소창에 붙여넣어주세요.';}
+      finally{button.disabled=false;}
+    };
+    button.focus();
   });
 }
 function folderWelcomeDialog() {
-  if(!supportsDataFolder(window,navigator))return browserStorageDialog({welcome:true});
+  if(!supportsDataFolder(window,navigator))return chromeRequiredDialog();
   modal(`<section class="folder-welcome" data-folder-welcome><div class="dialog-heading"><h2>먼저, 전용 폴더를 만들어요</h2></div><p class="folder-welcome-intro">처음 한 번 연결하면 <strong>문서·주석·설정을 이 폴더에 자동 저장</strong>합니다. 저장할 때마다 파일이나 위치를 고를 필요가 없어요.</p><ol class="folder-welcome-steps"><li><strong>문서(Documents) 폴더를 여세요.</strong><p>아래 <b>폴더 선택 창 열기</b> 버튼을 누르면 시작합니다.</p></li><li><strong>새 폴더를 만들고 이름을 정하세요.</strong><p>선택 창의 <b>새 폴더</b>로 <b>HTMLMemo</b>처럼 원하는 이름을 짓고, 그 폴더를 선택하세요. 문서 폴더 전체가 아닌, 방금 만든 폴더입니다.</p></li><li><strong>폴더 사용과 쓰기를 허용하세요.</strong><p><b>폴더 선택</b>(또는 <b>열기</b>) 후 권한 창에서 <b>허용</b>을 누르세요. <b>방문할 때마다 허용</b>이 있으면 선택하세요.</p></li></ol><details class="folder-welcome-existing"><summary>다른 기기에서 옮겨 온 폴더가 있나요?</summary><p>새로 만들지 말고 <b>같은 버튼</b>으로 옮겨 온 전용 폴더를 선택하세요. 그 안의 문서·주석·설정이 자동 복원됩니다.</p></details><p class="folder-welcome-move">새 기기로 옮길 때는 <strong>이 폴더 전체</strong>를 복사하면 됩니다.</p><p id="folder-connection-status" class="folder-welcome-status" role="status" aria-live="polite">폴더 선택 창은 버튼을 누른 뒤에만 열립니다.</p><div class="dialog-actions folder-welcome-actions"><button id="select-storage-folder" class="primary-button" type="button">폴더 선택 창 열기</button><button id="folder-welcome-later" class="secondary-button" type="button">나중에 연결</button></div><p class="folder-welcome-warning">나중에 연결하면 당분간 브라우저 안에만 저장됩니다. 브라우저 데이터를 지우면 문서와 주석을 잃을 수 있어요. <b>설정 → 데이터 폴더 → 폴더 연결</b>에서 다시 시작할 수 있습니다.</p></section>`,dialog=>{
     $('#folder-welcome-later').onclick=()=>{rememberFolderWelcome();dialog.close();$('#settings-button').focus();};
     dialog.oncancel=event=>{if($('#select-storage-folder')?.disabled){event.preventDefault();return;}rememberFolderWelcome();requestAnimationFrame(()=>$('#settings-button').focus());};
@@ -570,7 +572,7 @@ function bindFolderConnection(onConnected) {
   button.onclick=safely(()=>connect());if($('#resume-data-folder'))$('#resume-data-folder').onclick=safely(()=>connect(true));
 }
 function chooseFolder({onConnected} = {}) {
-  if(!supportsDataFolder(window,navigator)){browserStorageDialog();return;}
+  if(!supportsDataFolder(window,navigator)){chromeRequiredDialog();return;}
   modal(`<div class="dialog-heading"><h2>저장 폴더 연결</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><p class="dialog-description">Documents(문서) 안의 <strong>HTMLMemo 전용 하위 폴더</strong>를 선택하세요. 선택 창에서 <strong>원하는 이름의 새 폴더</strong>를 만들 수 있습니다. 예: <code>문서/HTMLMemo</code>.</p><p class="dialog-description small">홈·문서·다운로드 폴더 전체와 시스템 폴더는 브라우저가 연결을 제한합니다. “Can't open this folder”가 나오면 전용 하위 폴더를 선택하세요. 읽기·쓰기 권한을 허용하며, “방문할 때마다 허용” 선택지가 있으면 선택하세요.</p><p class="dialog-description">기존 서재도 이곳에 복사하며 이후 가져오는 문서·주석·설정은 자동 저장합니다. <strong>옮겨 온 데이터 폴더를 선택하면 자동 복원</strong>합니다. 기존 문서와 충돌하는 복원본은 별도 사본으로 남겨 덮어쓰지 않습니다.</p><p class="dialog-description"><strong>새 기기로는 이 폴더 전체를 옮기세요.</strong> 설정 JSON을 별도로 저장할 필요가 없습니다. 모든 하위 파일을 함께 복사해야 합니다.</p>${dataFolderGuide()}<p id="folder-connection-status" class="dialog-description" role="status">${esc(folderStatusText())}</p><div class="dialog-actions"><button class="secondary-button" data-dialog-close>닫기</button>${folder?'<button id="resume-data-folder" class="secondary-button">다시 연결</button>':''}<button id="select-storage-folder" class="primary-button">${folder?'다른 폴더 선택':'폴더 선택'}</button></div>`,()=>{
     bindFolderConnection(onConnected);
   });
@@ -1530,9 +1532,10 @@ async function initialize() {
   // The entry can also be loaded dynamically. A cold/streamed document must
   // finish parsing before any handler or status text is assigned to its shell.
   if(document.readyState==='loading')await new Promise(resolve=>document.addEventListener('DOMContentLoaded',resolve,{once:true}));
+  if(!supportsDataFolder(window,navigator)){chromeRequiredDialog();return;}
   try{preferences=loadPreferences(localStorage);}catch(error){toast('설정 일부를 읽지 못했습니다. 연결한 데이터 폴더로 복원할 수 있습니다.',true);}
   dataFolder=new DataFolder({storage:localStorage,report:state=>{if(state.handle)folder=state.handle;renderFolderState();},onRestored:async result=>{preferences=loadPreferences(localStorage);applyTheme(preferences.theme);$('#library-sort').value=preferences.librarySort+':'+preferences.librarySortDirection;for(const tab of tabs)if(tab.reader)Object.assign(tab.reader,preferences.annotation);applyToolbarPosition();await refreshLibrary();if(result.recovered)toast('이전의 온전한 폴더 저장본에서 복원했습니다. 최신 변경 일부가 빠졌을 수 있습니다.',true);}});
-  applyTheme(preferences.theme);bindUI();fitHeader();$('#library-sort').value=preferences.librarySort+':'+preferences.librarySortDirection;network();const savedFolder=await getSetting('folder');folder=supportsDataFolder(window,navigator)?savedFolder:null;settingsFileHandle=await getSetting('settings-file');settingsFolderHint=await getSetting('settings-folder-hint')||'';await refreshLibrary();activate('library');
+  applyTheme(preferences.theme);bindUI();fitHeader();$('#library-sort').value=preferences.librarySort+':'+preferences.librarySortDirection;network();folder=await getSetting('folder');settingsFileHandle=await getSetting('settings-file');settingsFolderHint=await getSetting('settings-folder-hint')||'';await refreshLibrary();activate('library');
   onStorageChange(()=>{if(activeId==='library'){clearTimeout(libraryReloadTimer);libraryReloadTimer=setTimeout(()=>{if(activeId==='library')refreshLibrary().catch(showError);},30);}});
   if(folder){try{await dataFolder.connect(folder,{resume:true});await refreshLibrary();}catch(error){renderFolderState();showError(error);}}
   if(needsFolderWelcome()&&!$('#dialog').open)folderWelcomeDialog();

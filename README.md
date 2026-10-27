@@ -4,9 +4,11 @@
 
 ## 설치와 URL 공유
 
-폰과 PC의 최신 브라우저에서 같은 URL을 엽니다. 전용 폴더 선택을 지원하면 폴더 자동 저장을 사용하고, 지원하지 않으면 브라우저의 기기 내부 저장소로 바로 시작합니다. 폴더 선택 기능이나 폴더 쓰기 잠금 기능이 없다는 이유로 앱 전체를 막지 않습니다. 기기 내부 저장소에서도 파일 가져오기·읽기·주석·HTML 내보내기·기기 간 동기화를 사용할 수 있습니다. 브라우저 데이터 삭제나 기기 초기화 전에는 중요한 자료를 다른 기기나 HTML 파일에도 보관하세요.
+**이 앱은 구글 크롬에서만 정상적으로 작동합니다. 크롬에서 실행해주세요.**
 
-1. 폰이나 PC의 브라우저로 https://seionwon.github.io/HTMLMemo/ 를 엽니다. 추가 설치·연결 설정은 필요하지 않습니다.
+전용 저장 폴더를 지원하는 최신 Google Chrome에서 같은 URL을 엽니다. 폴더 선택 API 또는 안전한 폴더 쓰기에 필요한 기능이 없으면 Chrome 실행 안내가 표시되며 서재로 넘어가지 않습니다. 안내에서 앱 주소를 복사할 수 있고 복사 권한이 없으면 주소를 직접 선택해 복사합니다. iPhone·iPad처럼 Chrome에서도 전용 폴더 연결을 제공하지 않는 환경은 지원 대상이 아닙니다. [폴더 선택 API와 기능 확인](https://developer.chrome.com/docs/capabilities/web-apis/file-system-access#feature-detection).
+
+1. Google Chrome으로 https://seionwon.github.io/HTMLMemo/ 를 엽니다. 추가 설치·연결 설정은 필요하지 않습니다.
 2. **HTML 파일 가져오기**, 메뉴의 **텍스트 붙여넣기**, 주소창의 **웹 페이지 열기**로 시작합니다.
 3. 홈 화면에 아이콘이 필요할 때만 **앱 설치**를 선택합니다. 처음 로딩과 오프라인 준비를 마친 뒤에는 저장한 HTML을 오프라인으로 사용할 수 있습니다. 웹 탐색에는 인터넷이 필요합니다. [MDN 설치 기능](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Guides/Making_PWAs_installable).
 
