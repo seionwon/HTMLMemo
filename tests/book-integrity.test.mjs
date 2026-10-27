@@ -22,6 +22,14 @@ test('a saved first-page DOM with empty TOC headers is identified as an incomple
   assert.equal(inspectBookDocument(documentFor(book.replace(JSON.stringify(manifest),'{"format":"memosuite-book-html-v1","volumes":[null]}'))).complete,false);
 });
 
+test('books exported under the renamed book-html-v1 format open as complete books like the old name', () => {
+  const renamed=book.replace(JSON.stringify(manifest),JSON.stringify({...manifest,format:'book-html-v1'}));
+  const parsed=parseHTML(renamed,{}, {allowScripts:true});
+  assert.equal(inspectBookDocument(documentFor(parsed.html)).complete,true);
+  assert.ok(!parsed.metadata.warnings.includes(BOOK_DATA_MISSING));
+  assert.equal(inspectBookDocument(documentFor(renamed.replace('<script id="book-volume-0" type="application/octet-stream">encoded-whole-volume</script>',''))).complete,false);
+});
+
 test('static sanitization and page capture cannot silently discard a standalone book runtime and unopened volumes', async () => {
   assert.throws(()=>parseHTML(book),/화면 캡처/);
   const parsed=parseHTML(book,{}, {allowScripts:true});

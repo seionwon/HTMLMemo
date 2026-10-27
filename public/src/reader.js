@@ -2455,7 +2455,7 @@ export class Reader {
     if(this.annotationCatalogSource===source)return this.annotationCatalog;
     const paths=new Map(),sections=new Map();let manifest;
     try{manifest=JSON.parse(source);}catch{/* Ordinary HTML has no book manifest. */}
-    if(manifest?.format==='memosuite-book-html-v1'&&Array.isArray(manifest.volumes)){
+    if(['book-html-v1','memosuite-book-html-v1'].includes(manifest?.format)&&Array.isArray(manifest.volumes)){
       let order=0;const categories=new Map();
       manifest.volumes.forEach((volume,vi)=>{
         if(!volume||typeof volume!=='object')return;

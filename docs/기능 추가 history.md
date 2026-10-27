@@ -3381,3 +3381,21 @@ CodeMemo의 제한된 로컬 검증기로 iframe 요소를 클릭한 시도는 �
 전체/공개 Chrome에서 **1280/800/600/390/320px**의 서재 시작 버튼이 가져오기·붙여넣기 두 개이며 실제 클릭이 닿는 것을 확인했습니다. 같은 줄의 안내 열기·320px 키보드 조작, 가져오기·붙여넣기·기존 주석 보존, 서재 카드/목록·문서 열기와 기존 상단 주소·Chrome 연결 검사도 통과했습니다. 공개 **1280px 카드·390px 목록·320px 카드** 화면을 직접 확인했습니다. CI Ubuntu의 일부 한글은 글꼴 부재로 네모로 보이므로 문구는 DOM과 게시 HTML로 확인했고 신뢰된 로컬 브라우저에서는 한글도 확인했습니다.
 
 공개 파일 **32개(1,508,389바이트)** 모두 HTTP **200**이며 실제 Pages 아티팩트와 바이트·SHA-256이 일치했습니다. 게시 HTML·앱 코드에서 삭제된 버튼과 연결 코드가 없음을 확인했습니다. 증거는 `test-results/library-web-open-removal-ci`, `test-results/library-web-open-removal-published`, 각 폴더의 서재 화면·브라우저 검사 XML, `test-results/library-web-open-removal-build-ci.log`, `test-results/library-web-open-removal-published-ci.log`, `test-results/library-web-open-removal-actions.json`, `test-results/library-web-open-removal-pages`, `test-results/library-web-open-removal-online-files.json`에 보관했습니다. 정식 서비스는 GitHub Pages이며 이력 보충 커밋은 앱 파일을 바꾸지 않습니다. 새로고침하면 적용됩니다.
+
+<a id="hist-20261027-014"></a>
+
+### 2026-10-27 16:14:50 +09:00 — 이름이 바뀐 MemoSuite 책 HTML도 온전한 책으로 열기
+
+| ID | change-kind | status |
+|---|---|---|
+| hist-20261027-014 | 오류 수정 · 가져오기 호환 | 구현·로컬 검증 완료 / GitHub Pages 게시 확인 예정 |
+
+**증상:** MemoSuite에서 「바이브 코딩 입문 + 실전 + 개발 용어」 3권 합본을 HTML로 내보내 HTMLMemo로 가져오면, 본문과 실행 코드가 모두 들어 있는데도 「이 파일에는 책의 목차 제목만 남아 있고 본문 데이터 또는 실행 코드가 빠져 있습니다」가 떴습니다.
+
+**원인:** MemoSuite가 2026-10-25에 내보내는 책 HTML의 매니페스트 형식 이름을 `memosuite-book-html-v1`에서 `book-html-v1`로 바꿨습니다. HTMLMemo는 목차(`reader-tree`)·본문 자리(`reader-content`)로 책 파일임은 알아봤지만, 온전한 책인지 판정할 때 옛 이름만 받아 불완전으로 판정했습니다. 책 목차 · 주석 경로(`reader.js`), 판 옮겨 오기(`migrate.js`), 화면 캡처 거부(`shared/capture.js`)도 옛 이름만 알았습니다.
+
+**고친 것:** 네 곳 모두 `book-html-v1`과 `memosuite-book-html-v1`을 함께 받게 했습니다. 옛 이름으로 내보낸 파일과 이미 보관함에 있는 책은 그대로 열립니다. 판정의 다른 조건(권마다 목차와 `book-volume-N` 본문, 실행 코드)은 바꾸지 않았습니다.
+
+**검증:** 새 이름의 책이 온전한 책으로 판정되고 본문 블록이 빠지면 여전히 불완전으로 판정되는 단위 시험을 더해 로컬 단위 **551개**, JavaScript·JSON 검사, 책 관련 Chrome 시험 **11개**를 통과했습니다. 실제 MemoSuite 운영에서 내려받은 3권 합본(`book-html-v1`)을 고치기 전 코드로 판정하면 위 오류 문구가, 고친 코드로 판정하면 온전한 책이 나옴을 확인했습니다. 같은 작업 폴더에서 진행 중인 다른 작업(휴지통)의 커밋하지 않은 파일은 건드리지 않고, 이 변경의 파일만 커밋했습니다.
+
+**게시 상태:** 이 기록 시점에는 로컬 검증만 완료했습니다. GitHub Actions의 전체 Chrome과 정식 주소의 게시 결과를 확인한 뒤 같은 항목에 보충합니다.

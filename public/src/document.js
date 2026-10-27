@@ -8,15 +8,18 @@ export const LOCAL_CSP = "default-src 'none'; frame-src 'self'; img-src data: bl
 // Executable source belongs ONLY in an opaque-origin runner, never the reader.
 export const SCRIPT_CSP = "default-src 'none'; frame-src 'self'; img-src data: blob:; style-src 'unsafe-inline' data:; font-src data:; media-src data: blob:; script-src 'unsafe-inline' 'unsafe-eval' data: blob:; worker-src data: blob:; connect-src data: blob:; form-action 'none'; base-uri 'none'";
 export const BOOK_DATA_MISSING = '이 파일에는 책의 목차 제목만 남아 있고 본문 데이터 또는 실행 코드가 빠져 있습니다. 완전한 원본 HTML 파일을 가져와 주세요. 기존 문서와 주석은 보관함에 유지됩니다.';
+// MemoSuite book exports were renamed from memosuite-book-html-v1 to
+// book-html-v1 on 2026-10-25; files written under either name must open.
+export const BOOK_FORMATS = ['book-html-v1', 'memosuite-book-html-v1'];
 export function inspectBookDocument(doc) {
   const data = doc.getElementById('book-manifest');
   let manifest;
   try { manifest = JSON.parse(data?.textContent || 'null'); } catch { /* Report damaged book data below. */ }
-  if (manifest?.format !== 'memosuite-book-html-v1' && !(doc.getElementById('reader-tree') && doc.getElementById('reader-content'))) return null;
+  if (!BOOK_FORMATS.includes(manifest?.format) && !(doc.getElementById('reader-tree') && doc.getElementById('reader-content'))) return null;
   const executable = [...doc.querySelectorAll('script')].some(script =>
     (!script.type || /^(?:module|(?:text|application)\/javascript)$/i.test(script.type)) &&
     (script.getAttribute('src') || script.textContent.trim()));
-  const complete = manifest?.format === 'memosuite-book-html-v1' &&
+  const complete = BOOK_FORMATS.includes(manifest?.format) &&
     Array.isArray(manifest.volumes) && manifest.volumes.length > 0 &&
     manifest.volumes.every((volume, index) => Array.isArray(volume?.sections) && volume.sections.length > 0 &&
       doc.getElementById('book-volume-' + index)?.textContent.trim()) && (executable || doc.documentElement.hasAttribute('data-htmlmemo-isolated-runtime'));
@@ -340,7 +343,7 @@ export function selectionAnchor(doc, range) {
   if (start === undefined || end <= start) return null;
   return {start, end, quote: index.text.slice(start, end), prefix: index.text.slice(Math.max(0, start - 40), start), suffix: index.text.slice(end, end + 40)};
 }
-// The section a packed book (memosuite-book-html-v1) is showing, or '' for ordinary pages.
+// The section a packed book (book-html-v1) is showing, or '' for ordinary pages.
 export const currentSection = doc => doc?.getElementById?.('reader-content')?.dataset?.section || '';
 // Drawings are stored relative to an element. Its text identifies it again after reloads and
 // in later editions of the same book.

@@ -13,7 +13,7 @@ const TEXT_MATCH = .7, ELEMENT_MATCH = .6, MIN_FUZZY = 6;
 export function bookManifest(doc) {
   try {
     const manifest = JSON.parse(doc?.getElementById?.('book-manifest')?.textContent || 'null');
-    return manifest?.format === 'memosuite-book-html-v1' && Array.isArray(manifest.volumes) ? manifest : null;
+    return ['book-html-v1', 'memosuite-book-html-v1'].includes(manifest?.format) && Array.isArray(manifest.volumes) ? manifest : null;
   } catch { return null; }
 }
 
