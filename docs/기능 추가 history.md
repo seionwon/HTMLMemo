@@ -3565,3 +3565,29 @@ CodeMemo의 제한된 로컬 검증기로 iframe 요소를 클릭한 시도는 �
 게시 후 신뢰된 전용 Chrome에서도 실제 [공개 주소](https://seionwon.github.io/HTMLMemo/)의 Android 첫 실행 검사 **1개**를 별도로 통과했습니다. 빈 브라우저 프로필·`launchQueue=null` 조건의 최초 로딩과 재실행, 오프라인 준비 뒤의 오류 알림 없음, 폴더 선택 취소·권한 거부의 재시도, 네 가지 화면 크기의 버튼 접근과 가로 넘침 없음을 다시 확인했습니다. 공개 **390px·844×390 가로 화면**도 직접 확인했습니다. OS/실제 폰을 직접 조작한 검사로 표현하지 않으며 기존 폴더 지정 안내와 저장 흐름을 유지합니다.
 
 공개 앱 39개 파일과 distribution.json, **총 40개(2,467,356바이트)** 모두 HTTP **200**이며 이 Actions 실행의 실제 Pages 아티팩트와 바이트·SHA-256이 일치했습니다. 서비스 워커 캐시 ID와 PNG 아이콘도 빌드가 만든 실제 결과물 기준으로 확인했습니다. 증거는 `test-results/first-start-actions.log`, `first-start-online.json`, `first-start-pages-artifact.zip`, `first-start-local/`, `first-start-published/`, `/tmp/htmlmemo-first-start-published.log`에 보관했습니다. 정식 공개 버전은 **1.2.15**이며 새로고침으로 반영됩니다. 이 후속 기록은 앱 파일과 게시 설정을 바꾸지 않습니다.
+
+
+<a id="hist-20261027-021"></a>
+### 2026-10-27 19:01:24 +09:00 — 펜 설정 버튼의 세 번째 줄을 형광펜 색상에 연결
+
+| ID | change-kind | status |
+|---|---|---|
+| hist-20261027-021 | 주석 툴바 표시 수정 | 구현·전체/공개 Chrome·GitHub Pages 게시 확인 완료 |
+
+**목적·사용:** 문서를 열면 보이는 플로팅 툴바의 **펜과 색상** 버튼에서 세 번째 줄이 **형광펜 색상**을 사용하도록 고쳤습니다. 형광펜을 고른 상태에서 색상을 바꾸면 가운데 줄은 해당 색상 자체를, 세 번째 줄은 같은 색상에 현재 투명도를 적용한 모습을 표시합니다. 첫 번째 줄은 펜 색상과 굵기를 나타냅니다. 세 번째 줄의 길이는 기존 펜 표시 시간 설정에 따라 달라집니다.
+
+**수정·범위:** 투명도 표시의 배경색 변수를 펜 색상에서 형광펜 색상으로 연결했습니다. 버튼 크기·세 줄 배치·투명도·표시 시간이나 주석 데이터 형식은 바꾸지 않습니다. 현재 공개 소스를 기준으로 별도 작업 폴더에서 수정·검증해 진행 중인 다른 작업의 변경을 함께 게시하지 않도록 했으며, 원래 작업 폴더에도 동일한 색상 연결과 기존 검사 기대값을 반영했습니다.
+
+**로컬 검증:** 게시 기준 버전에서 단위 **576개**, JavaScript **97개·JSON** 문법 검사, Tailwind CSS **4.3.3** 빌드와 git diff --check를 통과했습니다. 신뢰된 CodeMemo 브라우저의 **1280px**에서 시험 문서를 붙여넣고 펜은 파랑·형광펜은 분홍으로 각각 고른 뒤 첫째 줄은 파랑, 둘째/셋째 줄은 분홍으로 나타나는 화면을 직접 확인했습니다. 요청은 HTTP **200**, 예외 **0개**였고 임시 검증 서버를 종료했습니다. 개인 문서는 사용하지 않았습니다. 증거는 `test-results/highlighter-alpha-unit.log`, `highlighter-alpha-check.log`, `highlighter-alpha-build.log`, `highlighter-alpha-preview/`입니다.
+
+**게시 상태:** 이 기록 시점에는 로컬 검증까지 완료했습니다. 기존 팔레트 Chrome 검사의 세 번째 줄 기대값을 형광펜 색상으로 수정했으며 새 검사 시나리오는 추가하지 않았습니다. 기존 GitHub Actions에서 **1280/390/320px**, 서로 다른 펜/형광펜 색상, 투명도와 모든 표시 시간·다시 열기까지 검사하고 실제 https://seionwon.github.io/HTMLMemo/ 의 게시 결과를 같은 항목에 보충합니다.
+
+
+**동시 반영·검증 기준 보충:** 최초 분리 작업 커밋 `dbc8443`의 푸시는 그사이 main이 먼저 갱신되어 **non-fast-forward**로 거절됐으며 강제로 게시하지 않았습니다. 최신 main `275571d4d94d2a4c0406803a507ae52227e95a51`에 동일한 CSS 색상 연결·컴파일 결과·Chrome 기대값이 이미 포함된 것을 확인해 이 커밋을 최종 검증 기준으로 사용합니다. 해당 버전을 별도 작업 폴더에서 다시 검사한 결과 단위 **577개**, JavaScript **98개·JSON**, Tailwind CSS **4.3.3** 빌드와 git diff --check를 통과했습니다. 이 시점에는 해당 커밋의 전체/공개 Chrome과 게시 결과를 기다립니다. 최신 기준의 로그는 `test-results/highlighter-alpha-current-unit.log`, `highlighter-alpha-current-check.log`, `highlighter-alpha-current-build.log`에 보관했습니다.
+
+
+**최종 검증·게시 완료 (19:01:24 +09:00):** 최신 검증 소스 `275571d4d94d2a4c0406803a507ae52227e95a51`의 [Actions 40483491370](https://github.com/seionwon/HTMLMemo/actions/runs/40483491370)에서 우선 Chrome **6개**, 전체 Chrome **75개**, 실제 [공개 URL](https://seionwon.github.io/HTMLMemo/)의 Chrome **48개**가 모두 통과했습니다. 우선 검사는 전체 검사에 포함된 시나리오입니다. 빌드 완료는 **18:55:13**, Pages 게시 완료는 **18:55:37**, 공개 검증 완료는 **18:59:25 +09:00**입니다. CI 단위 **577개 중 576개 통과·실패 0·건너뜀 1**이며 Linux 대상이 아닌 macOS Chrome 실행 보호 검사만 건너뛰었습니다. 해당 검사는 로컬 macOS에서 통과했습니다. 최신 기준 로컬 단위 **577개**, 로컬/CI JavaScript **98개·JSON**, Tailwind CSS **4.3.3** 빌드와 관련 파일의 git diff --check도 통과했습니다. 초기 검증과 동시 반영 과정은 위에 보존했습니다.
+
+전체/공개 Chrome의 **1280/390/320px** 모두 첫째 줄은 펜의 파랑 **RGB(59,130,246)**, 가운데와 세 번째 줄의 색상은 형광펜의 분홍 **RGB(243,157,162)**으로 일치했습니다. 세 번째 줄에는 설정한 **55% 투명도**가 적용됐고 **10초에서 전체 길이의 50%**로 표시됐습니다. 펜 색상만 바꾼 경우에도 세 번째 줄은 형광펜 색상을 유지했으며 기존 투명도 **10/90%**, 펜 표시 시간 **영구/3/10/30초**, 굵기 **1/18px**, 밝은/어두운 테마, 세 줄의 겹침 방지·버튼 안 배치·다시 열기 검사를 유지했습니다. 공개 **1280/320px**의 세 줄 화면을 직접 확인했습니다. CI Ubuntu의 일부 한글은 글꼴 부재로 네모로 보이므로 문구는 DOM과 신뢰된 로컬 브라우저 결과로 확인했습니다.
+
+공개 파일 **40개(2,467,356바이트)** 모두 HTTP **200**이며 실제 Pages 아티팩트와 바이트·SHA-256이 일치했습니다. 증거는 `test-results/highlighter-alpha-ci`, `highlighter-alpha-published`의 `pages-only-pen-settings-summary.json`·팔레트 화면·XML, `highlighter-alpha-build-ci.log`, `highlighter-alpha-published-ci.log`, `highlighter-alpha-actions.json`, `highlighter-alpha-pages`, `highlighter-alpha-online-files.json`, `highlighter-alpha-publication-note.json`에 보관했습니다. 임시 검증 작업 폴더는 정리하고 로그와 화면은 원래 프로젝트 폴더에 남겼습니다. 정식 서비스는 GitHub Pages이며 이력 보충 커밋은 앱 파일을 바꾸지 않습니다. 새로고침하면 펜과 색상 버튼의 세 번째 줄에 형광펜 색상이 반영됩니다.
