@@ -801,8 +801,8 @@ test('real Chrome: Pages-only URL use, safe text import, app tabs and optional i
     assert.equal(await page.evaluate('!!document.querySelector(\'meta[name="htmlmemo-app"],#connection-button,#execution-chrome\')'),false);
     for(const width of [1280,390,320]){
       await page.send('Emulation.setDeviceMetricsOverride',{width,height:width===1280?900:844,deviceScaleFactor:1,mobile:width<600});
-      const guide=await page.evaluate('(()=>{const p=document.querySelector("#single-file-notice"),r=p.getBoundingClientRect();return {format:p.querySelector("strong").textContent,text:p.textContent,described:document.querySelector("#hero-import").getAttribute("aria-describedby"),fits:r.width>0&&r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight,overflow:document.documentElement.scrollWidth>innerWidth};})()');
-      assert.equal(guide.format,'Webpage, Single File');assert.match(guide.text,/웹페이지, 단일 파일 · \.mhtml/);assert.equal(guide.described,'single-file-notice');assert.equal(guide.fits,true);assert.equal(guide.overflow,false);
+      const library=await page.evaluate('(()=>{const button=document.querySelector("#hero-import"),r=button.getBoundingClientRect();return {notice:!!document.querySelector("#library #single-file-notice,#library [data-single-file-guide]"),described:button.getAttribute("aria-describedby"),fits:r.width>0&&r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight,overflow:document.documentElement.scrollWidth>innerWidth};})()');
+      assert.equal(library.notice,false);assert.equal(library.described,null);assert.equal(library.fits,true);assert.equal(library.overflow,false);
       await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,`test-results/pages-only-single-file-library-${width}.png`),await page.screenshot());
       await page.click('#web-help-button');await page.waitFor('document.querySelector("#dialog").open&&!!document.querySelector("#dialog [data-single-file-guide]")');
       assert.equal(await page.evaluate('document.querySelector("#dialog [data-single-file-guide] strong").textContent'),'Webpage, Single File');

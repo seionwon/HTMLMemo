@@ -297,7 +297,6 @@ html[data-app-sidebar-resizing] iframe{pointer-events:none!important}
 #library .hero-actions .primary-button,#library .hero-actions .secondary-button{height:28px;min-width:0;padding:5px 10px;font-size:11px;border-radius:6px}
 #library .hero-actions .primary-button>span{font-size:12px}
 #library .library-import-help{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px;margin-bottom:4px}
-#library .library-import-note{flex:1 1 360px;min-width:0;margin:0;color:var(--muted);font-size:10px;line-height:1.7}
 [data-single-file-guide]{overflow-wrap:anywhere}
 #library .library-help{display:flex;gap:4px;width:fit-content;max-width:100%;min-height:20px;margin:0 0 0 auto;padding:0;font-size:10px;text-decoration:underline;text-underline-offset:2px}
 #library .library-help svg{width:14px;height:14px}

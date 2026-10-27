@@ -3267,3 +3267,17 @@ CodeMemo 임시 브라우저에서 0.1 두께의 선 근처를 눌러 주석 편
 **최종 검증·게시 완료 (12:28:50 +09:00):** 초기 기록(12:16:44) 이후 소스 `8ca144af7b1f58d4e2fcc72a9210e6c905d82bd1`의 [Actions 40443309419](https://github.com/seionwon/HTMLMemo/actions/runs/40443309419)에서 우선 이동/첫 실행 **2개**, 전체 Chrome **69개**, 실제 [공개 URL](https://seionwon.github.io/HTMLMemo/)의 Chrome **44개**가 모두 통과했습니다. 우선 검사 2개는 전체 검사에 포함된 시나리오입니다. 빌드 작업 완료는 **12:23:15**, Pages 게시 완료는 **12:23:30**, 공개 검증 완료는 **12:27:27 +09:00**입니다. CI 단위 **547개 중 546개 통과·실패 0·건너뜀 1**이며 Linux 대상이 아닌 macOS Chrome 실행 보호 검사만 건너뛰었습니다. 해당 검사는 로컬 macOS에서 통과했습니다. CI JavaScript **87개·JSON** 및 빌드도 통과했습니다.
 
 공개 **1280px 카드·390px 목록·320px 카드** 화면을 직접 확인했습니다. 제목 문구가 사라지고 세 버튼이 한 줄로 표시되며 기존 가져오기·붙여넣기·안내와 검색·보기 전환·문서 열기·주석 보존 검사가 통과했습니다. CI Ubuntu의 일부 한글은 글꼴 부재로 네모로 보이므로 문구는 DOM으로 확인했고, 신뢰된 로컬 브라우저에서는 한글도 확인했습니다. 공개 파일 **32개(1,504,121바이트)** 모두 HTTP **200**이며 실제 Pages 아티팩트와 바이트·SHA-256이 일치했고 게시된 HTML에 삭제한 제목이 없음을 확인했습니다. 증거는 `test-results/library-heading-removal-ci`, `test-results/library-heading-removal-published`, 각 폴더의 서재 화면·브라우저 검사 XML, `test-results/library-heading-removal-build-ci.log`, `test-results/library-heading-removal-published-ci.log`, `test-results/library-heading-removal-actions.json`, `test-results/library-heading-removal-pages`, `test-results/library-heading-removal-online-files.json`에 보관했습니다. 정식 서비스는 GitHub Pages이며 이력 보충 커밋은 앱 파일을 바꾸지 않습니다. 새로고침하면 적용됩니다.
+
+
+<a id="hist-20261027-009"></a>
+### 2026-10-27 12:33:21 +09:00 — 내 서재의 상시 단일 파일 저장 안내 제거
+
+| ID | change-kind | status |
+|---|---|---|
+| hist-20261027-009 | 서재 화면 정리 | 구현·로컬 검증 완료, GitHub Pages 게시 검증 대기 |
+
+**목적·사용:** 내 서재에서 항상 표시되던 ‘브라우저에서 웹페이지를 저장할 때는 Webpage, Single File…’ 안내 문단을 제거했습니다. 필요한 저장 방법은 **웹페이지 가져오기 안내**를 눌러 확인합니다. 세 시작 버튼은 왼쪽 정렬을 유지하고 안내 링크는 기존 위치에서 열립니다. 삭제한 문구의 전용 CSS와 가져오기 버튼의 해당 문구 참조도 정리했습니다. 선택된 디자인·아이콘·색상과 파일 가져오기·메모·저장 방식은 유지합니다.
+
+**검증:** 제거된 문단을 참조하던 기존 단위/Chrome 검사를 새 화면에 맞췄으며 별도의 검사 파일·시나리오는 추가하지 않았습니다. 로컬 단위 **547개**, JavaScript **106개·JSON** 검사, Tailwind CSS **4.3.3** 빌드, git diff --check를 통과했습니다. 신뢰된 CodeMemo 브라우저의 **1280px·320px** 서재와 **390px** 가져오기 안내 화면을 직접 확인했습니다. 세 요청 모두 HTTP **200**, 예외 **0개**이며 서재에는 문구가 없고 안내 창에서 단일 파일 저장 방법을 볼 수 있습니다. 임시 서버를 종료했습니다. 증거는 `test-results/library-save-notice-removal-unit.log`, `test-results/library-save-notice-removal-check.log`, `test-results/library-save-notice-removal-build.log`, `test-results/library-save-notice-removal-preview`에 보관했습니다.
+
+**게시 상태:** 이 기록 시점에는 로컬 검증만 완료했습니다. 기존 GitHub Actions의 전체/공개 Chrome과 정식 주소 https://seionwon.github.io/HTMLMemo/ 의 게시 결과를 확인한 뒤 같은 항목에 보충합니다.
