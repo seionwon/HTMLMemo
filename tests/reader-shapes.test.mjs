@@ -7,7 +7,14 @@ import {documentFor,installDOM} from './dom.mjs';
 installDOM();
 const points=[{x:30,y:40},{x:150,y:100}];
 const shapes=['rect','circle','ellipse'];
-function reader(){const r=Object.create(Reader.prototype);Object.assign(r,{doc:documentFor('<html><head></head><body>Original text</body></html>'),color:'#edcf67',width:3,opacity:.45,rectFill:false});return r;}
+function reader(){const r=Object.create(Reader.prototype);Object.assign(r,{doc:documentFor('<html><head></head><body>Original text</body></html>'),color:'#edcf67',highlightColor:'#f39da2',width:3,opacity:.45,rectFill:false});return r;}
+test('text and area highlights snapshot their own color while pen, underline and filled shapes retain the pen color',()=>{
+ const r=reader(),annotations=['highlight','area','pen','underline','area-underline','strike',...shapes].map(type=>r.annotation(type,type==='highlight'||type==='underline'||type==='strike'?{textAnchor:{start:0,end:8,quote:'Original'}}:{points,anchor:'body'}));
+ for(const a of annotations){const highlight=['highlight','area'].includes(a.type);assert.equal(a.color,highlight?'#f39da2':'#edcf67');assert.equal(a.opacity,highlight?.45:1);}
+ r.highlightColor='#22c55e';r.color='#334155';assert.equal(r.annotation('highlight',{}).color,'#22c55e');assert.equal(annotations[0].color,'#f39da2');
+ const parsed=parseHTML('<html><head><title>Independent colors</title></head><body>Original text</body></html>');parsed.metadata.annotations=annotations;
+ assert.deepEqual(parseHTML(serializeHTML(documentFor(parsed.html),parsed.metadata)).metadata.annotations,annotations);
+});
 const draw=(r,a,preview=false)=>r.drawAnnotation({...a,points},preview,{points,scale:1});
 test('rectangles, circles and ellipses snapshot the shared rectangle fill mode and highlight opacity',()=>{
  const r=reader();r.rectFill=true;const filled=shapes.map(type=>r.annotation(type,{points,anchor:'body'})),highlight=r.annotation('highlight',{textAnchor:{start:0,end:8,quote:'Original'}});

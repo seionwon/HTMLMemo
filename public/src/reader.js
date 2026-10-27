@@ -11,7 +11,7 @@ const svg = (doc, tag, attrs = {}) => { const node = doc.createElementNS(NS, tag
 export class Reader {
   constructor(host, parsed, callbacks) {
     this.host = host; this.metadata = parsed.metadata; this.callbacks = callbacks; this.history = new History(this.metadata.annotations);
-    this.tool = 'select'; this.color = '#edcf67'; this.width = 3; this.opacity = .35; this.rectFill = false; this.penTTL = 0; this.zoom = 1;
+    this.tool = 'select'; this.color = '#edcf67'; this.highlightColor = '#edcf67'; this.width = 3; this.opacity = .35; this.rectFill = false; this.penTTL = 0; this.zoom = 1;
     this.nativeScroll = !!parsed.nativeScroll;
     this.selection = null; this.selectedId = null; this.linkHistory = []; this.searchResults = []; this.searchPosition = -1; this.autoFit = this.metadata.view.autoFit !== false;
     this.middleScroll = null; this.tocResize = null; this.tocDrag = null;
@@ -1800,7 +1800,7 @@ export class Reader {
     }catch(error){this.restoreTextSelection(target);throw error;}
     finally{this.selectionNotePending=false;}
   }
-  annotation(type, properties) { return {id:uid(), type, color:this.color, width:this.width, opacity:type === 'highlight' || type === 'area' ? this.opacity : 1, created:Date.now(), ...(FILL_TOOLS.includes(type)?{fill:this.rectFill===true,...(this.rectFill===true?{fillOpacity:this.opacity}:{})}:{}), ...properties}; }
+  annotation(type, properties) { const highlight=type==='highlight'||type==='area';return {id:uid(), type, color:highlight?this.highlightColor:this.color, width:this.width, opacity:highlight?this.opacity:1, created:Date.now(), ...(FILL_TOOLS.includes(type)?{fill:this.rectFill===true,...(this.rectFill===true?{fillOpacity:this.opacity}:{})}:{}), ...properties}; }
   addText(type, anchor, text) {
     if (!anchor?.quote?.trim()) return false;
     if (type === 'note') {

@@ -749,8 +749,10 @@ async function navigate(tab,url){
   tab.readable=false;tab.loading=true;tab.frame.src=url;renderBrowserState(tab);renderTabs();updateChrome();
 }
 function toolbarButton(action,name,label,extra='',content=icon(name,18)) {return `<button class="tool-button" data-action="${action}" aria-label="${label}" title="${label}" ${extra}>${content}</button>`;}
-function penSettingsButton() {return toolbarButton('palette','palette','펜과 색상','','<span class="pen-settings-lines" aria-hidden="true"><span class="pen-settings-stroke"></span><span class="pen-settings-duration"><span class="pen-settings-alpha"></span></span></span>');}
+function penSettingsButton() {return toolbarButton('palette','palette','펜과 색상','','<span class="pen-settings-lines" aria-hidden="true"><span class="pen-settings-stroke"></span><span class="pen-settings-highlight"></span><span class="pen-settings-duration"><span class="pen-settings-alpha"></span></span></span>');}
 function annotationToolFamily(tool) {return {area:'highlight','area-underline':'underline',text:'note','rect-filled':'rect'}[tool]||tool;}
+function annotationColorKey(r) {return annotationToolFamily(r.tool)==='highlight'?'highlightColor':'color';}
+function annotationColor(r) {return r[annotationColorKey(r)];}
 function annotationToolMode(r) {return r.tool==='rect'&&r.rectFill?'rect-filled':r.tool;}
 function annotationToolModes(group) {
   return {
@@ -820,9 +822,9 @@ function updateToolbarState() {
   r.updateReadingControls?.();
   const palette=$('[data-action="palette"]',$('#toolbar'));
   if(palette){
-    palette.style.setProperty('--tool-color',r.color);palette.style.setProperty('--tool-opacity',r.opacity);palette.style.setProperty('--tool-width-preview',(1+(Math.min(18,Math.max(1,r.width))-1)*5/17).toFixed(2)+'px');
+    palette.style.setProperty('--tool-color',r.color);palette.style.setProperty('--tool-highlight-color',r.highlightColor);palette.style.setProperty('--tool-opacity',r.opacity);palette.style.setProperty('--tool-width-preview',(1+(Math.min(18,Math.max(1,r.width))-1)*5/17).toFixed(2)+'px');
     palette.style.setProperty('--tool-time-preview',({0:100,3:25,10:50,30:75}[r.penTTL]??100)+'%');
-    palette.title=`펜과 색상 · 색상 ${r.color.toUpperCase()} · 굵기 ${r.width}px · 형광펜/채움 투명도 ${Math.round(r.opacity*100)}% · 펜 표시 시간 ${r.penTTL?r.penTTL+'초':'영구 저장'}`;
+    palette.title=`펜과 색상 · 펜 색상 ${r.color.toUpperCase()} · 굵기 ${r.width}px · 형광펜 색상 ${r.highlightColor.toUpperCase()} · 형광펜/채움 투명도 ${Math.round(r.opacity*100)}% · 펜 표시 시간 ${r.penTTL?r.penTTL+'초':'영구 저장'}`;
     palette.setAttribute('aria-label',palette.title);
   }
 }
@@ -903,7 +905,7 @@ function renderPalettePopoverContent(r) {
   const customPalettes = preferences.annotation.customPalettes || [];
   const isCustomPalette = customPalettes.some(p => p.id === activePalette.id);
   const customColors = preferences.annotation.customColors || [];
-  const currentColor = (r.color || '#edcf67').toLowerCase();
+  const currentColor = annotationColor(r).toLowerCase();
   let pickerHsv = hexToHsv(currentColor);
   const rgb = hexToRgb(currentColor);
   pop.innerHTML = `<div class="popover-heading" data-palette-drag tabindex="0" role="group" aria-label="펜과 색상 창 이동" title="드래그하여 이동 · 방향키로 이동 (Shift: 크게)"><h3>펜과 색상</h3><button type="button" class="icon-button popover-close" data-popover-close aria-label="펜과 색상 닫기" title="닫기">${icon('close',16)}</button></div>`
@@ -916,7 +918,7 @@ function renderPalettePopoverContent(r) {
   const applyColor = (rawColor, {fromHsv = false, keepHexInput = false} = {}) => {
     const norm = normalizeHexColor(rawColor);
     if (!norm) return;
-    changePreferences({annotation: {color: norm}});
+    changePreferences({annotation: {[annotationColorKey(r)]: norm}});
     if (!fromHsv) pickerHsv = hexToHsv(norm);
     const nextRgb = hexToRgb(norm);
     $('#color-picker-sv', pop)?.style.setProperty('--picker-hue', String(pickerHsv.h));
@@ -943,19 +945,19 @@ function renderPalettePopoverContent(r) {
   $('#palette-preset', pop).onchange = safely(e => {
     changePreferences({annotation: {paletteId: e.target.value}});
     const nextPalette = getActivePalette();
-    if (nextPalette.colors.length && !nextPalette.colors.includes(r.color.toLowerCase())) {
-      changePreferences({annotation: {color: nextPalette.colors[0]}});
+    if (nextPalette.colors.length && !nextPalette.colors.includes(annotationColor(r).toLowerCase())) {
+      changePreferences({annotation: {[annotationColorKey(r)]: nextPalette.colors[0]}});
     }
     renderPalettePopoverContent(r);
   });
   $('#add-custom-color', pop).onclick = safely(() => {
-    const norm = normalizeHexColor(r.color) || '#edcf67';
+    const norm = normalizeHexColor(annotationColor(r)) || '#edcf67';
     const nextCustom = [...new Set([...(preferences.annotation.customColors || []), norm])].slice(-64);
     changePreferences({annotation: {customColors: nextCustom}});
     renderPalettePopoverContent(r);
   });
   $('#remove-custom-color', pop).onclick = safely(() => {
-    const norm = normalizeHexColor(r.color);
+    const norm = normalizeHexColor(annotationColor(r));
     const nextCustom = (preferences.annotation.customColors || []).filter(c => c !== norm);
     changePreferences({annotation: {customColors: nextCustom}});
     renderPalettePopoverContent(r);
@@ -965,7 +967,7 @@ function renderPalettePopoverContent(r) {
     const nameInput = $('#custom-palette-name', pop);
     const name = (nameInput?.value.trim() || `사용자 팔레트 ${existing.length + 1}`).slice(0, 40);
     const savedCustom = preferences.annotation.customColors || [];
-    const baseColors = savedCustom.length ? [...new Set([...savedCustom, r.color.toLowerCase()])] : [...new Set([r.color.toLowerCase(), ...activePalette.colors])];
+    const baseColors = savedCustom.length ? [...new Set([...savedCustom, annotationColor(r).toLowerCase()])] : [...new Set([annotationColor(r).toLowerCase(), ...activePalette.colors])];
     const id = 'custom-' + uid();
     const nextPalettes = [...existing, {id, name, colors: baseColors.slice(0, 20)}].slice(-40);
     changePreferences({annotation: {customPalettes: nextPalettes, paletteId: id}});
@@ -1028,7 +1030,7 @@ function renderPalettePopoverContent(r) {
   $('#color-hex', pop).onchange = safely(e => {
     const norm = normalizeHexColor(e.target.value);
     if (norm) applyColor(norm);
-    else e.target.value = r.color.toUpperCase();
+    else e.target.value = annotationColor(r).toUpperCase();
   });
   for (const channel of ['#color-r', '#color-g', '#color-b']) {
     $(channel, pop).oninput = safely(() => {

@@ -2,6 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizePreferences, loadPreferences, storePreferences, serializeSettings, parseSettings, readSettingsFile, PREFERENCES_KEY, PRESET_COLORS, PRESET_PALETTES, normalizeHexColor, hexToRgb, rgbToHex, hexToHsv, hsvToHex } from '../public/src/preferences.js';
 const storage=()=>{const values=new Map();return {getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value),values};};
+test('pen and highlighter colors stay independent through storage and portable settings, rejecting malformed highlight colors',()=>{
+  const local=storage(),preferences=storePreferences({annotation:{color:'#334155',highlightColor:'#F39DA2'}},local);
+  assert.equal(preferences.annotation.highlightColor,'#f39da2');assert.equal(preferences.annotation.color,'#334155');
+  assert.deepEqual(loadPreferences(local),preferences);assert.deepEqual(parseSettings(serializeSettings(preferences)).preferences,preferences);
+  assert.equal(normalizePreferences().annotation.highlightColor,'#edcf67');
+  for(const highlightColor of [null,42,{},[],true,'red','#abc','#12345678','url(x)'])assert.throws(()=>normalizePreferences({annotation:{highlightColor}}),/주석 색상/);
+});
 test('all portable preferences round trip through a local settings file',async()=>{const preferences=normalizePreferences({theme:'dark',librarySort:'title',librarySortDirection:'desc',libraryView:'list',annotation:{color:'#123456',width:9,opacity:.7,penTTL:10},toolbarPosition:{x:.2,y:.8}});const json=serializeSettings(preferences,'My HTML');const result=await readSettingsFile(new File([json],'settings.json'));assert.deepEqual(result,{preferences,folderName:'My HTML'});assert.equal(JSON.parse(json).storage,'local');});
 test('preferences stay in local storage and migrate the existing theme',()=>{const local=storage();local.setItem('htmlmemo-theme','dark');assert.equal(loadPreferences(local).theme,'dark');const expected=storePreferences({theme:'system',librarySort:'created'},local);assert.deepEqual(loadPreferences(local),expected);assert.ok(local.values.has(PREFERENCES_KEY));});
 test('a backup contains no document data, file handles or arbitrary properties',()=>{const text=serializeSettings({theme:'light',documents:['PRIVATE-DOCUMENT'],fileHandle:{name:'PRIVATE-PATH'},annotation:{color:'#123456',secret:'PRIVATE-TOKEN'}},'folder');assert.ok(!text.includes('PRIVATE'));assert.deepEqual(Object.keys(JSON.parse(text).preferences),['theme','librarySort','librarySortDirection','libraryView','annotation','toolbarPosition','sidebarWidth']);});

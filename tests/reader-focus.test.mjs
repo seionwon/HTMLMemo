@@ -13,7 +13,7 @@ function app({native=false,rejected=false,deferred=false,exitDeferred=false}={})
  const doc=new DOMParser().parseFromString(html,'text/html'),root=doc.querySelector('#app');
  const calls={requested:0,exited:0,measured:0,search:[]};
  const metadata={annotations:[{id:'note-1',text:'Keep my note'}]};
- const r={doc:{},metadata,measure(){calls.measured++;},setTool(){},stopSpeech(){calls.speechStopped=true;}};
+ const r={doc:{},metadata,highlightColor:'#f39da2',measure(){calls.measured++;},setTool(){},stopSpeech(){calls.speechStopped=true;}};
  let finish,finishExit;
  doc.exitFullscreen=async()=>{calls.exited++;if(exitDeferred)await new Promise(resolve=>finishExit=resolve);doc.fullscreenElement=null;doc.dispatchEvent(new doc.defaultView.Event('fullscreenchange'));};
  if(native)root.requestFullscreen=async()=>{calls.requested++;if(rejected)throw Error('Permission denied');if(deferred)await new Promise(resolve=>finish=resolve);doc.fullscreenElement=root;doc.dispatchEvent(new doc.defaultView.Event('fullscreenchange'));};
@@ -68,7 +68,9 @@ test('floating toolbar stays compact without duplicate TTS or relocated zoom con
  const summary=a.doc.querySelector('#toolbar [data-action=palette]'),activate=summary.onclick;
  for(const [color,width,opacity,penTTL] of [['#edcf67',3,.35,0],['#000000',1,.1,3],['#ffffff',18,.9,30],['#3b82f6',7,.55,10]]){
   Object.assign(a.r,{color,width,opacity,penTTL});a.context.updateToolbarState();
-  assert.equal(summary.textContent,'');assert.ok(summary.querySelector('.pen-settings-stroke'));assert.ok(summary.querySelector('.pen-settings-duration .pen-settings-alpha'));
+  assert.equal(summary.textContent,'');assert.ok(summary.querySelector('.pen-settings-stroke'));assert.ok(summary.querySelector('.pen-settings-highlight'));assert.ok(summary.querySelector('.pen-settings-duration .pen-settings-alpha'));
+  assert.deepEqual([...summary.querySelector('.pen-settings-lines').children].map(n=>n.className),['pen-settings-stroke','pen-settings-highlight','pen-settings-duration']);
+  assert.equal(summary.style.getPropertyValue('--tool-highlight-color'),'#f39da2');assert.ok(summary.title.includes('형광펜 색상 #F39DA2'));
   assert.equal(summary.querySelector('svg,[data-pen-setting]'),null);
   assert.equal(summary.style.getPropertyValue('--tool-time-preview'),({0:'100%',3:'25%',10:'50%',30:'75%'})[penTTL]);
   assert.equal(summary.style.getPropertyValue('--tool-color'),color);assert.equal(Number(summary.style.getPropertyValue('--tool-opacity')),opacity);
