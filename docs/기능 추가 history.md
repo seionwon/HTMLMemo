@@ -3289,14 +3289,21 @@ CodeMemo 임시 브라우저에서 0.1 두께의 선 근처를 눌러 주석 편
 
 
 <a id="hist-20261027-010"></a>
-### 2026-10-27 12:50:34 +09:00 — 웹페이지 가져오기 안내를 시작 버튼과 한 줄로 배치
+### 2026-10-27 13:01:58 +09:00 — 웹페이지 가져오기 안내를 시작 버튼과 한 줄로 배치
 
 | ID | change-kind | status |
 |---|---|---|
-| hist-20261027-010 | 서재 화면 배치 | 구현·로컬 검증 완료, GitHub Pages 게시 검증 대기 |
+| hist-20261027-010 | 서재 화면 배치 | 구현·전체/공개 Chrome·GitHub Pages 게시 확인 완료 |
 
 **목적·사용:** 내 서재의 ‘웹페이지 가져오기 안내’를 웹 페이지 열기·HTML 파일 가져오기·텍스트 붙여넣기와 **같은 줄 오른쪽**으로 올렸습니다. 안내만 차지하던 별도 줄과 전용 CSS를 제거했습니다. 안내를 누르면 기존 가져오기 설명이 열립니다. 폭 **480px 이하**에서는 기존 정보 아이콘으로 표시하며 툴팁과 접근성 이름으로 기능을 알립니다. 폭 **360px 이하**에서는 시작 버튼의 좌우 여백·간격을 조금 줄여 **320px**에서도 네 기능이 한 줄 안에 표시됩니다. 선택된 디자인·기존 아이콘과 색상, 데이터 저장 방식은 유지합니다.
 
 **검증:** 기존 안내 검사의 이전 ‘아래쪽 별도 줄’ 조건을 같은 줄의 위치·접근성·열기 동작에 맞췄으며 새 검사 파일·시나리오는 추가하지 않았습니다. 로컬 단위 **547개**, JavaScript **106개·JSON** 검사, Tailwind CSS **4.3.3** 빌드와 git diff --check를 통과했습니다. 신뢰된 CodeMemo 브라우저에서 **1280px·390px·320px** 배치를 직접 보았고, 세 화면 모두 안내를 클릭해 설명 창을 열고 닫았습니다. 세 요청 모두 HTTP **200**, 예외 **0개**입니다. 임시 검증 서버를 종료했습니다. 증거는 `test-results/library-inline-help-unit.log`, `test-results/library-inline-help-check.log`, `test-results/library-inline-help-build.log`, `test-results/library-inline-help-preview`에 보관했습니다.
 
 **게시 상태:** 이 기록 시점에는 로컬 검증만 완료했습니다. 기존 GitHub Actions의 전체/공개 Chrome과 정식 주소 https://seionwon.github.io/HTMLMemo/ 의 게시 결과를 확인한 뒤 같은 항목에 보충합니다.
+
+
+**최종 검증·게시 완료 (13:01:58 +09:00):** 초기 기록(12:50:34) 이후 소스 `2094b8adc25d1ad41336e703ad0ca679ddbd25e3`의 [Actions 40446486623](https://github.com/seionwon/HTMLMemo/actions/runs/40446486623)에서 우선 이동/첫 실행 **2개**, 전체 Chrome **69개**, 실제 [공개 URL](https://seionwon.github.io/HTMLMemo/)의 Chrome **44개**가 모두 통과했습니다. 우선 검사 2개는 전체 검사에 포함된 시나리오입니다. 빌드 작업 완료는 **12:57:31**, Pages 게시 완료는 **12:57:43**, 공개 검증 완료는 **13:01:15 +09:00**입니다. CI 단위는 **547개 중 546개 통과·실패 0·건너뜀 1**이며 Linux 대상이 아닌 macOS Chrome 실행 보호 검사만 건너뛰었습니다. 해당 검사는 로컬 macOS에서 통과했습니다. CI JavaScript **87개·JSON** 검사와 빌드도 통과했습니다.
+
+전체/공개 Chrome에서 **1280/800/600/390/320px**의 안내가 세 시작 버튼 오른쪽에 있고 세로 중심의 차이가 **1px 미만**이며, 화면 안에서 실제 클릭이 닿는 것을 확인했습니다. 320px에서는 키보드 Enter로도 안내 창이 열렸고 툴팁·접근성 이름이 유지됐습니다. 가져오기·붙여넣기·기존 주석 보존과 서재 카드/목록의 가로 넘침 방지 검사도 통과했습니다. 공개 **1280px 카드·390px 목록·320px 카드** 화면을 직접 확인했으며 별도 안내 줄 없이 좁은 화면의 정보 아이콘까지 한 줄에 표시됩니다. CI Ubuntu의 일부 한글은 글꼴 부재로 네모로 보이므로 문구는 DOM으로 확인했고 신뢰된 로컬 브라우저에서는 한글도 확인했습니다.
+
+공개 파일 **32개(1,503,986바이트)** 모두 HTTP **200**이며 실제 Pages 아티팩트와 바이트·SHA-256이 일치했습니다. 증거는 `test-results/library-inline-help-ci`, `test-results/library-inline-help-published`, 각 폴더의 서재·안내 화면과 브라우저 검사 XML, `test-results/library-inline-help-build-ci.log`, `test-results/library-inline-help-published-ci.log`, `test-results/library-inline-help-actions.json`, `test-results/library-inline-help-pages`, `test-results/library-inline-help-online-files.json`에 보관했습니다. 정식 서비스는 GitHub Pages이며 이력 보충 커밋은 앱 파일을 바꾸지 않습니다. 새로고침하면 적용됩니다.
