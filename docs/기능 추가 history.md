@@ -3310,11 +3310,11 @@ CodeMemo 임시 브라우저에서 0.1 두께의 선 근처를 눌러 주석 편
 
 
 <a id="hist-20261027-011"></a>
-### 2026-10-27 13:22:43 +09:00 — 스크립트 목차·본문·이전 다음 절 이동의 누락 경로 보완
+### 2026-10-27 13:39:39 +09:00 — 스크립트 목차·본문·이전 다음 절 이동의 누락 경로 보완
 
 | ID | change-kind | status |
 |---|---|---|
-| hist-20261027-011 | 리더 이동 회귀 수정 | 구현·로컬 단위 검증 완료, 실제 Chrome·게시 및 사용 문서 확인 대기 |
+| hist-20261027-011 | 리더 이동 회귀 수정 | 합성 재현 수정·전체/공개 Chrome·Pages 확인, 실제 사용 파일 검증 대기 |
 
 **문제·범위:** 이전 목차/본문 이동 검사는 해시를 바꾸는 링크·버튼 위주여서 일반 요소의 위임 클릭, History API, 원본의 scrollIntoView, 주소를 바꾸지 않는 장 교체를 확인하지 못했습니다. 사용자가 두 이동 문제가 계속된다고 알려 다시 점검했습니다. 사용 중인 HTML 파일의 이름/경로와 실패하는 목차 항목을 요청했으며, 이 기록 시점에 해당 파일은 아직 확인하지 못했습니다. 아래 구현과 검증을 사용자의 실제 파일에서 해결됐다는 증거로 표현하지 않습니다.
 
@@ -3332,3 +3332,12 @@ CodeMemo의 제한된 로컬 검증기로 iframe 요소를 클릭한 시도는 �
 **첫 실제 Chrome 결과·보완 (13:26:25 +09:00):** 소스 `1c65405dcf8baa86aa9aa8cdd7abb6f40f70cb37`의 [Actions 40449485584](https://github.com/seionwon/HTMLMemo/actions/runs/40449485584)는 우선 검사 **3개 중 2개 통과·1개 실패**로 게시 전에 중단됐습니다. 새 합성 문서의 1280px에서 일반 요소 목차, History API로 이전/다음 절, 반복 scrollIntoView, 취소된 링크와 주소 없는 다음 절 이동은 진행됐으나 첫 절의 북마크 400px 복귀에서 실패했습니다. 실제 상태는 표시 주소가 첫 절인 반면 원본/표시 본문은 둘째 절·0px였으며 브라우저 예외는 없었습니다. 주소를 안 바꾸고 장을 교체한 원본은 이후 앱이 같은 해시를 지정해도 hashchange가 발생하지 않는 경로였습니다. 기존 본문/이전·다음 이동 및 첫 실행 검사는 통과했습니다.
 
 같은 해시를 앱이 다시 지정하는 명시적인 이동 명령에서도 원본 hashchange 처리기를 실행하도록 보완했습니다. 실패 조건과 400/620px 기대값은 완화하지 않았습니다. 보완 후 로컬 단위 **550개**, JavaScript **106개·JSON**, 빌드와 git diff --check를 다시 통과했습니다. 첫 실패 로그·화면·진단은 `test-results/navigation-regression-first-build-ci.log`, `test-results/navigation-regression-first-ci/pages-only-scripted-navigation-failure.json`, 같은 폴더의 화면과 XML에 보존했습니다. 이 시점에는 보완 버전의 실제 Chrome·게시 결과를 아직 확인하지 않았습니다.
+
+
+**보완 버전의 검증·게시 확인 (13:39:39 +09:00):** 초기 기록(13:22:43) 이후 보완 소스 `d8acc1eedca7a5e8e480b41307ddb56aa0141eb1`의 [Actions 40449847049](https://github.com/seionwon/HTMLMemo/actions/runs/40449847049)에서 우선 이동/첫 실행 **3개**, 전체 Chrome **70개**, 실제 [공개 URL](https://seionwon.github.io/HTMLMemo/)의 Chrome **45개**가 모두 통과했습니다. 우선 3개는 전체 검사에 포함된 시나리오입니다. 빌드 작업 완료는 **13:33:47**, Pages 게시 완료는 **13:34:06**, 공개 검증 완료는 **13:37:46 +09:00**입니다. CI 단위는 **550개 중 549개 통과·실패 0·건너뜀 1**이며 Linux 대상이 아닌 macOS Chrome 실행 보호 검사만 건너뛰었습니다. 해당 검사는 로컬 macOS에서 통과했습니다. 로컬 단위 **550개**, 로컬 JavaScript **106개·JSON**, CI JavaScript **87개·JSON**, 빌드와 git diff --check도 통과했습니다.
+
+새 합성 문서는 전체/공개 Chrome 양쪽의 **1280px·390px**에서 일반 요소 목차·History API 이전/다음 절·주소 없는 장 이동·취소된 링크·같은 본문 목적지 재선택·북마크 복귀를 확인했습니다. 본문 스크롤은 **975px**, 목적지의 위/아래 경계는 **427.75~466.14px**로 본문 표시 영역 **24~846px** 안에 들어왔습니다. 저장된 북마크 **400/620px**는 늦은 원본 이벤트 뒤에도 유지됐으며 원본 HTML·주석·북마크를 보존했고 해당 검사의 예외는 **0개**였습니다. 전체/공개 측정 JSON은 동일했습니다. 기존 해시 방식의 목차·본문/이전/다음, 전체 검색·TTS·주석/폴더·보안 격리 검사도 통과했습니다.
+
+공개 사이트의 새 합성 문서 **1280px·390px**, 기존 목차 문서 **1280px** 화면을 직접 확인했습니다. 390px 합성 문서는 **100% 배율과 가로 이동** 조건이며 문서 전체를 화면 폭에 맞춘 조건으로 표현하지 않습니다. CI Ubuntu의 일부 한글은 글꼴 부재로 네모로 보이므로 문구는 DOM으로 확인했습니다. 공개 파일 **32개(1,510,461바이트)** 모두 HTTP **200**이며 실제 Pages 아티팩트와 바이트·SHA-256이 일치했습니다. 증거는 `test-results/navigation-regression-ci`, `test-results/navigation-regression-published`, 각 폴더의 `pages-only-scripted-navigation.json`·화면·XML, `test-results/navigation-regression-build-ci.log`, `test-results/navigation-regression-published-ci.log`, `test-results/navigation-regression-actions.json`, `test-results/navigation-regression-pages`, `test-results/navigation-regression-online-files.json`에 보관했습니다. 첫 실패 기록은 위에 보존하며 이력만 보충하는 후속 커밋은 앱 파일을 바꾸지 않습니다.
+
+**남은 확인:** 게시된 보완 경로의 합성 재현 검증은 완료했습니다. 사용자가 현재 읽는 실제 HTML 파일은 아직 확인하지 못했으며, 그 파일에서 보고한 두 문제가 모두 해결됐다고 단정하지 않습니다. 동일 파일 검증에는 해당 파일의 저장 경로와 실패하는 목차 항목 정보가 필요합니다. 개인 원문을 소스나 공개 빌드에 추가하지 않았습니다.
