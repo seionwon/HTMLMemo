@@ -3200,3 +3200,21 @@ CodeMemo 임시 브라우저에서 0.1 두께의 선 근처를 눌러 주석 편
 모바일의 다음 절 버튼은 실제 **x=310.52, y=37**, 이전 절은 **x=260.17, y=37**에서 버튼 자신에 클릭이 닿음을 확인했습니다. 확대 버튼이 덮던 위치에서 벗어나며, 전체/공개 모두 해당 버튼의 활성 상태와 실제 포인터 목적지를 검사했습니다. 기존 검색의 원본 결과 핸들러와 지우기, 검색어 위치 이동·목차 접기·주석/북마크·TTS·팔레트·서재/폴더·보안 격리 검사도 통과했습니다.
 
 공개 **1280px·390px** 화면을 직접 보아 버튼 겹침이 없음을 확인했습니다. CI Ubuntu의 일부 한글은 글꼴 부재로 네모로 보이므로 문구는 DOM으로 확인했고, 신뢰된 로컬 브라우저에서는 한글 링크 목적지와 다음 절의 실제 전후 화면도 확인했습니다. 390px 검증 문서는 100% 배율로 가로 스크롤을 사용하는 조건이며 원본 문서 전체를 화면 폭으로 축소한 조건과 구분합니다. 공개 파일 **32개(1,505,742바이트)** 모두 HTTP **200**이며 해당 CI의 실제 Pages 아티팩트와 바이트·SHA-256이 일치했습니다. 최종 증거는 `test-results/source-navigation-ci`, `test-results/source-navigation-published`, 각 폴더의 `pages-only-source-navigation.json`·`pages-only-source-navigation-clicks.json`·1280/390px 화면, `test-results/source-navigation-build-ci.log`, `test-results/source-navigation-published-ci.log`, `test-results/source-navigation-actions.json`, `test-results/source-navigation-pages`, `test-results/source-navigation-online-files.json`에 보관했습니다. 정식 서비스는 GitHub Pages이며 기능 이력만 보충하는 후속 커밋은 앱 파일을 바꾸지 않습니다. 새로고침하면 수정 버전이 적용됩니다.
+
+
+<a id="hist-20261027-006"></a>
+### 2026-10-27 11:44:09 +09:00 — Chrome 지원 안내와 전용 폴더 미지원 환경의 진입 차단
+
+| ID | change-kind | status |
+|---|---|---|
+| hist-20261027-006 | 실행 브라우저 안내·미지원 진입 차단 | 구현·로컬 검사 완료, 전체/공개 Chrome·게시 대기 |
+
+**목적·사용:** 사용자에게 보이는 지원 안내를 Google Chrome으로 통일했습니다. 전용 폴더 선택 또는 안전한 폴더 자동 저장에 필요한 기능이 없는 환경에서는 앱을 시작할 때 **“이 앱은 구글 크롬에서만 정상적으로 작동합니다. 크롬에서 실행해주세요.”**를 표시합니다. 닫기·나중에 연결·Escape·바깥 클릭으로 안내를 넘겨 서재를 사용하는 경로를 제공하지 않습니다. 이전 방문 기록이나 이미 연결한 폴더가 있어도 미지원 환경이면 동일하게 안내합니다. 앱 주소 복사와 Chrome 다운로드 링크를 제공하며 복사 권한이 없으면 주소를 선택해 직접 복사하도록 안내합니다. 복사하는 주소는 현재 페이지의 개인 쿼리·해시가 아닌 정식 공개 URL입니다.
+
+**동작·데이터 보존:** `showDirectoryPicker`와 폴더 쓰기 잠금 기능의 존재를 확인하며, 미지원이면 서재 초기화·데이터베이스 접근·폴더 자동 복원 전에 안내하고 종료합니다. 이미 저장된 문서·설정·폴더 연결 정보는 바꾸거나 지우지 않습니다. 정상 지원 환경의 기존 폴더 연결·나중에 연결·권한 취소/거부 처리와 데이터 저장 동작은 유지합니다. 실행 도중 폴더 지원이 사라진 경우에도 단순 경고 대신 같은 안내를 표시합니다. 브라우저의 이름을 나열하는 지원 문구를 정리했고 실행/앱 전달 화면과 README도 Chrome 기준으로 맞췄습니다. 브라우저 상표 문자열을 판별하는 차단 목록 대신 필요한 기능을 확인합니다. Chrome에서도 필수 기능이 없는 기기·버전은 안내 대상이며 다른 브라우저에 있던 자료를 Chrome으로 자동 이동하는 기능은 추가하지 않았습니다. [공식 기능 확인 안내](https://developer.chrome.com/docs/capabilities/web-apis/file-system-access#feature-detection)를 참고했습니다.
+
+**로컬 검증:** 단위 **547개**, JavaScript **106개·JSON**, Tailwind CSS **4.3.3** 빌드, git diff --check를 통과했습니다. 실제 앱 번들을 실행하는 DOM 모델에서 미지원 첫 방문/재방문, 데이터베이스 미접근, 기존 연결 정보 보존, Escape 차단, 주소 복사와 클립보드 부재/거부 후 직접 복사, 쓰기 잠금 미지원, 지원 기능이 사라졌을 때의 설정 진입을 확인했습니다. 기존 ‘경고만 표시하고 계속 사용’ 동작을 기대하던 단위 검사 하나는 요청한 새 정책에 맞춰 수정했습니다. 최초 기대값 실패는 `test-results/chrome-required-first-targeted.log`에 보존했고 최종 전체 결과는 `test-results/chrome-required-unit.log`에 있습니다.
+
+신뢰된 CodeMemo 브라우저에서 **1280px·390px** 안내 화면과 요청 문구를 직접 보았습니다. 각 요청은 HTTP **200**, 예외 **0개**였으며 실제 클립보드 쓰기가 제한된 환경에서 주소 선택과 직접 복사 안내도 확인했습니다. 이 화면 확인은 빌드 폴더에서만 미지원 분기를 강제로 선택해 렌더링을 확인한 것이며 실제 Safari/Firefox 검사로 세지 않습니다. 이후 빌드를 다시 만들어 실제 기능 확인 코드를 복원하고 `dist/src/data-folder.js`와 소스의 일치를 확인했으며 임시 서버를 종료했습니다. 개인 자료를 사용하지 않았고 선택된 디자인·기존 아이콘·색상과 공통 대화창 스타일을 유지했습니다.
+
+**추가 Chrome 검사·게시 상태:** 기존 첫 실행 시나리오에서 실제 Chrome의 폴더 선택 API를 미지원 상태로 모의해 안내 문구·일반 사용 진입 차단·Escape/바깥 클릭·정식 주소 복사·이전 방문 기록에 의한 우회 방지와 **1280/390/320px** 화면을 검사하도록 바꿨습니다. 정상 Chrome의 폴더 연결·취소·재연결 검사도 유지합니다. 먼저 실행하는 회귀 검사에는 기존 본문 링크/이전·다음 절 이동과 첫 실행 검사를 함께 포함하고 전체/공개 Chrome 검사를 그대로 유지합니다. 다른 브라우저를 실제 실행하는 검사는 추가하지 않았습니다. 이 초기 기록 시점에는 전체/공개 Chrome과 게시를 아직 실행하지 않았으며 결과를 같은 항목에 보충합니다. 정식 주소는 https://seionwon.github.io/HTMLMemo/ 입니다. 로그와 화면은 `test-results/chrome-required-unit.log`, `test-results/chrome-required-check.log`, `test-results/chrome-required-build.log`, `test-results/chrome-required-preview`에 보관했습니다.

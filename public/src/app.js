@@ -10,7 +10,7 @@ import { normalizePreferences, loadPreferences, storePreferences, serializeSetti
 import {bundledExample} from './distribution.js';
 import { InstallController, isIOS, installableLocation, installationURL, PUBLIC_APP_URL } from './install.js';
 import { APP_VERSION } from './version.js';
-import { DataFolder } from './data-folder.js';
+import { DataFolder, supportsDataFolder, CHROME_REQUIRED_MESSAGE } from './data-folder.js';
 import {validateFolders,folderPath,folderDescendants,editLibraryFolders,LibraryIndex} from './library-folders.js';
 
 let records = []; const tabs = []; let activeId = 'library'; let folder = null; let popoverName = ''; let sidebarMode = '';
@@ -78,7 +78,7 @@ function confirmDialog(title, description, label = '확인') {
   }));
 }
 function webHelpDialog(tab=webContext(),message=''){
-  modal(`<div class="dialog-heading"><h2>Chrome에서 탐색하고 여기서 메모하기</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div>${message?`<p class="web-notice" role="status">${esc(message)}</p>`:''}<p class="dialog-description">HTMLMemo는 이 URL만 열면 사용할 수 있습니다. 앱 설치는 선택 사항이며 추가 프로그램이나 서버 연결은 필요하지 않습니다.</p><p class="dialog-description small" data-single-file-guide>브라우저에서 웹페이지를 저장할 때는 <strong>Webpage, Single File</strong>(웹페이지, 단일 파일 · .mhtml) 형식을 선택하세요. 이미지·스타일을 하나의 파일에 함께 보관합니다.</p><ol class="setup-steps"><li>주소창에 검색어나 웹 주소를 입력하면 <strong>Chrome의 일반 탭</strong>에서 엽니다. 다른 브라우저로 앱을 열었다면 그 브라우저에서 열립니다.</li><li>필요한 글을 복사한 뒤 <strong>HTMLMemo 탭으로 돌아옵니다.</strong> 읽던 문서와 주석은 그대로입니다.</li><li><strong>텍스트 붙여넣기</strong>에서 글과 실제 원문 주소를 넣거나, Chrome에서 저장한 <strong>HTML 파일을 가져옵니다.</strong></li></ol><p class="dialog-description small">다른 Chrome 탭의 현재 주소·본문·로그인 정보나 클립보드를 자동으로 읽지 않습니다. 사이트가 탭 연결을 격리하거나 팝업을 막으면 직접 링크를 사용하세요. 이미 가진 HTML 파일은 그대로 가져올 수 있습니다.</p><div class="web-actions">${tab?`<a class="secondary-button" href="${esc(tab.url)}" target="_blank" rel="noopener noreferrer">보낸 주소 열기 ${icon('external',14)}</a>`:''}<button id="web-help-import" class="secondary-button">HTML 파일 가져오기</button><button id="web-help-paste" class="primary-button">텍스트 붙여넣기</button></div>`,()=>{
+  modal(`<div class="dialog-heading"><h2>Chrome에서 탐색하고 여기서 메모하기</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div>${message?`<p class="web-notice" role="status">${esc(message)}</p>`:''}<p class="dialog-description">HTMLMemo는 이 URL만 열면 사용할 수 있습니다. 앱 설치는 선택 사항이며 추가 프로그램이나 서버 연결은 필요하지 않습니다.</p><p class="dialog-description small" data-single-file-guide>브라우저에서 웹페이지를 저장할 때는 <strong>Webpage, Single File</strong>(웹페이지, 단일 파일 · .mhtml) 형식을 선택하세요. 이미지·스타일을 하나의 파일에 함께 보관합니다.</p><ol class="setup-steps"><li>주소창에 검색어나 웹 주소를 입력하면 <strong>Chrome의 일반 탭</strong>에서 엽니다. </li><li>필요한 글을 복사한 뒤 <strong>HTMLMemo 탭으로 돌아옵니다.</strong> 읽던 문서와 주석은 그대로입니다.</li><li><strong>텍스트 붙여넣기</strong>에서 글과 실제 원문 주소를 넣거나, Chrome에서 저장한 <strong>HTML 파일을 가져옵니다.</strong></li></ol><p class="dialog-description small">다른 Chrome 탭의 현재 주소·본문·로그인 정보나 클립보드를 자동으로 읽지 않습니다. 사이트가 탭 연결을 격리하거나 팝업을 막으면 직접 링크를 사용하세요. 이미 가진 HTML 파일은 그대로 가져올 수 있습니다.</p><div class="web-actions">${tab?`<a class="secondary-button" href="${esc(tab.url)}" target="_blank" rel="noopener noreferrer">보낸 주소 열기 ${icon('external',14)}</a>`:''}<button id="web-help-import" class="secondary-button">HTML 파일 가져오기</button><button id="web-help-paste" class="primary-button">텍스트 붙여넣기</button></div>`,()=>{
     $('#web-help-import').onclick=safely(async()=>{$('#dialog').close();await importFiles();});
     $('#web-help-paste').onclick=()=>pasteTextDialog(tab);
   });
@@ -495,13 +495,27 @@ async function connectDataFolder(selected,onConnected) {
 }
 function rememberFolderWelcome() { try{localStorage.setItem(FOLDER_WELCOME_KEY,'1');}catch{/* The unconnected reminder remains visible if this device cannot retain the choice. */} }
 function needsFolderWelcome() { if(folder)return false;try{return !localStorage.getItem(FOLDER_WELCOME_KEY);}catch{return true;} }
+function chromeRequiredDialog() {
+  $('#status-left').textContent='Chrome에서 실행해주세요.';
+  modal(`<section class="folder-welcome" data-chrome-required><div class="dialog-heading"><h2>Google Chrome에서 실행해주세요</h2></div><p id="chrome-required-message" class="folder-welcome-intro"><strong>${esc(CHROME_REQUIRED_MESSAGE)}</strong></p><p class="dialog-description">Chrome에서 아래 앱 주소를 열어주세요. 전용 저장 폴더를 지원하는 최신 Chrome이 필요합니다.</p><label class="paste-label" for="chrome-app-url">HTMLMemo 주소</label><input id="chrome-app-url" class="paste-title" type="url" readonly value="${esc(PUBLIC_APP_URL)}"><p id="chrome-copy-status" class="dialog-description small" role="status" aria-live="polite"></p><div class="dialog-actions folder-welcome-actions"><button id="chrome-copy-url" class="primary-button" type="button">앱 주소 복사</button><a class="secondary-button" href="https://www.google.com/chrome/" target="_blank" rel="noopener noreferrer">Chrome 다운로드</a></div></section>`,dialog=>{
+    dialog.setAttribute('aria-describedby','chrome-required-message');dialog.oncancel=event=>event.preventDefault();
+    const button=$('#chrome-copy-url'),input=$('#chrome-app-url'),status=$('#chrome-copy-status');
+    button.onclick=async()=>{
+      if(button.disabled)return;button.disabled=true;
+      try{await navigator.clipboard.writeText(PUBLIC_APP_URL);status.textContent='앱 주소를 복사했습니다. Chrome 주소창에 붙여넣어 실행해주세요.';}
+      catch{input.focus();input.select();status.textContent='선택된 앱 주소를 직접 복사해 Chrome 주소창에 붙여넣어주세요.';}
+      finally{button.disabled=false;}
+    };
+    button.focus();
+  });
+}
 function folderWelcomeDialog() {
-  const supported=typeof window.showDirectoryPicker==='function';
-  modal(`<section class="folder-welcome" data-folder-welcome><div class="dialog-heading"><h2>먼저, 전용 폴더를 만들어요</h2></div><p class="folder-welcome-intro">처음 한 번 연결하면 <strong>문서·주석·설정을 이 폴더에 자동 저장</strong>합니다. 저장할 때마다 파일이나 위치를 고를 필요가 없어요.</p>${supported?`<ol class="folder-welcome-steps"><li><strong>문서(Documents) 폴더를 여세요.</strong><p>아래 <b>폴더 선택 창 열기</b> 버튼을 누르면 시작합니다.</p></li><li><strong>새 폴더를 만들고 이름을 정하세요.</strong><p>선택 창의 <b>새 폴더</b>로 <b>HTMLMemo</b>처럼 원하는 이름을 짓고, 그 폴더를 선택하세요. 문서 폴더 전체가 아닌, 방금 만든 폴더입니다.</p></li><li><strong>폴더 사용과 쓰기를 허용하세요.</strong><p><b>폴더 선택</b>(또는 <b>열기</b>) 후 권한 창에서 <b>허용</b>을 누르세요. <b>방문할 때마다 허용</b>이 있으면 선택하세요.</p></li></ol><details class="folder-welcome-existing"><summary>다른 기기에서 옮겨 온 폴더가 있나요?</summary><p>새로 만들지 말고 <b>같은 버튼</b>으로 옮겨 온 전용 폴더를 선택하세요. 그 안의 문서·주석·설정이 자동 복원됩니다.</p></details>`:'<p class="folder-welcome-unsupported" role="status"><strong>이 브라우저는 기기의 폴더 연결을 지원하지 않아요.</strong><br>컴퓨터의 최신 Chrome 또는 Edge에서 같은 HTMLMemo 주소를 열어 연결하세요. 지금은 브라우저 안에만 저장되며, 전용 폴더에는 자동 저장되지 않습니다.</p>'}<p class="folder-welcome-move">새 기기로 옮길 때는 <strong>이 폴더 전체</strong>를 복사하면 됩니다.</p><p id="folder-connection-status" class="folder-welcome-status" role="status" aria-live="polite">${supported?'폴더 선택 창은 버튼을 누른 뒤에만 열립니다.':'폴더 연결을 지원하는 브라우저에서 다시 시작해주세요.'}</p><div class="dialog-actions folder-welcome-actions">${supported?'<button id="select-storage-folder" class="primary-button" type="button">폴더 선택 창 열기</button>':''}<button id="folder-welcome-later" class="secondary-button" type="button">나중에 연결</button></div><p class="folder-welcome-warning">나중에 연결하면 당분간 브라우저 안에만 저장됩니다. 브라우저 데이터를 지우면 문서와 주석을 잃을 수 있어요. 내 서재의 <b>데이터 폴더 연결</b>에서 다시 시작할 수 있습니다.</p></section>`,dialog=>{
+  if(!supportsDataFolder(window,navigator))return chromeRequiredDialog();
+  modal(`<section class="folder-welcome" data-folder-welcome><div class="dialog-heading"><h2>먼저, 전용 폴더를 만들어요</h2></div><p class="folder-welcome-intro">처음 한 번 연결하면 <strong>문서·주석·설정을 이 폴더에 자동 저장</strong>합니다. 저장할 때마다 파일이나 위치를 고를 필요가 없어요.</p><ol class="folder-welcome-steps"><li><strong>문서(Documents) 폴더를 여세요.</strong><p>아래 <b>폴더 선택 창 열기</b> 버튼을 누르면 시작합니다.</p></li><li><strong>새 폴더를 만들고 이름을 정하세요.</strong><p>선택 창의 <b>새 폴더</b>로 <b>HTMLMemo</b>처럼 원하는 이름을 짓고, 그 폴더를 선택하세요. 문서 폴더 전체가 아닌, 방금 만든 폴더입니다.</p></li><li><strong>폴더 사용과 쓰기를 허용하세요.</strong><p><b>폴더 선택</b>(또는 <b>열기</b>) 후 권한 창에서 <b>허용</b>을 누르세요. <b>방문할 때마다 허용</b>이 있으면 선택하세요.</p></li></ol><details class="folder-welcome-existing"><summary>다른 기기에서 옮겨 온 폴더가 있나요?</summary><p>새로 만들지 말고 <b>같은 버튼</b>으로 옮겨 온 전용 폴더를 선택하세요. 그 안의 문서·주석·설정이 자동 복원됩니다.</p></details><p class="folder-welcome-move">새 기기로 옮길 때는 <strong>이 폴더 전체</strong>를 복사하면 됩니다.</p><p id="folder-connection-status" class="folder-welcome-status" role="status" aria-live="polite">폴더 선택 창은 버튼을 누른 뒤에만 열립니다.</p><div class="dialog-actions folder-welcome-actions"><button id="select-storage-folder" class="primary-button" type="button">폴더 선택 창 열기</button><button id="folder-welcome-later" class="secondary-button" type="button">나중에 연결</button></div><p class="folder-welcome-warning">나중에 연결하면 당분간 브라우저 안에만 저장됩니다. 브라우저 데이터를 지우면 문서와 주석을 잃을 수 있어요. 내 서재의 <b>데이터 폴더 연결</b>에서 다시 시작할 수 있습니다.</p></section>`,dialog=>{
     $('#folder-welcome-later').onclick=()=>{rememberFolderWelcome();dialog.close();$('#library-data-folder').focus();};
     dialog.oncancel=event=>{if($('#select-storage-folder')?.disabled){event.preventDefault();return;}rememberFolderWelcome();requestAnimationFrame(()=>$('#library-data-folder').focus());};
-    if(supported)bindFolderConnection();
-    (supported?$('#select-storage-folder'):$('#folder-welcome-later')).focus();
+    bindFolderConnection();
+    $('#select-storage-folder').focus();
   });
 }
 function bindFolderConnection(onConnected) {
@@ -525,7 +539,7 @@ function bindFolderConnection(onConnected) {
   button.onclick=safely(()=>connect());if($('#resume-data-folder'))$('#resume-data-folder').onclick=safely(()=>connect(true));
 }
 function chooseFolder({onConnected} = {}) {
-  if(!window.showDirectoryPicker){toast('이 브라우저는 외부 폴더 연결을 지원하지 않습니다. 최신 데스크톱 Chrome 또는 Edge에서 연결하세요. 현재 변경은 앱 내부에만 저장됩니다.',true);return;}
+  if(!supportsDataFolder(window,navigator)){chromeRequiredDialog();return;}
   modal(`<div class="dialog-heading"><h2>저장 폴더 연결</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><p class="dialog-description">Documents(문서) 안의 <strong>HTMLMemo 전용 하위 폴더</strong>를 선택하세요. 선택 창에서 <strong>원하는 이름의 새 폴더</strong>를 만들 수 있습니다. 예: <code>문서/HTMLMemo</code>.</p><p class="dialog-description small">홈·문서·다운로드 폴더 전체와 시스템 폴더는 브라우저가 연결을 제한합니다. “Can't open this folder”가 나오면 전용 하위 폴더를 선택하세요. 읽기·쓰기 권한을 허용하며, “방문할 때마다 허용” 선택지가 있으면 선택하세요.</p><p class="dialog-description">기존 서재도 이곳에 복사하며 이후 가져오는 문서·주석·설정은 자동 저장합니다. <strong>옮겨 온 데이터 폴더를 선택하면 자동 복원</strong>합니다. 기존 문서와 충돌하는 복원본은 별도 사본으로 남겨 덮어쓰지 않습니다.</p><p class="dialog-description"><strong>새 기기로는 이 폴더 전체를 옮기세요.</strong> 설정 JSON을 별도로 저장할 필요가 없습니다. 모든 하위 파일을 함께 복사해야 합니다.</p>${dataFolderGuide()}<p id="folder-connection-status" class="dialog-description" role="status">${esc(folderStatusText())}</p><div class="dialog-actions"><button class="secondary-button" data-dialog-close>닫기</button>${folder?'<button id="resume-data-folder" class="secondary-button">다시 연결</button>':''}<button id="select-storage-folder" class="primary-button">${folder?'다른 폴더 선택':'폴더 선택'}</button></div>`,()=>{
     bindFolderConnection(onConnected);
   });
@@ -1416,7 +1430,7 @@ function bindUI() {
   $('#library-new-folder').onclick=()=>libraryFolderNameDialog();$('#library-folder-up').onclick=()=>navigateLibraryFolder(libraryFolderById.get(libraryFolderId)?.parentId||'');$('#library-folder-help').onclick=()=>modal(`<div class="dialog-heading"><h2>서재 폴더 사용 안내</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div>${$('#library-folder-help-content').innerHTML}<div class="dialog-actions"><button class="primary-button" data-dialog-close>확인</button></div>`);bindLibraryFolderDrag();
   $('#open-example').onclick=safely(async()=>{let html=await bundledExample();if(html===null){const response=await fetch('./example.html');if(!response.ok)throw new Error('예제 문서를 불러오지 못했습니다.');html=await response.text();}await createDocument({html,title:'천천히 읽는다는 것',viewport:{width:960,height:800}});});
   document.addEventListener('keydown',handleKey);document.addEventListener('pointerdown',event=>{if(!event.target.closest('#toolbar,#tool-popover,[data-htmlmemo-reading-controls]')&&!$('#tool-popover').hidden)closePopover();});
-  $('#dialog').addEventListener('click',event=>{if(event.target===$('#dialog'))$('#dialog').close();});
+  $('#dialog').addEventListener('click',event=>{if(event.target===$('#dialog')&&!$('#dialog [data-chrome-required]'))$('#dialog').close();});
   window.addEventListener('beforeunload',event=>{if(tabs.some(t=>t.opening||t.queue?.editsPending||t.checkpoints?.error||!!folder&&t.queue?.pending)||dataFolder?.pending){event.preventDefault();event.returnValue='';}});
   const savePositions=(checkpoint=false)=>{Promise.all(tabs.filter(t=>t.reader?.doc).map(async tab=>{tab.reader.rememberPosition();await tab.queue.flush();if(checkpoint)await tab.checkpoints.flush({force:true});})).then(()=>dataFolder?.flush()).catch(()=>{});};
   document.addEventListener('visibilitychange',()=>{if(document.hidden)savePositions();});
@@ -1443,6 +1457,7 @@ function fitHeader() {
   document.fonts?.ready?.then(update);window.addEventListener('resize',update);update();
 }
 async function initialize() {
+  if(!supportsDataFolder(window,navigator)){chromeRequiredDialog();return;}
   try{preferences=loadPreferences(localStorage);}catch(error){toast('설정 일부를 읽지 못했습니다. 연결한 데이터 폴더로 복원할 수 있습니다.',true);}
   dataFolder=new DataFolder({storage:localStorage,report:state=>{if(state.handle)folder=state.handle;renderFolderState();},onRestored:async result=>{preferences=loadPreferences(localStorage);applyTheme(preferences.theme);$('#library-sort').value=preferences.librarySort+':'+preferences.librarySortDirection;for(const tab of tabs)if(tab.reader)Object.assign(tab.reader,preferences.annotation);applyToolbarPosition();await refreshLibrary();if(result.recovered)toast('이전의 온전한 폴더 저장본에서 복원했습니다. 최신 변경 일부가 빠졌을 수 있습니다.',true);}});
   applyTheme(preferences.theme);bindUI();fitHeader();$('#library-sort').value=preferences.librarySort+':'+preferences.librarySortDirection;network();folder=await getSetting('folder');settingsFileHandle=await getSetting('settings-file');settingsFolderHint=await getSetting('settings-folder-hint')||'';await refreshLibrary();activate('library');

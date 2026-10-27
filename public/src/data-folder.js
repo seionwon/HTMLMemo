@@ -9,6 +9,10 @@ export const FOLDER_MANIFEST = 'HTMLMemo-library.json';
 export const FOLDER_PREVIOUS = 'HTMLMemo-library.previous.json';
 export const FOLDER_DATA = 'HTMLMemo-data';
 export const FOLDER_GUIDE = '새 기기로 옮기는 방법.txt';
+export const CHROME_REQUIRED_MESSAGE = '이 앱은 구글 크롬에서만 정상적으로 작동합니다. 크롬에서 실행해주세요.';
+export function supportsDataFolder(window,navigator) {
+  return typeof window.showDirectoryPicker==='function'&&typeof navigator.locks?.request==='function';
+}
 const FORMAT = 'HTMLMemo.library';
 const CHECKPOINT = 'data-folder-checkpoint';
 const object = value => value && typeof value === 'object' && !Array.isArray(value);
@@ -129,7 +133,7 @@ async function recoverSnapshot(folder) {
 function references(manifest) { return manifest?[manifest.settings,...manifest.documents.flatMap(e=>[e.source,e.state,e.history,e.original].filter(Boolean))]:[]; }
 function sameHead(a,b) { return a?.id===b?.id && a?.revision===b?.revision; }
 const defaultLock = action => {
-  if(!navigator.locks?.request)throw Error('이 브라우저는 안전한 폴더 자동 저장을 지원하지 않습니다. 최신 데스크톱 Chrome 또는 Edge를 사용해주세요.');
+  if(!navigator.locks?.request)throw Error(CHROME_REQUIRED_MESSAGE);
   return navigator.locks.request('htmlmemo-data-folder',action);
 };
 
