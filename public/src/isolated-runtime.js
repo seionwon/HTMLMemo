@@ -52,6 +52,15 @@ function bootstrap(channel,preferences) {
     return clone.outerHTML;
   };
   const emit=value=>send({channel,...value},'*');
+  // App-owned search/bookmark navigation already has a precise target. Do not
+  // turn its echoed hashchange into a new source navigation that resets it.
+  const silentHashes=[];
+  const setHashSilently=hash=>{const before=location.href;location.hash=hash;if(location.href!==before){silentHashes.push(location.href);if(silentHashes.length>128)silentHashes.shift();}};
+  addEventListener('hashchange',event=>{
+    const index=silentHashes.indexOf(event.newURL);
+    if(index>=0){silentHashes.splice(index,1);return;}
+    if(started&&event.newURL===location.href)emit({type:'navigation',hash:location.hash});
+  });
   const publish=()=>{
     timer=0;
     if(!started){if(!document.body)return;const snapshot=html(document.documentElement);if(snapshot.length>MAX){emit({type:'error',message:'문서의 실행 결과가 안전한 표시 한도(64MB)를 넘었습니다.'});return;}emit({type:'initial',html:snapshot,assets:[...document.querySelectorAll('script[id^="book-asset-"]')].map(node=>node.id)});started=true;dirty.clear();return;}
@@ -79,7 +88,7 @@ function bootstrap(channel,preferences) {
   }).observe(document,{subtree:true,childList:true,characterData:true,attributes:true});
   const command=value=>{
     if(value?.channel!==channel)return;
-    if(value.type==='hash'&&typeof value.hash==='string'&&value.hash.length<2000){location.hash=value.hash;return;}
+    if(value.type==='hash'&&typeof value.hash==='string'&&value.hash.length<2000){setHashSilently(value.hash);return;}
     if(!['click','input','change','toggle','submit'].includes(value.type)||!/^r\d{1,12}$/.test(value.id))return;
     const node=nodes.get(value.id);if(!node?.isConnected)return;
     if(value.type==='toggle'&&node.localName==='details'){if(node.open!==!!value.open)node.open=!!value.open;return;}
@@ -94,7 +103,7 @@ function bootstrap(channel,preferences) {
   };
   // srcdoc inherits the app's base URL. Hash links belong to this source
   // document, rather than navigating the hidden frame to the app URL.
-  addEventListener('click',event=>{const link=event.target?.closest?.('a[href]'),href=link?.getAttribute('href');if(!event.defaultPrevented&&href?.startsWith('#')){event.preventDefault();location.hash=href;}});
+  addEventListener('click',event=>{const link=event.target?.closest?.('a[href]'),href=link?.getAttribute('href')?.trim();if(!event.defaultPrevented&&href?.startsWith('#')){event.preventDefault();setHashSilently(href);emit({type:'navigation',hash:location.hash});}});
   let commandPort;
   addEventListener('message',event=>{
     const value=event.data;if(commandPort||event.source!==parent||value?.channel!==channel||value.type!=='connect'||!event.ports[0])return;
@@ -106,8 +115,8 @@ function bootstrap(channel,preferences) {
 
 /** Source code runs in an opaque origin. Only inert, sanitized DOM comes back. */
 export class IsolatedRuntime {
-  constructor({host,doc,source,storage=[],onStorage=()=>{},onError=()=>{}}) {
-    this.host=host;this.doc=doc;this.source=source;this.storage=cleanSourceStorage(storage);this.onStorage=onStorage;this.onError=onError;this.channel=crypto.randomUUID();this.queue=Promise.resolve();this.disposed=false;this.listeners=[];this.nodes=new Map();this.attributes=new Map();this.controlRevisions=new Map();this.inputRevision=0;
+  constructor({host,doc,source,storage=[],onStorage=()=>{},onNavigate=()=>{},onError=()=>{}}) {
+    this.host=host;this.doc=doc;this.source=source;this.storage=cleanSourceStorage(storage);this.onStorage=onStorage;this.onNavigate=onNavigate;this.onError=onError;this.channel=crypto.randomUUID();this.queue=Promise.resolve();this.disposed=false;this.listeners=[];this.nodes=new Map();this.attributes=new Map();this.controlRevisions=new Map();this.inputRevision=0;
   }
   async start() {
     const owner=this.host.ownerDocument,win=owner.defaultView;
@@ -160,6 +169,14 @@ export class IsolatedRuntime {
   fail(error) {clearTimeout(this.timer);if(this.reject){this.reject(error);this.resolve=this.reject=null;}else if(!this.disposed)this.onError(error);this.dispose();}
   async accept(value) {
     if(this.disposed)return;
+    if(value.type==='navigation'){
+      if(this.resolve||typeof value.hash!=='string'||value.hash.length>=2000||!/^#[^\u0000-\u001f\u007f]*$/.test(value.hash))return;
+      // Update only this displayed document's fragment, without echoing a
+      // hashchange back to the source and racing a later click.
+      const win=this.doc.defaultView;
+      win?.history?.replaceState(null,'',win.location.href.split('#')[0]+value.hash);
+      this.onNavigate(value.hash);return;
+    }
     if(value.type==='storage'){
       if(!Array.isArray(value.entries)||value.entries.length>256||JSON.stringify(value.entries).length>600000)return;
       const entries=cleanSourceStorage(value.entries);if(JSON.stringify(entries)!==JSON.stringify(this.storage)){this.storage=entries;this.onStorage(entries);}return;
@@ -234,8 +251,11 @@ export class IsolatedRuntime {
     for(const type of ['input','change'])add(this.doc,type,event=>{const node=sourceTarget(event);if(node&&['input','textarea','select'].includes(node.localName)){const id=node.getAttribute(ID),revision=++this.inputRevision;this.controlRevisions.set(id,revision);this.send({type,id,value:node.value,revision});}});
     add(this.doc,'submit',event=>{event.preventDefault();const node=sourceTarget(event);if(node?.localName==='form')this.send({type:'submit',id:node.getAttribute(ID)});});
     add(this.doc,'click',event=>{
-      const node=sourceTarget(event),control=node?.closest('button,summary,a[href],[role="button"],input[type="button"],input[type="submit"]');if(!control||!validId(control.getAttribute(ID)))return;
-      if(control.localName==='a'&&!control.getAttribute('href')?.startsWith('#'))return;
+      const node=sourceTarget(event),control=node?.closest('button,summary,a,[role="button"],input[type="button"],input[type="submit"]');if(!control||control.closest('[data-htmlmemo-ui]')||!validId(control.getAttribute(ID)))return;
+      const href=control.getAttribute('href');
+      // Executable hrefs/handlers are stripped from the visible copy. Their
+      // original source anchor can still run through this inert click command.
+      if(control.localName==='a'&&href&&!href.startsWith('#'))return;
       if(control.localName==='summary')return; // Native details toggle below carries exact state.
       event.preventDefault();this.send({type:'click',id:control.getAttribute(ID)});
     },false);

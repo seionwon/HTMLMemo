@@ -39,7 +39,7 @@ export class Reader {
           this.doc = this.frame.contentDocument;
           if (!this.doc?.body) throw new Error('HTML 문서를 표시하지 못했습니다.');
           if(this.metadata.execution?.allowScripts&&needsIsolatedRuntime(this.doc)){
-            this.runtime=new IsolatedRuntime({host:this.host,doc:this.doc,source:parsed.file||new Blob([parsed.html],{type:'text/html;charset=utf-8'}),storage:this.metadata.view.sourceStorage,onStorage:entries=>{this.metadata.view.sourceStorage=entries;(this.callbacks.onSourceSettings||this.callbacks.onPosition)?.();},onError:error=>this.callbacks.onError?.(error)});
+            this.runtime=new IsolatedRuntime({host:this.host,doc:this.doc,source:parsed.file||new Blob([parsed.html],{type:'text/html;charset=utf-8'}),storage:this.metadata.view.sourceStorage,onStorage:entries=>{this.metadata.view.sourceStorage=entries;(this.callbacks.onSourceSettings||this.callbacks.onPosition)?.();},onNavigate:hash=>{void this.navigateSourceHash(hash);},onError:error=>this.callbacks.onError?.(error)});
             await this.runtime.start();
           }
           await this.adoptSavedMainFrame();
@@ -400,17 +400,6 @@ export class Reader {
     this.doc.addEventListener('dblclick', event => {if(this.handleTocDblClick(event))return; this.focusDocument(event);}, true);
     this.viewport.addEventListener('dblclick', event => this.focusDocument(event));
     this.viewport.addEventListener('scroll',()=>this.updateReadingControls(),{passive:true});
-    const jumpToHash = hash => {
-      if (!hash || hash === '#') return false;
-      let id; try { id = decodeURIComponent(hash.slice(1)); } catch { id = hash.slice(1); }
-      if (!id) return false;
-      const target = this.doc.getElementById(id) || [...this.doc.querySelectorAll('a[name]')].find(a => a.name === id);
-      if (!target) return false;
-      this.linkHistory.push({top:this.scrollTop, left:this.scrollLeft});
-      if (this.linkHistory.length > 128) this.linkHistory.shift();
-      this.jump(target);
-      return true;
-    };
     this.doc.addEventListener('click', event => {
       if(this.suppressAnnotationClick&&event.detail!==0&&performance.now()<this.suppressAnnotationClick){this.suppressAnnotationClick=0;event.preventDefault();event.stopImmediatePropagation();return;}
       const target = event.target?.nodeType === 1 ? event.target : event.target?.parentElement;
@@ -436,7 +425,7 @@ export class Reader {
       if (this.tool !== 'select' && !this.isInsideTocOrTopbar(link)) return;
       let hash = '';
       if (this.metadata.source) { try { const current = new URL(this.metadata.source); const dest = new URL(href); if (current.origin === dest.origin && current.pathname === dest.pathname && current.search === dest.search) hash = dest.hash; } catch { /* non-web links aren't opened by the app */ } }
-      if (hash && hash.length > 1) jumpToHash(hash);
+      if (hash && hash.length > 1) this.jumpToHash(hash);
       else if (/^https?:/i.test(href)) this.callbacks.onLink?.(href);
     }, true);
     this.doc.addEventListener('click', event => {
@@ -449,23 +438,16 @@ export class Reader {
       const details = summary ? (summary.parentElement?.localName === 'details' ? summary.parentElement : summary.closest?.('details')) : null;
       const link = target.closest?.('a[href]');
       const href = link ? (link.getAttribute('href') || '').trim() : '';
-      const runtimeTocLink = this.runtime && link && !link.closest('[data-htmlmemo-ui]') && this.isInsideTocOrTopbar(link);
-      const section = runtimeTocLink && this.documentBookSearchSection(link);
-      if(section){event.preventDefault();void this.jumpOutlineSection(section);return;}
       const container = details ? null : ((stateBefore?.container?.isConnected ? stateBefore.container : null) || this.findTocSubContainer(target));
-      if (link && href.startsWith('#')) {
+      if (link && !link.closest('[data-htmlmemo-ui]') && href.startsWith('#') && !pagePrevented) {
         if (href === '#') {
           if (!summary && !pagePrevented) event.preventDefault();
         } else {
           let id; try { id = decodeURIComponent(href.slice(1)); } catch { id = href.slice(1); }
           const hashTarget = id ? (this.doc.getElementById(id) || [...this.doc.querySelectorAll('a[name]')].find(a => a.name === id)) : null;
-          // The isolated source bridge prevents browser navigation before this
-          // listener runs. Its hidden runner cannot scroll the visible reader.
-          // Keep dispatching source clicks, but handle actual TOC destinations here.
-          const runtimeTocTarget = runtimeTocLink && hashTarget && !this.isInsideTocOrTopbar(hashTarget);
-          if (hashTarget && hashTarget !== container && (!pagePrevented || runtimeTocTarget)) {
+          if (hashTarget && hashTarget !== container) {
             event.preventDefault();
-            if (this.tool === 'select' || this.isInsideTocOrTopbar(link)) jumpToHash(href);
+            if (this.tool === 'select' || this.isInsideTocOrTopbar(link)) this.jumpToHash(href);
           } else if (hashTarget === container && !pagePrevented) {
             event.preventDefault();
           }
@@ -2328,6 +2310,23 @@ export class Reader {
   async back() { const p = this.linkHistory.pop(); if (!p) return false; this.scrollTop=p.top; this.scrollLeft=p.left; this.callbacks.onView?.(); return true; }
   jump(target) {
     const r = target.getBoundingClientRect(), origin = this.layerOrigin(); this.scrollTop = Math.max(0,(r.top-origin.top+r.height/2)*this.zoom-this.viewport.clientHeight/2); this.scrollLeft = Math.max(0,(r.left-origin.left+r.width/2)*this.zoom-this.viewport.clientWidth/2);
+  }
+  jumpToHash(hash) {
+    if(!hash||hash==='#')return false;
+    let id;try{id=decodeURIComponent(hash.slice(1));}catch{id=hash.slice(1);}
+    const target=this.doc.getElementById(id)||[...this.doc.querySelectorAll('a[name]')].find(a=>a.name===id);
+    if(!target)return false;
+    this.linkHistory.push({top:this.scrollTop,left:this.scrollLeft});if(this.linkHistory.length>128)this.linkHistory.shift();
+    this.jump(target);this.callbacks.onView?.();return true;
+  }
+  async navigateSourceHash(hash) {
+    if(this.preparing||this.disposed||typeof hash!=='string'||!hash.startsWith('#')||hash.length>=2000)return false;
+    let id;try{id=decodeURIComponent(hash.slice(1));}catch{id=hash.slice(1);}
+    if(this.annotationBookPaths().has(id))return this.jumpOutlineSection(id);
+    const target=this.doc.getElementById(id)||[...this.doc.querySelectorAll('a[name]')].find(a=>a.name===id);
+    if(!target||this.isInsideTocOrTopbar(target)||target.closest('[data-htmlmemo-ui]'))return false;
+    this.cancelAnnotationJump?.();this.annotationJumpGeneration=(this.annotationJumpGeneration||0)+1;
+    return this.jumpToHash(hash);
   }
   async jumpOutlineSection(section) {
     if(!this.annotationBookPaths().has(section))return false;

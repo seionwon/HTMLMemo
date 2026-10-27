@@ -73,6 +73,18 @@ test('unsupported RPC operations, malformed selectors and oversized patch lists 
   await a.r.accept({type:'patches',patches:[{id:'r4"] body',kind:'content',html:'<body>attack</body>'},{id:'r9999',kind:'content',html:'<article>attack</article>'}]});
   await a.r.accept({type:'patches',patches:Array.from({length:10001},()=>({id:'r4',kind:'content',html:'<article>attack</article>'}))});assert.equal(a.doc.documentElement.outerHTML,before);
 });
+test('source navigation accepts only bounded local fragments after readiness and never forwards app UI clicks',async()=>{
+  const a=runtime(),navigations=[];a.r.onNavigate=hash=>navigations.push(hash);
+  await a.r.accept({type:'navigation',hash:'#early'});assert.deepEqual(navigations,[]);
+  await a.r.accept({type:'initial',html:initial});const before=a.doc.documentElement.outerHTML;
+  for(const hash of ['https://outside.invalid/','javascript:attack()','#bad\nvalue','#'+'x'.repeat(2000),{},null])await a.r.accept({type:'navigation',hash});
+  assert.deepEqual(navigations,[]);assert.equal(a.doc.documentElement.outerHTML,before);
+  await a.r.accept({type:'navigation',hash:'#%EC%A0%88'});assert.deepEqual(navigations,['#%EC%A0%88']);
+  const host=a.doc.createElement('section'),link=a.doc.createElement('a'),sent=[];host.dataset.htmlmemoUi='';link.href='#chapter';link.setAttribute('data-htmlmemo-runtime-id','r10');host.append(link);a.doc.body.append(host);a.r.index(host);a.r.send=value=>sent.push(value);a.r.bind();link.dispatchEvent(new a.doc.defaultView.Event('click',{bubbles:true,cancelable:true}));assert.deepEqual(sent,[],'app search retains its precise keyword/annotation target');
+  const sourceLink=a.doc.createElement('a');sourceLink.setAttribute('data-htmlmemo-runtime-id','r11');sourceLink.textContent='sanitized source action';a.doc.body.append(sourceLink);a.r.index(sourceLink);sourceLink.dispatchEvent(new a.doc.defaultView.Event('click',{bubbles:true,cancelable:true}));assert.deepEqual(sent,[{type:'click',id:'r11'}],'source anchors remain usable after executable hrefs have been sanitized');
+  sourceLink.setAttribute('href','https://outside.invalid/');sourceLink.dispatchEvent(new a.doc.defaultView.Event('click',{bubbles:true,cancelable:true}));assert.equal(sent.length,1,'external links keep the browser handoff path');
+  a.r.disposed=true;await a.r.accept({type:'navigation',hash:'#late'});assert.deepEqual(navigations,['#%EC%A0%88']);
+});
 test('source nodes cannot replace metadata or append executable content via attribute patches',async()=>{
   const a=runtime();await a.r.accept({type:'initial',html:initial});
   await a.r.accept({type:'patches',patches:[{id:'r5',kind:'attributes',tag:'script',attributes:[['src','https://remote.invalid/run.js'],['data-htmlmemo-runtime-id','r5']]},{id:'r5',kind:'content',html:'<script data-htmlmemo-runtime-id="r5">attack()</script>'}]});

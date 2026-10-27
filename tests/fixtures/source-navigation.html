@@ -1,0 +1,27 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>본문 링크와 이전 다음 절 검증</title>
+<style>*{box-sizing:border-box}html,body{height:100%;margin:0;overflow:hidden;font:16px/1.6 system-ui}body{display:flex;flex-direction:column}.topbar{height:36px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 8px}.controls{display:flex;gap:4px}.layout{display:grid;grid-template-columns:280px minmax(0,1fr);flex:1;min-height:0}nav,main{overflow:auto;padding:12px}nav{border-right:1px solid #cbd5e1}main{padding:24px}a{display:block;padding:8px;color:inherit}.spacer{height:1100px}</style></head>
+<body><header class="topbar"><strong>본문 이동 검증</strong><div class="controls"><button id="prev">이전 절</button><button id="next">다음 절</button></div></header>
+<div class="layout"><nav id="reader-nav"><strong>목차</strong><a id="toc-first" href="#v0%3Aone">첫 절</a><a id="toc-second" href="#v0%3Atwo">둘째 절</a></nav><main id="reader-main"><div id="reader-status"></div><article id="reader-content"></article></main></div>
+<script id="book-manifest" type="application/json">{"format":"memosuite-book-html-v1","title":"본문 이동 검증","volumes":[{"label":"검증 책","sections":[{"key":"v0:one","title":"첫 절"},{"key":"v0:two","title":"둘째 절"}]}]}</script>
+<script id="book-volume-0" type="application/octet-stream">["검증 원본"]</script>
+<script>
+(()=>{
+  const content=document.getElementById('reader-content'),main=document.getElementById('reader-main'),status=document.getElementById('reader-status'),keys=['v0:one','v0:two'];
+  window.navigationClicks=[];window.cancelledClicks=0;window.renderedSections=[];
+  function show(key){
+    if(!keys.includes(key))return;
+    const index=keys.indexOf(key);status.textContent='본문 준비 중';document.documentElement.dataset.readerReady='false';
+    setTimeout(()=>{
+      content.innerHTML='<h1 id="chapter-start">'+(index?'둘째 절':'첫 절')+'</h1><a id="body-local" href="#%EB%B3%B8%EB%AC%B8%20%EB%AA%A9%EC%A0%81%EC%A7%80">이 절 안에서 이동</a><a id="body-cancelled" href="#%EB%B3%B8%EB%AC%B8%20%EB%AA%A9%EC%A0%81%EC%A7%80">이동을 취소하는 원본 기능</a><a id="body-chapter" href="#'+encodeURIComponent(keys[1-index])+'">다른 절로 이동</a><a id="body-script" href="javascript:void(0)">원본 기능으로 다른 절로 이동</a><a id="body-web" href="https://example.com/">외부 웹 페이지</a><p id="kept-text">주석을 보존할 확인 문장입니다.</p><div class="spacer"></div><h2 id="본문 목적지">본문 링크의 목적지</h2><a id="body-repeat" href="#%EB%B3%B8%EB%AC%B8%20%EB%AA%A9%EC%A0%81%EC%A7%80">같은 위치로 다시 이동</a><div class="spacer"></div>';
+      document.getElementById('body-cancelled').onclick=event=>{event.preventDefault();window.cancelledClicks++;};
+      document.getElementById('body-script').onclick=()=>{location.hash=encodeURIComponent(keys[1-index]);};
+      for(const link of content.querySelectorAll('a'))link.addEventListener('click',()=>window.navigationClicks.push(link.id));
+      content.dataset.section=key;status.textContent='';document.documentElement.dataset.readerReady='true';main.scrollTo(0,0);window.renderedSections.push(key);
+      document.getElementById('prev').disabled=index===0;document.getElementById('next').disabled=index===1;
+    },60);
+  }
+  for(const [id,index] of [['prev',0],['next',1]])document.getElementById(id).onclick=()=>{window.navigationClicks.push(id);location.hash=encodeURIComponent(keys[index]);};
+  addEventListener('hashchange',()=>{let key;try{key=decodeURIComponent(location.hash.slice(1));}catch{return;}if(keys.includes(key)&&content.dataset.section!==key)show(key);});
+  show(keys[0]);
+})();
+</script></body></html>

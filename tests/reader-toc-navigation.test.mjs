@@ -11,23 +11,33 @@ function navigation({isolated=true}={}){
   // are outside this event-routing check.
   for(const name of ['setupDocumentTocResize','startFontObserver','startDynamicObserver'])r[name]=()=>{};
   r.baseEditorStyle=()=>'';r.jump=node=>jumps.push(node.id);
-  if(isolated){r.runtime=new IsolatedRuntime({doc,host:{ownerDocument:doc},source:new Blob(['fixture'])});r.runtime.index(doc.documentElement);r.runtime.send=value=>sent.push(value);r.runtime.bind();}
+  if(isolated){r.runtime=new IsolatedRuntime({doc,host:{ownerDocument:doc},source:new Blob(['fixture']),onNavigate:hash=>r.navigateSourceHash(hash)});r.runtime.index(doc.documentElement);r.runtime.send=value=>sent.push(value);r.runtime.bind();}
   r.bind();
   const click=selector=>{const e=new doc.defaultView.Event('click',{bubbles:true,cancelable:true});doc.querySelector(selector).dispatchEvent(e);return e;};
   return {doc,r,sent,jumps,click};
 }
-test('isolated source TOC links reach existing content anchors while preserving their original click dispatch',()=>{
-  const a=navigation();a.click('nav a[href="#chapter"]');assert.deepEqual(a.jumps,['chapter']);assert.deepEqual(a.sent,[{type:'click',id:'r1'}]);
-  a.r.tool='pen';a.click('nav a[href="#%EC%A0%88"]');assert.deepEqual(a.jumps,['chapter','절']);assert.equal(a.sent.at(-1).id,'r2');
-  a.click('summary a');assert.deepEqual(a.jumps,['chapter','절'],'a TOC disclosure target is not a body destination');
+test('isolated source TOC links reach confirmed content anchors while preserving their original click dispatch',async()=>{
+  const a=navigation();a.click('nav a[href="#chapter"]');assert.deepEqual(a.jumps,[]);assert.deepEqual(a.sent,[{type:'click',id:'r1'}]);
+  await a.r.runtime.accept({type:'navigation',hash:'#chapter'});assert.deepEqual(a.jumps,['chapter']);
+  a.r.tool='pen';a.click('nav a[href="#%EC%A0%88"]');await a.r.runtime.accept({type:'navigation',hash:'#%EC%A0%88'});assert.deepEqual(a.jumps,['chapter','절']);assert.equal(a.sent.at(-1).id,'r2');
+  a.click('summary a');await a.r.runtime.accept({type:'navigation',hash:'#children'});assert.deepEqual(a.jumps,['chapter','절'],'a TOC disclosure target is not a body destination');
 });
 test('ordinary HTML anchor navigation and source-prevented body links retain their existing behavior',()=>{
   const plain=navigation({isolated:false});plain.click('nav a[href="#chapter"]');assert.deepEqual(plain.jumps,['chapter']);
   const isolated=navigation();isolated.click('main a');assert.deepEqual(isolated.jumps,[],'the TOC exception must not override source-owned body interactions');assert.equal(isolated.sent.at(-1).id,'r4');
   const search=navigation(),host=search.doc.createElement('section');host.setAttribute('data-htmlmemo-ui','');search.doc.querySelector('nav').append(host);host.append(search.doc.querySelector('nav a'));search.click('section a');assert.deepEqual(search.jumps,[],'app-owned whole-book search retains its own keyword navigation');
 });
+test('confirmed source navigation reaches body anchors and chapter buttons without replaying a cancelled click',async()=>{
+  const a=navigation();
+  a.click('main a');assert.deepEqual(a.jumps,[],'the original source decides whether its click is cancelled');
+  await a.r.runtime.accept({type:'navigation',hash:'#chapter'});assert.deepEqual(a.jumps,['chapter']);
+  assert.equal(await a.r.navigateSourceHash('#%EC%A0%88'),true);assert.deepEqual(a.jumps,['chapter','절']);
+  assert.equal(await a.r.navigateSourceHash('#%EC%A0%88'),true);assert.deepEqual(a.jumps,['chapter','절','절'],'the same link can return to its target after manual scrolling');
+  assert.equal(await a.r.navigateSourceHash('#children'),false);assert.equal(await a.r.navigateSourceHash('https://outside.invalid/'),false);
+  a.r.preparing=true;assert.equal(await a.r.navigateSourceHash('#chapter'),false,'opening a source document must preserve its saved reading position');
+});
 test('re-clicking the current book chapter returns the visible reader to its beginning after a bookmark jump',async()=>{
   const a=navigation(),script=a.doc.createElement('script');script.id='book-manifest';script.type='application/json';script.textContent=JSON.stringify({format:'memosuite-book-html-v1',volumes:[{label:'책',sections:[{key:'v0:one',title:'첫 장'}]}]});a.doc.head.append(script);
   const content=a.doc.querySelector('main');content.id='reader-content';content.dataset.section='v0:one';a.doc.querySelector('nav a').setAttribute('href','#v0%3Aone');a.r.viewport.scrollTop=400;a.r.viewport.scrollLeft=20;
-  a.click('nav a');assert.equal(a.r.scrollTop,0);assert.equal(a.r.scrollLeft,0);assert.deepEqual(a.sent,[{type:'click',id:'r1'}]);assert.equal(await a.r.jumpOutlineSection('missing'),false);
+  a.click('nav a');await a.r.runtime.accept({type:'navigation',hash:'#v0%3Aone'});assert.equal(a.r.scrollTop,0);assert.equal(a.r.scrollLeft,0);assert.deepEqual(a.sent,[{type:'click',id:'r1'}]);assert.equal(await a.r.jumpOutlineSection('missing'),false);
 });
