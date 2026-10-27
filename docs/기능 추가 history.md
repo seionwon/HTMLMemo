@@ -3434,11 +3434,11 @@ CodeMemo의 제한된 로컬 검증기로 iframe 요소를 클릭한 시도는 �
 
 
 <a id="hist-20261027-016"></a>
-### 2026-10-27 17:04:46 +09:00 — 불러온 부분 검색어 지우기 버튼
+### 2026-10-27 17:18:31 +09:00 — 불러온 부분 검색어 지우기 버튼
 
 | ID | change-kind | status |
 |---|---|---|
-| hist-20261027-016 | 검색 사용성 | 구현·로컬 검증 완료, 전체/공개 Chrome·Pages 확인 전 |
+| hist-20261027-016 | 검색 사용성 | 구현·전체/공개 Chrome·GitHub Pages 게시 확인 완료 |
 
 **목적·사용:** 사이드바의 **불러온 부분에서 찾기** 입력칸 오른쪽 안에 **×** 버튼을 추가했습니다. 검색어가 있을 때 표시하며 누르면 검색어·결과 목록·본문의 해당 검색 표시를 즉시 지우고 이전/다음 화살표를 비활성화합니다. 입력창에 커서가 돌아와 바로 새 검색어를 입력할 수 있습니다. 책 자체 사이드바와 앱 사이드바 모두 같은 동작이며 검색 준비 중인 요청과 아직 시작하지 않은 검색 타이머도 취소합니다. 위쪽 **책 전체 검색**의 검색어와 결과는 유지합니다.
 
@@ -3447,3 +3447,10 @@ CodeMemo의 제한된 로컬 검증기로 iframe 요소를 클릭한 시도는 �
 **검증:** 기존 사이드바 단위/Chrome 검사를 확장했으며 새 검사 파일·시나리오는 추가하지 않았습니다. 로컬 단위 **566개**, JavaScript **107개·JSON** 검사, Tailwind CSS **4.3.3** 빌드와 git diff --check를 통과했습니다. 입력 지우기·입력창 포커스·화살표/결과 초기화, 지연 결과와 예약 검색의 취소, 책 전체 검색어 보존을 확인했습니다. 신뢰된 CodeMemo 브라우저에서 **1280px 검색 중 × 표시**와 **320px × 클릭 후 초기화**를 실제 붙여넣기로 만든 시험 문서로 확인했습니다. 두 요청 모두 HTTP **200**, 예외 **0개**이며 화면도 직접 확인했습니다. 개인 문서는 사용하지 않았고 임시 서버를 종료했습니다. 증거는 `test-results/loaded-search-clear-unit.log`, `test-results/loaded-search-clear-check.log`, `test-results/loaded-search-clear-build.log`, `test-results/loaded-search-clear-preview`에 있습니다.
 
 **게시 상태:** 이 기록 시점에는 로컬 검증만 완료했습니다. 기존 GitHub Actions에서 두 종류 사이드바의 × 클릭·320px 키보드 조작·본문 검색 표시 제거·인덱스 재사용을 실제 Chrome으로 확인한 뒤 전체/공개 검사와 정식 주소 https://seionwon.github.io/HTMLMemo/ 의 게시 결과를 같은 항목에 보충합니다.
+
+
+**최종 검증·게시 완료 (17:18:31 +09:00):** 초기 기록(17:04:46) 이후 소스 `ce57c42718b72ab64d05ade8439891804bea6484`의 [Actions 40471067055](https://github.com/seionwon/HTMLMemo/actions/runs/40471067055)에서 우선 Chrome **6개**, 전체 Chrome **71개**, 실제 [공개 URL](https://seionwon.github.io/HTMLMemo/)의 Chrome **46개**가 모두 통과했습니다. 우선 6개는 전체 검사에 포함된 시나리오입니다. 빌드 작업 완료는 **17:11:25**, Pages 게시 완료는 **17:11:38**, 공개 검증 완료는 **17:15:11 +09:00**입니다. CI 단위 **566개 중 565개 통과·실패 0·건너뜀 1**이며 Linux 대상이 아닌 macOS Chrome 실행 보호 검사만 건너뛰었습니다. 해당 검사는 로컬 macOS에서 통과했습니다. 로컬 단위 **566개**, 로컬 JavaScript **107개·JSON**, CI JavaScript **88개·JSON**, Tailwind CSS **4.3.3** 빌드와 git diff --check도 통과했습니다.
+
+전체/공개 Chrome에서 책 안의 사이드바 **1280/390px**, 앱 사이드바 **1280/390/320px**의 ×가 입력칸 안에 표시되고 실제 클릭이 닿는 것을 확인했습니다. 앱 사이드바의 **320px**에서는 키보드 Enter로도 지웠습니다. 검색어·결과 목록·본문의 해당 검색 표시가 사라지고 이전/다음 버튼이 비활성화되며 커서가 입력창으로 돌아왔습니다. 비어 있으면 ×는 숨고, 새 검색어를 입력하면 다시 표시되며 정상 검색됩니다. 책 전체 검색어는 그대로 남았고 두 검색창의 크기·폰트·간격 일치 검사를 유지했습니다. 긴 문서의 × 초기화와 재검색도 **첫 검색 인덱스를 재사용**했으며 원본·주석·북마크 보존과 목차 없는 문서 검사도 통과했습니다. 별도의 새 브라우저 시나리오를 만들지 않고 기존 검색 검사에서 확인했습니다.
+
+공개 **1280px 책 사이드바의 × 표시·390px 앱 사이드바의 × 표시·320px 목차 없는 문서의 지운 상태** 화면을 직접 확인했습니다. CI Ubuntu의 일부 한글은 글꼴 부재로 네모로 보이므로 문구는 DOM으로 확인했고 신뢰된 로컬 브라우저에서는 한글도 확인했습니다. 공개 파일 **32개(1,532,453바이트)** 모두 HTTP **200**이며 실제 Pages 아티팩트와 바이트·SHA-256이 일치했습니다. 증거는 `test-results/loaded-search-clear-ci`, `test-results/loaded-search-clear-published`, 각 폴더의 `sidebar-views-search-cleared-*.png`·검색 화면·XML, `test-results/loaded-search-clear-build-ci.log`, `test-results/loaded-search-clear-published-ci.log`, `test-results/loaded-search-clear-actions.json`, `test-results/loaded-search-clear-pages`, `test-results/loaded-search-clear-online-files.json`에 보관했습니다. 정식 서비스는 GitHub Pages이며 이력 보충 커밋은 앱 파일을 바꾸지 않습니다. 새로고침하면 적용됩니다.
