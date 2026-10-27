@@ -260,7 +260,11 @@ test('the settings icon preserves library, web opening, HTML import, app deliver
   assert.equal(!!doc.querySelector('#choose-folder,#menu-folder'),false);
   assert.equal(doc.querySelector('#library-tab').getAttribute('aria-current'),'page');
   click('#settings-button');
-  for(const id of ['#settings-execution','#settings-about'])assert.ok(doc.querySelector(id).closest('#dialog'));
+  for(const id of ['#settings-help','#settings-execution','#settings-about'])assert.ok(doc.querySelector(id).closest('#dialog'));
+  assert.equal(doc.querySelector('#settings-execution').previousElementSibling.id,'settings-help');
+  click('#settings-help');assert.equal(doc.querySelector('.help-browser h2').textContent,'HTMLMemo 도움말');
+  const helpSearch=doc.querySelector('#help-search');helpSearch.value='데이터 복원';helpSearch.oninput({isComposing:false});assert.ok(doc.querySelector('.help-results'));
+  click('#help-back-settings');assert.equal(doc.activeElement.id,'settings-help');
   click('#settings-execution');
   assert.equal(doc.querySelector('#dialog').open,false);
   assert.equal(doc.querySelector('#execution').hidden,false);
@@ -282,13 +286,13 @@ test('the settings icon preserves library, web opening, HTML import, app deliver
   assert.match(doc.querySelector('.about-brand img').getAttribute('src'),/^data:image\/svg\+xml;base64,/);
 });
 
-test('settings is a single labelled icon and both relocated actions preserve existing documents and preferences',async()=>{
+test('settings is a single labelled icon and help, delivery and About preserve existing documents and preferences',async()=>{
   const record={id:'kept-settings',title:'기존 문서',name:'kept.html',created:1234,modified:5678,metadata:{annotations:[{id:'note',text:'보존할 주석'}],bookmarks:[{id:'mark'}]}},before=structuredClone(record),app=await fileApp({documents:[record]}),{doc}=app,trigger=doc.querySelector('#settings-button');
   assert.equal(trigger.textContent,'');assert.ok(trigger.querySelector('svg'));assert.equal(trigger.title,'설정');assert.equal(trigger.getAttribute('aria-label'),'설정');assert.equal(trigger.getAttribute('aria-haspopup'),'dialog');assert.equal(trigger.getAttribute('aria-controls'),'dialog');assert.equal(trigger.getAttribute('aria-expanded'),null);
   assert.equal(trigger.previousElementSibling.id,'save-page');assert.equal(trigger.nextElementSibling,null);
   trigger.onclick();assert.equal(doc.querySelector('#dialog').open,true);assert.equal(doc.querySelector('#dialog h2').textContent,'HTMLMemo 설정');
   const group=doc.querySelector('.settings-app-actions');assert.equal(group.previousElementSibling.className,'dialog-heading');
-  assert.deepEqual([...group.querySelectorAll('button')].map(button=>button.textContent.trim()),['실행과 앱 전달','About']);
+  assert.deepEqual([...group.querySelectorAll('button')].map(button=>button.textContent.trim()),['도움말','실행과 앱 전달','About']);
   for(const button of group.querySelectorAll('button')){assert.equal(button.getAttribute('type'),'button');assert.equal(button.getAttribute('role'),null);assert.ok(button.querySelector('svg'));}
   doc.querySelector('#settings-about').onclick();assert.equal(doc.querySelector('#dialog h2').textContent,'About');assert.ok(doc.activeElement.hasAttribute('data-dialog-close'));doc.querySelector('#dialog [data-dialog-close]').onclick();
   assert.equal(doc.querySelector('#dialog').open,false);assert.equal(doc.querySelector('#library').hidden,false);
