@@ -3203,11 +3203,11 @@ CodeMemo 임시 브라우저에서 0.1 두께의 선 근처를 눌러 주석 편
 
 
 <a id="hist-20261027-006"></a>
-### 2026-10-27 11:44:09 +09:00 — Chrome 지원 안내와 전용 폴더 미지원 환경의 진입 차단
+### 2026-10-27 11:56:31 +09:00 — Chrome 지원 안내와 전용 폴더 미지원 환경의 진입 차단
 
 | ID | change-kind | status |
 |---|---|---|
-| hist-20261027-006 | 실행 브라우저 안내·미지원 진입 차단 | 구현·로컬 검사 완료, 전체/공개 Chrome·게시 대기 |
+| hist-20261027-006 | 실행 브라우저 안내·미지원 진입 차단 | 구현·전체/공개 Chrome·GitHub Pages 게시 확인 완료 |
 
 **목적·사용:** 사용자에게 보이는 지원 안내를 Google Chrome으로 통일했습니다. 전용 폴더 선택 또는 안전한 폴더 자동 저장에 필요한 기능이 없는 환경에서는 앱을 시작할 때 **“이 앱은 구글 크롬에서만 정상적으로 작동합니다. 크롬에서 실행해주세요.”**를 표시합니다. 닫기·나중에 연결·Escape·바깥 클릭으로 안내를 넘겨 서재를 사용하는 경로를 제공하지 않습니다. 이전 방문 기록이나 이미 연결한 폴더가 있어도 미지원 환경이면 동일하게 안내합니다. 앱 주소 복사와 Chrome 다운로드 링크를 제공하며 복사 권한이 없으면 주소를 선택해 직접 복사하도록 안내합니다. 복사하는 주소는 현재 페이지의 개인 쿼리·해시가 아닌 정식 공개 URL입니다.
 
@@ -3217,4 +3217,11 @@ CodeMemo 임시 브라우저에서 0.1 두께의 선 근처를 눌러 주석 편
 
 신뢰된 CodeMemo 브라우저에서 **1280px·390px** 안내 화면과 요청 문구를 직접 보았습니다. 각 요청은 HTTP **200**, 예외 **0개**였으며 실제 클립보드 쓰기가 제한된 환경에서 주소 선택과 직접 복사 안내도 확인했습니다. 이 화면 확인은 빌드 폴더에서만 미지원 분기를 강제로 선택해 렌더링을 확인한 것이며 실제 Safari/Firefox 검사로 세지 않습니다. 이후 빌드를 다시 만들어 실제 기능 확인 코드를 복원하고 `dist/src/data-folder.js`와 소스의 일치를 확인했으며 임시 서버를 종료했습니다. 개인 자료를 사용하지 않았고 선택된 디자인·기존 아이콘·색상과 공통 대화창 스타일을 유지했습니다.
 
-**추가 Chrome 검사·게시 상태:** 기존 첫 실행 시나리오에서 실제 Chrome의 폴더 선택 API를 미지원 상태로 모의해 안내 문구·일반 사용 진입 차단·Escape/바깥 클릭·정식 주소 복사·이전 방문 기록에 의한 우회 방지와 **1280/390/320px** 화면을 검사하도록 바꿨습니다. 정상 Chrome의 폴더 연결·취소·재연결 검사도 유지합니다. 먼저 실행하는 회귀 검사에는 기존 본문 링크/이전·다음 절 이동과 첫 실행 검사를 함께 포함하고 전체/공개 Chrome 검사를 그대로 유지합니다. 다른 브라우저를 실제 실행하는 검사는 추가하지 않았습니다. 이 초기 기록 시점에는 전체/공개 Chrome과 게시를 아직 실행하지 않았으며 결과를 같은 항목에 보충합니다. 정식 주소는 https://seionwon.github.io/HTMLMemo/ 입니다. 로그와 화면은 `test-results/chrome-required-unit.log`, `test-results/chrome-required-check.log`, `test-results/chrome-required-build.log`, `test-results/chrome-required-preview`에 보관했습니다.
+**추가 Chrome 검사·게시 상태:** 기존 첫 실행 시나리오에서 실제 Chrome의 폴더 선택 API를 미지원 상태로 모의해 안내 문구·일반 사용 진입 차단·Escape/바깥 클릭·정식 주소 복사·이전 방문 기록에 의한 우회 방지와 **1280/390/320px** 화면을 검사하도록 바꿨습니다. 정상 Chrome의 폴더 연결·취소·재연결 검사도 유지합니다. 먼저 실행하는 회귀 검사에는 기존 본문 링크/이전·다음 절 이동과 첫 실행 검사를 함께 포함하고 전체/공개 Chrome 검사를 그대로 유지합니다. 다른 브라우저를 실제 실행하는 검사는 추가하지 않았습니다. 초기 기록(11:44:09) 시점에는 전체/공개 Chrome과 게시를 아직 실행하지 않았으며 결과를 같은 항목에 보충합니다. 정식 주소는 https://seionwon.github.io/HTMLMemo/ 입니다. 로그와 화면은 `test-results/chrome-required-unit.log`, `test-results/chrome-required-check.log`, `test-results/chrome-required-build.log`, `test-results/chrome-required-preview`에 보관했습니다.
+
+
+**최종 검증·게시 완료 (11:56:31 +09:00):** 소스 `7b9f5b90767d3bc5c038f706d46aa38539f0cf3f`의 [Actions 40440155289](https://github.com/seionwon/HTMLMemo/actions/runs/40440155289)에서 먼저 실행한 이동/첫 실행 검사 **2개**, 전체 Chrome **69개**, 실제 [공개 URL](https://seionwon.github.io/HTMLMemo/)의 Chrome **44개**가 모두 통과했습니다. 먼저 실행한 2개는 전체 검사에 포함된 같은 시나리오이며 별개의 검사로 더하지 않습니다. 빌드 작업 완료는 **11:50:26**, Pages 게시 완료는 **11:50:39**, 공개 검증 완료는 **11:54:32 +09:00**입니다. CI 단위는 **547개 중 546개 통과·실패 0·건너뜀 1**이며, Linux에서 실행 대상이 아닌 제한된 macOS의 Chrome 실행 보호 검사만 건너뛰었습니다. 해당 검사는 로컬 macOS에서 통과했습니다. 로컬 단위 **547개**, 로컬 JavaScript **106개·JSON**, CI JavaScript **87개·JSON**, Tailwind CSS **4.3.3** 빌드와 git diff --check도 통과했습니다.
+
+전체/공개 검사 양쪽에서 폴더 선택 API를 미지원으로 모의한 실제 Chrome은 요청한 문구와 정식 주소를 표시했고, 일반 가져오기 버튼의 처리는 연결되지 않았으며 닫기/나중에 연결 버튼은 **0개**였습니다. Escape·바깥 클릭 이후에도 안내가 유지됐고, 방문 완료 기록을 저장한 뒤 다시 열어도 차단됐습니다. 주소 복사는 **https://seionwon.github.io/HTMLMemo/** 한 번으로 확인됐으며 해당 모의 검사의 브라우저 예외는 **0개**였습니다. **1280/390/320px**에서 대화창과 내용이 화면을 넘치지 않았고 전체/공개의 측정 JSON이 동일했습니다. 실제 Safari/Firefox를 실행해 검사한 것으로 표현하지 않으며 정상 Chrome의 폴더 설정과 취소·재연결, 기존 본문 링크·목차·이전/다음 절·주석·검색·TTS·팔레트·서재/폴더·보안 격리 검사도 통과했습니다.
+
+공개 **1280px·320px** 화면을 직접 보아 닫기 버튼 없는 Chrome 실행 안내와 주소·복사 버튼 배치를 확인했습니다. CI Ubuntu의 일부 한글은 글꼴 부재로 네모로 보이므로 문구는 DOM으로 확인했고, 신뢰된 로컬 브라우저의 1280/390px 화면에서는 한글도 확인했습니다. 공개 파일 **32개(1,508,507바이트)** 모두 HTTP **200**이며 해당 CI의 실제 Pages 아티팩트와 바이트·SHA-256이 일치했습니다. 증거는 `test-results/chrome-required-ci`, `test-results/chrome-required-published`, 각 폴더의 `pages-only-chrome-required.json`·1280/390/320px 화면, `test-results/chrome-required-build-ci.log`, `test-results/chrome-required-published-ci.log`, `test-results/chrome-required-actions.json`, `test-results/chrome-required-pages`, `test-results/chrome-required-online-files.json`에 보관했습니다. 정식 서비스는 GitHub Pages이며 이력만 보충하는 후속 커밋은 앱 파일을 바꾸지 않습니다. 새로고침하면 수정 버전이 적용됩니다.
