@@ -3363,14 +3363,21 @@ CodeMemo의 제한된 로컬 검증기로 iframe 요소를 클릭한 시도는 �
 
 
 <a id="hist-20261027-013"></a>
-### 2026-10-27 15:32:01 +09:00 — 내 서재의 웹 페이지 열기 버튼 제거
+### 2026-10-27 15:44:36 +09:00 — 내 서재의 웹 페이지 열기 버튼 제거
 
 | ID | change-kind | status |
 |---|---|---|
-| hist-20261027-013 | 서재 화면 정리 | 구현·로컬 검증 완료, 전체/공개 Chrome·Pages 확인 전 |
+| hist-20261027-013 | 서재 화면 정리 | 구현·전체/공개 Chrome·GitHub Pages 게시 확인 완료 |
 
 **목적·사용:** 내 서재의 **‘웹 페이지 열기 ↗’** 버튼을 제거했습니다. HTML 파일 가져오기와 텍스트 붙여넣기가 왼쪽부터 표시되며 웹페이지 가져오기 안내도 같은 줄에서 엽니다. 웹 주소나 검색어를 열 때는 기존 상단 주소·검색창을 사용합니다. 제거된 버튼의 연결 코드와 전용 CSS를 정리했습니다. 선택 디자인·아이콘·색상과 문서·주석 저장 방식은 유지합니다.
 
 **검증:** 삭제된 버튼을 참조하던 기존 단위/Chrome 검사를 남은 두 버튼에 맞췄으며 새 검사 파일·시나리오는 추가하지 않았습니다. 로컬 단위 **550개**, JavaScript **106개·JSON** 검사, Tailwind CSS **4.3.3** 빌드와 git diff --check를 통과했습니다. 신뢰된 CodeMemo 브라우저의 **1280px·320px** 서재 화면에서 버튼이 사라지고 남은 버튼이 왼쪽에 표시됨을 확인했습니다. 320px에서 붙여넣기·가져오기 안내 창을 실제로 열고 닫았으며 두 요청 모두 HTTP **200**, 예외 **0개**였습니다. 임시 검증 서버를 종료했습니다. 증거는 `test-results/library-web-open-removal-unit.log`, `test-results/library-web-open-removal-check.log`, `test-results/library-web-open-removal-build.log`, `test-results/library-web-open-removal-preview`에 보관했습니다.
 
 **게시 상태:** 이 기록 시점에는 로컬 검증만 완료했습니다. 기존 GitHub Actions의 전체/공개 Chrome과 정식 주소 https://seionwon.github.io/HTMLMemo/ 의 게시 결과를 확인한 뒤 같은 항목에 보충합니다.
+
+
+**최종 검증·게시 완료 (15:44:36 +09:00):** 초기 기록(15:32:01) 이후 소스 `5e2153c820742c0c1838f4e1b27b3f8661d7e327`의 [Actions 40461693471](https://github.com/seionwon/HTMLMemo/actions/runs/40461693471)에서 우선 이동/첫 실행 **3개**, 전체 Chrome **70개**, 실제 [공개 URL](https://seionwon.github.io/HTMLMemo/)의 Chrome **45개**가 모두 통과했습니다. 우선 3개는 전체 검사에 포함된 시나리오입니다. 빌드 작업 완료는 **15:38:52**, Pages 게시 완료는 **15:39:04**, 공개 검증 완료는 **15:42:54 +09:00**입니다. CI 단위는 **550개 중 549개 통과·실패 0·건너뜀 1**이며 Linux 대상이 아닌 macOS Chrome 실행 보호 검사만 건너뛰었습니다. 해당 검사는 로컬 macOS에서 통과했습니다. CI JavaScript **87개·JSON** 검사와 빌드도 통과했습니다.
+
+전체/공개 Chrome에서 **1280/800/600/390/320px**의 서재 시작 버튼이 가져오기·붙여넣기 두 개이며 실제 클릭이 닿는 것을 확인했습니다. 같은 줄의 안내 열기·320px 키보드 조작, 가져오기·붙여넣기·기존 주석 보존, 서재 카드/목록·문서 열기와 기존 상단 주소·Chrome 연결 검사도 통과했습니다. 공개 **1280px 카드·390px 목록·320px 카드** 화면을 직접 확인했습니다. CI Ubuntu의 일부 한글은 글꼴 부재로 네모로 보이므로 문구는 DOM과 게시 HTML로 확인했고 신뢰된 로컬 브라우저에서는 한글도 확인했습니다.
+
+공개 파일 **32개(1,508,389바이트)** 모두 HTTP **200**이며 실제 Pages 아티팩트와 바이트·SHA-256이 일치했습니다. 게시 HTML·앱 코드에서 삭제된 버튼과 연결 코드가 없음을 확인했습니다. 증거는 `test-results/library-web-open-removal-ci`, `test-results/library-web-open-removal-published`, 각 폴더의 서재 화면·브라우저 검사 XML, `test-results/library-web-open-removal-build-ci.log`, `test-results/library-web-open-removal-published-ci.log`, `test-results/library-web-open-removal-actions.json`, `test-results/library-web-open-removal-pages`, `test-results/library-web-open-removal-online-files.json`에 보관했습니다. 정식 서비스는 GitHub Pages이며 이력 보충 커밋은 앱 파일을 바꾸지 않습니다. 새로고침하면 적용됩니다.
