@@ -848,23 +848,36 @@ export class Reader {
       if(this.speechControl.parentElement!==this.readingControls)this.readingControls.prepend(this.speechControl);
       if(this.readingControls.parentElement!==this.host)this.host.prepend(this.readingControls);
     }
+    const group=topbar&&target!==topbar?target:null;
+    if(this.readingControlsGroup!==group){
+      this.readingControlsGroup?.removeAttribute('data-htmlmemo-reading-controls-group');this.readingControlsGroup?.style.removeProperty('--htmlmemo-controls-shift');
+      this.readingControlsGroup=group;group?.setAttribute('data-htmlmemo-reading-controls-group','');
+    }
     this.host.classList.toggle('reader-controls-row',!topbar);
     this.updateReadingControls();
   }
   readingControlsStyle() {
-    return '[data-htmlmemo-reading-controls]{display:inline-flex!important;align-items:center!important;gap:3px!important;flex:0 0 auto!important;vertical-align:middle!important;margin-inline-start:4px!important}[data-htmlmemo-reading-controls] button{box-sizing:border-box!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;font:500 12px/18px system-ui!important;letter-spacing:0!important;white-space:nowrap!important;width:auto!important;min-width:40px!important;height:20px!important;padding:0 5px!important;border:1px solid currentColor!important;border-radius:4px!important;background:transparent!important;color:inherit!important;cursor:pointer!important}[data-htmlmemo-reading-controls] [data-action=speak]{width:24px!important;min-width:24px!important;padding:0!important}[data-htmlmemo-reading-controls] svg{display:block!important;width:14px!important;height:14px!important;pointer-events:none!important}[data-htmlmemo-reading-controls] button:hover{background:#80808020!important}[data-htmlmemo-reading-controls] button:focus-visible{outline:2px solid currentColor!important;outline-offset:1px!important}[data-htmlmemo-reading-controls] [hidden]{display:none!important}';
+    return '[data-htmlmemo-reading-controls-group]{translate:var(--htmlmemo-controls-shift,0px) 0px!important}[data-htmlmemo-reading-controls]{display:inline-flex!important;align-items:center!important;gap:3px!important;flex:0 0 auto!important;vertical-align:middle!important;margin-inline-start:4px!important}[data-htmlmemo-reading-controls] button{box-sizing:border-box!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;font:500 12px/18px system-ui!important;letter-spacing:0!important;white-space:nowrap!important;width:auto!important;min-width:40px!important;height:20px!important;padding:0 5px!important;border:1px solid currentColor!important;border-radius:4px!important;background:transparent!important;color:inherit!important;cursor:pointer!important}[data-htmlmemo-reading-controls] [data-action=speak]{width:24px!important;min-width:24px!important;padding:0!important}[data-htmlmemo-reading-controls] svg{display:block!important;width:14px!important;height:14px!important;pointer-events:none!important}[data-htmlmemo-reading-controls] button:hover{background:#80808020!important}[data-htmlmemo-reading-controls] button:focus-visible{outline:2px solid currentColor!important;outline-offset:1px!important}[data-htmlmemo-reading-controls] [hidden]{display:none!important}';
   }
   updateReadingControls() {
     if(this.zoomControl){const text=Math.round(this.zoom*100)+'%';if(this.zoomControl.textContent!==text)this.zoomControl.textContent=text;}
     if(!this.readingControls||this.readingControls.ownerDocument!==this.doc||!this.frame?.getBoundingClientRect||!this.viewport?.getBoundingClientRect)return;
-    // A manually enlarged iframe can extend beyond the viewport. Keep its
-    // zoom button reachable in the same top row, including after horizontal pan.
-    const rect=this.readingControls.getBoundingClientRect?.(),view=this.viewport.getBoundingClientRect(),frame=this.frame.getBoundingClientRect();
-    if(!rect?.width||!view.width||!frame.width)return;
-    const scale=frame.width/this.frame.offsetWidth,previous=Number.parseFloat(this.readingControls.style.getPropertyValue('--htmlmemo-controls-shift'))||0;
+    // Move a source action group together when it fits. Pinning just zoom can
+    // put it over the book's previous/next buttons after horizontal panning.
+    const view=this.viewport.getBoundingClientRect(),frame=this.frame.getBoundingClientRect();if(!view.width||!frame.width)return;
+    const scale=frame.width/this.frame.offsetWidth,group=this.readingControlsGroup?.isConnected?this.readingControlsGroup:null;
+    const grouped=!!group;
+    const controls=grouped?group:this.readingControls;
+    if(grouped){this.readingControls.style.removeProperty('--htmlmemo-controls-shift');this.readingControls.style.removeProperty('transform');}
+    else group?.style.removeProperty('--htmlmemo-controls-shift');
+    const rect=controls.getBoundingClientRect?.();if(!rect?.width)return;
+    const previous=Number.parseFloat(controls.style.getPropertyValue('--htmlmemo-controls-shift'))||0;
     const min=(view.left+2-frame.left)/scale-rect.left+previous,max=(view.right-2-frame.left)/scale-rect.right+previous;
-    const shift=Math.max(min,Math.min(0,max)),value=shift.toFixed(2)+'px';
-    if(this.readingControls.style.getPropertyValue('--htmlmemo-controls-shift')!==value){this.readingControls.style.setProperty('--htmlmemo-controls-shift',value);this.readingControls.style.transform='translateX(var(--htmlmemo-controls-shift))';}
+    // A group wider than the viewport keeps its normal horizontal pan. Moving
+    // only its zoom button would cover source controls inside that same group.
+    const shift=grouped&&rect.width*scale>view.width-4?0:Math.max(min,Math.min(0,max)),value=shift.toFixed(2)+'px';
+    if(controls.style.getPropertyValue('--htmlmemo-controls-shift')!==value)controls.style.setProperty('--htmlmemo-controls-shift',value);
+    if(!grouped)this.readingControls.style.transform='translateX(var(--htmlmemo-controls-shift))';
   }
   ensureDocumentTocResize() {
     if (this.disposed || !this.doc?.body) return null;

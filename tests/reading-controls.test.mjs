@@ -97,3 +97,18 @@ test('app reading controls stay reachable when the enlarged page is horizontally
     assert.ok(right<=390&&right>=387);const previous=shift();r.updateReadingControls();assert.equal(shift(),previous,'repeated updates do not accumulate the shift');
   }
 });
+test('a visible source toolbar moves as a group so pinned zoom cannot cover previous-next buttons',()=>{
+  const {r,doc}=fixture('<header class="topbar"><div class="controls" style="transform:rotate(0deg);translate:2px 0px"><button id="prev">‹</button><button id="next">›</button><button>A−</button><button>A+</button></div></header>');r.setupReadingControls();
+  const group=doc.querySelector('.controls'),shift=node=>Number.parseFloat(node.style.getPropertyValue('--htmlmemo-controls-shift'))||0;
+  let left=-300;r.frame={offsetWidth:960,getBoundingClientRect:()=>({left,width:1200})};r.viewport={getBoundingClientRect:()=>({left:0,right:390,width:390})};
+  group.getBoundingClientRect=()=>({left:730+shift(group),right:910+shift(group),width:180});
+  r.readingControls.getBoundingClientRect=()=>({left:870+shift(group)+shift(r.readingControls),right:910+shift(group)+shift(r.readingControls),width:40});
+  for(left of [-300,-600,0]){
+    r.updateReadingControls();const rect=group.getBoundingClientRect();
+    assert.ok(left+rect.left*1.25>=2&&left+rect.right*1.25<=388.01,'the source buttons and app zoom fit together in the visible row');
+    assert.equal(shift(r.readingControls),0,'zoom never moves over a neighboring source button');const previous=shift(group);r.updateReadingControls();assert.equal(shift(group),previous);
+  }
+  r.viewport.getBoundingClientRect=()=>({left:0,right:200,width:200});r.updateReadingControls();assert.equal(shift(group),0);assert.equal(shift(r.readingControls),0,'a group wider than the screen keeps its original horizontal pan and button spacing');
+  assert.equal(group.style.transform,'rotate(0deg)');assert.equal(group.style.getPropertyValue('translate'),'2px 0px');
+  const saved=serializeHTML(doc,r.metadata),clean=documentFor(saved).querySelector('.controls');assert.doesNotMatch(saved,/--htmlmemo-controls-shift|data-htmlmemo-reading-controls/);assert.equal(clean.style.transform,'rotate(0deg)');assert.equal(clean.style.getPropertyValue('translate'),'2px 0px');assert.ok(clean.querySelector('#prev'));assert.ok(clean.querySelector('#next'));
+});

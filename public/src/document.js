@@ -85,6 +85,10 @@ function clearReaderSidebarArtifacts(root) {
   root.querySelector?.('#htmlmemo-reading-controls-style')?.remove();
   for(const paint of root.querySelectorAll?.('[data-htmlmemo-tts-paint]')||[])paint.remove();
   for(const controls of root.querySelectorAll?.('[data-htmlmemo-reading-controls]')||[])controls.remove();
+  for(const group of root.querySelectorAll?.('[data-htmlmemo-reading-controls-group]')||[]){
+    group.removeAttribute('data-htmlmemo-reading-controls-group');group.style?.removeProperty('--htmlmemo-controls-shift');
+    if(group.hasAttribute('style')&&!group.getAttribute('style')?.trim())group.removeAttribute('style');
+  }
   // Restore relocated native search controls before removing the editor panel.
   for(const part of root.querySelectorAll?.('[data-htmlmemo-book-search-part]')||[]){
     const key=part.getAttribute('data-htmlmemo-book-search-part'),slot=[...root.querySelectorAll('[data-htmlmemo-book-search-slot]')].find(node=>node.getAttribute('data-htmlmemo-book-search-slot')===key);
