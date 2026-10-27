@@ -3248,3 +3248,17 @@ CodeMemo 임시 브라우저에서 0.1 두께의 선 근처를 눌러 주석 편
 전체/공개 검사에서 폴더 연결 전·후에도 서재의 중복 상자가 없고 설정의 폴더 연결·취소·재시도와 하단 상태 표시가 작동했습니다. 두 환경 모두 원본 복사본 일치, 주석 **2개** 보존, 다른 기기의 폴더 구조 복원을 확인했습니다. 선택적인 브라우저 보관 권한을 거부하도록 모의한 경우에도 자동 저장은 완료됐으며 해당 첫 실행/보관 보호 검사의 브라우저 예외는 **0개**였습니다. 이전에 고친 본문 링크·목차·이전/다음 절과 검색·TTS·보안 격리 검사도 통과했습니다.
 
 공개 사이트의 **1280px 카드·390px 목록·320px 연결된 폴더 구조**와 **1280px 설정** 화면을 직접 확인했습니다. CI Ubuntu의 일부 한글은 글꼴 부재로 네모로 보이므로 문구는 DOM으로 확인했고, 신뢰된 로컬 브라우저에서는 한글도 확인했습니다. 공개 파일 **32개(1,504,471바이트)** 모두 HTTP **200**이며 실제 Pages 아티팩트와 바이트·SHA-256이 일치했습니다. 증거는 `test-results/library-folder-banner-ci`, `test-results/library-folder-banner-published`, 각 폴더의 `pages-only-library-folders.json`·`pages-only-storage-protection.json`·서재/설정 화면, `test-results/library-folder-banner-build-ci.log`, `test-results/library-folder-banner-published-ci.log`, `test-results/library-folder-banner-actions.json`, `test-results/library-folder-banner-pages`, `test-results/library-folder-banner-online-files.json`에 보관했습니다. 정식 서비스는 GitHub Pages이며 이력 보충 커밋은 앱 파일을 바꾸지 않습니다. 새로고침하면 적용됩니다.
+
+
+<a id="hist-20261027-008"></a>
+### 2026-10-27 12:16:44 +09:00 — 내 서재 상단의 소개 문구 제거
+
+| ID | change-kind | status |
+|---|---|---|
+| hist-20261027-008 | 서재 화면 정리 | 구현·로컬 검증 완료, GitHub Pages 게시 검증 대기 |
+
+**목적·사용:** 내 서재 상단의 **‘읽고, 남기고, 다시 이어서.’** 제목을 제거했습니다. 웹 페이지 열기·HTML 파일 가져오기·텍스트 붙여넣기 버튼이 문구 자리의 빈 공간 없이 왼쪽부터 한 줄로 표시됩니다. 삭제한 제목에만 쓰던 데스크톱·모바일 CSS도 정리했습니다. 기존 선택 디자인과 버튼·아이콘·색상, 문서·주석 저장 방식은 유지합니다.
+
+**검증:** 로컬 단위 **547개**, JavaScript **106개·JSON** 검사, Tailwind CSS **4.3.3** 빌드, git diff --check를 통과했습니다. 단순 문구 제거를 위한 새 검사는 추가하지 않았습니다. 신뢰된 CodeMemo 브라우저의 **1280px·390px·320px** 화면을 직접 확인했고 세 요청 모두 HTTP **200**, 예외 **0개**였습니다. 제목이 사라지고 세 버튼과 단일 파일 저장 안내, 서재 카드/목록 전환·검색·폴더 항목이 화면 안에 표시됩니다. 임시 검증 서버를 종료했습니다. 증거는 `test-results/library-heading-removal-unit.log`, `test-results/library-heading-removal-check.log`, `test-results/library-heading-removal-build.log`, `test-results/library-heading-removal-preview`에 보관했습니다.
+
+**게시 상태:** 이 기록 시점에는 로컬 검증만 완료했습니다. 기존 GitHub Actions의 전체/공개 Chrome과 정식 주소 https://seionwon.github.io/HTMLMemo/ 의 게시 결과를 확인한 뒤 같은 항목에 보충합니다.
