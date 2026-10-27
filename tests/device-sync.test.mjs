@@ -62,6 +62,22 @@ test('wrong app, corrupt bytes, invalid annotations and cancelled imports never 
  const bad=structuredClone(packet);bad.documents[0].record.metadata.annotations=[{id:'bad'}];await assert.rejects(b.adapter().mergeBackupData(bad),/주석/);
  await assert.rejects(b.adapter({isActive:()=>false}).mergeBackupData(packet),/닫았/);assert.equal(b.calls.length,0);
 });
-test('large original fails before upload and metadata-only remains available',async()=>{
+test('legacy relay packets keep their size bound while metadata-only remains available',async()=>{
  const a=fixture([await record('large',{html:'x'.repeat(900000)})]);await assert.rejects(a.adapter().getBackupData(),/전송 용량/);assert.equal((await a.adapter({includeSources:false}).getBackupData()).documents[0].body,null);
+});
+
+test('stream bundles transfer large originals and trash without base64 relay limits or duplicate source bytes',async()=>{
+ const blob=new Blob(Array(12).fill(new Uint8Array(1024*1024).fill(65)),{type:'text/html'}),large=await record('large-trash',{trash:true});delete large.html;large.file=blob;large.originalFile=blob;large.sourceIdentity=await localFileIdentity(blob);
+ const a=fixture([large],[],'맥북 원본'),b=fixture([],[],'폰의 다른 루트'),bundle=await a.adapter().getStreamBundle();
+ assert.equal(bundle.files.size,1);assert.equal(bundle.manifest.files[0].size,12*1024*1024);assert.equal(bundle.manifest.documents[0].body,bundle.manifest.documents[0].original);assert.ok(JSON.stringify(bundle.manifest).length<5000);
+ assert.ok(!JSON.stringify(bundle.manifest).includes('맥북 원본'));await b.adapter({isHost:()=>false}).mergeStreamBundle(bundle);
+ const received=b.docs.get('large-trash');assert.equal(received.trashedAt,3000);assert.equal(received.file.size,blob.size);assert.equal(received.originalFile.size,blob.size);assert.deepEqual(await localFileIdentity(received.file),large.sourceIdentity);assert.equal(b.storage.getItem('root-folder-name'),'폰의 다른 루트');assert.equal(b.history.get('large-trash').length,1);
+ const reply=await b.adapter().getStreamBundle(undefined,['large-trash']);assert.equal(reply.files.size,0);assert.equal(reply.manifest.documents.length,0);
+});
+test('stream manifest, original digest, missing files and cancellation reject before library changes',async()=>{
+ const a=fixture([await record('stream')]),bundle=await a.adapter().getStreamBundle(),b=fixture();
+ await assert.rejects(b.adapter().mergeStreamBundle({...bundle,files:new Map()}),/끝나지/);
+ const corrupt={...bundle,files:new Map(bundle.files)};corrupt.files.set(1,new Blob(['z'.repeat(bundle.files.get(1).size)],{type:'text/html'}));await assert.rejects(b.adapter().mergeStreamBundle(corrupt),/검증/);
+ const invalid=structuredClone(bundle.manifest);invalid.documents[0].body=999;await assert.rejects(b.adapter().mergeStreamBundle({manifest:invalid,files:bundle.files}),/원본 파일/);
+ await assert.rejects(b.adapter({isActive:()=>false}).mergeStreamBundle(bundle),/닫았/);assert.equal(b.calls.length,0);
 });

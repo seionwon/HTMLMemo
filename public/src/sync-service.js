@@ -113,7 +113,7 @@ export class SyncService {
         if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
         if (!this.isDestroyed && this.roomId) {
           console.log("Attempting to reconnect in 3s...");
-          this.reconnectTimer = setTimeout(() => this.connectRelay(), 3e3);
+          this.reconnectTimer = setTimeout(() => this.connectRelay().catch(error => this.setStatus('error', error?.message || '중계 서버에 다시 연결하지 못했습니다.')), 3e3);
         }
       };
     });

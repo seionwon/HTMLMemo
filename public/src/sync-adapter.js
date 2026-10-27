@@ -5,6 +5,7 @@ import {mergeLibraryFolders,validateFolders} from './library-folders.js';
 
 export const DEVICE_SYNC_FORMAT='HTMLMemo.sync';
 export const DEVICE_SYNC_LIMIT=1300000;
+export const DEVICE_SYNC_STREAM_LIMIT=2*1024*1024*1024;
 const idOK=id=>typeof id==='string'&&/^[\w-]{1,80}$/.test(id);
 const sizeError=()=>Error('중계 서비스의 전송 용량을 넘습니다. 양쪽 기기에 같은 HTML 원본을 준비하고 ‘원본 파일 포함’을 끈 뒤 주석·설정을 동기화해주세요.');
 const b64=bytes=>{let text='';for(let i=0;i<bytes.length;i+=32768)text+=String.fromCharCode(...bytes.subarray(i,i+32768));return btoa(text);};
@@ -16,6 +17,24 @@ async function unpack(body){
   if(!sameLocalFile(await localFileIdentity(blob),body.identity))throw Error('받은 원본 파일의 검증에 실패했습니다. 기존 문서는 유지됩니다.');return blob;
 }
 const contentOf=record=>record.file?{file:record.file,...(record.originalFile?{originalFile:record.originalFile}:{})}:{html:record.html,...(record.originalFile?{originalFile:record.originalFile}:{})};
+
+// Bulk originals travel on the authenticated WebRTC channel, never in relay JSON.
+export function validateStreamManifest(data){
+  if(data?.format!==DEVICE_SYNC_FORMAT||data.version!==2||!Array.isArray(data.documents)||data.documents.length>10000||!Array.isArray(data.files)||data.files.length>20000)throw Error('지원하지 않는 기기 간 전송 목록입니다.');
+  validateFolders(data.folders);if(data.settings!==null)validateSettings(data.settings);
+  const files=new Map();let total=0;
+  for(const file of data.files){
+    if(!Number.isSafeInteger(file.id)||file.id<1||files.has(file.id)||!Number.isSafeInteger(file.size)||file.size<0||file.size>DEVICE_SYNC_STREAM_LIMIT||typeof file.mime!=='string'||file.mime.length>200||!sameLocalFile(file.identity,file.identity)||file.identity.size!==file.size)throw Error('받은 원본 파일 목록이 손상되었습니다.');
+    total+=file.size;if(total>DEVICE_SYNC_STREAM_LIMIT)throw Error('한 번에 전송할 수 있는 파일은 총 2GB까지입니다. 일부 문서를 나누어 보내주세요.');files.set(file.id,file);
+  }
+  const ids=new Set(),used=new Set();
+  for(const value of data.documents){
+    if(!idOK(value?.record?.id)||ids.has(value.record.id)||!['html','file'].includes(value.sourceType))throw Error('받은 문서 목록이 손상되었습니다.');ids.add(value.record.id);validateState(value,value.record.id);
+    if(value.record.folderId&&!data.folders.some(f=>f.id===value.record.folderId))throw Error('받은 문서의 상대 폴더가 없습니다.');
+    for(const ref of [value.body,value.original])if(ref!==null){if(!files.has(ref))throw Error('문서가 참조하는 원본 파일이 없습니다.');used.add(ref);}
+  }
+  if(used.size!==files.size)throw Error('전송 목록에 사용하지 않는 파일이 있습니다.');return files;
+}
 
 /** MemoSuite SyncAdapter, backed by HTMLMemo's IndexedDB. Roots are intentionally absent. */
 export class DeviceSyncAdapter {
@@ -40,6 +59,32 @@ export class DeviceSyncAdapter {
     const result={format:DEVICE_SYNC_FORMAT,version:1,documents,folders:validateFolders(library.folders),settings:this.includeSettings&&this.isHost()?folderSettings(this.storage):null,logs:documents.map(d=>({title:d.record.title}))};
     if(new Blob([JSON.stringify(result)]).size>DEVICE_SYNC_LIMIT)throw sizeError();return result;
   }
+  async getStreamBundle(ids,exclude=[]){
+    this.check();const library=await this.ops.readLibrary(),documents=[],files=new Map(),descriptors=[],identities=new Map(),wanted=ids?new Set(ids):null,excluded=new Set(exclude);let total=0;
+    const add=async blob=>{
+      this.check();const identity=await localFileIdentity(blob),mime=blob.type||'text/html',key=identity.digest+':'+identity.size+':'+mime;
+      if(identities.has(key))return identities.get(key);
+      total+=blob.size;if(total>DEVICE_SYNC_STREAM_LIMIT)throw Error('한 번에 전송할 수 있는 파일은 총 2GB까지입니다. 일부 문서를 나누어 보내주세요.');
+      const id=descriptors.length+1;descriptors.push({id,size:blob.size,mime,identity});files.set(id,blob);identities.set(key,id);return id;
+    };
+    for(const header of library.documents){
+      if(wanted&&!wanted.has(header.id)||excluded.has(header.id))continue;
+      const doc=await this.ops.getDocument(header.id);if(!doc)throw Error('전송할 문서가 변경되었습니다. 다시 시작해주세요.');
+      const source=doc.file||new Blob([doc.html],{type:'text/html'}),record=portableRecord(doc);
+      if(!record.sourceIdentity)record.sourceIdentity=await localFileIdentity(doc.originalFile||source);
+      const state=validateState({record,revisions:await this.ops.listRevisions(doc.id)},doc.id);
+      documents.push({...state,body:this.includeSources?await add(source):null,original:this.includeSources&&doc.originalFile?await add(doc.originalFile):null,sourceType:doc.file?'file':'html'});this.check();
+    }
+    const manifest={format:DEVICE_SYNC_FORMAT,version:2,documents,files:descriptors,folders:validateFolders(library.folders),settings:this.includeSettings&&this.isHost()?folderSettings(this.storage):null,logs:documents.map(d=>({title:d.record.title}))};
+    validateStreamManifest(manifest);return {manifest,files};
+  }
+  async mergeStreamBundle({manifest,files},resolver){
+    this.check();const descriptors=validateStreamManifest(manifest),verified=new Map();
+    if(!(files instanceof Map)||files.size!==descriptors.size)throw Error('전송이 끝나지 않았습니다. 기존 문서는 유지됩니다.');
+    for(const [id,descriptor] of descriptors){const blob=files.get(id);if(!(blob instanceof Blob)||blob.size!==descriptor.size||!sameLocalFile(await localFileIdentity(blob),descriptor.identity))throw Error('받은 원본 파일의 검증에 실패했습니다. 기존 문서는 유지됩니다.');verified.set(id,blob);this.check();}
+    const incoming=await Promise.all(manifest.documents.map(async value=>({...validateState(value,value.record.id),body:value.body===null?null:verified.get(value.body),original:value.original===null?null:verified.get(value.original),sourceType:value.sourceType,fingerprint:await fingerprint(value.record)})));
+    return this.mergePreparedData(manifest,incoming,resolver);
+  }
   async mergeBackupData(data,resolver){
     this.check();
     if(data?.format!==DEVICE_SYNC_FORMAT||data.version!==1||!Array.isArray(data.documents)||data.documents.length>10000||new Blob([JSON.stringify(data)]).size>DEVICE_SYNC_LIMIT)throw Error('지원하지 않거나 너무 큰 HTMLMemo 동기화 데이터입니다.');
@@ -51,6 +96,10 @@ export class DeviceSyncAdapter {
       const body=value.body?await unpack(value.body):null,original=value.original?await unpack(value.original):null;
       incoming.push({...state,body,original,sourceType:value.sourceType,fingerprint:await fingerprint(state.record)});
     }
+    return this.mergePreparedData(data,incoming,resolver);
+  }
+  async mergePreparedData(data,incoming,resolver){
+    this.check();const remoteFolders=validateFolders(data.folders),settings=data.settings===null?null:validateSettings(data.settings);
     const local=await this.ops.readLibrary(),tree=mergeLibraryFolders(local.folders,remoteFolders,()=>crypto.randomUUID()),entries=[],mirrored=[],conflicts=[],plans=[];
     for(const value of incoming){
       const record=value.record,stamp=value.fingerprint;
@@ -67,7 +116,7 @@ export class DeviceSyncAdapter {
     for(const {value,previous,resolution} of plans){
       if(resolution==='local')continue;
       const record={...value.record,folderId:tree.mapping.get(value.record.folderId||'')||'',syncSourceId:value.record.id,syncFingerprint:value.fingerprint};
-      const content=value.body?(value.sourceType==='file'?{file:value.body}:{html:await value.body.text()}):contentOf(previous);
+      const content=value.body?(value.sourceType==='file'||value.body.size>=4*1024*1024?{file:value.body}:{html:await value.body.text()}):contentOf(previous);
       if(value.original)content.originalFile=value.original;
       if(previous&&resolution==='remote'){
         // Preserve an entire prior version, including its original bytes and history.

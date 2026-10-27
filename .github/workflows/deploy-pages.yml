@@ -84,7 +84,7 @@ jobs:
         run: |
           node --input-type=module <<'NODE'
           import {readFile} from 'node:fs/promises';
-          const files=['index.html','src/app.js','src/utils.js','src/preferences.js','src/web.js','src/reader.js','src/isolated-runtime.js','src/read-aloud.js','src/search-index.js','src/model.js','src/document.js','src/local-files.js','src/mhtml.js','src/storage.js','src/data-folder.js','src/library-folders.js','src/folder-tree.js','manifest.webmanifest','styles.css','src/sync-service.js','src/sync-crypto.js','src/sync-adapter.js','src/sync-ui.js','src/sync-qr.js','vendor/html5-qrcode.min.js','vendor/html5-qrcode-LICENSE.txt','vendor/qrcodegen-LICENSE.txt'];
+          const files=['index.html','src/app.js','src/utils.js','src/preferences.js','src/web.js','src/reader.js','src/isolated-runtime.js','src/read-aloud.js','src/search-index.js','src/model.js','src/document.js','src/local-files.js','src/mhtml.js','src/storage.js','src/data-folder.js','src/library-folders.js','src/folder-tree.js','manifest.webmanifest','styles.css','src/sync-service.js','src/sync-crypto.js','src/sync-adapter.js','src/sync-ui.js','src/sync-device-service.js','src/sync-peer.js','src/sync-stream.js','src/sync-temp.js','src/sync-qr.js','vendor/html5-qrcode.min.js','vendor/html5-qrcode-LICENSE.txt','vendor/qrcodegen-LICENSE.txt'];
           const expected=await Promise.all(files.map(file=>readFile('public/'+file,'utf8')));
           let matched=false;
           for(let attempt=0;attempt<30;attempt++){
