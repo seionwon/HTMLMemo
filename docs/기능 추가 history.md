@@ -3228,11 +3228,11 @@ CodeMemo 임시 브라우저에서 0.1 두께의 선 근처를 눌러 주석 편
 
 
 <a id="hist-20261027-007"></a>
-### 2026-10-27 12:02:46 +09:00 — 내 서재의 중복 데이터 폴더 안내 제거
+### 2026-10-27 12:14:11 +09:00 — 내 서재의 중복 데이터 폴더 안내 제거
 
 | ID | change-kind | status |
 |---|---|---|
-| hist-20261027-007 | 서재 화면 정리 | 구현·로컬 검증 완료, GitHub Pages 게시 검증 대기 |
+| hist-20261027-007 | 서재 화면 정리 | 구현·전체/공개 Chrome·GitHub Pages 게시 확인 완료 |
 
 **목적·사용:** 내 서재에서 설정의 데이터 폴더와 겹치던 자동 저장 안내 상자 및 ‘저장 위치 관리/데이터 폴더 연결’ 버튼을 제거했습니다. 폴더 연결과 관리, 새 기기로 옮기는 안내는 **상단 설정 → 데이터 폴더**에서 사용합니다. 화면 아래의 간단한 저장 상태 표시와 클릭해 다시 연결하는 기능, 최초 실행 시의 전용 폴더 만들기 안내는 유지합니다. 최초 안내에서 ‘나중에 연결’ 또는 Escape로 닫은 뒤에는 설정 버튼으로 초점을 옮기고 다시 연결할 위치도 설정으로 안내합니다.
 
@@ -3241,3 +3241,10 @@ CodeMemo 임시 브라우저에서 0.1 두께의 선 근처를 눌러 주석 편
 **검증:** 기존 폴더 연결·복원·첫 실행·서재 검사에서 제거된 상자를 참조하던 부분을 실제 남아 있는 설정과 상태 표시로 맞췄습니다. 새 검사 파일은 추가하지 않았습니다. 로컬 단위 **547개**, JavaScript **106개·JSON** 검사, Tailwind CSS **4.3.3** 빌드와 git diff --check를 통과했습니다. 신뢰된 CodeMemo 브라우저의 **1280px·390px** 서재와 **1280px** 설정 화면을 직접 보았으며 세 요청 모두 HTTP **200**, 브라우저 예외 **0개**였습니다. 중복 상자가 사라지고 기존 설정에서 연결 버튼·미연결 상태가 표시됩니다. 임시 검증 서버를 종료했습니다. 증거는 `test-results/library-folder-banner-unit.log`, `test-results/library-folder-banner-check.log`, `test-results/library-folder-banner-build.log`, `test-results/library-folder-banner-preview`에 보관했습니다.
 
 **게시 상태:** 이 기록 시점에는 로컬 검증만 완료했습니다. 기존 GitHub Actions에서 전체/공개 Chrome 및 정식 주소 https://seionwon.github.io/HTMLMemo/ 의 게시 결과를 확인한 뒤 같은 항목에 보충합니다.
+
+
+**최종 검증·게시 완료 (12:14:11 +09:00):** 초기 기록(12:02:46) 이후 소스 `77fd6799df70fd4c17ee5c3e96cb08767a7e4c44`의 [Actions 40442012829](https://github.com/seionwon/HTMLMemo/actions/runs/40442012829)에서 먼저 실행한 이동/첫 실행 검사 **2개**, 전체 Chrome **69개**, 실제 [공개 URL](https://seionwon.github.io/HTMLMemo/)의 Chrome **44개**가 모두 통과했습니다. 먼저 실행한 2개는 전체 검사에 포함된 시나리오입니다. 빌드 작업 완료는 **12:09:52**, Pages 게시 완료는 **12:10:06**, 공개 검증 완료는 **12:13:22 +09:00**입니다. CI 단위는 **547개 중 546개 통과·실패 0·건너뜀 1**이며, Linux 대상이 아닌 제한된 macOS의 Chrome 실행 보호 검사만 건너뛰었습니다. 해당 검사는 로컬 macOS에서 통과했습니다. 로컬 JavaScript **106개·JSON**, CI JavaScript **87개·JSON** 검사, 로컬·CI 빌드도 통과했습니다.
+
+전체/공개 검사에서 폴더 연결 전·후에도 서재의 중복 상자가 없고 설정의 폴더 연결·취소·재시도와 하단 상태 표시가 작동했습니다. 두 환경 모두 원본 복사본 일치, 주석 **2개** 보존, 다른 기기의 폴더 구조 복원을 확인했습니다. 선택적인 브라우저 보관 권한을 거부하도록 모의한 경우에도 자동 저장은 완료됐으며 해당 첫 실행/보관 보호 검사의 브라우저 예외는 **0개**였습니다. 이전에 고친 본문 링크·목차·이전/다음 절과 검색·TTS·보안 격리 검사도 통과했습니다.
+
+공개 사이트의 **1280px 카드·390px 목록·320px 연결된 폴더 구조**와 **1280px 설정** 화면을 직접 확인했습니다. CI Ubuntu의 일부 한글은 글꼴 부재로 네모로 보이므로 문구는 DOM으로 확인했고, 신뢰된 로컬 브라우저에서는 한글도 확인했습니다. 공개 파일 **32개(1,504,471바이트)** 모두 HTTP **200**이며 실제 Pages 아티팩트와 바이트·SHA-256이 일치했습니다. 증거는 `test-results/library-folder-banner-ci`, `test-results/library-folder-banner-published`, 각 폴더의 `pages-only-library-folders.json`·`pages-only-storage-protection.json`·서재/설정 화면, `test-results/library-folder-banner-build-ci.log`, `test-results/library-folder-banner-published-ci.log`, `test-results/library-folder-banner-actions.json`, `test-results/library-folder-banner-pages`, `test-results/library-folder-banner-online-files.json`에 보관했습니다. 정식 서비스는 GitHub Pages이며 이력 보충 커밋은 앱 파일을 바꾸지 않습니다. 새로고침하면 적용됩니다.
