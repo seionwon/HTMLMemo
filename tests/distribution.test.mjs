@@ -350,10 +350,10 @@ test('first run automatically explains folder creation in three steps without op
 
 test('deferring first-run setup persists only on this device while unconnected reminders and manual setup remain',async()=>{
   const app=await fileApp({firstRun:true,directoryPicker:async()=>memoryFolder()}),doc=app.doc;
-  doc.querySelector('#folder-welcome-later').onclick();assert.equal(doc.querySelector('#dialog').open,false);assert.equal(doc.activeElement.id,'library-data-folder');assert.equal(app.local.get('htmlmemo-data-folder-welcome-v1'),'1');
-  assert.match(doc.querySelector('#data-folder-summary').textContent,/미연결/);assert.equal(doc.querySelector('#library-data-folder').textContent,'데이터 폴더 연결');assert.equal(app.settings.get('folder'),undefined);
+  doc.querySelector('#folder-welcome-later').onclick();assert.equal(doc.querySelector('#dialog').open,false);assert.equal(doc.activeElement.id,'settings-button');assert.equal(app.local.get('htmlmemo-data-folder-welcome-v1'),'1');
+  assert.match(doc.querySelector('#data-folder-status').textContent,/미연결/);assert.equal(doc.querySelector('#data-folder-status').textContent,'폴더 미연결');assert.equal(app.settings.get('folder'),undefined);
   const reopened=await fileApp({firstRun:true,localEntries:[...app.local],directoryPicker:async()=>memoryFolder()});assert.equal(!!reopened.doc.querySelector('#dialog').open,false);
-  reopened.doc.querySelector('#library-data-folder').onclick();assert.equal(reopened.doc.querySelector('#dialog').open,true);assert.ok(reopened.doc.querySelector('#select-storage-folder'));
+  reopened.doc.querySelector('#data-folder-status').onclick();assert.equal(reopened.doc.querySelector('#dialog').open,true);assert.ok(reopened.doc.querySelector('#select-storage-folder'));
 });
 
 test('first-run picker cancellation or denied access retains the guide and retry works without a second setup dialog',async()=>{
@@ -370,7 +370,7 @@ test('first-run picker cancellation or denied access retains the guide and retry
 
 test('Escape deliberately defers first-run setup but never claims a folder was connected',async()=>{
   const app=await fileApp({firstRun:true,directoryPicker:async()=>memoryFolder()});app.doc.querySelector('#dialog').oncancel({preventDefault(){assert.fail('Escape is allowed when not saving');}});app.doc.querySelector('#dialog').close();
-  assert.equal(app.local.get('htmlmemo-data-folder-welcome-v1'),'1');assert.equal(app.settings.get('folder'),undefined);assert.match(app.doc.querySelector('#data-folder-summary').textContent,/미연결/);
+  assert.equal(app.local.get('htmlmemo-data-folder-welcome-v1'),'1');assert.equal(app.settings.get('folder'),undefined);assert.match(app.doc.querySelector('#data-folder-status').textContent,/미연결/);
 });
 
 test('missing folder support blocks app startup with the required Chrome message even after a previous visit',async()=>{
@@ -399,7 +399,7 @@ test('a missing safe folder-write lock also shows the Chrome requirement before 
 test('an existing connected folder or revoked permission never reopens the new-folder welcome',async()=>{
   for(const permission of ['granted','denied']){
     const selected=memoryFolder('기존 폴더',{permission}),app=await fileApp({firstRun:true,settings:[['folder',selected]],directoryPicker:async()=>{assert.fail('Do not automatically open a picker');}});
-    await settleUntil(()=>app.doc.querySelector('#data-folder-summary').textContent.includes(permission==='granted'?'완료':'중단'));
+    await settleUntil(()=>app.doc.querySelector('#data-folder-status').textContent.includes(permission==='granted'?'완료':'중단'));
     assert.equal(!!app.doc.querySelector('#dialog').open,false);assert.equal(app.doc.querySelector('[data-folder-welcome]'),null);assert.equal(app.settings.get('folder'),selected);
   }
 });
@@ -448,7 +448,7 @@ test('unsupported, rejected or unresolved browser protection never blocks a succ
       persist:mode==='request-error'?denied:mode==='request-pending'?()=>pending:async()=>true
     };
     const app=await fileApp({directoryPicker:async()=>selected,navigator:{storage}}),doc=app.doc;
-    doc.querySelector('#library-data-folder').onclick();doc.querySelector('#select-storage-folder').onclick();
+    doc.querySelector('#data-folder-status').onclick();doc.querySelector('#select-storage-folder').onclick();
     await settleUntil(()=>!doc.querySelector('#dialog').open);
     assert.equal(app.settings.get('folder'),selected,mode);assert.ok(selected.children.has('HTMLMemo-library.json'),mode);
     assert.equal(doc.querySelector('#data-folder-status').textContent,'폴더 저장 완료',mode);
@@ -461,7 +461,7 @@ test('browser protection is not requested on startup, picker cancellation, denie
   const previous=memoryFolder('Previous'),calls={checks:0,requests:0};let fail='AbortError';
   const app=await fileApp({settings:[['folder',previous]],directoryPicker:async()=>{throw new DOMException('Cancelled',fail);},navigator:{storage:{persisted:async()=>{calls.checks++;return false;},persist:async()=>{calls.requests++;return true;}}}}),doc=app.doc;
   await settleUntil(()=>doc.querySelector('#data-folder-status').textContent==='폴더 저장 완료');
-  assert.deepEqual(calls,{checks:0,requests:0});doc.querySelector('#library-data-folder').onclick();
+  assert.deepEqual(calls,{checks:0,requests:0});doc.querySelector('#data-folder-status').onclick();
   for(const mode of ['AbortError','NotAllowedError']){
     fail=mode;doc.querySelector('#select-storage-folder').onclick();await settleUntil(()=>!doc.querySelector('#select-storage-folder').disabled);
     assert.deepEqual(calls,{checks:0,requests:0});assert.equal(app.settings.get('folder'),previous);
@@ -489,10 +489,10 @@ test('folder cancellation, blocked access and failed persistence preserve the pr
   assert.equal(app.settings.get('folder'),next);assert.equal(doc.querySelector('#dialog').open,true);assert.equal(doc.querySelector('#dialog h2').textContent,'HTMLMemo 설정');assert.match(doc.querySelector('#status-left').textContent,/New HTMLMemo 자동 저장/);
 });
 
-test('settings and library expose folder setup, with a Chrome requirement if folder support becomes unavailable',async()=>{
+test('settings and status bar expose folder setup without a duplicate library banner, with a Chrome requirement if folder support becomes unavailable',async()=>{
   const app=await fileApp(),doc=app.doc;
   assert.equal(!!doc.querySelector('#choose-folder,#menu-folder'),false);assert.equal(doc.querySelector('.library-footer').textContent,'문서는 이 기기에 저장됩니다.');
   doc.querySelector('#settings-button').onclick();assert.equal(doc.querySelectorAll('#settings-folder').length,1);assert.equal(doc.querySelector('#settings-folder').textContent,'폴더 연결');
   app.context.window.showDirectoryPicker=undefined;doc.querySelector('#settings-folder').onclick();await new Promise(resolve=>setImmediate(resolve));assert.ok(doc.querySelector('[data-chrome-required]'));assert.match(doc.querySelector('#chrome-required-message').textContent,/구글 크롬에서만 정상적으로 작동/);assert.equal(app.settings.get('folder'),undefined);
-  assert.ok(doc.querySelector('#library-data-folder'));assert.ok(doc.querySelector('#data-folder-status'));assert.match(doc.querySelector('#data-folder-summary').textContent,/브라우저 데이터 삭제 시 잃을 수 있습니다/);
+  assert.equal(doc.querySelector('#data-folder-card,#data-folder-summary,#data-folder-description,#library-data-folder'),null);assert.ok(doc.querySelector('#data-folder-status'));assert.match(doc.querySelector('#data-folder-status').title,/브라우저 데이터 삭제 시 잃을 수 있습니다/);
 });

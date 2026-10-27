@@ -455,7 +455,7 @@ async function createDocument(snapshot, handle = null, name = null, local = {}) 
   return tab;
 }
 function dataFolderGuide() {
-  return `<details class="export-guide" data-folder-guide><summary>전용 폴더 자동 저장과 새 기기로 옮기는 방법</summary><p>Documents(문서) 안에 <strong>이름을 정한 전용 하위 폴더 하나</strong>를 만들고 읽기·쓰기를 허용하세요. 예: <code>문서/HTMLMemo</code>. 브라우저 선택 창의 새 폴더 기능을 사용합니다.</p><p>연결하면 기존 서재와 앞으로 가져오는 모든 HTML·MHTML 문서의 복사본, 주석·북마크·주석 이력·읽기 위치·앱 설정을 자동 보관합니다. 원래 파일을 이동·삭제해도 보관한 문서는 열 수 있습니다. <strong>설정 파일을 따로 저장할 필요가 없습니다.</strong></p><p>폴더 연결 시 브라우저 내부 데이터의 자동 삭제 방지도 함께 요청합니다. 브라우저가 허용하지 않아도 전용 폴더 자동 저장은 계속됩니다.</p><p>평소에는 원본 복사본과 주석을 분리해 저장하며 원본에 새 주석을 합치지 않습니다. <strong>다른 사람에게 주석까지 보내려면 문서를 열고 상단의 HTML 내보내기로 .html 파일을 새로 저장한 뒤 그 파일을 보내세요.</strong> 원본 파일만 보내면 앱에서 추가한 주석은 전달되지 않습니다. 받는 분도 HTMLMemo의 HTML 파일 가져오기로 엽니다.</p><ol><li>새 기기로 옮기기 전에 <strong>폴더 자동 저장 완료</strong> 표시를 확인하고 앱을 닫습니다.</li><li><strong>전용 폴더 전체를 하위 폴더·파일 빠짐없이</strong> 새 기기의 Documents(문서) 폴더로 복사합니다. 일부 HTML만 옮기면 주석·설정이 빠집니다.</li><li>새 기기의 HTMLMemo에서 <strong>설정 → 데이터 폴더 → 폴더 연결</strong>로 옮긴 폴더를 선택하고 쓰기를 허용하면 모두 자동 복원됩니다.</li></ol><p>브라우저가 권한을 회수하거나 폴더를 옮겼다면 다시 연결해야 합니다. 권한·용량·저장 오류는 화면 아래와 서재에 계속 표시하며 변경은 앱에 남겨둡니다. 저장이 끝나기 전에 앱을 강제 종료하지 마세요. 서로 다른 기기의 동시 편집을 실시간 동기화하지는 않습니다.</p></details>`;
+  return `<details class="export-guide" data-folder-guide><summary>전용 폴더 자동 저장과 새 기기로 옮기는 방법</summary><p>Documents(문서) 안에 <strong>이름을 정한 전용 하위 폴더 하나</strong>를 만들고 읽기·쓰기를 허용하세요. 예: <code>문서/HTMLMemo</code>. 브라우저 선택 창의 새 폴더 기능을 사용합니다.</p><p>연결하면 기존 서재와 앞으로 가져오는 모든 HTML·MHTML 문서의 복사본, 주석·북마크·주석 이력·읽기 위치·앱 설정을 자동 보관합니다. 원래 파일을 이동·삭제해도 보관한 문서는 열 수 있습니다. <strong>설정 파일을 따로 저장할 필요가 없습니다.</strong></p><p>폴더 연결 시 브라우저 내부 데이터의 자동 삭제 방지도 함께 요청합니다. 브라우저가 허용하지 않아도 전용 폴더 자동 저장은 계속됩니다.</p><p>평소에는 원본 복사본과 주석을 분리해 저장하며 원본에 새 주석을 합치지 않습니다. <strong>다른 사람에게 주석까지 보내려면 문서를 열고 상단의 HTML 내보내기로 .html 파일을 새로 저장한 뒤 그 파일을 보내세요.</strong> 원본 파일만 보내면 앱에서 추가한 주석은 전달되지 않습니다. 받는 분도 HTMLMemo의 HTML 파일 가져오기로 엽니다.</p><ol><li>새 기기로 옮기기 전에 <strong>폴더 자동 저장 완료</strong> 표시를 확인하고 앱을 닫습니다.</li><li><strong>전용 폴더 전체를 하위 폴더·파일 빠짐없이</strong> 새 기기의 Documents(문서) 폴더로 복사합니다. 일부 HTML만 옮기면 주석·설정이 빠집니다.</li><li>새 기기의 HTMLMemo에서 <strong>설정 → 데이터 폴더 → 폴더 연결</strong>로 옮긴 폴더를 선택하고 쓰기를 허용하면 모두 자동 복원됩니다.</li></ol><p>브라우저가 권한을 회수하거나 폴더를 옮겼다면 다시 연결해야 합니다. 권한·용량·저장 오류는 화면 아래와 설정에 계속 표시하며 변경은 앱에 남겨둡니다. 저장이 끝나기 전에 앱을 강제 종료하지 마세요. 서로 다른 기기의 동시 편집을 실시간 동기화하지는 않습니다.</p></details>`;
 }
 function folderStatusText() {
   if(!folder)return '데이터 폴더 미연결 · 브라우저 데이터 삭제 시 잃을 수 있습니다.';
@@ -465,13 +465,10 @@ function folderStatusText() {
   return '폴더 자동 저장 완료 · '+folder.name;
 }
 function renderFolderState() {
-  const status=folderStatusText(),error=!!folder&&(dataFolder?.state==='error'||tabs.some(t=>t.queue?.error)),button=$('#data-folder-status'),summary=$('#data-folder-summary');
-  if(!button||!summary)return;
+  const status=folderStatusText(),error=!!folder&&(dataFolder?.state==='error'||tabs.some(t=>t.queue?.error)),button=$('#data-folder-status');
+  if(!button)return;
   button.textContent=folder?(error?'폴더 저장 중단':dataFolder?.pending||tabs.some(t=>t.opening||t.queue?.pending)?'폴더 저장 중…':'폴더 저장 완료'):'폴더 미연결';
   button.title=status;button.setAttribute('aria-label',status+' · 저장 위치 관리');button.classList.toggle('save-error',error||!!folder&&tabs.some(t=>t.queue?.error));
-  $('#data-folder-card').dataset.state=error?'error':folder?'connected':'unconnected';summary.textContent=status;
-  $('#data-folder-description').textContent=error?(dataFolder.failureMessage||'저장 오류를 확인하고 다시 시도해주세요. 폴더가 최신 상태가 아닐 수 있습니다.'):folder?'새 기기로 옮길 때는 전용 폴더 전체를 복사한 뒤 한 번 연결하세요. 문서·주석·설정이 자동 복원됩니다.':'Documents(문서) 안에 전용 폴더를 한 번 연결하세요. 기존 서재와 앞으로 가져오는 모든 문서·주석·설정을 자동 보관합니다.';
-  $('#library-data-folder').textContent=folder?'저장 위치 관리':'데이터 폴더 연결';
   if($('#settings-folder-status'))$('#settings-folder-status').textContent=status;
 }
 async function flushInternalDocuments() { for(const tab of tabs)if(tab.reader){await tab.reader.ready;tab.reader.rememberPosition();await tab.queue.flush();await tab.checkpoints.flush({force:true});} }
@@ -511,9 +508,9 @@ function chromeRequiredDialog() {
 }
 function folderWelcomeDialog() {
   if(!supportsDataFolder(window,navigator))return chromeRequiredDialog();
-  modal(`<section class="folder-welcome" data-folder-welcome><div class="dialog-heading"><h2>먼저, 전용 폴더를 만들어요</h2></div><p class="folder-welcome-intro">처음 한 번 연결하면 <strong>문서·주석·설정을 이 폴더에 자동 저장</strong>합니다. 저장할 때마다 파일이나 위치를 고를 필요가 없어요.</p><ol class="folder-welcome-steps"><li><strong>문서(Documents) 폴더를 여세요.</strong><p>아래 <b>폴더 선택 창 열기</b> 버튼을 누르면 시작합니다.</p></li><li><strong>새 폴더를 만들고 이름을 정하세요.</strong><p>선택 창의 <b>새 폴더</b>로 <b>HTMLMemo</b>처럼 원하는 이름을 짓고, 그 폴더를 선택하세요. 문서 폴더 전체가 아닌, 방금 만든 폴더입니다.</p></li><li><strong>폴더 사용과 쓰기를 허용하세요.</strong><p><b>폴더 선택</b>(또는 <b>열기</b>) 후 권한 창에서 <b>허용</b>을 누르세요. <b>방문할 때마다 허용</b>이 있으면 선택하세요.</p></li></ol><details class="folder-welcome-existing"><summary>다른 기기에서 옮겨 온 폴더가 있나요?</summary><p>새로 만들지 말고 <b>같은 버튼</b>으로 옮겨 온 전용 폴더를 선택하세요. 그 안의 문서·주석·설정이 자동 복원됩니다.</p></details><p class="folder-welcome-move">새 기기로 옮길 때는 <strong>이 폴더 전체</strong>를 복사하면 됩니다.</p><p id="folder-connection-status" class="folder-welcome-status" role="status" aria-live="polite">폴더 선택 창은 버튼을 누른 뒤에만 열립니다.</p><div class="dialog-actions folder-welcome-actions"><button id="select-storage-folder" class="primary-button" type="button">폴더 선택 창 열기</button><button id="folder-welcome-later" class="secondary-button" type="button">나중에 연결</button></div><p class="folder-welcome-warning">나중에 연결하면 당분간 브라우저 안에만 저장됩니다. 브라우저 데이터를 지우면 문서와 주석을 잃을 수 있어요. 내 서재의 <b>데이터 폴더 연결</b>에서 다시 시작할 수 있습니다.</p></section>`,dialog=>{
-    $('#folder-welcome-later').onclick=()=>{rememberFolderWelcome();dialog.close();$('#library-data-folder').focus();};
-    dialog.oncancel=event=>{if($('#select-storage-folder')?.disabled){event.preventDefault();return;}rememberFolderWelcome();requestAnimationFrame(()=>$('#library-data-folder').focus());};
+  modal(`<section class="folder-welcome" data-folder-welcome><div class="dialog-heading"><h2>먼저, 전용 폴더를 만들어요</h2></div><p class="folder-welcome-intro">처음 한 번 연결하면 <strong>문서·주석·설정을 이 폴더에 자동 저장</strong>합니다. 저장할 때마다 파일이나 위치를 고를 필요가 없어요.</p><ol class="folder-welcome-steps"><li><strong>문서(Documents) 폴더를 여세요.</strong><p>아래 <b>폴더 선택 창 열기</b> 버튼을 누르면 시작합니다.</p></li><li><strong>새 폴더를 만들고 이름을 정하세요.</strong><p>선택 창의 <b>새 폴더</b>로 <b>HTMLMemo</b>처럼 원하는 이름을 짓고, 그 폴더를 선택하세요. 문서 폴더 전체가 아닌, 방금 만든 폴더입니다.</p></li><li><strong>폴더 사용과 쓰기를 허용하세요.</strong><p><b>폴더 선택</b>(또는 <b>열기</b>) 후 권한 창에서 <b>허용</b>을 누르세요. <b>방문할 때마다 허용</b>이 있으면 선택하세요.</p></li></ol><details class="folder-welcome-existing"><summary>다른 기기에서 옮겨 온 폴더가 있나요?</summary><p>새로 만들지 말고 <b>같은 버튼</b>으로 옮겨 온 전용 폴더를 선택하세요. 그 안의 문서·주석·설정이 자동 복원됩니다.</p></details><p class="folder-welcome-move">새 기기로 옮길 때는 <strong>이 폴더 전체</strong>를 복사하면 됩니다.</p><p id="folder-connection-status" class="folder-welcome-status" role="status" aria-live="polite">폴더 선택 창은 버튼을 누른 뒤에만 열립니다.</p><div class="dialog-actions folder-welcome-actions"><button id="select-storage-folder" class="primary-button" type="button">폴더 선택 창 열기</button><button id="folder-welcome-later" class="secondary-button" type="button">나중에 연결</button></div><p class="folder-welcome-warning">나중에 연결하면 당분간 브라우저 안에만 저장됩니다. 브라우저 데이터를 지우면 문서와 주석을 잃을 수 있어요. <b>설정 → 데이터 폴더 → 폴더 연결</b>에서 다시 시작할 수 있습니다.</p></section>`,dialog=>{
+    $('#folder-welcome-later').onclick=()=>{rememberFolderWelcome();dialog.close();$('#settings-button').focus();};
+    dialog.oncancel=event=>{if($('#select-storage-folder')?.disabled){event.preventDefault();return;}rememberFolderWelcome();requestAnimationFrame(()=>$('#settings-button').focus());};
     bindFolderConnection();
     $('#select-storage-folder').focus();
   });
@@ -1411,7 +1408,7 @@ function bindUI() {
   setIconButton('#library-tab','library','내 서재');
   setIconButton('#settings-button','settings','설정');bindTabs();
   $('#execution-export-guide').innerHTML=annotationExportGuide();
-  $('#library-data-folder').onclick=()=>chooseFolder();$('#data-folder-status').onclick=()=>chooseFolder();
+  $('#data-folder-status').onclick=()=>chooseFolder();
   $('#library-tab').onclick=()=>activate('library');$('#browse-start').onclick=focusAddress;
   $('#execution-web').onclick=()=>webHelpDialog();
   $('#share-url').value=PUBLIC_APP_URL;$('#shared-app-link').href=PUBLIC_APP_URL;

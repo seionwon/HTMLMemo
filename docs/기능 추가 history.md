@@ -3225,3 +3225,19 @@ CodeMemo 임시 브라우저에서 0.1 두께의 선 근처를 눌러 주석 편
 전체/공개 검사 양쪽에서 폴더 선택 API를 미지원으로 모의한 실제 Chrome은 요청한 문구와 정식 주소를 표시했고, 일반 가져오기 버튼의 처리는 연결되지 않았으며 닫기/나중에 연결 버튼은 **0개**였습니다. Escape·바깥 클릭 이후에도 안내가 유지됐고, 방문 완료 기록을 저장한 뒤 다시 열어도 차단됐습니다. 주소 복사는 **https://seionwon.github.io/HTMLMemo/** 한 번으로 확인됐으며 해당 모의 검사의 브라우저 예외는 **0개**였습니다. **1280/390/320px**에서 대화창과 내용이 화면을 넘치지 않았고 전체/공개의 측정 JSON이 동일했습니다. 실제 Safari/Firefox를 실행해 검사한 것으로 표현하지 않으며 정상 Chrome의 폴더 설정과 취소·재연결, 기존 본문 링크·목차·이전/다음 절·주석·검색·TTS·팔레트·서재/폴더·보안 격리 검사도 통과했습니다.
 
 공개 **1280px·320px** 화면을 직접 보아 닫기 버튼 없는 Chrome 실행 안내와 주소·복사 버튼 배치를 확인했습니다. CI Ubuntu의 일부 한글은 글꼴 부재로 네모로 보이므로 문구는 DOM으로 확인했고, 신뢰된 로컬 브라우저의 1280/390px 화면에서는 한글도 확인했습니다. 공개 파일 **32개(1,508,507바이트)** 모두 HTTP **200**이며 해당 CI의 실제 Pages 아티팩트와 바이트·SHA-256이 일치했습니다. 증거는 `test-results/chrome-required-ci`, `test-results/chrome-required-published`, 각 폴더의 `pages-only-chrome-required.json`·1280/390/320px 화면, `test-results/chrome-required-build-ci.log`, `test-results/chrome-required-published-ci.log`, `test-results/chrome-required-actions.json`, `test-results/chrome-required-pages`, `test-results/chrome-required-online-files.json`에 보관했습니다. 정식 서비스는 GitHub Pages이며 이력만 보충하는 후속 커밋은 앱 파일을 바꾸지 않습니다. 새로고침하면 수정 버전이 적용됩니다.
+
+
+<a id="hist-20261027-007"></a>
+### 2026-10-27 12:02:46 +09:00 — 내 서재의 중복 데이터 폴더 안내 제거
+
+| ID | change-kind | status |
+|---|---|---|
+| hist-20261027-007 | 서재 화면 정리 | 구현·로컬 검증 완료, GitHub Pages 게시 검증 대기 |
+
+**목적·사용:** 내 서재에서 설정의 데이터 폴더와 겹치던 자동 저장 안내 상자 및 ‘저장 위치 관리/데이터 폴더 연결’ 버튼을 제거했습니다. 폴더 연결과 관리, 새 기기로 옮기는 안내는 **상단 설정 → 데이터 폴더**에서 사용합니다. 화면 아래의 간단한 저장 상태 표시와 클릭해 다시 연결하는 기능, 최초 실행 시의 전용 폴더 만들기 안내는 유지합니다. 최초 안내에서 ‘나중에 연결’ 또는 Escape로 닫은 뒤에는 설정 버튼으로 초점을 옮기고 다시 연결할 위치도 설정으로 안내합니다.
+
+**동작·오류:** 제거한 상자의 상태 갱신과 클릭 처리, 전용 CSS를 정리했습니다. 상자 없이도 화면 아래와 열린 설정의 미연결·저장 중·완료·오류 상태를 갱신합니다. 폴더 선택 취소·권한 거부·연결 실패 시 기존 자료와 연결을 유지하는 처리, 문서·주석·설정 자동 저장 및 다른 기기의 복원 방식은 유지합니다. 선택된 디자인·기존 아이콘과 색상은 바꾸지 않았습니다.
+
+**검증:** 기존 폴더 연결·복원·첫 실행·서재 검사에서 제거된 상자를 참조하던 부분을 실제 남아 있는 설정과 상태 표시로 맞췄습니다. 새 검사 파일은 추가하지 않았습니다. 로컬 단위 **547개**, JavaScript **106개·JSON** 검사, Tailwind CSS **4.3.3** 빌드와 git diff --check를 통과했습니다. 신뢰된 CodeMemo 브라우저의 **1280px·390px** 서재와 **1280px** 설정 화면을 직접 보았으며 세 요청 모두 HTTP **200**, 브라우저 예외 **0개**였습니다. 중복 상자가 사라지고 기존 설정에서 연결 버튼·미연결 상태가 표시됩니다. 임시 검증 서버를 종료했습니다. 증거는 `test-results/library-folder-banner-unit.log`, `test-results/library-folder-banner-check.log`, `test-results/library-folder-banner-build.log`, `test-results/library-folder-banner-preview`에 보관했습니다.
+
+**게시 상태:** 이 기록 시점에는 로컬 검증만 완료했습니다. 기존 GitHub Actions에서 전체/공개 Chrome 및 정식 주소 https://seionwon.github.io/HTMLMemo/ 의 게시 결과를 확인한 뒤 같은 항목에 보충합니다.
