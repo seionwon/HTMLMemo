@@ -54,12 +54,13 @@ function bootstrap(channel,preferences) {
   const emit=value=>send({channel,...value},'*');
   // App-owned search/bookmark navigation already has a precise target. Do not
   // turn its echoed hashchange into a new source navigation that resets it.
-  const silentHashes=[];
-  const setHashSilently=hash=>{const before=location.href;location.hash=hash;if(location.href!==before){silentHashes.push(location.href);if(silentHashes.length>128)silentHashes.shift();}};
+  const silentHashes=[];let navigationSuppressed=0;
+  const rememberSilentHash=href=>{silentHashes.push(href);if(silentHashes.length>128)silentHashes.shift();};
+  const setHashSilently=hash=>{const before=location.href;location.hash=hash;if(location.href!==before)rememberSilentHash(location.href);};
   addEventListener('hashchange',event=>{
     const index=silentHashes.indexOf(event.newURL);
     if(index>=0){silentHashes.splice(index,1);return;}
-    if(started&&event.newURL===location.href)emit({type:'navigation',hash:location.hash});
+    if(started&&!navigationSuppressed&&event.newURL===location.href)emit({type:'navigation',hash:location.hash});
   });
   const publish=()=>{
     timer=0;
@@ -99,11 +100,14 @@ function bootstrap(channel,preferences) {
       node.value=value.value;node.dispatchEvent(new Event(value.type,{bubbles:true}));schedule();return;
     }
     // No eval, arbitrary property access, network/file request or parent callback.
-    if(value.type==='click'){node.click();schedule();}
+    if(value.type==='click'){
+      const silent=value.navigate===false,before=location.href;if(silent)navigationSuppressed++;
+      try{node.click();}finally{if(silent){navigationSuppressed--;if(location.href!==before&&!silentHashes.includes(location.href))rememberSilentHash(location.href);}schedule();}
+    }
   };
   // srcdoc inherits the app's base URL. Hash links belong to this source
   // document, rather than navigating the hidden frame to the app URL.
-  addEventListener('click',event=>{const link=event.target?.closest?.('a[href]'),href=link?.getAttribute('href')?.trim();if(!event.defaultPrevented&&href?.startsWith('#')){event.preventDefault();setHashSilently(href);emit({type:'navigation',hash:location.hash});}});
+  addEventListener('click',event=>{const link=event.target?.closest?.('a[href]'),href=link?.getAttribute('href')?.trim();if(!event.defaultPrevented&&href?.startsWith('#')){event.preventDefault();setHashSilently(href);if(!navigationSuppressed)emit({type:'navigation',hash:location.hash});}});
   let commandPort;
   addEventListener('message',event=>{
     const value=event.data;if(commandPort||event.source!==parent||value?.channel!==channel||value.type!=='connect'||!event.ports[0])return;
@@ -251,13 +255,14 @@ export class IsolatedRuntime {
     for(const type of ['input','change'])add(this.doc,type,event=>{const node=sourceTarget(event);if(node&&['input','textarea','select'].includes(node.localName)){const id=node.getAttribute(ID),revision=++this.inputRevision;this.controlRevisions.set(id,revision);this.send({type,id,value:node.value,revision});}});
     add(this.doc,'submit',event=>{event.preventDefault();const node=sourceTarget(event);if(node?.localName==='form')this.send({type:'submit',id:node.getAttribute(ID)});});
     add(this.doc,'click',event=>{
-      const node=sourceTarget(event),control=node?.closest('button,summary,a,[role="button"],input[type="button"],input[type="submit"]');if(event.defaultPrevented||!control||!validId(control.getAttribute(ID)))return;
+      const node=sourceTarget(event),control=node?.closest('button,summary,a,[role="button"],input[type="button"],input[type="submit"]');if(!control||!validId(control.getAttribute(ID)))return;
       const href=control.getAttribute('href');
       // Executable hrefs/handlers are stripped from the visible copy. Their
       // original source anchor can still run through this inert click command.
       if(control.localName==='a'&&href&&!href.startsWith('#'))return;
       if(control.localName==='summary')return; // Native details toggle below carries exact state.
-      event.preventDefault();this.send({type:'click',id:control.getAttribute(ID)});
+      const navigate=!event.defaultPrevented;
+      event.preventDefault();this.send({type:'click',id:control.getAttribute(ID),...(navigate?{}:{navigate:false})});
     },false);
     add(this.doc,'toggle',event=>{const node=sourceTarget(event);if(node?.localName==='details')this.send({type:'toggle',id:node.getAttribute(ID),open:node.open});});
     add(this.doc.defaultView,'hashchange',()=>this.send({type:'hash',hash:this.doc.defaultView.location.hash}));

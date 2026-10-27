@@ -28,6 +28,8 @@ jobs:
       - run: npm test
       - run: npm run check
       - run: mkdir -p test-results
+      - name: Verify source links and previous-next navigation before the full Chrome suite
+        run: node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/browser-results.xml --test-name-pattern='Pages-only body links and previous-next' tests/browser.integration.mjs
       - run: npm run test:browser
       - name: Keep structured Chrome results and fixture screenshots
         if: always()

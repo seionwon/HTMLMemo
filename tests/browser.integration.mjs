@@ -1942,7 +1942,22 @@ test('real Chrome: Pages-only body links and previous-next source controls navig
     await page.navigate(url);await page.waitFor('!!document.querySelector("[data-open=source-navigation-document]")');await page.click('[data-open=source-navigation-document]');
     const frame='document.querySelector(".document-host:not([hidden]) iframe")',doc=frame+'.contentDocument';await page.waitFor(`${doc}?.querySelector('#body-local')&&!${frame}.hasAttribute('aria-hidden')`);
     const saved=()=>page.evaluate(`(async()=>{const r=await(await import('./src/storage.js')).getDocument('source-navigation-document');return {html:r.html,annotations:r.metadata.annotations,bookmarks:r.metadata.bookmarks};})()`),before=await saved(),metrics=[];
-    const clickNative=async selector=>{const point=await page.evaluate(`(async()=>{const f=${frame},n=f.contentDocument.querySelector(${JSON.stringify(selector)});if(!n)throw Error('Missing source control');n.scrollIntoView({block:'nearest'});const viewport=f.closest('.reader-viewport'),measure=()=>{const r=n.getBoundingClientRect(),b=f.getBoundingClientRect(),z=b.width/f.clientWidth;return {x:b.left+(r.left+r.width/2)*z,y:b.top+(r.top+r.height/2)*z};};let p=measure(),v=viewport.getBoundingClientRect();if(p.x<v.left||p.x>v.right)viewport.scrollLeft+=p.x-(v.left+v.width/2);await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));return {...measure(),screenWidth:innerWidth,screenHeight:innerHeight};})()`);assert.ok(point.x>=0&&point.x<=point.screenWidth&&point.y>=0&&point.y<=point.screenHeight,'the source control must be on screen before clicking: '+selector);const {x,y}=point;await page.send('Input.dispatchMouseEvent',{type:'mousePressed',x,y,button:'left',clickCount:1});await page.send('Input.dispatchMouseEvent',{type:'mouseReleased',x,y,button:'left',clickCount:1});};
+    const clicked=[];
+    const clickNative=async selector=>{
+      const point=await page.evaluate(`(async()=>{
+        const f=${frame},d=f.contentDocument,n=d.querySelector(${JSON.stringify(selector)});if(!n)throw Error('Missing source control');
+        n.scrollIntoView({block:'nearest'});
+        const viewport=f.closest('.reader-viewport'),measure=()=>{const r=n.getBoundingClientRect(),b=f.getBoundingClientRect(),z=b.width/f.clientWidth;return {x:b.left+(r.left+r.width/2)*z,y:b.top+(r.top+r.height/2)*z};};
+        let p=measure(),v=viewport.getBoundingClientRect();if(p.x<v.left||p.x>v.right)viewport.scrollLeft+=p.x-(v.left+v.width/2);
+        await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+        p=measure();const r=n.getBoundingClientRect(),hit=d.elementFromPoint(r.left+r.width/2,r.top+r.height/2),outer=document.elementFromPoint(p.x,p.y);
+        return {...p,screenWidth:innerWidth,screenHeight:innerHeight,sourceHit:hit===n||n.contains(hit),hitId:hit?.id,hitTag:hit?.localName,outerHit:outer===f,outerTag:outer?.localName,outerId:outer?.id,disabled:!!n.disabled,viewportLeft:viewport.scrollLeft,viewportTop:viewport.scrollTop,section:d.querySelector('#reader-content').dataset.section};
+      })()`);
+      clicked.push({selector,...point});await writeFile(join(root,'test-results/pages-only-source-navigation-clicks.json'),JSON.stringify(clicked,null,2));
+      assert.ok(point.x>=0&&point.x<=point.screenWidth&&point.y>=0&&point.y<=point.screenHeight,'the source control must be on screen before clicking: '+selector);
+      assert.ok(point.sourceHit&&point.outerHit&&!point.disabled,'the pointer must actually reach the enabled source control: '+JSON.stringify(clicked.at(-1)));
+      const {x,y}=point;await page.send('Input.dispatchMouseEvent',{type:'mousePressed',x,y,button:'left',clickCount:1});await page.send('Input.dispatchMouseEvent',{type:'mouseReleased',x,y,button:'left',clickCount:1});
+    };
     const ready=async(section,top=0)=>{await page.waitFor(`(()=>{const d=${doc};return d.querySelector('#reader-content')?.dataset.section===${JSON.stringify(section)}&&d.documentElement.dataset.readerReady==='true'&&!d.querySelector('#reader-status').textContent.trim()&&d.querySelector('#reader-main').scrollTop===${top};})()`);await page.evaluate('new Promise(resolve=>setTimeout(resolve,150))');assert.equal(await page.evaluate(`${doc}.querySelector('#reader-main').scrollTop`),top,'a delayed source echo must not override the selected location');};
     const position=()=>page.evaluate(`(()=>{const d=${doc},m=d.querySelector('#reader-main'),r=d.getElementById('본문 목적지').getBoundingClientRect(),b=m.getBoundingClientRect();return {section:d.querySelector('#reader-content').dataset.section,top:m.scrollTop,targetTop:r.top,targetBottom:r.bottom,viewportTop:b.top,viewportBottom:b.bottom,hash:d.defaultView.location.hash};})()`);
     let cancelled=0;
@@ -1961,6 +1976,14 @@ test('real Chrome: Pages-only body links and previous-next source controls navig
       metrics.push({width,local,repeated,previousSection:'v0:one',nextSection:'v0:two',bookmarkPositions:[400,620],cancelledClicks:cancelled,sourceClicks:clicks.length});await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,`test-results/pages-only-source-navigation-${width}.png`),await page.screenshot());
     }
     await page.waitFor('document.querySelectorAll(".tab-dirty:not([hidden])").length===0');assert.deepEqual(await saved(),before);assert.deepEqual(chrome.errors,[]);await writeFile(join(root,'test-results/pages-only-source-navigation.json'),JSON.stringify({cases:metrics,sourceHandlersPreserved:true,bookmarksAndNotesPreserved:true,executableViewLinks:false,errors:chrome.errors},null,2));
+  }catch(error){
+    if(chrome)try{
+      const state=await chrome.page.evaluate(`(()=>{const f=document.querySelector('.document-host:not([hidden]) iframe'),d=f?.contentDocument,m=d?.querySelector('#reader-main');return {width:innerWidth,section:d?.querySelector('#reader-content')?.dataset.section,ready:d?.documentElement.dataset.readerReady,status:d?.querySelector('#reader-status')?.textContent,top:m?.scrollTop,hash:d?.defaultView.location.hash,nextDisabled:d?.querySelector('#next')?.disabled,previousDisabled:d?.querySelector('#prev')?.disabled};})()`);
+      const sourceState=await chrome.page.scriptEvaluate('({hash:location.hash,clicks:window.navigationClicks,section:document.querySelector("#reader-content").dataset.section,top:document.querySelector("#reader-main").scrollTop})').catch(error=>({error:error.message}));
+      await writeFile(join(root,'test-results/pages-only-source-navigation-failure.json'),JSON.stringify({message:error.message,state,sourceState,errors:chrome.errors},null,2));
+      await writeFile(join(root,'test-results/pages-only-source-navigation-failure.png'),await chrome.page.screenshot());
+    }catch{}
+    throw error;
   }finally{if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
 });
 

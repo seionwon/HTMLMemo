@@ -25,7 +25,7 @@ test('isolated source TOC links reach confirmed content anchors while preserving
 test('ordinary HTML anchor navigation and source-prevented body links retain their existing behavior',()=>{
   const plain=navigation({isolated:false});plain.click('nav a[href="#chapter"]');assert.deepEqual(plain.jumps,['chapter']);
   const isolated=navigation();isolated.click('main a');assert.deepEqual(isolated.jumps,[],'the TOC exception must not override source-owned body interactions');assert.equal(isolated.sent.at(-1).id,'r4');
-  const search=navigation(),host=search.doc.createElement('section');host.setAttribute('data-htmlmemo-ui','');host.addEventListener('click',event=>event.preventDefault(),true);search.doc.querySelector('nav').append(host);host.append(search.doc.querySelector('nav a'));search.click('section a');assert.deepEqual(search.jumps,[],'app-owned whole-book search retains its own keyword navigation');assert.deepEqual(search.sent,[]);
+  const search=navigation(),host=search.doc.createElement('section');host.setAttribute('data-htmlmemo-ui','');host.addEventListener('click',event=>event.preventDefault(),true);search.doc.querySelector('nav').append(host);host.append(search.doc.querySelector('nav a'));search.click('section a');assert.deepEqual(search.jumps,[],'app-owned whole-book search retains its own keyword navigation');assert.deepEqual(search.sent,[{type:'click',id:'r1',navigate:false}]);
 });
 test('confirmed source navigation reaches body anchors and chapter buttons without replaying a cancelled click',async()=>{
   const a=navigation();
