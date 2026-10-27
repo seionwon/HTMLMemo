@@ -3461,7 +3461,7 @@ CodeMemo의 제한된 로컬 검증기로 iframe 요소를 클릭한 시도는 �
 
 | ID | change-kind | status |
 |---|---|---|
-| hist-20261027-017 | 기기 간 전송 · 동기화 · 데이터 보존 | 구현·로컬 검증 완료, Pages 게시 전 |
+| hist-20261027-017 | 기기 간 전송 · 동기화 · 데이터 보존 | 구현·암호화 왕복 검증·Pages 게시·공개 검증 완료 |
 
 **요청·구조:** 사용자는 MemoSuite에서 검증한 기기 간 기능을 HTMLMemo에 최대한 그대로 옮기고, 로그인이나 별도 영구 저장 서버를 만들지 않도록 요청했습니다. 외부 임시 중계 서버는 사용할 수 있으며 각 기기의 전용 저장 폴더(루트) 이름이 달라도 되고, 휴지통도 모두 포함해야 합니다. MemoSuite `packages/shared/src/sync/SyncService.ts`와 `utils/crypto.ts`를 JavaScript로 옮겨 `ntfy.sh` 연결, 방 이름의 SHA-256 해시, PBKDF2/AES-GCM, FULL/PARTIAL 패키지, 송수신 순서와 왕복 확인 방식을 유지했습니다. HTMLMemo의 파일/주석/폴더 저장 구조를 위한 어댑터를 별도로 구현했습니다. React나 로그인 SDK·데이터 저장 서버는 추가하지 않았습니다.
 
@@ -3490,6 +3490,12 @@ CodeMemo의 제한된 로컬 검증기로 iframe 요소를 클릭한 시도는 �
 근거는 `test-results/device-sync.json`, `device-sync-live.json`, `device-sync-*.png` 및 로컬 검사 로그입니다. 새 기능은 `npm test`와 `npm run test:browser`·기존 Pages 워크플로에 포함했고 공개 파일 해시 검사에도 추가했습니다. 공개 사이트에서 연결창을 여는 읽기 전용 검사도 포함했습니다.
 
 **게시 상태:** 이 기록 시점에는 로컬 검증을 마쳤으며 관련 소스·검사·문서를 커밋해 기존 GitHub Actions·Pages로 게시합니다. 실제 게시와 공개 화면/파일 검증 결과는 같은 항목에 보충합니다.
+
+**최종 게시·공개 검증 완료 (2026-10-27):** 변경 커밋 `a1e7b9fd0e11551ae09c11c0e6da4e1b5255ea9c`의 [Actions 40477089398](https://github.com/seionwon/HTMLMemo/actions/runs/40477089398)는 빌드 **18:04:30**, Pages 게시 **18:04:45**, 공개 검증 **18:08:45 +09:00**에 모두 성공했습니다. CI 단위 **574개 중 573개 통과·실패 0·건너뜀 1**이며 Linux 대상이 아닌 macOS 실행 보호 검사만 건너뛰었습니다. 해당 검사를 포함한 로컬 단위 **574개**는 모두 통과했습니다. 최종 커밋의 전체 실제 Chrome **73개**, 공개 URL의 Chrome **47개**도 실패·건너뜀 없이 통과했습니다. 우선 실행한 기존 회귀 6개는 전체 검사에 포함됩니다.
+
+별도의 신뢰된 로컬 Chrome으로도 실제 [공개 주소](https://seionwon.github.io/HTMLMemo/)의 동기화 창을 **1280/390/320px**에서 열어 QR 표시·가로 넘침 없음·연결 전 중계 요청 없음·창/역할 변경 시 지연 시작 모의 카메라 정리를 확인했습니다. 데스크톱과 320px 화면을 직접 확인했습니다. 실제 전송의 독립 프로필·서로 다른 루트·휴지통 보존 검사는 로컬 모의 중계로, 공개 ntfy 암호화 첨부 왕복은 생성한 시험 문자열로 각각 수행했으며 사용자의 서재나 카메라 하드웨어를 시험에 사용하지 않았습니다.
+
+공개 앱 **39개 파일과 distribution.json, 총 40개(2,464,347바이트)** 모두 HTTP **200**이며 이 Actions 실행의 실제 Pages 아티팩트와 바이트·SHA-256이 일치했습니다. 처음의 소스 직접 비교에서 달랐던 서비스 워커 캐시 ID와 PNG 아이콘은 빌드가 생성하는 결과물로, 실제 게시 아티팩트 기준 재검사에서는 모두 일치했습니다. 최초 비교도 `test-results/device-sync-online-source-check.json`에 보존했습니다. 최종 근거는 `test-results/device-sync-online.json`, `device-sync-pages-artifact.zip`, `device-sync-published-1280.png`·`390.png`·`320.png`, `device-sync-live.json`과 `/tmp/htmlmemo-sync-actions.log`입니다. 앱은 **설정 → 기기 간 동기화 → 연결**에서 사용할 수 있습니다. 이 후속 기록은 앱 파일과 게시 설정을 바꾸지 않습니다.
 
 
 <a id="hist-20261027-018"></a>
