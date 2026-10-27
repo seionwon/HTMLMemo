@@ -3327,3 +3327,8 @@ CodeMemo 임시 브라우저에서 0.1 두께의 선 근처를 눌러 주석 편
 CodeMemo의 제한된 로컬 검증기로 iframe 요소를 클릭한 시도는 내부 원본 컨트롤의 실제 클릭을 증명하지 못했으므로 성공 검증에서 제외합니다. 임시 예제 파일을 빌드 폴더에서만 사용한 뒤 정상 빌드로 복원하고 예제 원본과의 일치를 확인했으며 임시 서버도 종료했습니다. 단위/검사/빌드 로그는 `test-results/navigation-regression-unit.log`, `test-results/navigation-regression-check.log`, `test-results/navigation-regression-build.log`에 있습니다.
 
 **게시 상태:** 이 기록 시점에는 실제 Chrome과 게시 검증을 완료하지 않았습니다. 기존 GitHub Actions 및 정식 주소 https://seionwon.github.io/HTMLMemo/ 의 결과와 한계를 같은 항목에 보충합니다.
+
+
+**첫 실제 Chrome 결과·보완 (13:26:25 +09:00):** 소스 `1c65405dcf8baa86aa9aa8cdd7abb6f40f70cb37`의 [Actions 40449485584](https://github.com/seionwon/HTMLMemo/actions/runs/40449485584)는 우선 검사 **3개 중 2개 통과·1개 실패**로 게시 전에 중단됐습니다. 새 합성 문서의 1280px에서 일반 요소 목차, History API로 이전/다음 절, 반복 scrollIntoView, 취소된 링크와 주소 없는 다음 절 이동은 진행됐으나 첫 절의 북마크 400px 복귀에서 실패했습니다. 실제 상태는 표시 주소가 첫 절인 반면 원본/표시 본문은 둘째 절·0px였으며 브라우저 예외는 없었습니다. 주소를 안 바꾸고 장을 교체한 원본은 이후 앱이 같은 해시를 지정해도 hashchange가 발생하지 않는 경로였습니다. 기존 본문/이전·다음 이동 및 첫 실행 검사는 통과했습니다.
+
+같은 해시를 앱이 다시 지정하는 명시적인 이동 명령에서도 원본 hashchange 처리기를 실행하도록 보완했습니다. 실패 조건과 400/620px 기대값은 완화하지 않았습니다. 보완 후 로컬 단위 **550개**, JavaScript **106개·JSON**, 빌드와 git diff --check를 다시 통과했습니다. 첫 실패 로그·화면·진단은 `test-results/navigation-regression-first-build-ci.log`, `test-results/navigation-regression-first-ci/pages-only-scripted-navigation-failure.json`, 같은 폴더의 화면과 XML에 보존했습니다. 이 시점에는 보완 버전의 실제 Chrome·게시 결과를 아직 확인하지 않았습니다.

@@ -106,7 +106,12 @@ function bootstrap(channel,preferences) {
   }).observe(document,{subtree:true,childList:true,characterData:true,attributes:true});
   const command=value=>{
     if(value?.channel!==channel)return;
-    if(value.type==='hash'&&typeof value.hash==='string'&&value.hash.length<2000){navigationEnabled=false;pendingNavigation=null;setHashSilently(value.hash);return;}
+    if(value.type==='hash'&&typeof value.hash==='string'&&value.hash.length<2000){
+      navigationEnabled=false;pendingNavigation=null;const before=location.href;setHashSilently(value.hash);
+      // A script can change chapters without changing its URL. Replaying an
+      // app target must still run the book's handler when that hash is equal.
+      if(location.href===before)dispatchEvent(new HashChangeEvent('hashchange',{oldURL:before,newURL:location.href}));return;
+    }
     if(!['click','input','change','toggle','submit'].includes(value.type)||!/^r\d{1,12}$/.test(value.id))return;
     const node=nodes.get(value.id);if(!node?.isConnected)return;
     if(value.type==='toggle'&&node.localName==='details'){if(node.open!==!!value.open)node.open=!!value.open;return;}
