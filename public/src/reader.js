@@ -449,17 +449,24 @@ export class Reader {
       const details = summary ? (summary.parentElement?.localName === 'details' ? summary.parentElement : summary.closest?.('details')) : null;
       const link = target.closest?.('a[href]');
       const href = link ? (link.getAttribute('href') || '').trim() : '';
+      const runtimeTocLink = this.runtime && link && !link.closest('[data-htmlmemo-ui]') && this.isInsideTocOrTopbar(link);
+      const section = runtimeTocLink && this.documentBookSearchSection(link);
+      if(section){event.preventDefault();void this.jumpOutlineSection(section);return;}
       const container = details ? null : ((stateBefore?.container?.isConnected ? stateBefore.container : null) || this.findTocSubContainer(target));
-      if (link && href.startsWith('#') && !pagePrevented) {
+      if (link && href.startsWith('#')) {
         if (href === '#') {
-          if (!summary) event.preventDefault();
+          if (!summary && !pagePrevented) event.preventDefault();
         } else {
           let id; try { id = decodeURIComponent(href.slice(1)); } catch { id = href.slice(1); }
           const hashTarget = id ? (this.doc.getElementById(id) || [...this.doc.querySelectorAll('a[name]')].find(a => a.name === id)) : null;
-          if (hashTarget && hashTarget !== container) {
+          // The isolated source bridge prevents browser navigation before this
+          // listener runs. Its hidden runner cannot scroll the visible reader.
+          // Keep dispatching source clicks, but handle actual TOC destinations here.
+          const runtimeTocTarget = runtimeTocLink && hashTarget && !this.isInsideTocOrTopbar(hashTarget);
+          if (hashTarget && hashTarget !== container && (!pagePrevented || runtimeTocTarget)) {
             event.preventDefault();
             if (this.tool === 'select' || this.isInsideTocOrTopbar(link)) jumpToHash(href);
-          } else if (hashTarget === container) {
+          } else if (hashTarget === container && !pagePrevented) {
             event.preventDefault();
           }
         }
@@ -2322,6 +2329,24 @@ export class Reader {
   jump(target) {
     const r = target.getBoundingClientRect(), origin = this.layerOrigin(); this.scrollTop = Math.max(0,(r.top-origin.top+r.height/2)*this.zoom-this.viewport.clientHeight/2); this.scrollLeft = Math.max(0,(r.left-origin.left+r.width/2)*this.zoom-this.viewport.clientWidth/2);
   }
+  async jumpOutlineSection(section) {
+    if(!this.annotationBookPaths().has(section))return false;
+    this.cancelAnnotationJump?.();
+    const generation=this.annotationJumpGeneration=(this.annotationJumpGeneration||0)+1;
+    try{
+      if(this.preparing&&this.ready)await this.ready;
+      if(this.disposed||generation!==this.annotationJumpGeneration)return false;
+      if(currentSection(this.doc)!==section){
+        const result=await this.waitForLocationTarget(null,{section,navigate:true,generation,bookmark:true,noticeMessage:'목차의 본문을 준비하는 중…'});
+        if(this.disposed||generation!==this.annotationJumpGeneration||result.cancelled)return false;
+        if(result.error)throw result.error;
+        if(!result.ready)throw new Error('목차의 본문을 불러오지 못했습니다. 다시 눌러 주세요. 문서와 주석은 보관됩니다.');
+      }
+      // Source scripts run in a separate document: their scrollTo(0, 0) does
+      // not move this visible reader, including a re-click of the current chapter.
+      this.scrollTop=0;this.scrollLeft=0;this.callbacks.onView?.();return true;
+    }catch(error){if(!this.disposed&&generation===this.annotationJumpGeneration)this.callbacks.onError?.(error);return false;}
+  }
   async jumpAnnotation(id) {
     this.cancelAnnotationJump?.();
     const generation=this.annotationJumpGeneration=(this.annotationJumpGeneration||0)+1;
@@ -2370,7 +2395,7 @@ export class Reader {
       return true;
     }catch(error){if(!this.disposed&&generation===this.annotationJumpGeneration)this.callbacks.onError?.(error);return false;}
   }
-  waitForLocationTarget(annotation,{section,location,navigate,generation,bookmark=false}) {
+  waitForLocationTarget(annotation,{section,location,navigate,generation,bookmark=false,noticeMessage}) {
     return new Promise(resolve=>{
       let settled=false,busy=false,scheduled=null,timer=null,notice=null,noticeShown=false,refresh=navigate;
       const cancelled=()=>this.disposed||generation!==this.annotationJumpGeneration;
@@ -2403,7 +2428,7 @@ export class Reader {
       };
       this.cancelAnnotationJump=cancel;observe();
       timer=setTimeout(()=>finish({ready:false,sectionReady:sectionReady()}),15000);
-      notice=setTimeout(()=>{if(!settled){noticeShown=true;this.callbacks.onNotice?.(bookmark?'북마크가 있는 본문을 준비하는 중…':'주석이 있는 본문과 위치를 준비하는 중…');}},250);
+      notice=setTimeout(()=>{if(!settled){noticeShown=true;this.callbacks.onNotice?.(noticeMessage||(bookmark?'북마크가 있는 본문을 준비하는 중…':'주석이 있는 본문과 위치를 준비하는 중…'));}},250);
       try{if(navigate)this.doc.defaultView.location.hash=encodeURIComponent(section);void attempt();}catch(error){finish({error});}
     });
   }
