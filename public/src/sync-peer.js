@@ -50,8 +50,18 @@ export class DirectSyncConnection{
     });
     if(this.closed||channel.readyState!=='open')throw Error('파일 전송 연결이 닫혔습니다.');channel.send(data);
   }
-  destroy(){
+  destroy({graceful=false}={}){
     if(this.closed)return;this.closed=true;for(const timer of [this.connectTimer,this.disconnectTimer,this.candidateTimer,this.errorTimer])clearTimeout(timer);
-    if(this.channel){this.channel.onopen=null;this.channel.onmessage=null;this.channel.onerror=null;this.channel.onclose=null;this.channel.close();}this.pc.onconnectionstatechange=null;this.pc.onicecandidate=null;this.pc.ondatachannel=null;this.pc.close();
+    this.pc.onconnectionstatechange=null;this.pc.onicecandidate=null;this.pc.ondatachannel=null;
+    const channel=this.channel;
+    if(channel){
+      channel.onopen=null;channel.onmessage=null;channel.onerror=null;channel.onclose=null;
+      if(graceful&&channel.readyState==='open'){
+        // Drain the final commit ACK before closing the entire connection.
+        const timer=setTimeout(()=>this.pc.close(),5000);channel.addEventListener('close',()=>{clearTimeout(timer);this.pc.close();},{once:true});channel.close();return;
+      }
+      channel.close();
+    }
+    this.pc.close();
   }
 }

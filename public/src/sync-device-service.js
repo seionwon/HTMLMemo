@@ -40,12 +40,12 @@ export class DeviceSyncService extends SyncService{
     this.peer=new DirectSyncConnection({signal:message=>this.sendSignal(message),onOpen:()=>{
       this.clearWaiting();this.setStatus('connected','상대 기기의 응답을 확인했습니다. 파일 전송 연결이 준비됐습니다.');if(this.isHost)void this.syncDirectData();
     },onMessage:data=>this.stream.receive(data),onError:error=>void this.fail(error)});
-    this.stream=new SyncStream({send:data=>this.peer.send(data),onProgress:progress=>this.options.onProgress?.(progress),onBundle:async(bundle)=>{
+    this.stream=new SyncStream({send:data=>this.peer.send(data),findFiles:typeof this.options.adapter.findReusableStreamFiles==='function'?manifest=>this.options.adapter.findReusableStreamFiles(manifest):null,onProgress:progress=>this.options.onProgress?.(progress),onBundle:async(bundle)=>{
       this.setStatus('merging','받은 파일을 검증하고 문서·주석·휴지통을 저장하는 중…');this.updateSyncInfoMeta(bundle.manifest,!this.isHost&&!!this.remotePartial);
       const exclude=await this.options.adapter.mergeStreamBundle(bundle,this.options.onConflict);this.mergedExcludeIds=Array.isArray(exclude)?exclude:[];this.hasReceivedData=true;return exclude;
-    },onCommitted:({partial})=>{
+    },onCommitted:({partial,confirmed})=>{
       if(this.isDestroyed)return;
-      if(this.isHost||partial)void this.confirmCompletion();else if(!this.hasSentInitialSync)void this.syncDirectData();
+      if(this.isHost||partial)void this.confirmCompletion({direct:confirmed});else if(!this.hasSentInitialSync)void this.syncDirectData();
     }});
   }
   async syncDirectData(){
@@ -55,12 +55,20 @@ export class DeviceSyncService extends SyncService{
       this.setStatus('syncing','원본 파일과 주석·이력을 검사하고 전송 목록을 준비하는 중…');
       const ids=await this.options.adapter.getSyncTargetIds(this.options.initialDataLogId),bundle=await this.options.adapter.getStreamBundle(ids,this.mergedExcludeIds);
       if(this.isDestroyed)return;this.setStatus('syncing','기기 간 암호화 연결로 파일을 나누어 전송하는 중…');
-      await this.stream.sendBundle(bundle,{partial:!!ids});
+      const result=await this.stream.sendBundle(bundle,{partial:!!ids});
+      if(result?.committed&&(ids||!this.isHost&&this.hasReceivedData)){await this.confirmCompletion({direct:true});return;}
       if(!this.isDestroyed&&!this.finished)this.setStatus('syncing',this.isHost?'원본 전송을 마쳤습니다. 상대 기기의 저장·응답을 기다리는 중…':'이 기기의 변경을 보냈습니다. 기준 기기의 저장 확인을 기다리는 중…');
     }catch(error){if(!this.isDestroyed)await this.fail(error);}finally{this.isSyncing=false;}
   }
-  async confirmCompletion(){
-    try{await this.sendSignal({kind:'complete'});if(!this.isDestroyed){this.setStatus('completed','양쪽 기기의 저장을 확인했습니다. 동기화를 완료했습니다.');this.options.onDataReceived();}}
+  async confirmCompletion({direct=false}={}){
+    try{
+      // New peers acknowledge the committed database over the direct channel.
+      // Completion must not wait for a relay that is no longer needed.
+      if(!direct){
+        let timer;try{await Promise.race([this.sendSignal({kind:'complete'}),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('저장은 끝났지만 상대 기기에 완료를 알리지 못했습니다. 양쪽 앱을 새로고침하고 다시 연결해주세요.')),15000);})]);}finally{clearTimeout(timer);}
+      }
+      if(!this.isDestroyed&&!this.finished){this.setStatus('completed','전송이 완료되었습니다. 이 화면은 닫아도 됩니다.');this.options.onDataReceived();}
+    }
     catch(error){if(!this.isDestroyed)await this.fail(error);}
   }
   async acceptSignal(encoded){
@@ -74,7 +82,7 @@ export class DeviceSyncService extends SyncService{
     if(message.from!==this.remoteId||message.session!==this.sessionId)return;
     if(message.kind==='hello_ack'&&this.isHost){this.clearWaiting();if(!this.peer){this.makePeer();await this.peer.offer();}return;}
     if(message.kind==='complete'){
-      if(!this.hasSentInitialSync)return;this.setStatus('completed','상대 기기의 저장 확인을 받았습니다. 동기화를 완료했습니다.');this.options.onDataReceived();return;
+      if(!this.hasSentInitialSync)return;this.setStatus('completed','전송이 완료되었습니다. 이 화면은 닫아도 됩니다.');this.options.onDataReceived();return;
     }
     if(message.kind==='error'){await this.fail(Error('상대 기기에서 전송을 중단했습니다. '+String(message.message||'연결을 확인해주세요.').slice(0,1500)),false);return;}
     if(['offer','answer','candidates'].includes(message.kind)){this.makePeer();await this.peer.receive(message);}
@@ -107,5 +115,5 @@ export class DeviceSyncService extends SyncService{
     if(notify&&this.remoteId&&this.sessionId){let timer;try{await Promise.race([this.sendSignal({kind:'error',message:message.slice(0,1500)}),new Promise(resolve=>{timer=setTimeout(resolve,5000);})]);}catch{}finally{clearTimeout(timer);}}
     if(!this.isDestroyed)super.setStatus('error',message);
   }
-  destroy(){if(this.isDestroyed)return;this.clearWaiting();this.peer?.destroy();this.stream?.destroy();super.destroy();}
+  destroy(){if(this.isDestroyed)return;this.clearWaiting();this.peer?.destroy({graceful:this.finished});this.stream?.destroy();super.destroy();}
 }

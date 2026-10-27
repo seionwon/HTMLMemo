@@ -403,3 +403,5 @@ html[data-app-sidebar-resizing] iframe{pointer-events:none!important}
 .device-sync .dialog-heading{position:sticky;top:-25px;background:var(--surface);z-index:3;padding:8px 0}.device-sync [role=status]{scroll-margin:12px}
 /* Connection truth and bounded streaming progress remain visible near the heading. */
 .sync-state{margin:8px 0 12px}.sync-state #sync-status{margin:0}.sync-state #sync-progress{display:block;width:100%;height:7px;margin:10px 0 0;accent-color:var(--green)}.sync-state #sync-transfer-detail{margin:5px 0 0;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}.sync-state #sync-transfer-detail:empty{display:none}#sync-qr-hint{margin:9px 0 12px}#sync-qr[hidden]{display:none}#sync-progress[hidden]{display:none}
+
+.sync-state.is-completed{border-color:var(--green);background:var(--green-light)}.sync-state.is-completed #sync-status{font-size:14px;font-weight:650;color:var(--green);line-height:1.7}.sync-state #sync-complete-actions{margin-top:12px}.sync-state #sync-close{width:100%}

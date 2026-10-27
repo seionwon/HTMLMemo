@@ -81,3 +81,23 @@ test('stream manifest, original digest, missing files and cancellation reject be
  const invalid=structuredClone(bundle.manifest);invalid.documents[0].body=999;await assert.rejects(b.adapter().mergeStreamBundle({manifest:invalid,files:bundle.files}),/원본 파일/);
  await assert.rejects(b.adapter({isActive:()=>false}).mergeStreamBundle(bundle),/닫았/);assert.equal(b.calls.length,0);
 });
+
+test('existing sources are reused across different IDs, filenames and trash without library writes',async()=>{
+ const remote=await record('remote'),a=fixture([remote]),bundle=await a.adapter().getStreamBundle();
+ const local=await record('phone-copy',{html:remote.html,trash:true});local.name='renamed-on-phone.html';
+ const b=fixture([local],[],'Other root'),files=await b.adapter().findReusableStreamFiles(bundle.manifest);
+ assert.equal(files.size,bundle.files.size);assert.deepEqual(await localFileIdentity(files.get(1)),bundle.manifest.files[0].identity);
+ assert.equal(b.calls.length,0);assert.equal(b.docs.get('phone-copy').trashedAt,3000);
+});
+test('cached source identity, matching names and matching sizes cannot hide different original bytes',async()=>{
+ const a=fixture([await record('same')]),bundle=await a.adapter().getStreamBundle(),changed=await record('same',{html:'x'.repeat(bundle.files.get(1).size)});
+ changed.sourceIdentity=bundle.manifest.documents[0].record.sourceIdentity;
+ const b=fixture([changed]);assert.equal((await b.adapter().findReusableStreamFiles(bundle.manifest)).size,0);assert.equal(b.calls.length,0);
+});
+test('reuse includes both a prepared HTML and its unchanged original with the requested MIME types',async()=>{
+ const original=new Blob(['<p>original</p>'],{type:'text/html'}),prepared=new Blob(['<head></head><p>original</p>'],{type:'text/html;charset=utf-8'});
+ const remote=await record('remote');delete remote.html;remote.file=prepared;remote.originalFile=original;remote.sourceIdentity=await localFileIdentity(original);
+ const bundle=await fixture([remote]).adapter().getStreamBundle(),local={...remote,id:'other',file:new Blob([prepared],{type:'text/html'}),originalFile:new Blob([original],{type:'application/octet-stream'})},b=fixture([local]);
+ const files=await b.adapter().findReusableStreamFiles(bundle.manifest);assert.equal(files.size,2);
+ for(const descriptor of bundle.manifest.files){assert.equal(files.get(descriptor.id).type,descriptor.mime);assert.deepEqual(await localFileIdentity(files.get(descriptor.id)),descriptor.identity);}
+});

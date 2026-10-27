@@ -78,6 +78,32 @@ export class DeviceSyncAdapter {
     const manifest={format:DEVICE_SYNC_FORMAT,version:2,documents,files:descriptors,folders:validateFolders(library.folders),settings:this.includeSettings&&this.isHost()?folderSettings(this.storage):null,logs:documents.map(d=>({title:d.record.title}))};
     validateStreamManifest(manifest);return {manifest,files};
   }
+  async findReusableStreamFiles(manifest){
+    this.check();const descriptors=validateStreamManifest(manifest),found=new Map();
+    if(!descriptors.size)return found;
+    const key=identity=>identity.digest+':'+identity.size,wanted=new Map(),sizes=new Map();
+    for(const descriptor of descriptors.values()){
+      const identityKey=key(descriptor.identity);if(!wanted.has(identityKey)){wanted.set(identityKey,[]);sizes.set(descriptor.size,(sizes.get(descriptor.size)||0)+1);}
+      wanted.get(identityKey).push(descriptor);
+    }
+    const sourceIds=new Set(manifest.documents.map(value=>value.record.id)),sourceKeys=new Set(manifest.documents.filter(value=>sameLocalFile(value.record.sourceIdentity,value.record.sourceIdentity)).map(value=>key(value.record.sourceIdentity)));
+    const headers=(await this.ops.readLibrary()).documents;
+    // Local document IDs, filenames and root names may differ. Try likely
+    // sources first, but prove every reuse with the actual immutable bytes.
+    const likely=header=>sourceIds.has(header.id)||sameLocalFile(header.sourceIdentity,header.sourceIdentity)&&sourceKeys.has(key(header.sourceIdentity));
+    for(const header of [...headers.filter(likely),...headers.filter(header=>!likely(header))]){
+      this.check();if(!wanted.size)break;
+      if(!likely(header)&&Number.isSafeInteger(header.byteSize)&&!sizes.has(header.byteSize)&&!sizes.has(header.sourceIdentity?.size))continue;
+      const doc=await this.ops.getDocument(header.id);this.check();if(!doc)continue;
+      for(const blob of [doc.file||typeof doc.html==='string'&&new Blob([doc.html],{type:'text/html'}),doc.originalFile]){
+        if(!(blob instanceof Blob)||!sizes.has(blob.size))continue;
+        const identity=await localFileIdentity(blob);this.check();const identityKey=key(identity),matches=wanted.get(identityKey);if(!matches)continue;
+        for(const descriptor of matches)found.set(descriptor.id,blob.type===descriptor.mime?blob:blob.slice(0,blob.size,descriptor.mime));
+        wanted.delete(identityKey);const remaining=sizes.get(blob.size)-1;if(remaining)sizes.set(blob.size,remaining);else sizes.delete(blob.size);
+      }
+    }
+    return found;
+  }
   async mergeStreamBundle({manifest,files},resolver){
     this.check();const descriptors=validateStreamManifest(manifest),verified=new Map();
     if(!(files instanceof Map)||files.size!==descriptors.size)throw Error('전송이 끝나지 않았습니다. 기존 문서는 유지됩니다.');
