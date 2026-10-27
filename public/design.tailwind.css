@@ -293,12 +293,11 @@ html[data-app-sidebar-resizing] iframe{pointer-events:none!important}
 #library .hero{padding:12px 0;min-height:0}
 #library .hero-copy{display:flex;align-items:center;justify-content:space-between;gap:12px}
 #library .hero .eyebrow,#library .hero-description,#library .feature-tags{display:none}
-#library .hero-actions{margin:0;gap:6px;flex-wrap:wrap}
+#library .hero-actions{flex:0 0 auto;margin:0;gap:6px;flex-wrap:nowrap}
 #library .hero-actions .primary-button,#library .hero-actions .secondary-button{height:28px;min-width:0;padding:5px 10px;font-size:11px;border-radius:6px}
 #library .hero-actions .primary-button>span{font-size:12px}
-#library .library-import-help{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px;margin-bottom:4px}
 [data-single-file-guide]{overflow-wrap:anywhere}
-#library .library-help{display:flex;gap:4px;width:fit-content;max-width:100%;min-height:20px;margin:0 0 0 auto;padding:0;font-size:10px;text-decoration:underline;text-underline-offset:2px}
+#library .library-help{display:flex;flex-shrink:0;gap:4px;width:fit-content;max-width:100%;min-height:20px;margin:0 0 0 auto;padding:0;font-size:10px;text-decoration:underline;text-underline-offset:2px}
 #library .library-help svg{width:14px;height:14px}
 #library .library-help span{font-size:inherit}
 #library .library-heading{padding:10px 0;gap:8px}
@@ -360,6 +359,16 @@ html[data-app-sidebar-resizing] iframe{pointer-events:none!important}
  .library-view-button{width:27px;padding:0}
  .document-grid[data-view=list] .card-details{grid-template-columns:16px minmax(0,1fr) 60px 36px;gap:6px;height:32px;padding:0 34px 0 8px}
  .document-grid[data-view=list] .list-progress{display:none}
+}
+
+@media(max-width:480px){
+ #library .hero-copy{gap:8px}
+ #library .library-help{width:20px;height:28px;min-width:20px;justify-content:center;text-decoration:none}
+ #library .library-help span{display:none}
+}
+@media(max-width:360px){
+ #library .hero-actions{gap:4px}
+ #library .hero-actions .primary-button,#library .hero-actions .secondary-button{padding-inline:4px}
 }
 
 /* Dedicated-folder hierarchy: compact paths, tree and identical folder rows in both views. */
