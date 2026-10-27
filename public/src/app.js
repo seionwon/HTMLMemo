@@ -1409,7 +1409,7 @@ function bindUI() {
   setIconButton('#settings-button','settings','설정');bindTabs();
   $('#execution-export-guide').innerHTML=annotationExportGuide();
   $('#data-folder-status').onclick=()=>chooseFolder();
-  $('#library-tab').onclick=()=>activate('library');$('#browse-start').onclick=focusAddress;
+  $('#library-tab').onclick=()=>activate('library');
   $('#execution-web').onclick=()=>webHelpDialog();
   $('#share-url').value=PUBLIC_APP_URL;$('#shared-app-link').href=PUBLIC_APP_URL;
   $('#share-app').onclick=safely(copyAppURL);

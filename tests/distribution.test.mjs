@@ -240,7 +240,7 @@ test('the settings icon preserves library, web opening, HTML import, app deliver
   assert.equal(doc.querySelector('#save-page').previousElementSibling.id,'library-tab');
   assert.equal(doc.querySelector('#library-tab').textContent,'');assert.equal(doc.querySelector('#library-tab').title,'내 서재');
   for(const id of ['#library-tab','#settings-button','#save-page'])assert.ok(doc.querySelector(id).closest('header'));
-  assert.deepEqual([...doc.querySelectorAll('#library .hero-actions button')].map(button=>button.id),['browse-start','hero-import','paste-button']);
+  assert.deepEqual([...doc.querySelectorAll('#library .hero-actions button')].map(button=>button.id),['hero-import','paste-button']);
   assert.ok(doc.querySelector('#hero-import').closest('#library'));assert.equal(doc.querySelector('#hero-import').textContent,'HTML 파일 가져오기');
   assert.equal(!!doc.querySelector('#choose-folder,#menu-folder'),false);
   assert.equal(doc.querySelector('#library-tab').getAttribute('aria-current'),'page');
@@ -251,8 +251,7 @@ test('the settings icon preserves library, web opening, HTML import, app deliver
   assert.equal(doc.querySelector('#execution').hidden,false);
   assert.equal(doc.querySelector('#library').hidden,true);
   assert.equal(doc.querySelector('#library-tab').getAttribute('aria-current'),'false');
-  let focused=false;doc.querySelector('#address').focus=()=>focused=true;
-  click('#library-tab');click('#browse-start');assert.equal(focused,true);
+  click('#library-tab');assert.equal(doc.querySelector('#browse-start'),null);
   assert.equal(doc.querySelector('#library').hidden,false);
   assert.equal(doc.querySelector('#execution').hidden,true);
   openExecution({doc});click('#library-tab');

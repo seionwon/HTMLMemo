@@ -998,7 +998,7 @@ test('real Chrome: browsing, capture, local annotation, file writes, reopen and 
         assert.equal(await page.evaluate('document.querySelector(".about-brand h3").textContent'),'HTMLMemo');
         await page.click('#dialog [data-dialog-close]');
         await clickSettingsAction(page,'#settings-execution');await page.waitFor('!document.querySelector("#execution").hidden');
-        await page.click('#library-tab');await page.click('#browse-start');await page.waitFor('!document.querySelector("#library").hidden && document.activeElement.id==="address"');
+        await page.click('#library-tab');await page.waitFor('!document.querySelector("#library").hidden');
         await clickSettingsAction(page,'#settings-execution');await page.click('#library-tab');await page.waitFor('!document.querySelector("#library").hidden');
         await clickLibraryImport(page);
       }
@@ -1391,13 +1391,13 @@ test('real Chrome: compact library shares titles and sources, keeps dense views 
     const before=await state();await page.navigate(url);await page.waitFor('document.querySelectorAll(".document-card").length===8');
     assert.equal(await page.evaluate('!!document.querySelector("#new-tab,#app-menu #paste-button,#app-menu #web-help-button")'),false);
     assert.equal(await page.evaluate('document.querySelectorAll("#web-help-button").length===1&&!!document.querySelector("#library #web-help-button")'),true);
-    assert.deepEqual(await page.evaluate('[...document.querySelectorAll("#library .hero-actions button")].map(button=>button.id)'),['browse-start','hero-import','paste-button']);
+    assert.deepEqual(await page.evaluate('[...document.querySelectorAll("#library .hero-actions button")].map(button=>button.id)'),['hero-import','paste-button']);
     assert.equal(await page.evaluate('document.querySelectorAll("#paste-button").length'),1);
     assert.equal(await page.evaluate('!!document.querySelector("#data-folder-card,#library-data-folder,#data-folder-summary,#data-folder-description")'),false);
     const filenameMetrics=[];
     for(const width of [1280,800,600,390,320]){
       await page.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
-      assert.equal(await page.evaluate(`(()=>{const hero=document.querySelector('#library .hero').getBoundingClientRect();return [...document.querySelectorAll('#library .hero-actions button')].every(button=>{const r=button.getBoundingClientRect();return r.width>0&&r.height>0&&r.left>=0&&r.right<=innerWidth&&r.top>=hero.top&&r.bottom<=hero.bottom&&button.contains(document.elementFromPoint(r.left+r.width/2,r.top+r.height/2));});})()`),true,'all three library actions remain visible and reachable at '+width);
+      assert.equal(await page.evaluate(`(()=>{const hero=document.querySelector('#library .hero').getBoundingClientRect();return [...document.querySelectorAll('#library .hero-actions button')].every(button=>{const r=button.getBoundingClientRect();return r.width>0&&r.height>0&&r.left>=0&&r.right<=innerWidth&&r.top>=hero.top&&r.bottom<=hero.bottom&&button.contains(document.elementFromPoint(r.left+r.width/2,r.top+r.height/2));});})()`),true,'both library actions remain visible and reachable at '+width);
       assert.equal(await page.evaluate(`(()=>{const b=document.querySelector('#library #web-help-button'),r=b.getBoundingClientRect(),action=document.querySelector('#paste-button').getBoundingClientRect(),hero=document.querySelector('#library .hero').getBoundingClientRect();return b.textContent==='웹페이지 가져오기 안내'&&b.getAttribute('role')===null&&b.getAttribute('aria-haspopup')==='dialog'&&b.getAttribute('aria-label')==='웹페이지 가져오기 안내'&&b.title==='웹페이지 가져오기 안내'&&r.height>=20&&r.left>=action.right&&r.right<=innerWidth&&r.top>=hero.top&&r.bottom<=hero.bottom&&Math.abs((r.top+r.bottom-action.top-action.bottom)/2)<1&&b.contains(document.elementFromPoint(r.left+r.width/2,r.top+r.height/2));})()`),true,'the library guide shares the action row and remains reachable at '+width);
       if(width===320){await page.evaluate('document.querySelector("#web-help-button").focus()');for(const type of ['keyDown','keyUp'])await page.send('Input.dispatchKeyEvent',{type,key:'Enter',code:'Enter',windowsVirtualKeyCode:13,...(type==='keyDown'?{text:'\r',unmodifiedText:'\r'}:{})});}else await page.click('#web-help-button');
       await page.waitFor('document.querySelector("#dialog").open&&document.querySelector("#web-help-import")&&document.querySelector("#web-help-paste")');assert.equal(await page.evaluate('document.querySelector("#dialog h2").textContent'),'Chrome에서 탐색하고 여기서 메모하기');
