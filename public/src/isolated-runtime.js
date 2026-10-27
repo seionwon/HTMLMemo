@@ -251,7 +251,7 @@ export class IsolatedRuntime {
     for(const type of ['input','change'])add(this.doc,type,event=>{const node=sourceTarget(event);if(node&&['input','textarea','select'].includes(node.localName)){const id=node.getAttribute(ID),revision=++this.inputRevision;this.controlRevisions.set(id,revision);this.send({type,id,value:node.value,revision});}});
     add(this.doc,'submit',event=>{event.preventDefault();const node=sourceTarget(event);if(node?.localName==='form')this.send({type:'submit',id:node.getAttribute(ID)});});
     add(this.doc,'click',event=>{
-      const node=sourceTarget(event),control=node?.closest('button,summary,a,[role="button"],input[type="button"],input[type="submit"]');if(!control||control.closest('[data-htmlmemo-ui]')||!validId(control.getAttribute(ID)))return;
+      const node=sourceTarget(event),control=node?.closest('button,summary,a,[role="button"],input[type="button"],input[type="submit"]');if(event.defaultPrevented||!control||!validId(control.getAttribute(ID)))return;
       const href=control.getAttribute('href');
       // Executable hrefs/handlers are stripped from the visible copy. Their
       // original source anchor can still run through this inert click command.
