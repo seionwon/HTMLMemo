@@ -79,6 +79,8 @@ test('sidebar switches four icon-only views with tooltip labels and total counts
   const input=a.doc.querySelector('#document-search');assert.equal(input.getAttribute('placeholder'),'불러온 부분에서 찾기');assert.equal(input.getAttribute('aria-label'),'불러온 부분 검색어');assert.equal(a.doc.querySelector('#sidebar-title').textContent,'검색');input.value='기억';input.oninput();a.flush();
   assert.equal(a.doc.querySelector('#search-count').textContent,'1 / 1개 결과');
   a.doc.querySelector('[data-search-index]').onclick();assert.deepEqual(a.calls.next,[1]);
+  const clear=a.doc.querySelector('#search-clear');assert.equal(clear.hidden,false);assert.equal(clear.getAttribute('aria-label'),'불러온 부분 검색어 지우기');let focused=0;input.focus=()=>focused++;
+  clear.onclick();assert.equal(input.value,'');assert.equal(a.r.sidebarSearchQuery,'');assert.equal(a.r.searchQuery,'');assert.equal(clear.hidden,true);assert.equal(focused,1);assert.equal(a.doc.querySelector('[data-search-index]'),null);assert.equal(a.doc.querySelector('#search-count').textContent,'검색어를 입력하세요.');assert.equal(a.doc.querySelector('#search-prev').disabled,true);assert.equal(a.doc.querySelector('#search-next').disabled,true);
   a.choose('annotations');assert.equal(a.doc.querySelector('#sidebar-title').textContent,'주석');a.doc.querySelector('[data-annotation]').onclick();assert.deepEqual(a.calls.annotations,['a1']);
   assert.equal(a.doc.querySelector('[data-sidebar-view=annotations]').getAttribute('aria-pressed'),'true');
   assert.equal(a.doc.querySelectorAll('[data-sidebar-view][aria-pressed=true]').length,1);
@@ -205,6 +207,8 @@ test('asynchronous sidebar search cannot overwrite another view or a newer query
   a.choose('annotations');assert.equal(pending[0].current(),false);pending[0].resolve([{quote:'stale'}]);await Promise.resolve();assert.ok(a.doc.querySelector('[data-annotation]'));
   a.choose('search');input=a.doc.querySelector('#document-search');const resumed=pending.at(-1);input.value='new';input.oninput();a.flush();assert.equal(resumed.current(),false);resumed.resolve([{quote:'stale draft'}]);await Promise.resolve();assert.equal(a.doc.querySelector('[data-search-index]'),null);
   pending.at(-1).reject(new Error('index failed'));await Promise.resolve();await Promise.resolve();assert.match(a.doc.querySelector('#search-count').textContent,/검색을 준비하지 못했습니다/);assert.deepEqual(errors,['index failed']);
+  input.value='pending';input.oninput();a.flush();const cleared=pending.at(-1);a.doc.querySelector('#search-clear').onclick();assert.equal(cleared.current(),false);cleared.resolve([{quote:'must not return after clear'}]);await Promise.resolve();assert.equal(a.doc.querySelector('[data-search-index]'),null);assert.equal(a.doc.querySelector('#search-count').textContent,'검색어를 입력하세요.');
+  input.value='debounced';input.oninput();const count=pending.length;a.doc.querySelector('#search-clear').onclick();a.flush();assert.equal(pending.length,count);assert.equal(a.r.sidebarSearchQuery,'');
 });
 
 test('icon totals include all annotations and bookmarks, update in place and show zero',()=>{
@@ -221,7 +225,7 @@ test('native search fields share loaded-part metrics and equal top/between spaci
   const css=await readFile(new URL('../public/design.tailwind.css',import.meta.url),'utf8');
   const shared=css.match(/\[data-htmlmemo-doc-sidebar-ui\] \.sidebar-book-search input,\[data-htmlmemo-doc-sidebar-ui\] \.search-field input\{([^}]+)\}/)?.[1];
   assert.ok(shared,'both search inputs must use one rule');
-  for(const declaration of ['display:block!important','width:100%!important','height:auto!important','margin:0!important','padding:8px!important','font:400 12px/1.6 var(--app-font)!important'])assert.ok(shared.includes(declaration),declaration);
+  for(const declaration of ['display:block!important','width:100%!important','height:auto!important','margin:0!important','padding:8px 32px 8px 8px!important','font:400 12px/1.6 var(--app-font)!important'])assert.ok(shared.includes(declaration),declaration);
   assert.match(css,/\.sidebar-content\{--sidebar-search-gap:10px;padding:var\(--sidebar-search-gap\) 2px;/);
   assert.match(css,/\.sidebar-book-search\{display:flow-root;margin:0 0 var\(--sidebar-search-gap\);padding:0;border:0\}/);
   assert.match(css,/\.sidebar-book-search>\[data-htmlmemo-book-search-part\]:not\(input\)\{margin:0!important;padding:0!important;border:0!important\}/);
@@ -588,6 +592,7 @@ test('the visible source TOC gets inline choices without moving its tree, listen
   a.r.applyTocWidth=width=>{expanded=width;a.r.tocStrip=false;};a.r.syncAfterTocResize=()=>synced++;
   panel.querySelector('[data-sidebar-view=search]').onclick();assert.equal(expanded,260);assert.equal(synced,1);assert.equal(toc.scrollTop,0);
   assert.equal(toc.getAttribute('data-htmlmemo-sidebar-view'),'search');const input=panel.querySelector('#htmlmemo-native-document-search');assert.equal(input.getAttribute('placeholder'),'불러온 부분에서 찾기');assert.equal(input.getAttribute('aria-label'),'불러온 부분 검색어');input.value='원래';input.oninput();a.flush();
+  const whole=a.r.documentBookSearchInput;whole.value='책 전체 검색 유지';panel.querySelector('#htmlmemo-native-search-clear').onclick();assert.equal(whole.value,'책 전체 검색 유지');assert.equal(input.value,'');assert.equal(a.r.searchQuery,'');assert.equal(panel.querySelector('#htmlmemo-native-search-clear').hidden,true);
   panel.querySelector('[data-sidebar-view=annotations]').onclick();assert.equal(panel.querySelector('[data-annotation] .annotation-main').textContent,'남겨 둔 메모');assert.equal(panel.querySelector('[data-annotation] .annotation-meta').textContent,'메모');
   panel.querySelector('[data-sidebar-view=outline]').onclick();assert.equal(toc.scrollTop,37);assert.equal(panel.querySelector('.sidebar-content').hidden,false);
   assert.equal(panel.querySelectorAll('.sidebar-bookmarks').length,0);assert.equal(panel.querySelector('#htmlmemo-native-add-bookmark'),null);assert.equal(panel.querySelector('[data-heading]'),null,'the source TOC is not duplicated');

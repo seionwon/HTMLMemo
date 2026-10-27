@@ -31,6 +31,17 @@ async function verifyLoadedSearchEnds(page,doc,prefix,total,click,screenshotName
   for(let position=total-1;position>=1;position--){await click('#'+prefix+'search-prev');assert.deepEqual(await state(),expected(position));}
   await enter(true);assert.deepEqual(await state(),expected(1));
   await click('[data-search-index="'+(total-1)+'"]');assert.deepEqual(await state(),expected(total));await click('[data-search-index="0"]');assert.deepEqual(await state(),expected(1));
+  const query=await page.evaluate(`${doc}.querySelector('#${prefix}document-search').value`),whole=await page.evaluate(`${doc}.querySelector('#book-search')?.value??null`),readerDoc=doc==='document'?'document.querySelector(".document-host:not([hidden]) iframe").contentDocument':doc;
+  const clearLayout=await page.evaluate(`(()=>{const d=${doc},b=d.querySelector('#${prefix}search-clear'),r=b.getBoundingClientRect(),input=d.querySelector('#${prefix}document-search').getBoundingClientRect();return {visible:!b.hidden&&r.width>=24&&r.height>=24,inside:r.left>=input.left&&r.right<=input.right&&r.top>=input.top&&r.bottom<=input.bottom,hit:b.contains(d.elementFromPoint(r.left+r.width/2,r.top+r.height/2)),label:b.getAttribute('aria-label'),type:b.type};})()`);
+  assert.deepEqual(clearLayout,{visible:true,inside:true,hit:true,label:'불러온 부분 검색어 지우기',type:'button'});
+  if(screenshotName.endsWith('320')){
+    await page.evaluate(`${doc}.querySelector('#${prefix}search-clear').focus()`);
+    for(const type of ['keyDown','keyUp'])await page.send('Input.dispatchKeyEvent',{type,key:'Enter',code:'Enter',windowsVirtualKeyCode:13,...(type==='keyDown'?{text:'\r',unmodifiedText:'\r'}:{})});
+  }else await click('#'+prefix+'search-clear');
+  const cleared=()=>page.evaluate(`(()=>{const d=${doc},i=d.querySelector('#${prefix}document-search');return {query:i.value,focused:d.activeElement===i,hidden:d.querySelector('#${prefix}search-clear').hidden,results:d.querySelectorAll('[data-search-index]').length,count:d.querySelector('#${prefix}search-count').textContent,prev:d.querySelector('#${prefix}search-prev').disabled,next:d.querySelector('#${prefix}search-next').disabled,mark:!!${readerDoc}.querySelector('[data-htmlmemo-search]:not([data-htmlmemo-book-search-hit])'),whole:d.querySelector('#book-search')?.value??null};})()`);
+  assert.deepEqual(await cleared(),{query:'',focused:true,hidden:true,results:0,count:'검색어를 입력하세요.',prev:true,next:true,mark:false,whole});
+  await writeFile(join(root,`test-results/sidebar-views-search-cleared-${screenshotName}.png`),await page.screenshot());
+  await page.evaluate(`(()=>{const i=${doc}.querySelector('#${prefix}document-search');i.value=${JSON.stringify(query)};i.dispatchEvent(new Event('input',{bubbles:true}));})()`);await page.waitFor(`${doc}.querySelector('#${prefix}search-count').textContent===${JSON.stringify(`1 / ${total}개 결과`)}`);assert.deepEqual(await state(),expected(1));
 }
 test('real Chrome: MHTML import restores a Chrome archive, saves notes and exports self-contained HTML',{timeout:90000},async()=>{
   await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-mhtml-'));await cp(join(root,'public'),folder,{recursive:true});

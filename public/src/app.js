@@ -1210,8 +1210,8 @@ function renderSidebar(mode,{panel=$('#sidebar'),embedded=false,documentReader=r
   updateSidebarCounts(panel,r);
   const content=$('.sidebar-content',panel);content.hidden=false;
   if(mode==='search'){
-    content.innerHTML=`<div class="search-field"><input id="${id('document-search')}" aria-label="불러온 부분 검색어" placeholder="불러온 부분에서 찾기" autocomplete="off"></div><div class="search-navigation loaded-search-navigation"><span id="${id('search-count')}" role="status" aria-live="polite">검색어를 입력하세요.</span><button id="${id('search-prev')}" class="icon-button" aria-label="이전 검색 결과" disabled>${icon('back')}</button><button id="${id('search-next')}" class="icon-button" aria-label="다음 검색 결과" disabled>${icon('forward')}</button></div><div id="${id('search-results')}"></div>`;
-    const input=q('document-search');input.value=r.sidebarSearchQuery??r.searchQuery??'';
+    content.innerHTML=`<div class="search-field loaded-search-field"><input id="${id('document-search')}" aria-label="불러온 부분 검색어" placeholder="불러온 부분에서 찾기" autocomplete="off"><button type="button" id="${id('search-clear')}" class="icon-button loaded-search-clear" aria-label="불러온 부분 검색어 지우기" title="검색어 지우기" hidden>${icon('close',14)}</button></div><div class="search-navigation loaded-search-navigation"><span id="${id('search-count')}" role="status" aria-live="polite">검색어를 입력하세요.</span><button id="${id('search-prev')}" class="icon-button" aria-label="이전 검색 결과" disabled>${icon('back')}</button><button id="${id('search-next')}" class="icon-button" aria-label="다음 검색 결과" disabled>${icon('forward')}</button></div><div id="${id('search-results')}"></div>`;
+    const input=q('document-search'),clear=q('search-clear');input.value=r.sidebarSearchQuery??r.searchQuery??'';clear.hidden=!input.value;
     const run=(resume=false)=>{
       const query=input.value,current=()=>panel.sidebarMode==='search'&&panel.annotationReader===r&&reader()===r&&input.isConnected&&input.value===query;if(!current())return;
       const show=results=>{if(!current()||!results)return;updateSearchNavigation(r);q('search-results').innerHTML=results.slice(0,150).map((result,index)=>`<button class="search-result" data-search-index="${index}">${esc(result.quote)}</button>`).join('');$$('[data-search-index]',panel).forEach(button=>button.onclick=()=>{r.searchPosition=Number(button.dataset.searchIndex)-1;r.nextSearch(1);updateSearchNavigation(r);});};
@@ -1219,7 +1219,8 @@ function renderSidebar(mode,{panel=$('#sidebar'),embedded=false,documentReader=r
       if(results?.then){q('search-count').textContent='검색 준비 중…';q('search-prev').disabled=true;q('search-next').disabled=true;q('search-results').replaceChildren();results.then(show).catch(error=>{if(current()){q('search-count').textContent='검색을 준비하지 못했습니다. 다시 검색해 주세요.';r.callbacks?.onError?.(error);}});}else show(results);
     };
     const advance=direction=>{clearTimeout(panel.sidebarSearchTimer);if(r.searchQuery!==input.value){run();return;}r.nextSearch(direction);updateSearchNavigation(r);};
-    input.oninput=()=>{r.sidebarSearchQuery=input.value;clearTimeout(panel.sidebarSearchTimer);panel.sidebarSearchTimer=setTimeout(run,120);};input.onkeydown=e=>{if(e.key==='Enter'&&!e.isComposing){e.preventDefault();advance(e.shiftKey?-1:1);}};
+    input.oninput=()=>{r.sidebarSearchQuery=input.value;clear.hidden=!input.value;clearTimeout(panel.sidebarSearchTimer);panel.sidebarSearchTimer=setTimeout(run,120);};input.onkeydown=e=>{if(e.key==='Enter'&&!e.isComposing){e.preventDefault();advance(e.shiftKey?-1:1);}};
+    clear.onclick=()=>{clearTimeout(panel.sidebarSearchTimer);input.value='';r.sidebarSearchQuery='';r.search('');q('search-results').replaceChildren();updateSearchNavigation(r);clear.hidden=true;input.focus();};
     q('search-prev').onclick=()=>advance(-1);q('search-next').onclick=()=>advance(1);if(focusSearch)input.focus();if(input.value)run(!focusSearch);
   }else if(mode==='outline'){
     // Native books keep their original TOC nodes below this editor-owned panel.
