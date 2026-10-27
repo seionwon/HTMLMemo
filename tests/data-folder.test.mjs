@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {DataFolder,FOLDER_MANIFEST,FOLDER_PREVIOUS,FOLDER_DATA,FOLDER_GUIDE,folderSettings,applyFolderSettings,portableRecord} from '../public/src/data-folder.js';
+import {DataFolder,FOLDER_MANIFEST,FOLDER_PREVIOUS,FOLDER_DATA,FOLDER_GUIDE,folderSettings,applyFolderSettings,portableRecord,createStorageSubfolder,storageFolderName} from '../public/src/data-folder.js';
 import {PREFERENCES_KEY,normalizePreferences} from '../public/src/preferences.js';
 import {memoryFolder,memoryLocal,settleUntil} from './folder-fixture.mjs';
 import {LIBRARY_FOLDERS_KEY,editLibraryFolders} from '../public/src/library-folders.js';
@@ -17,6 +17,23 @@ function library(documents=[document()]) {
 function manager(t,lib,storage=memoryLocal(),extra={}) { const backup=new DataFolder({storage,operations:lib.operations,lock:fn=>fn(),delay:100000,...extra});t.after(()=>backup.dispose());return backup; }
 const manifest=async folder=>JSON.parse(await (await (await folder.getFileHandle(FOLDER_MANIFEST)).getFile()).text());
 const readObject=async(folder,ref)=> (await(await(await folder.getDirectoryHandle(FOLDER_DATA)).getFileHandle(ref.name)).getFile()).text();
+
+test('new storage prefers existing Documents or 문서 and creates only a named child',async()=>{
+  for(const name of ['Documents','문서']){
+    const root=memoryFolder('My device'),documents=await root.getDirectoryHandle(name,{create:true});
+    const child=await createStorageSubfolder(root,'나의 서재');assert.equal(child,documents.children.get('나의 서재'));
+    assert.deepEqual([...root.children.keys()],[name]);assert.deepEqual([...documents.children.keys()],['나의 서재']);
+    assert.equal(await createStorageSubfolder(documents,'HTMLMemo'),documents.children.get('HTMLMemo'));
+  }
+  const root=memoryFolder('Chosen location');assert.equal(await createStorageSubfolder(root,'HTMLMemo'),root.children.get('HTMLMemo'));
+});
+test('storage creation rejects invalid paths and nonempty collisions without changing their files',async()=>{
+  for(const name of ['', '.', '..', '../outside', 'a/b', 'a\\b', 'a:', 'a?', 'CON', 'LPT1.txt', 'name.', '한'.repeat(81)])assert.throws(()=>storageFolderName(name));
+  const root=memoryFolder('Documents');for(const name of ['../outside','a/b'])await assert.rejects(createStorageSubfolder(root,name));assert.equal(root.children.size,0);
+  const collision=await root.getDirectoryHandle('HTMLMemo',{create:true}),file=await collision.getFileHandle('personal.txt',{create:true});file.replace('Keep this data');
+  await assert.rejects(createStorageSubfolder(root,'HTMLMemo'),/다른 파일/);assert.equal(await(await file.getFile()).text(),'Keep this data');
+  const existing=await root.getDirectoryHandle('Existing',{create:true});await existing.getFileHandle(FOLDER_MANIFEST,{create:true});assert.equal(await createStorageSubfolder(root,'Existing'),existing);
+});
 
 test('folder connection copies every source, separate notes, bookmarks, history, view and settings into one portable folder',async t=>{
   const lib=library([document(),document('second')]),disk=memoryFolder(),storage=memoryLocal([[PREFERENCES_KEY,JSON.stringify(normalizePreferences({theme:'dark',libraryView:'list'}))],['msuite_tts_rate','1.5'],['htmlmemo_tts_lang_doc','ko'],['msuite_tts_voice_ko','device voice'],['htmlmemo-doc-toc-width-v1','310'],['other-app-secret','never copy']]);

@@ -68,8 +68,9 @@ test('a real build removes retired distribution artifacts and writes the Pages w
 
 // Executes the real standalone bundle with a DOM model and local IndexedDB
 // contract. It verifies event handlers, not Chrome rendering or OS file dialogs.
-async function fileApp({address='file:///Users/beginner/HTMLMemo.html',navigator={},documents=[],localEntries=[],settings=[],firstRun=false,directoryPicker=async()=>{throw new DOMException('Cancelled','AbortError');}}={}){
-  // Ordinary feature fixtures deliberately defer onboarding; dedicated first-run tests do not.
+async function fileApp({address='file:///Users/beginner/HTMLMemo.html',navigator={},documents=[],localEntries=[],settings=[],firstRun=false,launchQueue,directoryPicker=async()=>{throw new DOMException('Cancelled','AbortError');}}={}){
+  // Model-only feature tests invoke individual handlers without native dialog modality.
+  // Dedicated first-run tests and real browser tests exercise the required setup surface.
   const html=standaloneHTML(assets),doc=new DOMParser().parseFromString(html,'text/html'),blobs=[],local=new Map([...(firstRun?[]:[['htmlmemo-data-folder-welcome-v1','1']]),...localEntries]);
   const selectPrototype=Object.getPrototypeOf(doc.querySelector('select'));Object.defineProperty(selectPrototype,'value',{configurable:true,get(){return this.getAttribute('data-test-value')??this.querySelector('option[selected]')?.value??this.querySelector('option')?.value??'';},set(value){this.setAttribute('data-test-value',value);}});
   Object.defineProperty(doc,'activeElement',{value:doc.body,writable:true,configurable:true});doc.defaultView.HTMLElement.prototype.focus=function(){this.ownerDocument.activeElement=this;};
@@ -80,8 +81,9 @@ async function fileApp({address='file:///Users/beginner/HTMLMemo.html',navigator
   class LocalURL extends URL{static createObjectURL(blob){blobs.push(blob);return 'blob:local-test';}static revokeObjectURL(){}}
   const events=new Map();const window={addEventListener(name,fn){if(!events.has(name))events.set(name,[]);events.get(name).push(fn);},postMessage(){},dispatchEvent(){}};
   if(directoryPicker)window.showDirectoryPicker=directoryPicker;
+  if(launchQueue!==undefined)window.launchQueue=launchQueue;
   const context=vm.createContext({document:doc,window,indexedDB,localStorage:{get length(){return local.size;},key:index=>[...local.keys()][index]??null,getItem:key=>local.get(key)??null,setItem:(key,value)=>local.set(key,value)},location:new URL(address),navigator:{onLine:false,storage:{},locks:{request:async(name,action)=>action()},...navigator},URL:LocalURL,Blob,File,crypto,TextEncoder,TextDecoder,Uint8Array,DataView,atob,btoa,structuredClone,Event,DOMException,innerWidth:1200,innerHeight:850,matchMedia:()=>({matches:false}),setInterval(){},setTimeout(fn,ms){if(ms===800)queueMicrotask(fn);return 1;},clearTimeout(){},requestAnimationFrame:fn=>fn(),fetch:()=>{throw new Error('An embedded app must not fetch a server');}});
-  const script=[...doc.querySelectorAll('script')].find(el=>el.type!=='application/json');new vm.Script(script.textContent).runInContext(context);await new Promise(resolve=>setImmediate(resolve));assert.match(doc.querySelector('#status-left').textContent,typeof directoryPicker==='function'&&typeof context.navigator.locks?.request==='function'?/개의 문서/:/Chrome/);return {doc,context,blobs,local,get databaseOpens(){return databaseOpens;},settings:stores.get('settings'),emit:(name,event)=>events.get(name)?.forEach(fn=>fn(event))};
+  const script=[...doc.querySelectorAll('script')].find(el=>el.type!=='application/json');new vm.Script(script.textContent).runInContext(context);await new Promise(resolve=>setImmediate(resolve));if(!firstRun&&doc.querySelector('[data-folder-welcome]'))dialog.open=false;assert.match(doc.querySelector('#status-left').textContent,typeof directoryPicker==='function'&&typeof context.navigator.locks?.request==='function'?/개의 문서/:/Chrome/);return {doc,context,blobs,local,get databaseOpens(){return databaseOpens;},settings:stores.get('settings'),emit:(name,event)=>events.get(name)?.forEach(fn=>fn(event))};
 }
 function openExecution(app){app.doc.querySelector('#settings-button').onclick();app.doc.querySelector('#settings-execution').onclick();}
 test('execution shares only the canonical URL, with no app package or installation download',async()=>{
@@ -354,35 +356,63 @@ test('card and list views sort by both directions for saved date, modified date 
 test('first run automatically explains folder creation in three steps without opening a native picker',async()=>{
   let calls=0;const app=await fileApp({firstRun:true,directoryPicker:async()=>{calls++;return memoryFolder();}}),doc=app.doc;
   assert.equal(doc.querySelector('#dialog').open,true);assert.ok(doc.querySelector('[data-folder-welcome]'));assert.equal(doc.querySelector('#dialog').getAttribute('aria-labelledby'),'dialog-title');
-  assert.match(doc.querySelector('#dialog-title').textContent,/전용 폴더/);assert.equal(doc.querySelectorAll('.folder-welcome-steps li').length,3);
-  for(const text of ['Documents','새 폴더','원하는 이름','HTMLMemo','쓰기','허용','자동 저장','이 폴더 전체','나중에 연결','브라우저 데이터를 지우면'])assert.ok(doc.querySelector('[data-folder-welcome]').textContent.includes(text),text);
-  assert.equal(doc.activeElement.id,'select-storage-folder');assert.equal(calls,0);assert.equal(app.settings.get('folder'),undefined);assert.equal(app.local.has('htmlmemo-data-folder-welcome-v1'),false);
-  assert.match(doc.querySelector('.folder-welcome-existing').textContent,/새로 만들지 말고.*자동 복원/);
+  assert.match(doc.querySelector('#dialog-title').textContent,/저장 폴더/);assert.equal(doc.querySelectorAll('.folder-welcome-steps li').length,3);
+  for(const text of ['Documents','하위','원하는 이름','HTMLMemo','쓰기','허용','자동 저장','이 폴더 전체','설정'])assert.ok(doc.querySelector('[data-folder-welcome]').textContent.includes(text),text);
+  assert.equal(doc.activeElement.id,'create-storage-folder');assert.equal(calls,0);assert.equal(app.settings.get('folder'),undefined);assert.equal(app.local.has('htmlmemo-data-folder-welcome-v1'),false);
+  assert.match(doc.querySelector('.folder-welcome-existing').textContent,/전용 폴더 자체.*자동 복원/);
 });
 
-test('deferring first-run setup persists only on this device while unconnected reminders and manual setup remain',async()=>{
-  const app=await fileApp({firstRun:true,directoryPicker:async()=>memoryFolder()}),doc=app.doc;
-  doc.querySelector('#folder-welcome-later').onclick();assert.equal(doc.querySelector('#dialog').open,false);assert.equal(doc.activeElement.id,'settings-button');assert.equal(app.local.get('htmlmemo-data-folder-welcome-v1'),'1');
-  assert.match(doc.querySelector('#data-folder-status').textContent,/미연결/);assert.equal(doc.querySelector('#data-folder-status').textContent,'폴더 미연결');assert.equal(app.settings.get('folder'),undefined);
-  const reopened=await fileApp({firstRun:true,localEntries:[...app.local],directoryPicker:async()=>memoryFolder()});assert.equal(!!reopened.doc.querySelector('#dialog').open,false);
-  reopened.doc.querySelector('#data-folder-status').onclick();assert.equal(reopened.doc.querySelector('#dialog').open,true);assert.ok(reopened.doc.querySelector('#select-storage-folder'));
+test('first-run setup cannot be skipped, including a legacy deferred visit',async()=>{
+  const app=await fileApp({firstRun:true,localEntries:[['htmlmemo-data-folder-welcome-v1','1']],directoryPicker:async()=>memoryFolder()}),doc=app.doc;
+  assert.equal(doc.querySelector('#dialog').open,true);assert.equal(doc.querySelector('#folder-welcome-later,[data-dialog-close]'),null);
+  let prevented=false;doc.querySelector('#dialog').oncancel({preventDefault(){prevented=true;}});assert.equal(prevented,true);
+  doc.querySelector('#dialog').close();doc.querySelector('#dialog').onclose();assert.equal(doc.querySelector('#dialog').open,true);
+  assert.equal(app.settings.get('folder'),undefined);assert.equal(doc.documentElement.dataset.storageSetup,'required');
+});
+
+test('first-run creates a named child under Documents and connects only after a successful save',async()=>{
+  const parent=memoryFolder('Documents');let options,calls=0;
+  const app=await fileApp({firstRun:true,directoryPicker:async value=>{options=value;calls++;return parent;}}),doc=app.doc;
+  doc.querySelector('#storage-folder-name').value='내 전용 서재';assert.equal(parent.children.size,0);
+  doc.querySelector('#create-storage-folder').onclick();await settleUntil(()=>!doc.querySelector('#dialog').open);
+  const child=parent.children.get('내 전용 서재');assert.equal(calls,1);assert.equal(options.startIn,'documents');assert.equal(options.id,'htmlmemo-storage-parent-v1');
+  assert.equal(app.settings.get('folder'),child);assert.ok(child.children.has('HTMLMemo-library.json'));assert.equal(parent.children.has('HTMLMemo-library.json'),false);
+  assert.equal(doc.documentElement.dataset.storageSetup,'ready');assert.equal(app.local.get('htmlmemo-data-folder-welcome-v1'),'1');
+});
+
+test('a failed first folder save keeps setup required and retries the same newly-created child safely',async()=>{
+  const control={failWrite:'HTMLMemo-library.json'},parent=memoryFolder('Documents',control);
+  const app=await fileApp({firstRun:true,directoryPicker:async()=>parent}),doc=app.doc;
+  doc.querySelector('#create-storage-folder').onclick();await settleUntil(()=>!doc.querySelector('#create-storage-folder').disabled);
+  const child=parent.children.get('HTMLMemo');assert.ok(child);assert.equal(doc.querySelector('#dialog').open,true);assert.equal(doc.documentElement.dataset.storageSetup,'required');assert.equal(app.local.has('htmlmemo-data-folder-welcome-v1'),false);
+  control.failWrite=null;doc.querySelector('#create-storage-folder').onclick();await settleUntil(()=>!doc.querySelector('#dialog').open);
+  assert.equal(app.settings.get('folder'),child);assert.equal(parent.children.size,1);assert.ok(child.children.has('HTMLMemo-library.json'));assert.equal(doc.documentElement.dataset.storageSetup,'ready');
+});
+
+test('a native file launch waits for the first complete storage connection',async()=>{
+  let consumer,reads=0;const selected=memoryFolder('Chosen storage');
+  const app=await fileApp({firstRun:true,launchQueue:{setConsumer:fn=>consumer=fn},directoryPicker:async()=>selected});assert.equal(typeof consumer,'function');
+  consumer({files:[{kind:'file',name:'queued.html',getFile:()=>{reads++;return new Promise(()=>{});}}]});await new Promise(resolve=>setImmediate(resolve));assert.equal(reads,0);
+  app.doc.querySelector('#select-storage-folder').onclick();await settleUntil(()=>reads===1);assert.equal(app.doc.documentElement.dataset.storageSetup,'ready');assert.ok(selected.children.has('HTMLMemo-library.json'));
 });
 
 test('first-run picker cancellation or denied access retains the guide and retry works without a second setup dialog',async()=>{
   let calls=0,fail='AbortError',options;const selected=memoryFolder('내 HTML 서재'),app=await fileApp({firstRun:true,directoryPicker:async value=>{calls++;options=value;if(fail)throw Object.assign(Error('Picker failure'),{name:fail});return selected;}}),doc=app.doc;
   for(const error of ['AbortError','NotAllowedError']){
     fail=error;doc.querySelector('#select-storage-folder').onclick();await settleUntil(()=>!doc.querySelector('#select-storage-folder').disabled);
-    assert.equal(doc.querySelector('#dialog').open,true);assert.ok(doc.querySelector('[data-folder-welcome]'));assert.equal(app.settings.get('folder'),undefined);assert.equal(app.local.has('htmlmemo-data-folder-welcome-v1'),false);assert.equal(doc.querySelector('#folder-welcome-later').disabled,false);
-    assert.match(doc.querySelector('#folder-connection-status').textContent,error==='AbortError'?/취소.*다시 시작/:/쓰기를 허용/);
+    assert.equal(doc.querySelector('#dialog').open,true);assert.ok(doc.querySelector('[data-folder-welcome]'));assert.equal(app.settings.get('folder'),undefined);assert.equal(app.local.has('htmlmemo-data-folder-welcome-v1'),false);assert.equal(doc.querySelector('#create-storage-folder').disabled,false);
+    assert.match(doc.querySelector('#folder-connection-status').textContent,error==='AbortError'?/취소.*다시 선택/:/쓰기를 허용/);
   }
-  fail='';doc.querySelector('#select-storage-folder').onclick();assert.equal(doc.querySelector('#folder-welcome-later').disabled,true);
+  fail='';doc.querySelector('#select-storage-folder').onclick();assert.equal(doc.querySelector('#create-storage-folder').disabled,true);
   let prevented=false;doc.querySelector('#dialog').oncancel({preventDefault(){prevented=true;}});assert.equal(prevented,true);
   await settleUntil(()=>!doc.querySelector('#dialog').open);assert.equal(calls,3);assert.equal(options.startIn,'documents');assert.equal(options.mode,'readwrite');assert.equal(app.settings.get('folder'),selected);assert.equal(app.local.get('htmlmemo-data-folder-welcome-v1'),'1');assert.ok(selected.children.has('HTMLMemo-library.json'));assert.equal(doc.querySelector('#data-folder-status').textContent,'폴더 저장 완료');
 });
 
-test('Escape deliberately defers first-run setup but never claims a folder was connected',async()=>{
-  const app=await fileApp({firstRun:true,directoryPicker:async()=>memoryFolder()});app.doc.querySelector('#dialog').oncancel({preventDefault(){assert.fail('Escape is allowed when not saving');}});app.doc.querySelector('#dialog').close();
-  assert.equal(app.local.get('htmlmemo-data-folder-welcome-v1'),'1');assert.equal(app.settings.get('folder'),undefined);assert.match(app.doc.querySelector('#data-folder-status').textContent,/미연결/);
+test('Escape and closing the first-run dialog never mark setup complete',async()=>{
+  const app=await fileApp({firstRun:true,directoryPicker:async()=>memoryFolder()});let blocked=false;
+  app.doc.querySelector('#dialog').oncancel({preventDefault(){blocked=true;}});assert.equal(blocked,true);
+  app.doc.querySelector('#dialog').close();app.doc.querySelector('#dialog').onclose();
+  assert.equal(app.doc.querySelector('#dialog').open,true);assert.equal(app.local.has('htmlmemo-data-folder-welcome-v1'),false);assert.equal(app.settings.get('folder'),undefined);
 });
 
 test('missing folder support blocks app startup with the required Chrome message even after a previous visit',async()=>{
@@ -408,11 +438,15 @@ test('a missing safe folder-write lock also shows the Chrome requirement before 
   const app=await fileApp({navigator:{locks:undefined}});assert.ok(app.doc.querySelector('[data-chrome-required]'));assert.equal(app.databaseOpens,0);assert.equal(app.doc.querySelector('#hero-import').onclick,null);
 });
 
-test('an existing connected folder or revoked permission never reopens the new-folder welcome',async()=>{
+test('a saved folder resumes; revoked permission requires reconnecting the same folder',async()=>{
   for(const permission of ['granted','denied']){
     const selected=memoryFolder('기존 폴더',{permission}),app=await fileApp({firstRun:true,settings:[['folder',selected]],directoryPicker:async()=>{assert.fail('Do not automatically open a picker');}});
     await settleUntil(()=>app.doc.querySelector('#data-folder-status').textContent.includes(permission==='granted'?'완료':'중단'));
-    assert.equal(!!app.doc.querySelector('#dialog').open,false);assert.equal(app.doc.querySelector('[data-folder-welcome]'),null);assert.equal(app.settings.get('folder'),selected);
+    assert.equal(!!app.doc.querySelector('#dialog').open,permission==='denied');assert.equal(app.settings.get('folder'),selected);
+    if(permission==='denied'){
+      assert.ok(app.doc.querySelector('#resume-data-folder'));assert.equal(selected.children.size,0);selected.control.permission='granted';
+      app.doc.querySelector('#resume-data-folder').onclick();await settleUntil(()=>!app.doc.querySelector('#dialog').open);assert.equal(app.settings.get('folder'),selected);
+    }
   }
 });
 

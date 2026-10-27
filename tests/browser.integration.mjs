@@ -2535,9 +2535,9 @@ test('real Chrome: Pages-only first-run folder welcome is automatic, readable an
     await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:800,deviceScaleFactor:1,mobile:false});await page.navigate(url);
     const welcome='document.querySelector("#dialog").open&&!!document.querySelector("[data-folder-welcome]")';await page.waitFor(welcome);
     const state=await page.evaluate(`({calls:window.firstRunPickerCalls,focus:document.activeElement.id,label:document.querySelector('#dialog').getAttribute('aria-labelledby'),steps:document.querySelectorAll('.folder-welcome-steps li').length,seen:localStorage.getItem('htmlmemo-data-folder-welcome-v1'),text:document.querySelector('[data-folder-welcome]').textContent})`);
-    assert.equal(state.calls,0);assert.equal(state.focus,'select-storage-folder');assert.equal(state.label,'dialog-title');assert.equal(state.steps,3);assert.equal(state.seen,null);
+    assert.equal(state.calls,0);assert.equal(state.focus,'create-storage-folder');assert.equal(state.label,'dialog-title');assert.equal(state.steps,3);assert.equal(state.seen,null);
     assert.deepEqual(await page.evaluate('window.storageProtection'),{checks:0,requests:0,saved:false},'opening the app never asks for this permission');
-    for(const text of ['Documents','새 폴더','원하는 이름','허용','자동 저장','이 폴더 전체','나중에 연결','브라우저 데이터를 지우면'])assert.ok(state.text.includes(text),text);
+    for(const text of ['Documents','하위','원하는 이름','허용','자동 저장','이 폴더 전체','설정'])assert.ok(state.text.includes(text),text);
     assert.equal(await page.evaluate(`(async()=>{return (await (await import('./src/storage.js')).listDocuments()).length;})()`),0);
     await mkdir(join(root,'test-results'),{recursive:true});
     for(const width of [1280,320]){
@@ -2546,16 +2546,19 @@ test('real Chrome: Pages-only first-run folder welcome is automatic, readable an
       assert.equal(await page.evaluate(`(()=>{const d=document.querySelector('#dialog'),r=d.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight&&d.scrollWidth<=d.clientWidth+1;})()`),true);
       await writeFile(join(root,`test-results/pages-only-first-run-${width}.png`),await page.screenshot());
     }
-    await page.click('.folder-welcome-existing summary');assert.equal(await page.evaluate('document.querySelector(".folder-welcome-existing").open'),true);assert.match(await page.evaluate('document.querySelector(".folder-welcome-existing").textContent'),/새로 만들지 말고.*자동 복원/);
-    await page.click('#select-storage-folder');await page.waitFor('!document.querySelector("#select-storage-folder").disabled&&document.querySelector("#folder-connection-status").textContent.includes("취소")');assert.equal(await page.evaluate('window.firstRunPickerCalls'),1);assert.equal(await page.evaluate(welcome),true);
-    assert.deepEqual(await page.evaluate('window.firstRunOptions'),{id:'htmlmemo-storage-v2',mode:'readwrite',startIn:'documents'});
+    await page.click('.folder-welcome-existing summary');assert.equal(await page.evaluate('document.querySelector(".folder-welcome-existing").open'),true);assert.match(await page.evaluate('document.querySelector(".folder-welcome-existing").textContent'),/전용 폴더 자체.*자동 복원/);
+    await page.click('#create-storage-folder');await page.waitFor('!document.querySelector("#create-storage-folder").disabled&&document.querySelector("#folder-connection-status").textContent.includes("취소")');assert.equal(await page.evaluate('window.firstRunPickerCalls'),1);assert.equal(await page.evaluate(welcome),true);
+    assert.deepEqual(await page.evaluate('window.firstRunOptions'),{id:'htmlmemo-storage-parent-v1',mode:'readwrite',startIn:'documents'});
     await page.evaluate(`window.showDirectoryPicker=async()=>{throw new DOMException('Denied','NotAllowedError');}`);await page.click('#select-storage-folder');await page.waitFor('!document.querySelector("#select-storage-folder").disabled&&document.querySelector("#folder-connection-status").textContent.includes("쓰기를 허용")');assert.equal(await page.evaluate('localStorage.getItem("htmlmemo-data-folder-welcome-v1")'),null);
     assert.deepEqual(await page.evaluate('window.storageProtection'),{checks:0,requests:0,saved:false},'cancelled or denied setup never asks for protection');
-    await page.click('#folder-welcome-later');await page.waitFor('!document.querySelector("#dialog").open');assert.equal(await page.evaluate('document.activeElement.id'),'settings-button');assert.match(await page.evaluate('document.querySelector("#data-folder-status").textContent'),/미연결/);
-    await page.navigate(url);await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');assert.equal(await page.evaluate('document.querySelector("#dialog").open'),false);
-    await page.click('#data-folder-status');await page.waitFor('document.querySelector("#select-storage-folder")&&document.querySelector("#dialog").open');await page.click('#dialog [data-dialog-close]');
-    await page.evaluate(`localStorage.removeItem('htmlmemo-data-folder-welcome-v1')`);await page.navigate(url);await page.waitFor(welcome);
-    await page.evaluate(`window.showDirectoryPicker=async()=> (await navigator.storage.getDirectory()).getDirectoryHandle('내 HTMLMemo 서재',{create:true})`);await page.click('#select-storage-folder');await page.waitFor('!document.querySelector("#dialog").open&&document.querySelector("#data-folder-status").textContent==="폴더 저장 완료"');
+    assert.equal(await page.evaluate('document.querySelector("#folder-welcome-later,[data-dialog-close]")'),null);
+    for(const type of ['keyDown','keyUp'])await page.send('Input.dispatchKeyEvent',{type,key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
+    assert.equal(await page.evaluate(welcome),true);
+    await page.send('Input.dispatchMouseEvent',{type:'mousePressed',x:2,y:2,button:'left',clickCount:1});await page.send('Input.dispatchMouseEvent',{type:'mouseReleased',x:2,y:2,button:'left',clickCount:1});assert.equal(await page.evaluate(welcome),true);
+    await page.evaluate('document.querySelector("#dialog").close()');await page.waitFor(welcome);
+    await page.evaluate(`localStorage.setItem('htmlmemo-data-folder-welcome-v1','1')`);await page.navigate(url);await page.waitFor(welcome);
+    assert.equal(await page.evaluate('document.documentElement.dataset.storageSetup'),'required');
+    await page.evaluate(`window.showDirectoryPicker=async()=> (await navigator.storage.getDirectory()).getDirectoryHandle('Documents',{create:true});document.querySelector('#storage-folder-name').value='내 HTMLMemo 서재'`);await page.click('#create-storage-folder');await page.waitFor('!document.querySelector("#dialog").open&&document.querySelector("#data-folder-status").textContent==="폴더 저장 완료"');
     await page.waitFor('window.storageProtection.requests===1');assert.deepEqual(await page.evaluate('window.storageProtection'),{checks:1,requests:1,saved:true},'denied optional protection still leaves a complete folder backup');
     assert.equal(await page.evaluate('!!document.querySelector("#data-folder-card,#library-data-folder")'),false,'connecting a folder does not reintroduce the library banner');
     const saved=await page.evaluate(`(async()=>{const {getSetting}=await import('./src/storage.js'),handle=await getSetting('folder');return {name:handle.name,seen:localStorage.getItem('htmlmemo-data-folder-welcome-v1'),manifest:JSON.parse(await(await(await handle.getFileHandle('HTMLMemo-library.json')).getFile()).text())};})()`);assert.equal(saved.name,'내 HTMLMemo 서재');assert.equal(saved.seen,'1');assert.equal(saved.manifest.documents.length,0);
@@ -2610,7 +2613,7 @@ test('real Chrome: Pages-only data folder copies imported originals and restores
     await page.click('#sidebar [data-sidebar-view=bookmarks]');await page.click('#add-bookmark');await page.waitFor('document.querySelector("#note-text")');await page.evaluate('document.querySelector("#note-text").value="다른 기기에서도 이어서"');await page.click('#dialog button[value=save]');await page.waitFor(ready);
     await page.evaluate(`window.showDirectoryPicker=async options=>{window.dataFolderPicker={mode:options.mode,startIn:typeof options.startIn==='string'?options.startIn:options.startIn.name};return (await navigator.storage.getDirectory()).getDirectoryHandle('HTMLMemo-portable',{create:true});};`);
     await clickSettingsAction(page,'#settings-folder');await page.click('#select-storage-folder');await page.waitFor('document.querySelector("#dialog[open] h2")?.textContent==="HTMLMemo 설정"&&document.querySelector("#data-folder-status").textContent==="폴더 저장 완료"');
-    assert.deepEqual(await page.evaluate('window.dataFolderPicker'),{mode:'readwrite',startIn:'documents'});
+    assert.deepEqual(await page.evaluate('window.dataFolderPicker'),{mode:'readwrite',startIn:'HTMLMemo browser fixture'});
     await page.evaluate('document.querySelector("#appearance").value="dark";document.querySelector("#appearance").dispatchEvent(new Event("change"));document.querySelector("#dialog").close();');
     await page.click('.document-host:not([hidden]) [data-action=speak]');await page.waitFor('document.querySelector(".mstts-player")');await page.click('.mstts-player button:nth-of-type(4)');await page.click('.mstts-player button:last-of-type');
     await page.evaluate(`${doc}.querySelector('main').scrollTop=900;`);await page.waitFor(`${doc}.querySelector('main').scrollTop>=899`);
@@ -2666,7 +2669,7 @@ test('real Chrome: folder setup explains subfolders and preserves connections th
     // exercise recovery; a real OPFS handle exercises persistence and file writes.
     await page.evaluate(`window.folderPicks=0;window.cancelFolder=true;window.showDirectoryPicker=async options=>{window.folderPicks++;window.folderOptions={id:options.id,mode:options.mode,startIn:typeof options.startIn==='string'?options.startIn:options.startIn.name};if(window.cancelFolder)throw new DOMException('Cancelled','AbortError');return (await navigator.storage.getDirectory()).getDirectoryHandle('HTMLMemo',{create:true});};`);
     assert.equal(await page.evaluate('!!document.querySelector("#choose-folder,#menu-folder")'),false);
-    await clickSettingsAction(page,'#settings-button');await page.waitFor('document.querySelector("#settings-folder")?.textContent==="폴더 연결"');
+    await clickSettingsAction(page,'#settings-button');await page.waitFor('document.querySelector("#settings-folder")?.textContent==="관리"');
     await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/folder-setup-settings-1280.png'),await page.screenshot());
     await page.click('#settings-folder');await page.waitFor('document.querySelector("#dialog[open] h2")?.textContent==="저장 폴더 연결"');assert.equal(await page.evaluate('window.folderPicks'),0);
     assert.match(await page.evaluate('document.querySelector("#dialog-content").textContent'),/문서\/HTMLMemo/);
@@ -2677,7 +2680,7 @@ test('real Chrome: folder setup explains subfolders and preserves connections th
     }
     await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
     await page.click('#select-storage-folder');await page.waitFor('!document.querySelector("#select-storage-folder").disabled && document.querySelector("#folder-connection-status").textContent.includes("변경하지")');
-    assert.deepEqual(await page.evaluate('window.folderOptions'),{id:'htmlmemo-storage-v2',mode:'readwrite',startIn:'documents'});
+    assert.deepEqual(await page.evaluate('window.folderOptions'),{id:'htmlmemo-storage-v2',mode:'readwrite',startIn:'HTMLMemo browser fixture'});
     await page.evaluate('window.cancelFolder=false');await page.click('#select-storage-folder');await page.waitFor('document.querySelector("#dialog[open] h2")?.textContent==="HTMLMemo 설정"&&document.querySelector("#settings-folder")?.textContent==="관리"');assert.equal(await page.evaluate('document.querySelector("#status-left").textContent.includes("HTMLMemo 자동 저장")'),true);
     assert.equal(await page.evaluate(`(async()=>{const {getSetting}=await import('./src/storage.js'),directory=await getSetting('folder');if(!(directory instanceof FileSystemDirectoryHandle))throw Error('Directory handle was not preserved');const file=await directory.getFileHandle('check.txt',{create:true}),writer=await file.createWritable();await writer.write('HTMLMemo directory check');await writer.close();return (await file.getFile()).text();})()`),'HTMLMemo directory check');
     await page.navigate(url);await page.waitFor('document.querySelector("#status-left").textContent.includes("HTMLMemo 자동 저장")');

@@ -11,7 +11,7 @@ import {bundledExample} from './distribution.js';
 import { InstallController, isIOS, installableLocation, installationURL, PUBLIC_APP_URL } from './install.js';
 import { APP_VERSION } from './version.js';
 import { openDeviceSync } from './sync-ui.js';
-import { DataFolder, supportsDataFolder, CHROME_REQUIRED_MESSAGE } from './data-folder.js';
+import { DataFolder, supportsDataFolder, CHROME_REQUIRED_MESSAGE, createStorageSubfolder, storageFolderName } from './data-folder.js';
 import {validateFolders,folderPath,folderDescendants,editLibraryFolders,LibraryIndex} from './library-folders.js';
 
 let records = []; const tabs = []; let activeId = 'library'; let folder = null; let popoverName = ''; let sidebarMode = '';
@@ -23,6 +23,7 @@ let libraryFolderById=new Map(),libraryFolderChildren=new Map(),libraryFolderCou
 let preferences=normalizePreferences(), settingsFileHandle=null, settingsFolderHint='';
 let dataFolder, browserStorageProtection;
 const FOLDER_WELCOME_KEY='htmlmemo-data-folder-welcome-v1';
+let folderSetupPending=false,lastSetupAttempt=null;const folderSetupWaiters=[];
 let sharingApp=false, installController;
 let readerFocused=false, nativeReaderFullscreen=false, focusBusy=false;
 let tabLayout='';
@@ -41,7 +42,7 @@ function setButton(selector, name, label = '') { $(selector).innerHTML=icon(name
 function setIconButton(selector, name, label, size = 18) { const button=$(selector);button.innerHTML=icon(name,size);button.title=label;button.setAttribute('aria-label',label); }
 function modal(html, bind = () => {}) {
   closePopover(); $('#dialog-content').innerHTML=html; const dialog=$('#dialog'); dialog.returnValue='';dialog.oncancel=null;dialog.removeAttribute('aria-describedby');
-  const heading=$('h2',dialog);if(heading){heading.id='dialog-title';dialog.setAttribute('aria-labelledby',heading.id);}else dialog.removeAttribute('aria-labelledby');
+  dialog.onclose=null;const heading=$('h2',dialog);if(heading){heading.id='dialog-title';dialog.setAttribute('aria-labelledby',heading.id);}else dialog.removeAttribute('aria-labelledby');
   if (!dialog.open) dialog.showModal();
   $$('[data-dialog-close]',dialog).forEach(button=>button.onclick=()=>dialog.close()); bind(dialog);
 }
@@ -491,7 +492,7 @@ async function createDocument(snapshot, handle = null, name = null, local = {}) 
   return tab;
 }
 function dataFolderGuide() {
-  return `<details class="export-guide" data-folder-guide><summary>전용 폴더 자동 저장과 새 기기로 옮기는 방법</summary><p>Documents(문서) 안에 <strong>이름을 정한 전용 하위 폴더 하나</strong>를 만들고 읽기·쓰기를 허용하세요. 예: <code>문서/HTMLMemo</code>. 브라우저 선택 창의 새 폴더 기능을 사용합니다.</p><p>연결하면 기존 서재와 앞으로 가져오는 모든 HTML·MHTML 문서의 복사본, 주석·북마크·주석 이력·읽기 위치·앱 설정을 자동 보관합니다. 원래 파일을 이동·삭제해도 보관한 문서는 열 수 있습니다. <strong>설정 파일을 따로 저장할 필요가 없습니다.</strong></p><p>폴더 연결 시 브라우저 내부 데이터의 자동 삭제 방지도 함께 요청합니다. 브라우저가 허용하지 않아도 전용 폴더 자동 저장은 계속됩니다.</p><p>평소에는 원본 복사본과 주석을 분리해 저장하며 원본에 새 주석을 합치지 않습니다. <strong>다른 사람에게 주석까지 보내려면 문서를 열고 상단의 HTML 내보내기로 .html 파일을 새로 저장한 뒤 그 파일을 보내세요.</strong> 원본 파일만 보내면 앱에서 추가한 주석은 전달되지 않습니다. 받는 분도 HTMLMemo의 HTML 파일 가져오기로 엽니다.</p><ol><li>새 기기로 옮기기 전에 <strong>폴더 자동 저장 완료</strong> 표시를 확인하고 앱을 닫습니다.</li><li><strong>전용 폴더 전체를 하위 폴더·파일 빠짐없이</strong> 새 기기의 Documents(문서) 폴더로 복사합니다. 일부 HTML만 옮기면 주석·설정이 빠집니다.</li><li>새 기기의 HTMLMemo에서 <strong>설정 → 데이터 폴더 → 폴더 연결</strong>로 옮긴 폴더를 선택하고 쓰기를 허용하면 모두 자동 복원됩니다.</li></ol><p>브라우저가 권한을 회수하거나 폴더를 옮겼다면 다시 연결해야 합니다. 권한·용량·저장 오류는 화면 아래와 설정에 계속 표시하며 변경은 앱에 남겨둡니다. 저장이 끝나기 전에 앱을 강제 종료하지 마세요. 서로 다른 기기의 동시 편집을 실시간 동기화하지는 않습니다.</p></details>`;
+  return `<details class="export-guide" data-folder-guide><summary>전용 폴더 자동 저장과 새 기기로 옮기는 방법</summary><p>처음 실행할 때 Documents(문서)를 선택하면 그 아래에 <strong>입력한 이름의 전용 하위 폴더</strong>를 만듭니다. 예: <code>문서/HTMLMemo</code>. 문서 폴더 전체 선택이 제한되면 선택 창에서 하위 폴더를 만든 뒤 기존 저장 폴더 연결로 선택하세요.</p><p>연결하면 기존 서재와 앞으로 가져오는 모든 HTML·MHTML 문서의 복사본, 주석·북마크·주석 이력·읽기 위치·앱 설정을 자동 보관합니다. 원래 파일을 이동·삭제해도 보관한 문서는 열 수 있습니다. <strong>설정 파일을 따로 저장할 필요가 없습니다.</strong></p><p>폴더 연결 시 브라우저 내부 데이터의 자동 삭제 방지도 함께 요청합니다. 브라우저가 허용하지 않아도 전용 폴더 자동 저장은 계속됩니다.</p><p>평소에는 원본 복사본과 주석을 분리해 저장하며 원본에 새 주석을 합치지 않습니다. <strong>다른 사람에게 주석까지 보내려면 문서를 열고 상단의 HTML 내보내기로 .html 파일을 새로 저장한 뒤 그 파일을 보내세요.</strong> 원본 파일만 보내면 앱에서 추가한 주석은 전달되지 않습니다. 받는 분도 HTMLMemo의 HTML 파일 가져오기로 엽니다.</p><ol><li>새 기기로 옮기기 전에 <strong>폴더 자동 저장 완료</strong> 표시를 확인하고 앱을 닫습니다.</li><li><strong>전용 폴더 전체를 하위 폴더·파일 빠짐없이</strong> 새 기기의 Documents(문서) 폴더로 복사합니다. 일부 HTML만 옮기면 주석·설정이 빠집니다.</li><li>새 기기의 HTMLMemo에서 <strong>설정 → 데이터 폴더 → 폴더 연결</strong>로 옮긴 폴더를 선택하고 쓰기를 허용하면 모두 자동 복원됩니다.</li></ol><p>브라우저가 권한을 회수하거나 폴더를 옮겼다면 다시 연결해야 합니다. 권한·용량·저장 오류는 화면 아래와 설정에 계속 표시하며 변경은 앱에 남겨둡니다. 저장이 끝나기 전에 앱을 강제 종료하지 마세요. 서로 다른 기기의 동시 편집을 실시간 동기화하지는 않습니다.</p></details>`;
 }
 function folderStatusText() {
   if(!folder)return '데이터 폴더 미연결 · 브라우저 데이터 삭제 시 잃을 수 있습니다.';
@@ -520,15 +521,17 @@ function protectBrowserStorage() {
     }catch{return false;}
   })();
 }
-async function connectDataFolder(selected,onConnected) {
+async function connectDataFolder(selected,onConnected,{resume=false}={}) {
   await flushInternalDocuments();
-  await dataFolder.connect(selected);folder=dataFolder.handle;void protectBrowserStorage();await refreshLibrary();
+  await dataFolder.connect(selected,{resume});folder=dataFolder.handle;void protectBrowserStorage();await refreshLibrary();
+  folderSetupPending=false;lastSetupAttempt=null;document.documentElement.dataset.storageSetup='ready';for(const resolve of folderSetupWaiters.splice(0))resolve();
   rememberFolderWelcome();
   $('#dialog').close();if(typeof onConnected==='function')onConnected();toast('문서·주석·설정을 '+folder.name+' 폴더에 자동 저장했습니다. 새 기기로는 폴더 전체를 옮기세요.');
 }
 function rememberFolderWelcome() { try{localStorage.setItem(FOLDER_WELCOME_KEY,'1');}catch{/* The unconnected reminder remains visible if this device cannot retain the choice. */} }
-function needsFolderWelcome() { if(folder)return false;try{return !localStorage.getItem(FOLDER_WELCOME_KEY);}catch{return true;} }
+function needsFolderWelcome() { return !folder||dataFolder?.state==='error'; }
 function chromeRequiredDialog() {
+  document.documentElement.dataset.storageSetup='unsupported';
   $('#status-left').textContent='Chrome에서 실행해주세요.';
   modal(`<section class="folder-welcome" data-chrome-required><div class="dialog-heading"><h2>Google Chrome에서 실행해주세요</h2></div><p id="chrome-required-message" class="folder-welcome-intro"><strong>${esc(CHROME_REQUIRED_MESSAGE)}</strong></p><p class="dialog-description">Chrome에서 아래 앱 주소를 열어주세요. 전용 저장 폴더를 지원하는 최신 Chrome이 필요합니다.</p><label class="paste-label" for="chrome-app-url">HTMLMemo 주소</label><input id="chrome-app-url" class="paste-title" type="url" readonly value="${esc(PUBLIC_APP_URL)}"><p id="chrome-copy-status" class="dialog-description small" role="status" aria-live="polite"></p><div class="dialog-actions folder-welcome-actions"><button id="chrome-copy-url" class="primary-button" type="button">앱 주소 복사</button><a class="secondary-button" href="https://www.google.com/chrome/" target="_blank" rel="noopener noreferrer">Chrome 다운로드</a></div></section>`,dialog=>{
     dialog.setAttribute('aria-describedby','chrome-required-message');dialog.oncancel=event=>event.preventDefault();
@@ -544,32 +547,33 @@ function chromeRequiredDialog() {
 }
 function folderWelcomeDialog() {
   if(!supportsDataFolder(window,navigator))return chromeRequiredDialog();
-  modal(`<section class="folder-welcome" data-folder-welcome><div class="dialog-heading"><h2>먼저, 전용 폴더를 만들어요</h2></div><p class="folder-welcome-intro">처음 한 번 연결하면 <strong>문서·주석·설정을 이 폴더에 자동 저장</strong>합니다. 저장할 때마다 파일이나 위치를 고를 필요가 없어요.</p><ol class="folder-welcome-steps"><li><strong>문서(Documents) 폴더를 여세요.</strong><p>아래 <b>폴더 선택 창 열기</b> 버튼을 누르면 시작합니다.</p></li><li><strong>새 폴더를 만들고 이름을 정하세요.</strong><p>선택 창의 <b>새 폴더</b>로 <b>HTMLMemo</b>처럼 원하는 이름을 짓고, 그 폴더를 선택하세요. 문서 폴더 전체가 아닌, 방금 만든 폴더입니다.</p></li><li><strong>폴더 사용과 쓰기를 허용하세요.</strong><p><b>폴더 선택</b>(또는 <b>열기</b>) 후 권한 창에서 <b>허용</b>을 누르세요. <b>방문할 때마다 허용</b>이 있으면 선택하세요.</p></li></ol><details class="folder-welcome-existing"><summary>다른 기기에서 옮겨 온 폴더가 있나요?</summary><p>새로 만들지 말고 <b>같은 버튼</b>으로 옮겨 온 전용 폴더를 선택하세요. 그 안의 문서·주석·설정이 자동 복원됩니다.</p></details><p class="folder-welcome-move">새 기기로 옮길 때는 <strong>이 폴더 전체</strong>를 복사하면 됩니다.</p><p id="folder-connection-status" class="folder-welcome-status" role="status" aria-live="polite">폴더 선택 창은 버튼을 누른 뒤에만 열립니다.</p><div class="dialog-actions folder-welcome-actions"><button id="select-storage-folder" class="primary-button" type="button">폴더 선택 창 열기</button><button id="folder-welcome-later" class="secondary-button" type="button">나중에 연결</button></div><p class="folder-welcome-warning">나중에 연결하면 당분간 브라우저 안에만 저장됩니다. 브라우저 데이터를 지우면 문서와 주석을 잃을 수 있어요. <b>설정 → 데이터 폴더 → 폴더 연결</b>에서 다시 시작할 수 있습니다.</p></section>`,dialog=>{
-    $('#folder-welcome-later').onclick=()=>{rememberFolderWelcome();dialog.close();$('#settings-button').focus();};
-    dialog.oncancel=event=>{if($('#select-storage-folder')?.disabled){event.preventDefault();return;}rememberFolderWelcome();requestAnimationFrame(()=>$('#settings-button').focus());};
-    bindFolderConnection();
-    $('#select-storage-folder').focus();
+  folderSetupPending=true;document.documentElement.dataset.storageSetup='required';
+  modal(`<section class="folder-welcome" data-folder-welcome><div class="dialog-heading"><h2>저장 폴더를 먼저 설정하세요</h2></div><p class="folder-welcome-intro">문서·주석·설정을 자동 저장할 <strong>전용 폴더를 연결해야 앱을 사용할 수 있습니다.</strong></p><label class="paste-label" for="storage-folder-name">새 저장 폴더 이름</label><input id="storage-folder-name" class="paste-title" maxlength="120" value="HTMLMemo" autocomplete="off" spellcheck="false"><ol class="folder-welcome-steps"><li><strong>문서(Documents) 폴더를 선택하세요.</strong><p>새 폴더 만들기는 Documents(문서)에서 시작합니다. 문서 폴더가 없는 기기에서는 저장할 상위 폴더를 선택하세요.</p></li><li><strong>하위에 전용 폴더를 만듭니다.</strong><p>선택한 위치에 Documents 또는 문서 폴더가 있으면 그 안에 만듭니다. 기본 위치는 <b>문서/HTMLMemo</b>이며 원하는 이름을 사용할 수 있습니다.</p></li><li><strong>폴더 사용과 쓰기를 허용하세요.</strong><p>연결과 첫 자동 저장이 끝나면 앱이 열립니다. <b>방문할 때마다 허용</b>이 있으면 선택하세요.</p></li></ol><details class="folder-welcome-existing"><summary>기존 저장 폴더를 연결하거나 옮겨 왔나요?</summary><p>아래 <b>기존 저장 폴더 연결</b>로 전용 폴더 자체를 선택하세요. 그 안의 문서·주석·설정을 자동 복원합니다. 브라우저가 문서 폴더 전체 선택을 제한하면 선택 창에서 하위 폴더를 만든 뒤 이 버튼으로 연결할 수도 있습니다.</p></details><p class="folder-welcome-move">새 기기로 옮길 때는 <strong>이 폴더 전체</strong>를 복사하면 됩니다.</p><p id="folder-connection-status" class="folder-welcome-status" role="status" aria-live="polite">버튼을 누른 뒤에만 폴더 선택 창이 열립니다. 설정을 마쳐야 계속할 수 있습니다.</p><div class="dialog-actions folder-welcome-actions"><button id="create-storage-folder" class="primary-button" type="button">새 저장 폴더 만들기</button><button id="select-storage-folder" class="secondary-button" type="button">기존 저장 폴더 연결</button>${folder?'<button id="resume-data-folder" class="secondary-button" type="button">이전 폴더 다시 연결</button>':''}</div></section>`,dialog=>{
+    dialog.oncancel=event=>event.preventDefault();
+    dialog.onclose=()=>{if(folderSetupPending&&dialog.querySelector('[data-folder-welcome]')&&!dialog.open)dialog.showModal();};
+    bindFolderConnection();$('#create-storage-folder').focus();
   });
 }
 function bindFolderConnection(onConnected) {
-  const button=$('#select-storage-folder'),status=$('#folder-connection-status');
-  const connect=async(usePrevious=false)=>{
+  const button=$('#select-storage-folder'),create=$('#create-storage-folder'),name=$('#storage-folder-name'),status=$('#folder-connection-status');
+  const connect=async(usePrevious=false,createNew=false)=>{
     if(button.disabled)return;
-    button.disabled=true;const resume=$('#resume-data-folder'),later=$('#folder-welcome-later');if(resume)resume.disabled=true;if(later)later.disabled=true;let selected;
+    const resume=$('#resume-data-folder');for(const control of [button,create,resume,name])if(control)control.disabled=true;let selected;
     try{
-      // The native picker/permission request must be the first operation in the user's click.
+      // Keep the native permission picker in the user's click, before filesystem work.
       if(usePrevious){selected=folder;await selected.requestPermission?.({mode:'readwrite'});}
+      else if(createNew){const childName=storageFolderName(name.value);const parent=await window.showDirectoryPicker({id:'htmlmemo-storage-parent-v1',mode:'readwrite',startIn:'documents'});selected=await createStorageSubfolder(parent,childName,lastSetupAttempt);lastSetupAttempt=selected;}
       else selected=await window.showDirectoryPicker({id:'htmlmemo-storage-v2',mode:'readwrite',startIn:folder||'documents'});
       status.textContent='문서·주석·설정을 복원하고 폴더에 저장하는 중… 앱을 닫지 마세요.';
-      await connectDataFolder(selected,onConnected);
+      await connectDataFolder(selected,onConnected,{resume:usePrevious});
     }catch(error){
       folder=dataFolder.handle||folder;renderFolderState();
-      if(error?.name==='AbortError')status.textContent=later?'폴더 선택을 취소했습니다. 아래 버튼을 눌러 다시 시작하거나 나중에 연결할 수 있어요.':'폴더 연결은 변경하지 않았습니다. 연결하려면 전용 하위 폴더를 선택하세요.';
+      if(error?.name==='AbortError')status.textContent=folderSetupPending?'폴더 선택을 취소했습니다. 저장 폴더를 설정해야 앱을 사용할 수 있습니다. 다시 선택해주세요.':'폴더 연결은 변경하지 않았습니다. 연결하려면 전용 하위 폴더를 선택하세요.';
       else if(['NotAllowedError','SecurityError'].includes(error?.name))status.textContent='브라우저가 폴더 연결을 허용하지 않았습니다. 문서/HTMLMemo 같은 전용 하위 폴더를 선택하고 쓰기를 허용하세요.';
       else status.textContent='폴더에 저장하지 못했습니다. 기존 문서는 유지됩니다. '+(error?.message||String(error));
-    }finally{button.disabled=false;if(resume)resume.disabled=false;if(later)later.disabled=false;}
+    }finally{for(const control of [button,create,resume,name])if(control)control.disabled=false;}
   };
-  button.onclick=safely(()=>connect());if($('#resume-data-folder'))$('#resume-data-folder').onclick=safely(()=>connect(true));
+  button.onclick=safely(()=>connect());if(create)create.onclick=safely(()=>connect(false,true));if($('#resume-data-folder'))$('#resume-data-folder').onclick=safely(()=>connect(true));
 }
 function chooseFolder({onConnected} = {}) {
   if(!supportsDataFolder(window,navigator)){chromeRequiredDialog();return;}
@@ -595,6 +599,7 @@ function duplicateImportDialog(local, matches) {
   }));
 }
 function openLocalFile(input,parentId=libraryFolderId) {
+  if(folderSetupPending&&$('#dialog').open&&$('[data-folder-welcome]'))return new Promise(resolve=>folderSetupWaiters.push(resolve)).then(()=>openLocalFile(input,parentId));
   // File picker, input, drop and launch events share one queue. Concurrent
   // imports must not overwrite a pending three-way choice or miss each other.
   const pending=localImportQueue.then(()=>importLocalFile(input,parentId));
@@ -1429,6 +1434,7 @@ function documentMenu(record) {
   const location=document.createElement('p');location.className='dialog-description small';location.textContent='위치: '+libraryPathLabel(record.folderId||'');actions.before(location);
 }
 function handleKey(event) {
+  if(folderSetupPending&&$('#dialog').open&&$('[data-folder-welcome]'))return;
   const isField=/^(INPUT|TEXTAREA|SELECT)$/.test(event.target?.tagName)||event.target?.isContentEditable;
   if(event.key==='Escape'&&reader()?.cancelAnnotationDrag?.()){event.preventDefault();return;}
   if((event.ctrlKey||event.metaKey)&&event.shiftKey&&event.key.toLowerCase()==='v'&&!isField&&!$('#dialog').open){event.preventDefault();pasteTextDialog();return;}
@@ -1502,8 +1508,10 @@ function bindUI() {
   $('#library-trash').onclick=toggleLibraryTrash;$('#library-empty-trash').onclick=safely(emptyLibraryTrash);$('#library-new-folder').onclick=()=>libraryFolderNameDialog();$('#library-folder-up').onclick=()=>libraryTrash?toggleLibraryTrash():navigateLibraryFolder(libraryFolderById.get(libraryFolderId)?.parentId||'');$('#library-folder-help').onclick=()=>modal(`<div class="dialog-heading"><h2>서재 폴더 사용 안내</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div>${$('#library-folder-help-content').innerHTML}<div class="dialog-actions"><button class="primary-button" data-dialog-close>확인</button></div>`);bindLibraryFolderDrag();
   $('#open-example').onclick=safely(async()=>{let html=await bundledExample();if(html===null){const response=await fetch('./example.html');if(!response.ok)throw new Error('예제 문서를 불러오지 못했습니다.');html=await response.text();}await createDocument({html,title:'천천히 읽는다는 것',viewport:{width:960,height:800}});});
   document.addEventListener('keydown',handleKey);document.addEventListener('pointerdown',event=>{if(!event.target.closest('#toolbar,#tool-popover,[data-htmlmemo-reading-controls]')&&!$('#tool-popover').hidden)closePopover();});
-  $('#dialog').addEventListener('click',event=>{if(event.target===$('#dialog')&&!$('#dialog [data-chrome-required]'))$('#dialog').close();});
-  window.addEventListener('beforeunload',event=>{if(tabs.some(t=>t.opening||t.queue?.editsPending||t.checkpoints?.error||!!folder&&t.queue?.pending)||dataFolder?.pending){event.preventDefault();event.returnValue='';}});
+  $('#dialog').addEventListener('click',event=>{if(event.target===$('#dialog')&&!$('#dialog [data-chrome-required],#dialog [data-folder-welcome]'))$('#dialog').close();});
+  // A debounced reading position alone is not an unsaved edit. Real edits and
+  // in-flight folder writes still protect the user from leaving too early.
+  window.addEventListener('beforeunload',event=>{if(tabs.some(t=>t.opening||t.queue?.editsPending||t.checkpoints?.error)||dataFolder?.pending){event.preventDefault();event.returnValue='';}});
   const savePositions=(checkpoint=false)=>{Promise.all(tabs.filter(t=>t.reader?.doc).map(async tab=>{tab.reader.rememberPosition();await tab.queue.flush();if(checkpoint)await tab.checkpoints.flush({force:true});})).then(()=>dataFolder?.flush()).catch(()=>{});};
   document.addEventListener('visibilitychange',()=>{if(document.hidden)savePositions();});
   window.addEventListener('pagehide',()=>savePositions(true));
@@ -1533,13 +1541,14 @@ async function initialize() {
   // finish parsing before any handler or status text is assigned to its shell.
   if(document.readyState==='loading')await new Promise(resolve=>document.addEventListener('DOMContentLoaded',resolve,{once:true}));
   if(!supportsDataFolder(window,navigator)){chromeRequiredDialog();return;}
+  document.documentElement.dataset.storageSetup='checking';
   try{preferences=loadPreferences(localStorage);}catch(error){toast('설정 일부를 읽지 못했습니다. 연결한 데이터 폴더로 복원할 수 있습니다.',true);}
   dataFolder=new DataFolder({storage:localStorage,report:state=>{if(state.handle)folder=state.handle;renderFolderState();},onRestored:async result=>{preferences=loadPreferences(localStorage);applyTheme(preferences.theme);$('#library-sort').value=preferences.librarySort+':'+preferences.librarySortDirection;for(const tab of tabs)if(tab.reader)Object.assign(tab.reader,preferences.annotation);applyToolbarPosition();await refreshLibrary();if(result.recovered)toast('이전의 온전한 폴더 저장본에서 복원했습니다. 최신 변경 일부가 빠졌을 수 있습니다.',true);}});
   applyTheme(preferences.theme);bindUI();fitHeader();$('#library-sort').value=preferences.librarySort+':'+preferences.librarySortDirection;network();folder=await getSetting('folder');settingsFileHandle=await getSetting('settings-file');settingsFolderHint=await getSetting('settings-folder-hint')||'';await refreshLibrary();activate('library');
   onStorageChange(()=>{if(activeId==='library'){clearTimeout(libraryReloadTimer);libraryReloadTimer=setTimeout(()=>{if(activeId==='library')refreshLibrary().catch(showError);},30);}});
   if(folder){try{await dataFolder.connect(folder,{resume:true});await refreshLibrary();}catch(error){renderFolderState();showError(error);}}
-  if(needsFolderWelcome()&&!$('#dialog').open)folderWelcomeDialog();
+  if(needsFolderWelcome())folderWelcomeDialog();else document.documentElement.dataset.storageSetup='ready';
+  if(typeof window.launchQueue?.setConsumer==='function')window.launchQueue.setConsumer(safely(async params=>{if(folderSetupPending)await new Promise(resolve=>folderSetupWaiters.push(resolve));const parentId=libraryFolderId;for(const handle of params.files||[])await openLocalFile(handle,parentId);}));
   if(installableLocation(location)&&'serviceWorker'in navigator)await navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'}).then(reg=>reg?.update?.().catch(()=>{})).catch(()=>toast('오프라인 준비를 완료하지 못했습니다. 다음 접속에서 다시 준비합니다.',true));
-  if(typeof window.launchQueue?.setConsumer==='function')window.launchQueue.setConsumer(safely(async params=>{const parentId=libraryFolderId;for(const handle of params.files||[])await openLocalFile(handle,parentId);}));
 }
 initialize().catch(error=>{$('#status-left').textContent='서재를 준비하지 못했습니다.';showError(error);});

@@ -53,10 +53,27 @@ export async function launchChrome({firstRun=false}={}){
   catch(error){child.kill();await rm(profile,{recursive:true,force:true}).catch(()=>{});throw error;}
   const debugURL='http://'+new URL(endpoint).host;
   const targets=await fetch(debugURL+'/json/list').then(response=>response.json());const page=await CDP.connect(targets.find(t=>t.type==='page').webSocketDebuggerUrl);await page.send('Page.enable');await page.send('Runtime.enable');await page.send('Target.setAutoAttach',{autoAttach:true,waitForDebuggerOnStart:false,flatten:true});
-  // Keep routine reader tests independent from onboarding. The first-run test
-  // explicitly opts into an untouched profile and exercises the real welcome.
-  if(!firstRun)await page.send('Page.addScriptToEvaluateOnNewDocument',{source:"try{localStorage.setItem('htmlmemo-data-folder-welcome-v1','1')}catch{}"});
+  // Routine fixtures really connect an isolated OPFS directory through the setup UI.
+  // First-run cases keep the untouched profile and exercise picker/cancel/permission UX.
+  if(!firstRun){
+    const navigate=page.navigate.bind(page);
+    page.navigate=async url=>{
+      // A configured folder is now part of every routine fixture. Leave only
+      // after its ordinary autosave settles, rather than hitting beforeunload.
+      if(await page.evaluate('document.querySelector("#data-folder-status")?.textContent==="폴더 저장 중…"'))
+        await page.waitFor('document.querySelector("#data-folder-status")?.textContent!=="폴더 저장 중…"');
+      await navigate(url);
+      if(!await page.evaluate('!!document.querySelector("#data-folder-status")'))return;
+      await page.waitFor("['ready','required','unsupported'].includes(document.documentElement.dataset.storageSetup)");
+      if(await page.evaluate("document.documentElement.dataset.storageSetup==='required'")){
+        await page.evaluate(`window.__fixturePicker=window.showDirectoryPicker;window.showDirectoryPicker=async()=> (await navigator.storage.getDirectory()).getDirectoryHandle('HTMLMemo browser fixture',{create:true});document.querySelector('#select-storage-folder').click();`);
+        await page.waitFor("document.documentElement.dataset.storageSetup==='ready'&&!document.querySelector('#dialog').open");
+        await page.evaluate('window.showDirectoryPicker=window.__fixturePicker;delete window.__fixturePicker');
+      }
+    };
+  }
   const errors=[];page.on('Runtime.exceptionThrown',e=>errors.push(e.exceptionDetails.exception?.description||e.exceptionDetails.text));
+  if(process.env.HTMLMEMO_CHROME_DIAGNOSTICS==='1')page.on('Page.javascriptDialogOpening',event=>console.error('Test browser JavaScript dialog:',event.type));
   return {page,errors,process:child,profile,async close(){await page.close();child.kill('SIGTERM');await Promise.race([new Promise(resolve=>child.once('exit',resolve)),delay(5000)]);if(child.exitCode===null)child.kill('SIGKILL');await rm(profile,{recursive:true,force:true,maxRetries:5,retryDelay:100});}};
 }
 

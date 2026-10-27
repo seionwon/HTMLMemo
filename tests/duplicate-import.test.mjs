@@ -23,7 +23,7 @@ function app(rows=[structuredClone(record)],{cacheError=false}={}){
     putDocumentSourceIdentity:async(id,sourceIdentity)=>{if(cacheError)throw Error('storage full');const row=rows.find(row=>row.id===id);row.sourceIdentity=sourceIdentity;cached.push(id);return row;},toast:message=>notices.push(message),
     openRecord:async item=>{opened.push(item);return item;},createDocument:async(...args)=>{created.push(args);return {id:'new'};},renderLibrary:()=>restored++,updateChrome:()=>restored++,setTimeout:fn=>fn(),
   });
-  vm.runInContext('var localImportQueue=Promise.resolve(),activeId="library",libraryFolderId="";'+code,context);
+  vm.runInContext('var localImportQueue=Promise.resolve(),activeId="library",libraryFolderId="",folderSetupPending=false,folderSetupWaiters=[];'+code,context);
   return {context,doc,dialog,created,opened,reads,rows,cached,notices,get restored(){return restored;}};
 }
 test('a proven legacy match caches only its source identity and keeps the three-way choice',async()=>{

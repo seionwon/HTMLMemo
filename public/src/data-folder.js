@@ -13,6 +13,31 @@ export const CHROME_REQUIRED_MESSAGE = '이 앱은 구글 크롬에서만 정상
 export function supportsDataFolder(window,navigator) {
   return typeof window.showDirectoryPicker==='function'&&typeof navigator.locks?.request==='function';
 }
+export function storageFolderName(value) {
+  const name=typeof value==='string'?value.trim().normalize('NFC'):'';
+  if(!name||name==='.'||name==='..'||/[\u0000-\u001f\u007f/\\<>:"|?*]/.test(name)||/[. ]$/.test(name)||new TextEncoder().encode(name).length>240||/^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)/i.test(name))throw Error('폴더 이름에는 경로나 특수문자 없이 짧은 이름을 입력해주세요.');
+  return name;
+}
+/** Only inspect the user-granted directory; never search outside that permission. */
+export async function createStorageSubfolder(parent,value,previousAttempt=null) {
+  const name=storageFolderName(value);let base=parent;
+  if(!/^(documents|문서)$/i.test(parent.name||'')){
+    for(const candidate of ['Documents','문서']){
+      try{base=await parent.getDirectoryHandle(candidate);break;}
+      catch(error){if(!['NotFoundError','TypeMismatchError'].includes(error.name))throw error;}
+    }
+  }
+  let child;
+  try{child=await base.getDirectoryHandle(name);}
+  catch(error){if(error.name!=='NotFoundError')throw error;return base.getDirectoryHandle(name,{create:true});}
+  if(previousAttempt&&(child===previousAttempt||typeof child.isSameEntry==='function'&&await child.isSameEntry(previousAttempt)))return child;
+  for(const marker of [FOLDER_MANIFEST,FOLDER_PREVIOUS]){
+    try{await child.getFileHandle(marker);return child;}
+    catch(error){if(error.name!=='NotFoundError')throw error;}
+  }
+  for await(const [entry] of child.entries())if(!['.DS_Store','desktop.ini','Thumbs.db'].includes(entry))throw Error('같은 이름의 폴더에 다른 파일이 있습니다. 다른 이름을 입력하거나 기존 HTMLMemo 저장 폴더를 연결해주세요.');
+  return child;
+}
 const FORMAT = 'HTMLMemo.library';
 const CHECKPOINT = 'data-folder-checkpoint';
 const object = value => value && typeof value === 'object' && !Array.isArray(value);

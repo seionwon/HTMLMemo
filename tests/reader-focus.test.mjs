@@ -18,7 +18,7 @@ function app({native=false,rejected=false,deferred=false,exitDeferred=false}={})
  doc.exitFullscreen=async()=>{calls.exited++;if(exitDeferred)await new Promise(resolve=>finishExit=resolve);doc.fullscreenElement=null;doc.dispatchEvent(new doc.defaultView.Event('fullscreenchange'));};
  if(native)root.requestFullscreen=async()=>{calls.requested++;if(rejected)throw Error('Permission denied');if(deferred)await new Promise(resolve=>finish=resolve);doc.fullscreenElement=root;doc.dispatchEvent(new doc.defaultView.Event('fullscreenchange'));};
  const context=vm.createContext({document:doc,$:selector=>doc.querySelector(selector),reader:()=>r,requestAnimationFrame:fn=>fn(),applyToolbarPosition(){},closePopover(){doc.querySelector('#tool-popover').hidden=true;},closeSidebar(){doc.querySelector('#sidebar').hidden=true;},restoreSidebar(){},renderSidebar:value=>calls.search.push(value)});
- new vm.Script('var readerFocused=false,nativeReaderFullscreen=false,focusBusy=false;'+functions+'\n'+listener).runInContext(context);
+ new vm.Script('var readerFocused=false,nativeReaderFullscreen=false,focusBusy=false,folderSetupPending=false;'+functions+'\n'+listener).runInContext(context);
  return {context,doc,root,r,calls,finish:()=>finish(),finishExit:()=>finishExit()};
 }
 test('document focus works without browser fullscreen and keeps annotation tools/dialogs in its shell',async()=>{
