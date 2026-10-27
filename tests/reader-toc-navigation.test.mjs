@@ -41,3 +41,10 @@ test('re-clicking the current book chapter returns the visible reader to its beg
   const content=a.doc.querySelector('main');content.id='reader-content';content.dataset.section='v0:one';a.doc.querySelector('nav a').setAttribute('href','#v0%3Aone');a.r.viewport.scrollTop=400;a.r.viewport.scrollLeft=20;
   a.click('nav a');await a.r.runtime.accept({type:'navigation',hash:'#v0%3Aone'});assert.equal(a.r.scrollTop,0);assert.equal(a.r.scrollLeft,0);assert.deepEqual(a.sent,[{type:'click',id:'r1'}]);assert.equal(await a.r.jumpOutlineSection('missing'),false);
 });
+test('scripted scrolling reaches only connected body targets and preserves navigation history',()=>{
+  const a=navigation(),target=a.doc.querySelector('main h1');a.r.scrollTop=420;a.r.scrollLeft=12;
+  assert.equal(a.r.navigateSourceTarget(target),true);assert.deepEqual(a.jumps,['chapter']);assert.deepEqual(a.r.linkHistory,[{top:420,left:12}]);
+  for(const node of [a.doc.querySelector('nav a'),a.doc.head,a.doc.createElement('p')])assert.equal(a.r.navigateSourceTarget(node),false);
+  const panel=a.doc.createElement('div');panel.setAttribute('data-htmlmemo-ui','');panel.append(target);a.doc.body.append(panel);assert.equal(a.r.navigateSourceTarget(target),false);
+  a.r.preparing=true;assert.equal(a.r.navigateSourceTarget(a.doc.querySelector('main h2')),false);assert.deepEqual(a.jumps,['chapter']);
+});

@@ -54,17 +54,30 @@ function bootstrap(channel,preferences) {
   const emit=value=>send({channel,...value},'*');
   // App-owned search/bookmark navigation already has a precise target. Do not
   // turn its echoed hashchange into a new source navigation that resets it.
-  const silentHashes=[];let navigationSuppressed=0;
+  const silentHashes=[];let navigationSuppressed=0,navigationEnabled=false,pendingNavigation=null,lastSection='';
+  const recordNavigation=value=>{if(started&&navigationEnabled&&!navigationSuppressed){pendingNavigation=value;schedule();}};
   const rememberSilentHash=href=>{silentHashes.push(href);if(silentHashes.length>128)silentHashes.shift();};
   const setHashSilently=hash=>{const before=location.href;location.hash=hash;if(location.href!==before)rememberSilentHash(location.href);};
   addEventListener('hashchange',event=>{
     const index=silentHashes.indexOf(event.newURL);
     if(index>=0){silentHashes.splice(index,1);return;}
-    if(started&&!navigationSuppressed&&event.newURL===location.href)emit({type:'navigation',hash:location.hash});
+    if(event.newURL===location.href)recordNavigation({hash:location.hash});
   });
+  for(const method of ['pushState','replaceState']){
+    const original=history[method].bind(history);
+    history[method]=function(state,title,url){
+      // A fragment in srcdoc otherwise resolves against the app's base URL,
+      // which native history correctly refuses to rewrite from this origin.
+      const ownURL=typeof url==='string'&&url.startsWith('#')?location.href.split('#')[0]+url:url;
+      const result=arguments.length>2?original(state,title,ownURL):original(state,title);
+      if(location.hash)recordNavigation({hash:location.hash});return result;
+    };
+  }
+  const scrollIntoView=Element.prototype.scrollIntoView;
+  if(scrollIntoView)Element.prototype.scrollIntoView=function(...args){const result=scrollIntoView.apply(this,args);recordNavigation({target:key(this)});return result;};
   const publish=()=>{
     timer=0;
-    if(!started){if(!document.body)return;const snapshot=html(document.documentElement);if(snapshot.length>MAX){emit({type:'error',message:'문서의 실행 결과가 안전한 표시 한도(64MB)를 넘었습니다.'});return;}emit({type:'initial',html:snapshot,assets:[...document.querySelectorAll('script[id^="book-asset-"]')].map(node=>node.id)});started=true;dirty.clear();return;}
+    if(!started){if(!document.body)return;const snapshot=html(document.documentElement);if(snapshot.length>MAX){emit({type:'error',message:'문서의 실행 결과가 안전한 표시 한도(64MB)를 넘었습니다.'});return;}emit({type:'initial',html:snapshot,assets:[...document.querySelectorAll('script[id^="book-asset-"]')].map(node=>node.id)});started=true;lastSection=document.getElementById('reader-content')?.dataset.section||'';dirty.clear();return;}
     const entries=[...dirty];dirty.clear();
     const roots=entries.filter(([node])=>node.isConnected&&!inert(node)&&!entries.some(([other,kind])=>kind==='content'&&other!==node&&other.contains(node)));
     const patches=[];let length=0;
@@ -76,6 +89,10 @@ function bootstrap(channel,preferences) {
     }
     const released=[];for(const root of removed)if(!root.isConnected)for(const node of [root,...(root.querySelectorAll?.('*')||[])]){if(node.localName==='script'&&/^book-asset-\d{1,10}$/.test(node.id))released.push(node.id);nodes.delete(ids.get(node));controls.delete(ids.get(node));controlNodes.delete(node);}removed.clear();if(released.length)emit({type:'released-assets',ids:[...new Set(released)]});
     if(patches.length)emit({type:'patches',patches});
+    const section=document.getElementById('reader-content')?.dataset.section||'';
+    if(section!==lastSection){lastSection=section;if(section&&section.length<2000&&!pendingNavigation&&navigationEnabled&&!navigationSuppressed)try{const hash='#'+encodeURIComponent(section);if(hash.length<2000)pendingNavigation={hash};}catch{/* Ignore malformed source section identifiers. */}}
+    // Publish DOM first: a new scroll target must exist in the visible reader.
+    if(pendingNavigation){const navigation=pendingNavigation;pendingNavigation=null;if(navigationEnabled&&!navigationSuppressed)emit({type:'navigation',...navigation});}
   };
   const schedule=()=>{if(!timer)timer=setTimeout(publish,30);};
   new MutationObserver(records=>{
@@ -89,25 +106,25 @@ function bootstrap(channel,preferences) {
   }).observe(document,{subtree:true,childList:true,characterData:true,attributes:true});
   const command=value=>{
     if(value?.channel!==channel)return;
-    if(value.type==='hash'&&typeof value.hash==='string'&&value.hash.length<2000){setHashSilently(value.hash);return;}
+    if(value.type==='hash'&&typeof value.hash==='string'&&value.hash.length<2000){navigationEnabled=false;pendingNavigation=null;setHashSilently(value.hash);return;}
     if(!['click','input','change','toggle','submit'].includes(value.type)||!/^r\d{1,12}$/.test(value.id))return;
     const node=nodes.get(value.id);if(!node?.isConnected)return;
     if(value.type==='toggle'&&node.localName==='details'){if(node.open!==!!value.open)node.open=!!value.open;return;}
-    if(value.type==='submit'&&node.localName==='form'){node.requestSubmit();return;}
+    if(value.type==='submit'&&node.localName==='form'){navigationEnabled=true;pendingNavigation=null;node.requestSubmit();return;}
     if(value.type==='input'||value.type==='change'){
       if(!['input','textarea','select'].includes(node.localName)||typeof value.value!=='string'||value.value.length>200000)return;
       if(Number.isSafeInteger(value.revision)&&value.revision>=0)appliedInput=Math.max(appliedInput,value.revision);
-      node.value=value.value;node.dispatchEvent(new Event(value.type,{bubbles:true}));schedule();return;
+      navigationEnabled=true;pendingNavigation=null;node.value=value.value;node.dispatchEvent(new Event(value.type,{bubbles:true}));schedule();return;
     }
     // No eval, arbitrary property access, network/file request or parent callback.
     if(value.type==='click'){
-      const silent=value.navigate===false,before=location.href;if(silent)navigationSuppressed++;
+      const silent=value.navigate===false,before=location.href;navigationEnabled=!silent;pendingNavigation=null;if(silent)navigationSuppressed++;
       try{node.click();}finally{if(silent){navigationSuppressed--;if(location.href!==before&&!silentHashes.includes(location.href))rememberSilentHash(location.href);}schedule();}
     }
   };
   // srcdoc inherits the app's base URL. Hash links belong to this source
   // document, rather than navigating the hidden frame to the app URL.
-  addEventListener('click',event=>{const link=event.target?.closest?.('a[href]'),href=link?.getAttribute('href')?.trim();if(!event.defaultPrevented&&href?.startsWith('#')){event.preventDefault();setHashSilently(href);if(!navigationSuppressed)emit({type:'navigation',hash:location.hash});}});
+  addEventListener('click',event=>{const link=event.target?.closest?.('a[href]'),href=link?.getAttribute('href')?.trim();if(!event.defaultPrevented&&href?.startsWith('#')){event.preventDefault();setHashSilently(href);recordNavigation({hash:location.hash});}});
   let commandPort;
   addEventListener('message',event=>{
     const value=event.data;if(commandPort||event.source!==parent||value?.channel!==channel||value.type!=='connect'||!event.ports[0])return;
@@ -119,8 +136,8 @@ function bootstrap(channel,preferences) {
 
 /** Source code runs in an opaque origin. Only inert, sanitized DOM comes back. */
 export class IsolatedRuntime {
-  constructor({host,doc,source,storage=[],onStorage=()=>{},onNavigate=()=>{},onError=()=>{}}) {
-    this.host=host;this.doc=doc;this.source=source;this.storage=cleanSourceStorage(storage);this.onStorage=onStorage;this.onNavigate=onNavigate;this.onError=onError;this.channel=crypto.randomUUID();this.queue=Promise.resolve();this.disposed=false;this.listeners=[];this.nodes=new Map();this.attributes=new Map();this.controlRevisions=new Map();this.inputRevision=0;
+  constructor({host,doc,source,storage=[],onStorage=()=>{},onNavigate=()=>{},onScroll=()=>{},onError=()=>{}}) {
+    this.host=host;this.doc=doc;this.source=source;this.storage=cleanSourceStorage(storage);this.onStorage=onStorage;this.onNavigate=onNavigate;this.onScroll=onScroll;this.onError=onError;this.channel=crypto.randomUUID();this.queue=Promise.resolve();this.disposed=false;this.listeners=[];this.nodes=new Map();this.attributes=new Map();this.controlRevisions=new Map();this.inputRevision=0;
   }
   async start() {
     const owner=this.host.ownerDocument,win=owner.defaultView;
@@ -174,11 +191,13 @@ export class IsolatedRuntime {
   async accept(value) {
     if(this.disposed)return;
     if(value.type==='navigation'){
+      if(this.resolve)return;
+      if(validId(value.target)){const target=this.nodes.get(value.target);if(target?.isConnected)this.onScroll(target);return;}
       if(this.resolve||typeof value.hash!=='string'||value.hash.length>=2000||!/^#[^\u0000-\u001f\u007f]*$/.test(value.hash))return;
       // Update only this displayed document's fragment, without echoing a
       // hashchange back to the source and racing a later click.
       const win=this.doc.defaultView;
-      win?.history?.replaceState(null,'',win.location.href.split('#')[0]+value.hash);
+      try{win?.history?.replaceState(null,'',win.location.href.split('#')[0]+value.hash);}catch{/* A restricted display URL must not disable its source controls. */}
       this.onNavigate(value.hash);return;
     }
     if(value.type==='storage'){
@@ -255,7 +274,14 @@ export class IsolatedRuntime {
     for(const type of ['input','change'])add(this.doc,type,event=>{const node=sourceTarget(event);if(node&&['input','textarea','select'].includes(node.localName)){const id=node.getAttribute(ID),revision=++this.inputRevision;this.controlRevisions.set(id,revision);this.send({type,id,value:node.value,revision});}});
     add(this.doc,'submit',event=>{event.preventDefault();const node=sourceTarget(event);if(node?.localName==='form')this.send({type:'submit',id:node.getAttribute(ID)});});
     add(this.doc,'click',event=>{
-      const node=sourceTarget(event),control=node?.closest('button,summary,a,[role="button"],input[type="button"],input[type="submit"]');if(!control||!validId(control.getAttribute(ID)))return;
+      const node=sourceTarget(event);let control=node?.closest('button,summary,a,[role="button"],input[type="button"],input[type="submit"]');
+      if(!control){
+        // Books also delegate navigation from ordinary div/span/list nodes.
+        // Keep the actual source target so its original bubbling path runs.
+        if(event.defaultPrevented||node?.closest('[data-htmlmemo-ui],[data-htmlmemo-id],[data-htmlmemo-mark],[data-htmlmemo-search],input,textarea,select,option,label'))return;
+        control=node;
+      }
+      if(!control||!validId(control.getAttribute(ID)))return;
       const href=control.getAttribute('href');
       // Executable hrefs/handlers are stripped from the visible copy. Their
       // original source anchor can still run through this inert click command.

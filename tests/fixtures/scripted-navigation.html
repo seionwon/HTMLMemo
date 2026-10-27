@@ -1,0 +1,20 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>스크립트 목차와 본문 이동 검증</title>
+<style>*{box-sizing:border-box}html,body{height:100%;margin:0;overflow:hidden;font:16px/1.6 system-ui}body{display:flex;flex-direction:column}.topbar{height:36px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 8px}.controls{display:flex;gap:4px}.layout{display:grid;grid-template-columns:280px minmax(0,1fr);flex:1;min-height:0}nav,main{overflow:auto;padding:12px}nav{border-right:1px solid #cbd5e1}main{padding:24px}a,.chapter-action{display:block;padding:8px;color:inherit;cursor:pointer}.spacer{height:1100px}</style></head><body>
+<header class="topbar"><strong>스크립트 이동 검증</strong><div class="controls"><button id="prev">이전 절</button><button id="next">다음 절</button><button id="next-plain">주소 변경 없이 다음 절</button></div></header>
+<div class="layout"><nav id="reader-nav"><strong>목차</strong><div id="reader-tree"><a id="toc-one" href="#v0%3Aone">첫 절</a><div id="toc-two" class="chapter-action" tabindex="0" data-section="v0:two"><span>둘째 절 · 일반 요소 목차</span></div><a id="toc-three" href="#v0%3Athree">셋째 절</a></div></nav><main id="reader-main"><div id="reader-status"></div><article id="reader-content"></article></main></div>
+<script id="book-manifest" type="application/json">{"format":"memosuite-book-html-v1","volumes":[{"label":"검증 책","sections":[{"key":"v0:one","title":"첫 절"},{"key":"v0:two","title":"둘째 절"},{"key":"v0:three","title":"셋째 절"}]}]}</script>
+<script id="book-volume-0" type="application/octet-stream">["불변 검증 원본"]</script>
+<script>
+(()=>{
+ const content=document.getElementById('reader-content'),main=document.getElementById('reader-main'),status=document.getElementById('reader-status'),keys=['v0:one','v0:two','v0:three'];let current=keys[0],generation=0;
+ window.scriptedClicks=[];
+ function show(key){
+  if(!keys.includes(key))return;current=key;const version=++generation,index=keys.indexOf(key);status.textContent='본문 준비 중';document.documentElement.dataset.readerReady='false';
+  setTimeout(()=>{if(version!==generation)return;content.innerHTML='<h1>'+['첫 절','둘째 절','셋째 절'][index]+'</h1><a id="body-script" href="#local-target">스크립트로 본문 위치 이동</a><a id="body-cancelled" href="#local-target">원본이 취소하는 링크</a><p id="kept-text">기존 주석 보존 문장입니다.</p><div class="spacer"></div><h2 id="local-target">스크립트 본문 목적지</h2><div class="spacer"></div>';document.getElementById('body-script').onclick=event=>{event.preventDefault();window.scriptedClicks.push('body-script');document.getElementById('local-target').scrollIntoView({block:'center'});};document.getElementById('body-cancelled').onclick=event=>{event.preventDefault();window.scriptedClicks.push('body-cancelled');};content.dataset.section=key;status.textContent='';document.documentElement.dataset.readerReady='true';main.scrollTo(0,0);document.getElementById('prev').disabled=!index;document.getElementById('next').disabled=index===2;document.getElementById('next-plain').disabled=index===2;},70);
+ }
+ function navigate(key,method){window.scriptedClicks.push(method+':'+key);history[method](null,'','#'+encodeURIComponent(key));show(key);}
+ document.getElementById('reader-tree').addEventListener('click',event=>{const action=event.target.closest('a,.chapter-action');if(!action)return;event.preventDefault();navigate(action.dataset.section||decodeURIComponent(action.hash.slice(1)),'replaceState');});
+ document.getElementById('prev').onclick=()=>navigate(keys[Math.max(0,keys.indexOf(current)-1)],'replaceState');document.getElementById('next').onclick=()=>navigate(keys[Math.min(2,keys.indexOf(current)+1)],'pushState');document.getElementById('next-plain').onclick=()=>{window.scriptedClicks.push('plain');show(keys[Math.min(2,keys.indexOf(current)+1)]);};
+ addEventListener('hashchange',()=>{const key=decodeURIComponent(location.hash.slice(1));if(keys.includes(key))show(key);});show(keys[0]);
+})();
+</script></body></html>

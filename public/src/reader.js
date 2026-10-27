@@ -39,7 +39,7 @@ export class Reader {
           this.doc = this.frame.contentDocument;
           if (!this.doc?.body) throw new Error('HTML 문서를 표시하지 못했습니다.');
           if(this.metadata.execution?.allowScripts&&needsIsolatedRuntime(this.doc)){
-            this.runtime=new IsolatedRuntime({host:this.host,doc:this.doc,source:parsed.file||new Blob([parsed.html],{type:'text/html;charset=utf-8'}),storage:this.metadata.view.sourceStorage,onStorage:entries=>{this.metadata.view.sourceStorage=entries;(this.callbacks.onSourceSettings||this.callbacks.onPosition)?.();},onNavigate:hash=>{void this.navigateSourceHash(hash);},onError:error=>this.callbacks.onError?.(error)});
+            this.runtime=new IsolatedRuntime({host:this.host,doc:this.doc,source:parsed.file||new Blob([parsed.html],{type:'text/html;charset=utf-8'}),storage:this.metadata.view.sourceStorage,onStorage:entries=>{this.metadata.view.sourceStorage=entries;(this.callbacks.onSourceSettings||this.callbacks.onPosition)?.();},onNavigate:hash=>{void this.navigateSourceHash(hash);},onScroll:target=>this.navigateSourceTarget(target),onError:error=>this.callbacks.onError?.(error)});
             await this.runtime.start();
           }
           await this.adoptSavedMainFrame();
@@ -2337,9 +2337,13 @@ export class Reader {
     let id;try{id=decodeURIComponent(hash.slice(1));}catch{id=hash.slice(1);}
     if(this.annotationBookPaths().has(id))return this.jumpOutlineSection(id);
     const target=this.doc.getElementById(id)||[...this.doc.querySelectorAll('a[name]')].find(a=>a.name===id);
-    if(!target||this.isInsideTocOrTopbar(target)||target.closest('[data-htmlmemo-ui]'))return false;
+    return this.navigateSourceTarget(target);
+  }
+  navigateSourceTarget(target) {
+    if(this.preparing||this.disposed||target?.ownerDocument!==this.doc||!target.isConnected||!this.doc.body.contains(target)||this.isInsideTocOrTopbar(target)||target.closest('script,style,template,[data-htmlmemo-ui]'))return false;
     this.cancelAnnotationJump?.();this.annotationJumpGeneration=(this.annotationJumpGeneration||0)+1;
-    return this.jumpToHash(hash);
+    this.linkHistory.push({top:this.scrollTop,left:this.scrollLeft});if(this.linkHistory.length>128)this.linkHistory.shift();
+    this.jump(target);this.callbacks.onView?.();return true;
   }
   async jumpOutlineSection(section) {
     if(!this.annotationBookPaths().has(section))return false;

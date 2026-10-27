@@ -29,7 +29,7 @@ jobs:
       - run: npm run check
       - run: mkdir -p test-results
       - name: Verify source navigation and first-run browser requirements before the full Chrome suite
-        run: node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/browser-results.xml --test-name-pattern='Pages-only body links and previous-next|Pages-only first-run folder welcome' tests/browser.integration.mjs
+        run: node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/browser-results.xml --test-name-pattern='Pages-only body links and previous-next|Pages-only first-run folder welcome|Pages-only script-driven TOC' tests/browser.integration.mjs
       - run: npm run test:browser
       - name: Keep structured Chrome results and fixture screenshots
         if: always()

@@ -86,6 +86,26 @@ test('source navigation accepts only bounded local fragments and preserves origi
   const movedHost=a.doc.createElement('div'),clear=a.doc.createElement('button');movedHost.dataset.htmlmemoUi='';clear.setAttribute('data-htmlmemo-runtime-id','r12');movedHost.append(clear);a.doc.body.append(movedHost);a.r.index(movedHost);clear.dispatchEvent(new a.doc.defaultView.Event('click',{bubbles:true,cancelable:true}));assert.deepEqual(sent.at(-1),{type:'click',id:'r12'},'source controls moved into the app search panel keep their original action');
   a.r.disposed=true;await a.r.accept({type:'navigation',hash:'#late'});assert.deepEqual(navigations,['#%EC%A0%88']);
 });
+test('delegated source actions on ordinary elements still receive clicks without replaying app UI or editing controls',async()=>{
+  const a=runtime();await a.r.accept({type:'initial',html:initial});
+  const action=a.doc.createElement('div');action.setAttribute('data-htmlmemo-runtime-id','r9');action.innerHTML='<span data-htmlmemo-runtime-id="r10">Chapter action</span>';a.doc.body.append(action);a.r.index(action);
+  const sent=[];a.r.send=value=>sent.push(value);a.r.bind();
+  const click=node=>node.dispatchEvent(new a.doc.defaultView.Event('click',{bubbles:true,cancelable:true}));
+  click(action.firstElementChild);assert.deepEqual(sent,[{type:'click',id:'r10'}]);sent.length=0;
+  action.addEventListener('click',event=>event.preventDefault());click(action);assert.deepEqual(sent,[],'an app-consumed ordinary click is not a source action');
+  const panel=a.doc.createElement('section');panel.setAttribute('data-htmlmemo-ui','');const item=a.doc.createElement('div');item.setAttribute('data-htmlmemo-runtime-id','r11');panel.append(item);a.doc.body.append(panel);a.r.index(panel);click(item);assert.deepEqual(sent,[]);
+  for(const tag of ['input','textarea','select']){const field=a.doc.createElement(tag);field.setAttribute('data-htmlmemo-runtime-id','r12');a.doc.body.append(field);a.r.index(field);click(field);assert.deepEqual(sent,[],'native field focus and selection are not cancelled: '+tag);field.remove();}
+});
+test('source scroll targets must be mapped live nodes and a restricted display history never disables navigation',async()=>{
+  const a=runtime(),scrolled=[],navigated=[];a.r.onScroll=node=>scrolled.push(node);a.r.onNavigate=hash=>navigated.push(hash);
+  await a.r.accept({type:'navigation',target:'r5'});assert.deepEqual(scrolled,[]);
+  await a.r.accept({type:'initial',html:initial});
+  for(const target of ['r999','r5.invalid','https://outside.invalid',{},null])await a.r.accept({type:'navigation',target});assert.deepEqual(scrolled,[]);
+  const paragraph=a.doc.querySelector('p');await a.r.accept({type:'navigation',target:'r5'});assert.deepEqual(scrolled,[paragraph]);
+  paragraph.remove();await a.r.accept({type:'navigation',target:'r5'});assert.equal(scrolled.length,1);
+  let attempts=0;Object.defineProperty(a.doc,'defaultView',{configurable:true,value:{location:{href:'about:srcdoc'},history:{replaceState(){attempts++;throw new DOMException('Restricted URL','SecurityError');}}}});
+  await a.r.accept({type:'navigation',hash:'#chapter'});assert.equal(attempts,1);assert.deepEqual(navigated,['#chapter']);assert.equal(a.r.disposed,false);
+});
 test('source nodes cannot replace metadata or append executable content via attribute patches',async()=>{
   const a=runtime();await a.r.accept({type:'initial',html:initial});
   await a.r.accept({type:'patches',patches:[{id:'r5',kind:'attributes',tag:'script',attributes:[['src','https://remote.invalid/run.js'],['data-htmlmemo-runtime-id','r5']]},{id:'r5',kind:'content',html:'<script data-htmlmemo-runtime-id="r5">attack()</script>'}]});
