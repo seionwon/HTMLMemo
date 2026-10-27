@@ -703,8 +703,8 @@ async function navigate(tab,url){
   if(tab.external){renderExternalTab(tab);renderTabs();updateChrome();focusBrowserTab(tab);return;}
   tab.readable=false;tab.loading=true;tab.frame.src=url;renderBrowserState(tab);renderTabs();updateChrome();
 }
-function toolbarButton(action,name,label,extra='') {return `<button class="tool-button" data-action="${action}" aria-label="${label}" title="${label}" ${extra}>${icon(name,18)}</button>`;}
-function penSettingsButton() {return `<button type="button" class="tool-button pen-settings-summary" data-action="palette" aria-label="펜과 색상" title="펜과 색상"><span class="pen-settings-lines" aria-hidden="true"><span class="pen-settings-stroke"></span><span class="pen-settings-duration"><span class="pen-settings-alpha"></span></span></span></button>`;}
+function toolbarButton(action,name,label,extra='',content=icon(name,18)) {return `<button class="tool-button" data-action="${action}" aria-label="${label}" title="${label}" ${extra}>${content}</button>`;}
+function penSettingsButton() {return toolbarButton('palette','palette','펜과 색상','','<span class="pen-settings-lines" aria-hidden="true"><span class="pen-settings-stroke"></span><span class="pen-settings-duration"><span class="pen-settings-alpha"></span></span></span>');}
 function annotationToolFamily(tool) {return {area:'highlight','area-underline':'underline',text:'note','rect-filled':'rect'}[tool]||tool;}
 function annotationToolMode(r) {return r.tool==='rect'&&r.rectFill?'rect-filled':r.tool;}
 function annotationToolModes(group) {
@@ -736,7 +736,7 @@ function showAnnotationToolModes(group, keyboard = false) {
 function renderToolbar() {
   const r=reader();if(!r||!r.doc)return;
   $('#toolbar').hidden=false;
-  $('#toolbar').innerHTML=`<button class="toolbar-grip" aria-label="툴바 이동">${icon('grip',14)}</button><span class="tool-group">${toolbarButton('select','select','선택 / 읽기 (V) · 주석을 드래그해 이동')}${toolbarButton('pen','pen','펜 (P)')}${toolbarButton('highlight','highlight','형광펜 (H)')}${toolbarButton('underline','underline','밑줄 (U)')}${toolbarButton('rect','rect','사각형 (R)')}${toolbarButton('eraser','eraser','지우개 (E)')}${toolbarButton('note','note','메모 (N)')}</span><span class="toolbar-divider"></span>${penSettingsButton()}<span class="tool-group toolbar-history">${toolbarButton('undo','undo','실행 취소 (Ctrl/⌘ Z)')}${toolbarButton('redo','redo','다시 실행 (Ctrl/⌘ Shift Z)')}</span><span class="toolbar-divider"></span>${toolbarButton('more','more','더 많은 도구')}`;
+  $('#toolbar').innerHTML=`<button class="toolbar-grip" aria-label="툴바 이동">${icon('grip',14)}</button><span class="tool-group">${toolbarButton('select','select','선택 / 읽기 (V) · 주석을 드래그해 이동')}${toolbarButton('pen','pen','펜 (P)')}${toolbarButton('highlight','highlight','형광펜 (H)')}${toolbarButton('underline','underline','밑줄 (U)')}${toolbarButton('rect','rect','사각형 (R)')}${toolbarButton('eraser','eraser','지우개 (E)')}${toolbarButton('note','note','메모 (N)')}${penSettingsButton()}<span class="tool-group toolbar-history">${toolbarButton('undo','undo','실행 취소 (Ctrl/⌘ Z)')}${toolbarButton('redo','redo','다시 실행 (Ctrl/⌘ Shift Z)')}</span>${toolbarButton('more','more','더 많은 도구')}</span>`;
   $$('[data-action]',$('#toolbar')).forEach(button=>{
     const action=button.dataset.action,modes=annotationToolModes(action);
     button.onpointerdown=e=>{const selection=action==='note'?r.doc.getSelection?.():null;if(e.pointerType==='mouse'||(selection?.rangeCount&&!selection.isCollapsed))e.preventDefault();};

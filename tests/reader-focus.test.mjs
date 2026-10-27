@@ -58,6 +58,9 @@ test('floating toolbar stays compact without duplicate TTS or relocated zoom con
  new vm.Script(toolbar+'renderToolbar();').runInContext(a.context);
  assert.deepEqual([...a.doc.querySelectorAll('#toolbar [data-action]')].map(button=>button.dataset.action),['select','pen','highlight','underline','rect','eraser','note','palette','undo','redo','more']);
  assert.ok(a.doc.querySelector('#toolbar .toolbar-grip'));
+ assert.equal(a.doc.querySelector('#toolbar .toolbar-divider'),null);
+ assert.strictEqual(a.doc.querySelector('#toolbar [data-action=palette]').parentElement,a.doc.querySelector('#toolbar [data-action=note]').parentElement);
+ assert.equal(a.doc.querySelector('#toolbar [data-action=palette]').className,'tool-button');
  assert.equal(a.doc.querySelector('#toolbar [data-action=zoom]'),null);
  assert.equal(a.doc.querySelector('#toolbar [data-action=speak]'),null);
  Object.assign(a.r,{tool:'pen',history:{canUndo:false,canRedo:true}});
