@@ -395,3 +395,8 @@ html[data-app-sidebar-resizing] iframe{pointer-events:none!important}
  .library-search input{width:100%;min-width:0}
  .library-controls select{min-width:0;width:100%}
 }
+
+/* Device exchange: the existing dialog and colour system, with no extra toolbar row. */
+.device-sync{font-size:13px;line-height:1.65}.device-sync input:not([type=checkbox]),.device-sync select{width:100%;min-width:0;padding:9px;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--text);font:inherit}.sync-tabs{display:flex;gap:8px;margin:12px 0}.sync-tabs button{flex:1;white-space:normal}.device-sync fieldset{display:grid;gap:9px;border:1px solid var(--line);border-radius:8px;margin:14px 0;padding:12px}.device-sync label{display:block}.device-sync input[type=checkbox]{margin-right:6px}.sync-code-row{display:flex;gap:6px}.sync-code-row input{flex:1;min-width:0;font-family:monospace;letter-spacing:.04em}.sync-code-row button{flex-shrink:0;padding:8px}#sync-qr{display:block;max-width:170px;height:auto;margin:12px auto;background:#fff}#sync-host>button{width:100%}#sync-status{padding:10px;background:var(--surface-muted);border-radius:6px;overflow-wrap:anywhere}#sync-status[data-state=error]{color:#d34b4b}#sync-conflict{border:1px solid var(--line);padding:12px;border-radius:8px}#sync-conflict .dialog-actions{flex-wrap:wrap}#sync-scanner{max-width:100%;overflow:hidden}#sync-scanner video{max-width:100%}@media(max-width:480px){.sync-code-row{flex-wrap:wrap}.sync-code-row input{flex-basis:100%}.device-sync .dialog-actions button{white-space:normal}}
+
+.device-sync .dialog-heading{position:sticky;top:-25px;background:var(--surface);z-index:3;padding:8px 0}.device-sync [role=status]{scroll-margin:12px}

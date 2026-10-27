@@ -24,8 +24,10 @@ export class SyncService {
   isDestroyed = false;
   constructor(options) {
     this.options = options;
+    this.abort = new AbortController();
   }
   setStatus(status, message) {
+    if (this.isDestroyed) return;
     this.options.onStatusChange(status, message);
   }
   async initialize(roomId) {
@@ -130,6 +132,7 @@ export class SyncService {
     }
   }
   async handleRelayMessage(msg) {
+    if (this.isDestroyed) return;
     if (msg.attachment) {
       if (msg.tags && msg.tags.includes(`inst_${this.instanceId}`)) {
         return;
@@ -205,7 +208,7 @@ export class SyncService {
       }
     } catch (err) {
       console.error("Sync failed:", err);
-      this.setStatus("error", `Sync error: ${err.message}`);
+      this.setStatus("error", `Sync error: ${err?.message || String(err)}`);
     } finally {
       this.isSyncing = false;
     }
@@ -215,6 +218,7 @@ export class SyncService {
     const tags = [this.isHost ? "host" : "client", `inst_${this.instanceId}`];
     const response = await fetch(`${RELAY_BASE}/${this.topic}`, {
       method: "PUT",
+      signal: this.abort.signal,
       body: encryptedData,
       headers: {
         "Filename": "sync.enc",
@@ -231,6 +235,7 @@ export class SyncService {
     const message = JSON.stringify(payload);
     const response = await fetch(`${RELAY_BASE}/${this.topic}`, {
       method: "POST",
+      signal: this.abort.signal,
       body: message
     });
     if (!response.ok) {
@@ -239,12 +244,16 @@ export class SyncService {
   }
   async downloadAndProcessAttachment(url) {
     try {
-      const response = await fetch(url);
+      const safe = new URL(url);
+      if(safe.origin !== RELAY_BASE || !safe.pathname.startsWith("/file/")) throw Error("Unexpected relay attachment");
+      const response = await fetch(url,{signal:this.abort.signal});
       if (!response.ok) throw new Error("Download failed");
+      if(Number(response.headers.get("content-length"))>2000000)throw Error("Relay data too large");
       const encodedData = await response.text();
+      if(encodedData.length>2000000)throw Error("Relay data too large");
       await this.processReceivedEncodedData(encodedData);
     } catch (err) {
-      this.setStatus("error", `Download error: ${err.message}`);
+      this.setStatus("error", `Download error: ${err?.message || String(err)}`);
     }
   }
   async processReceivedEncodedData(encodedData) {
@@ -273,6 +282,7 @@ export class SyncService {
       this.setStatus("error", "Data parsing failed.");
       return;
     }
+    if (this.isDestroyed) return;
     try {
       this.setStatus("merging", "Merging database changes...");
       const excludeIds = await this.options.adapter.mergeBackupData(data, this.options.onConflict);
@@ -298,7 +308,7 @@ export class SyncService {
         }
       }
     } catch (err) {
-      this.setStatus("error", `Merge error: ${err.message}`);
+      this.setStatus("error", `Merge error: ${err?.message || String(err)}`);
     }
   }
   updateSyncInfoMeta(data, isPartial) {
@@ -323,6 +333,7 @@ export class SyncService {
   }
   destroy() {
     this.isDestroyed = true;
+    this.abort.abort();
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     if (this.ws) {

@@ -104,7 +104,7 @@ export async function putDocumentSourceIdentity(id, sourceIdentity) {
   });
 }
 /** View-only saves leave annotations, history, source HTML and the modification date alone. */
-export async function putDocumentView(id, view) {
+export async function putDocumentView(id, view, expectedSyncEpoch) {
   const position = structuredClone(view), connection = await db();
   return new Promise((resolve, reject) => {
     const tx = connection.transaction('documents', 'readwrite'), store = tx.objectStore('documents');
@@ -113,6 +113,7 @@ export async function putDocumentView(id, view) {
       try {
         saved = request.result;
         if (!saved) throw new Error('읽기 위치를 저장할 문서를 찾지 못했습니다.');
+        if(saved.syncEpoch&&saved.syncEpoch!==expectedSyncEpoch)throw Error('다른 기기에서 받은 최신 문서입니다. 이 탭을 다시 열어주세요.');
         saved.metadata = {...saved.metadata, view:position};
         store.put(saved);
       } catch (error) { failure = error; tx.abort(); }
@@ -277,6 +278,7 @@ export async function putDocumentRevision(record, {baseline = false, restoredFro
         const last=latest.result;
         const old=previous.result;
         if(mustExist&&!old)throw Error('문서가 영구 삭제되었습니다. 이전 탭의 내용으로 다시 만들지 않습니다.');
+        if(old?.syncEpoch&&old.syncEpoch!==value.syncEpoch)throw Error('동기화로 최신 문서가 저장되었습니다. 이전 탭을 다시 열어주세요. 작성 중인 내용은 유지됩니다.');
         // A still-open legacy tab must not erase a later duplicate-check cache.
         if(!value.sourceIdentity&&old?.sourceIdentity)value.sourceIdentity=old.sourceIdentity;
         // Moving a document is independent of an open reader's annotation saves.
@@ -339,6 +341,39 @@ export async function restoreFolderDocuments(entries, folders = null, expectedFo
   });
   for(const entry of entries)changed(entry.record.id);
   if(folders!==null)changed(null);
+}
+
+/** Optimistic, atomic device import. Incoming entries are validated before opening the transaction.
+ * No file handle, root folder name or filesystem permission can enter this path.
+ */
+export const syncRecordSnapshot = record => record ? JSON.stringify({id:record.id,title:record.title,name:record.name,modified:record.modified,metadata:record.metadata,folderId:record.folderId||'',trashedAt:record.trashedAt,historyVersion:record.historyVersion,sourceIdentity:record.sourceIdentity,syncEpoch:record.syncEpoch}) : null;
+export async function commitDeviceSync(entries, folders, expectedFolders) {
+  const connection=await db();
+  await new Promise((resolve,reject)=>{
+    const tx=connection.transaction(['documents','contents','revisions','revisionHeaders','settings'],'readwrite');let failure,pending=entries.length+1;
+    const fail=error=>{failure=error;tx.abort();};
+    const apply=()=>{if(--pending)return;try{
+      for(const entry of entries){
+        const {content,revisions,expected}=entry;const record={...entry.record,syncEpoch:crypto.randomUUID()};
+        const documents=tx.objectStore('documents');
+        if(expected===null)documents.add({...record,historyVersion:revisions.length});
+        else documents.put({...record,historyVersion:(entry.previousHistoryVersion||0)+revisions.length});
+        tx.objectStore('contents').put({documentId:record.id,...content});
+        for(const revision of revisions){const {id:oldId,documentId:oldDocumentId,...value}=revision;addRevision(tx,{...value,documentId:record.id});}
+      }
+      tx.objectStore('settings').put(folders,'library-folders-v1');
+    }catch(error){fail(error);}};
+    for(const entry of entries){const request=tx.objectStore('documents').get(entry.record.id);request.onsuccess=()=>{
+      if(syncRecordSnapshot(request.result)!==entry.expected)return fail(Error('동기화 중 다른 창에서 문서가 바뀌었습니다. 기존 내용은 유지했습니다. 다시 시도해주세요.'));
+      apply();
+    };}
+    const current=tx.objectStore('settings').get('library-folders-v1');current.onsuccess=()=>{
+      if(JSON.stringify(current.result||[])!==JSON.stringify(expectedFolders))return fail(Error('동기화 중 폴더가 바뀌었습니다. 다시 시도해주세요.'));
+      apply();
+    };
+    tx.oncomplete=resolve;tx.onerror=()=>reject(failure||tx.error||Error('동기화 데이터를 저장하지 못했습니다.'));tx.onabort=()=>reject(failure||tx.error||Error('받은 데이터를 저장하지 못했습니다. 기존 데이터는 유지됩니다.'));
+  });
+  for(const entry of entries)changed(entry.record.id);changed(null);
 }
 
 /** Autosave never writes the imported file. HTML is retained once; edits are separate metadata. */

@@ -32,7 +32,7 @@ export function folderSettings(storage) {
   const entries={};for(const key of keys){const value=storage.getItem(key);if(value!==null)entries[key]=value;}
   return validateSettings({entries});
 }
-function validateSettings(value) {
+export function validateSettings(value) {
   if(!object(value?.entries) || Object.keys(value.entries).length>50000)throw Error('폴더의 설정 형식이 올바르지 않습니다.');
   const entries={};
   for(const [key,item] of Object.entries(value.entries)){
@@ -49,10 +49,10 @@ export function applyFolderSettings(storage, settings) {
 }
 export function portableRecord(record) {
   const result={};
-  for(const key of ['id','title','name','source','created','modified','metadata','nativeScroll','byteSize','sourceIdentity','folderId','trashedAt'])if(record[key]!==undefined)result[key]=record[key];
+  for(const key of ['id','title','name','source','created','modified','metadata','nativeScroll','byteSize','sourceIdentity','folderId','trashedAt','syncSourceId','syncFingerprint'])if(record[key]!==undefined)result[key]=record[key];
   return result;
 }
-function validateState(value, id) {
+export function validateState(value, id) {
   const record=value?.record;
   if(!object(record)||record.id!==id||!validId(id)||typeof record.title!=='string'||record.title.length>1000||typeof record.name!=='string'||record.name.length>1000||!Number.isFinite(record.created)||!Number.isFinite(record.modified)||!object(record.metadata)||record.metadata.version!==1||!object(record.metadata.view)||!object(record.metadata.viewport)||!Array.isArray(value.revisions))throw Error('폴더의 문서 정보가 손상되었습니다.');
   const validateMarks = metadata => {

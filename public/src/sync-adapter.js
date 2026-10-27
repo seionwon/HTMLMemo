@@ -1,0 +1,85 @@
+import {listDocuments,getDocument,listRevisions,readLibrary,commitDeviceSync,syncRecordSnapshot} from './storage.js';
+import {portableRecord,validateState,validateSettings,folderSettings,applyFolderSettings} from './data-folder.js';
+import {localFileIdentity,sameLocalFile} from './local-files.js';
+import {mergeLibraryFolders,validateFolders} from './library-folders.js';
+
+export const DEVICE_SYNC_FORMAT='HTMLMemo.sync';
+export const DEVICE_SYNC_LIMIT=1300000;
+const idOK=id=>typeof id==='string'&&/^[\w-]{1,80}$/.test(id);
+const sizeError=()=>Error('중계 서비스의 전송 용량을 넘습니다. 양쪽 기기에 같은 HTML 원본을 준비하고 ‘원본 파일 포함’을 끈 뒤 주석·설정을 동기화해주세요.');
+const b64=bytes=>{let text='';for(let i=0;i<bytes.length;i+=32768)text+=String.fromCharCode(...bytes.subarray(i,i+32768));return btoa(text);};
+const fingerprint=async record=>{const text=JSON.stringify({title:record.title,name:record.name,sourceIdentity:record.sourceIdentity,metadata:record.metadata,trashedAt:record.trashedAt});return [...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text)))].map(n=>n.toString(16).padStart(2,'0')).join('');};
+async function pack(blob){if(blob.size>800000)throw sizeError();return {mime:blob.type,bytes:b64(new Uint8Array(await blob.arrayBuffer())),identity:await localFileIdentity(blob)};}
+async function unpack(body){
+  if(!body||typeof body.bytes!=='string'||body.bytes.length>DEVICE_SYNC_LIMIT||!/^[A-Za-z0-9+/]*={0,2}$/.test(body.bytes))throw Error('받은 원본 파일이 손상되었습니다.');
+  const text=atob(body.bytes),blob=new Blob([Uint8Array.from(text,c=>c.charCodeAt(0))],{type:typeof body.mime==='string'?body.mime:'text/html'});
+  if(!sameLocalFile(await localFileIdentity(blob),body.identity))throw Error('받은 원본 파일의 검증에 실패했습니다. 기존 문서는 유지됩니다.');return blob;
+}
+const contentOf=record=>record.file?{file:record.file,...(record.originalFile?{originalFile:record.originalFile}:{})}:{html:record.html,...(record.originalFile?{originalFile:record.originalFile}:{})};
+
+/** MemoSuite SyncAdapter, backed by HTMLMemo's IndexedDB. Roots are intentionally absent. */
+export class DeviceSyncAdapter {
+  constructor({storage=localStorage,includeSources=true,includeSettings=true,isHost=()=>true,isActive=()=>true,afterCommit=async()=>{},operations={}}={}){
+    this.storage=storage;this.includeSources=includeSources;this.includeSettings=includeSettings;this.isHost=isHost;this.isActive=isActive;this.afterCommit=afterCommit;
+    this.ops={listDocuments,getDocument,listRevisions,readLibrary,commitDeviceSync,...operations};
+  }
+  check(){if(!this.isActive())throw new DOMException('동기화를 닫았습니다.','AbortError');}
+  async analyzeSyncData(initial){const ids=await this.getSyncTargetIds(initial),docs=await this.ops.listDocuments({includeTrashed:true});return {type:ids?'single':'full',count:ids?ids.length:docs.length,label:ids?docs.find(d=>d.id===ids[0])?.title:'서재 전체'};}
+  async getSyncTargetIds(initial){return initial?(Array.isArray(initial)?initial:[initial]):undefined;}
+  async getBackupData(ids,exclude=[]){
+    this.check();const library=await this.ops.readLibrary(),documents=[],wanted=ids?new Set(ids):null,excluded=new Set(exclude);let packedBytes=0;
+    for(const header of library.documents){
+      if(wanted&&!wanted.has(header.id)||excluded.has(header.id))continue;
+      const doc=await this.ops.getDocument(header.id);if(!doc)throw Error('전송할 문서가 변경되었습니다. 다시 시작해주세요.');
+      const source=doc.file||new Blob([doc.html],{type:'text/html'}),record=portableRecord(doc);
+      if(!record.sourceIdentity)record.sourceIdentity=await localFileIdentity(doc.originalFile||source);
+      const state=validateState({record,revisions:await this.ops.listRevisions(doc.id)},doc.id);
+      const body=this.includeSources?await pack(source):null,original=this.includeSources&&doc.originalFile?await pack(doc.originalFile):null;
+      const entry={...state,body,original,sourceType:doc.file?'file':'html'};packedBytes+=new Blob([JSON.stringify(entry)]).size;if(packedBytes>DEVICE_SYNC_LIMIT)throw sizeError();documents.push(entry);this.check();
+    }
+    const result={format:DEVICE_SYNC_FORMAT,version:1,documents,folders:validateFolders(library.folders),settings:this.includeSettings&&this.isHost()?folderSettings(this.storage):null,logs:documents.map(d=>({title:d.record.title}))};
+    if(new Blob([JSON.stringify(result)]).size>DEVICE_SYNC_LIMIT)throw sizeError();return result;
+  }
+  async mergeBackupData(data,resolver){
+    this.check();
+    if(data?.format!==DEVICE_SYNC_FORMAT||data.version!==1||!Array.isArray(data.documents)||data.documents.length>10000||new Blob([JSON.stringify(data)]).size>DEVICE_SYNC_LIMIT)throw Error('지원하지 않거나 너무 큰 HTMLMemo 동기화 데이터입니다.');
+    const remoteFolders=validateFolders(data.folders),settings=data.settings===null?null:validateSettings(data.settings),seen=new Set(),incoming=[];
+    for(const value of data.documents){
+      if(!idOK(value?.record?.id)||seen.has(value.record.id)||!['html','file'].includes(value.sourceType))throw Error('받은 문서 목록이 손상되었습니다.');seen.add(value.record.id);
+      const state=validateState(value,value.record.id);
+      if(state.record.folderId&&!remoteFolders.some(f=>f.id===state.record.folderId))throw Error('받은 문서의 상대 폴더가 없습니다.');
+      const body=value.body?await unpack(value.body):null,original=value.original?await unpack(value.original):null;
+      incoming.push({...state,body,original,sourceType:value.sourceType,fingerprint:await fingerprint(state.record)});
+    }
+    const local=await this.ops.readLibrary(),tree=mergeLibraryFolders(local.folders,remoteFolders,()=>crypto.randomUUID()),entries=[],mirrored=[],conflicts=[],plans=[];
+    for(const value of incoming){
+      const record=value.record,stamp=value.fingerprint;
+      if(local.documents.some(d=>d.syncSourceId===record.id&&d.syncFingerprint===stamp&&(d.folderId||'')===(tree.mapping.get(record.folderId||'')||''))){continue;}
+      const match=local.documents.find(d=>d.id===record.id)||local.documents.find(d=>sameLocalFile(d.sourceIdentity,record.sourceIdentity));
+      const previous=match?await this.ops.getDocument(match.id):null;
+      if(previous&&await fingerprint(previous)===stamp&&(previous.folderId||'')===(tree.mapping.get(record.folderId||'')||'')){mirrored.push(previous.id);continue;}
+      if(!value.body&&!previous)throw Error('이 기기에 ‘'+record.title+'’의 원본이 없습니다. 같은 HTML 파일을 먼저 가져오거나 보내는 기기에서 원본 파일 포함을 켜주세요.');
+      if(!value.body&&previous&&!sameLocalFile(previous.sourceIdentity||await localFileIdentity(previous.originalFile||previous.file||new Blob([previous.html],{type:'text/html'})),record.sourceIdentity))throw Error('문서 원본이 다릅니다. 원본 파일을 포함해 다시 보내주세요.');
+      const plan={value,previous,resolution:previous?null:'remote'};plans.push(plan);
+      if(previous)conflicts.push({id:plans.length-1,type:'memo',title:record.title,localDate:new Date(previous.modified),remoteDate:new Date(record.modified),localContent:`이 기기: 주석 ${previous.metadata.annotations.length}개 · 북마크 ${previous.metadata.bookmarks.length}개`,remoteContent:`상대 기기: 주석 ${record.metadata.annotations.length}개 · 북마크 ${record.metadata.bookmarks.length}개`});
+    }
+    if(conflicts.length){if(!resolver)throw Error('양쪽에서 바뀐 문서가 있어 보관 방법을 선택해야 합니다.');const choices=await resolver(conflicts);if(!Array.isArray(choices)||choices.length!==conflicts.length||choices.some(c=>!['local','remote','both'].includes(c)))throw Error('충돌 선택을 완료하지 않았습니다.');conflicts.forEach((c,i)=>plans[c.id].resolution=choices[i]);}
+    for(const {value,previous,resolution} of plans){
+      if(resolution==='local')continue;
+      const record={...value.record,folderId:tree.mapping.get(value.record.folderId||'')||'',syncSourceId:value.record.id,syncFingerprint:value.fingerprint};
+      const content=value.body?(value.sourceType==='file'?{file:value.body}:{html:await value.body.text()}):contentOf(previous);
+      if(value.original)content.originalFile=value.original;
+      if(previous&&resolution==='remote'){
+        // Preserve an entire prior version, including its original bytes and history.
+        const backup={...portableRecord(previous),id:crypto.randomUUID(),title:previous.title+' (동기화 전 보관본)'};
+        entries.push({record:backup,content:contentOf(previous),revisions:await this.ops.listRevisions(previous.id),expected:null});
+        record.id=previous.id;
+      }else if(previous){record.id=crypto.randomUUID();record.title+=' (상대 기기)';}
+      let revisions=value.revisions;if(previous&&resolution==='remote'){const key=revision=>{const {id,documentId,...state}=revision;return JSON.stringify(state);};const known=new Set((await this.ops.listRevisions(previous.id)).map(key));revisions=revisions.filter(revision=>!known.has(key(revision)));}
+      entries.push({record,content,revisions,expected:previous&&resolution==='remote'?syncRecordSnapshot(previous):null,previousHistoryVersion:previous?.historyVersion||0});mirrored.push(record.id);
+    }
+    this.check();await this.ops.commitDeviceSync(entries,tree.folders,local.folders);
+    if(settings&&this.includeSettings&&!this.isHost())applyFolderSettings(this.storage,settings);
+    await this.afterCommit();this.check();return mirrored;
+  }
+}
