@@ -491,7 +491,7 @@ test('folder cancellation, blocked access and failed persistence preserve the pr
 
 test('settings and status bar expose folder setup without a duplicate library banner, with a Chrome requirement if folder support becomes unavailable',async()=>{
   const app=await fileApp(),doc=app.doc;
-  assert.equal(!!doc.querySelector('#choose-folder,#menu-folder'),false);assert.equal(doc.querySelector('.library-footer').textContent,'문서는 이 기기에 저장됩니다.');
+  assert.equal(!!doc.querySelector('#choose-folder,#menu-folder'),false);assert.equal(doc.querySelector('.library-footer'),null);
   doc.querySelector('#settings-button').onclick();assert.equal(doc.querySelectorAll('#settings-folder').length,1);assert.equal(doc.querySelector('#settings-folder').textContent,'폴더 연결');
   app.context.window.showDirectoryPicker=undefined;doc.querySelector('#settings-folder').onclick();await new Promise(resolve=>setImmediate(resolve));assert.ok(doc.querySelector('[data-chrome-required]'));assert.match(doc.querySelector('#chrome-required-message').textContent,/구글 크롬에서만 정상적으로 작동/);assert.equal(app.settings.get('folder'),undefined);
   assert.equal(doc.querySelector('#data-folder-card,#data-folder-summary,#data-folder-description,#library-data-folder'),null);assert.ok(doc.querySelector('#data-folder-status'));assert.match(doc.querySelector('#data-folder-status').title,/브라우저 데이터 삭제 시 잃을 수 있습니다/);

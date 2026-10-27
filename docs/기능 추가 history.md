@@ -3341,3 +3341,17 @@ CodeMemo의 제한된 로컬 검증기로 iframe 요소를 클릭한 시도는 �
 공개 사이트의 새 합성 문서 **1280px·390px**, 기존 목차 문서 **1280px** 화면을 직접 확인했습니다. 390px 합성 문서는 **100% 배율과 가로 이동** 조건이며 문서 전체를 화면 폭에 맞춘 조건으로 표현하지 않습니다. CI Ubuntu의 일부 한글은 글꼴 부재로 네모로 보이므로 문구는 DOM으로 확인했습니다. 공개 파일 **32개(1,510,461바이트)** 모두 HTTP **200**이며 실제 Pages 아티팩트와 바이트·SHA-256이 일치했습니다. 증거는 `test-results/navigation-regression-ci`, `test-results/navigation-regression-published`, 각 폴더의 `pages-only-scripted-navigation.json`·화면·XML, `test-results/navigation-regression-build-ci.log`, `test-results/navigation-regression-published-ci.log`, `test-results/navigation-regression-actions.json`, `test-results/navigation-regression-pages`, `test-results/navigation-regression-online-files.json`에 보관했습니다. 첫 실패 기록은 위에 보존하며 이력만 보충하는 후속 커밋은 앱 파일을 바꾸지 않습니다.
 
 **남은 확인:** 게시된 보완 경로의 합성 재현 검증은 완료했습니다. 사용자가 현재 읽는 실제 HTML 파일은 아직 확인하지 못했으며, 그 파일에서 보고한 두 문제가 모두 해결됐다고 단정하지 않습니다. 동일 파일 검증에는 해당 파일의 저장 경로와 실패하는 목차 항목 정보가 필요합니다. 개인 원문을 소스나 공개 빌드에 추가하지 않았습니다.
+
+
+<a id="hist-20261027-012"></a>
+### 2026-10-27 14:54:48 +09:00 — 내 서재 하단의 기기 저장 문구 제거
+
+| ID | change-kind | status |
+|---|---|---|
+| hist-20261027-012 | 서재 화면 정리 | 구현·로컬 검증 완료, GitHub Pages 게시 검증 대기 |
+
+**목적·사용:** 내 서재 목록 아래의 **‘문서는 이 기기에 저장됩니다.’** 문구와 앞의 초록색 점을 제거했습니다. 해당 안내 줄의 전용 스타일·여백도 정리했으며 서재에서 더 이상 표시되지 않습니다. 기존 서재 버튼·선택 디자인·문서와 주석 저장 기능은 유지합니다.
+
+**검증:** 제거한 문구를 참조하던 기존 단위 검사만 새 화면에 맞췄고 새 검사 파일·시나리오는 추가하지 않았습니다. 로컬 단위 **550개**, JavaScript **106개·JSON** 검사, Tailwind CSS **4.3.3** 빌드와 git diff --check를 통과했습니다. 신뢰된 CodeMemo 브라우저의 **1280px·390px** 화면을 직접 확인했고 반환된 서재 텍스트에도 문구가 없었습니다. 두 요청 모두 HTTP **200**, 예외 **0개**이며 임시 검증 서버를 종료했습니다. 증거는 `test-results/library-footer-removal-unit.log`, `test-results/library-footer-removal-check.log`, `test-results/library-footer-removal-build.log`, `test-results/library-footer-removal-preview`에 보관했습니다.
+
+**게시 상태:** 이 기록 시점에는 로컬 검증만 완료했습니다. 기존 GitHub Actions의 전체/공개 Chrome과 정식 주소 https://seionwon.github.io/HTMLMemo/ 의 게시 결과를 확인한 뒤 같은 항목에 보충합니다.
