@@ -81,7 +81,7 @@ async function fileApp({address='file:///Users/beginner/HTMLMemo.html',navigator
   const events=new Map();const window={addEventListener(name,fn){if(!events.has(name))events.set(name,[]);events.get(name).push(fn);},postMessage(){},dispatchEvent(){}};
   if(directoryPicker)window.showDirectoryPicker=directoryPicker;
   const context=vm.createContext({document:doc,window,indexedDB,localStorage:{get length(){return local.size;},key:index=>[...local.keys()][index]??null,getItem:key=>local.get(key)??null,setItem:(key,value)=>local.set(key,value)},location:new URL(address),navigator:{onLine:false,storage:{},locks:{request:async(name,action)=>action()},...navigator},URL:LocalURL,Blob,File,crypto,TextEncoder,TextDecoder,Uint8Array,DataView,atob,btoa,structuredClone,Event,DOMException,innerWidth:1200,innerHeight:850,matchMedia:()=>({matches:false}),setInterval(){},setTimeout(fn,ms){if(ms===800)queueMicrotask(fn);return 1;},clearTimeout(){},requestAnimationFrame:fn=>fn(),fetch:()=>{throw new Error('An embedded app must not fetch a server');}});
-  const script=[...doc.querySelectorAll('script')].find(el=>el.type!=='application/json');new vm.Script(script.textContent).runInContext(context);await new Promise(resolve=>setImmediate(resolve));assert.match(doc.querySelector('#status-left').textContent,typeof directoryPicker==='function'&&typeof context.navigator.locks?.request==='function'?/개의 문서/:/Chrome/);return {doc,context,blobs,local,get databaseOpens(){return databaseOpens;},settings:stores.get('settings'),emit:(name,event)=>events.get(name)?.forEach(fn=>fn(event))};
+  const script=[...doc.querySelectorAll('script')].find(el=>el.type!=='application/json');new vm.Script(script.textContent).runInContext(context);await new Promise(resolve=>setImmediate(resolve));assert.match(doc.querySelector('#status-left').textContent,/개의 문서/);return {doc,context,blobs,local,get databaseOpens(){return databaseOpens;},settings:stores.get('settings'),emit:(name,event)=>events.get(name)?.forEach(fn=>fn(event))};
 }
 function openExecution(app){app.doc.querySelector('#settings-button').onclick();app.doc.querySelector('#settings-execution').onclick();}
 test('execution shares only the canonical URL, with no app package or installation download',async()=>{
@@ -385,27 +385,27 @@ test('Escape deliberately defers first-run setup but never claims a folder was c
   assert.equal(app.local.get('htmlmemo-data-folder-welcome-v1'),'1');assert.equal(app.settings.get('folder'),undefined);assert.match(app.doc.querySelector('#data-folder-status').textContent,/미연결/);
 });
 
-test('missing folder support blocks app startup with the required Chrome message even after a previous visit',async()=>{
-  const text='이 앱은 구글 크롬에서만 정상적으로 작동합니다. 크롬에서 실행해주세요.';
+test('missing folder support starts a usable local library and never changes a previous root handle',async()=>{
   for(const firstRun of [true,false]){
     const original=memoryFolder('기존 보관 폴더'),app=await fileApp({firstRun,directoryPicker:null,settings:[['folder',original]],localEntries:[['untouched','saved value']]}),doc=app.doc;
-    assert.equal(doc.querySelector('#dialog').open,true);assert.ok(doc.querySelector('[data-chrome-required]'));assert.equal(doc.querySelector('#chrome-required-message').textContent,text);
-    assert.equal(doc.querySelector('#select-storage-folder,#folder-welcome-later,[data-dialog-close]'),null);assert.equal(doc.activeElement.id,'chrome-copy-url');
-    let cancelled=false;doc.querySelector('#dialog').oncancel({preventDefault(){cancelled=true;}});assert.equal(cancelled,true);assert.equal(doc.querySelector('#dialog').open,true);
-    assert.equal(doc.querySelector('#hero-import').onclick,null);assert.equal(app.databaseOpens,0);assert.equal(app.settings.get('folder'),original);assert.equal(app.local.get('untouched'),'saved value');assert.equal(original.children.size,0);
-    assert.doesNotMatch(doc.querySelector('[data-chrome-required]').textContent,/Edge|엣지|나중에 연결/);
+    assert.equal(!!doc.querySelector('#dialog').open,firstRun);assert.equal(!!doc.querySelector('[data-browser-storage]'),firstRun);assert.equal(doc.querySelector('[data-chrome-required]'),null);
+    if(firstRun){assert.equal(doc.activeElement.id,'storage-start');doc.querySelector('#storage-start').onclick();assert.equal(doc.querySelector('#dialog').open,false);assert.equal(app.local.get('htmlmemo-data-folder-welcome-v1'),'1');}
+    assert.equal(typeof doc.querySelector('#hero-import').onclick,'function');assert.equal(app.databaseOpens,1);assert.equal(app.settings.get('folder'),original);assert.equal(app.local.get('untouched'),'saved value');assert.equal(original.children.size,0);
+    assert.equal(doc.querySelector('#data-folder-status').textContent,'기기 저장');
   }
 });
-test('the Chrome requirement copies only the public app URL and recovers after clipboard denial',async()=>{
-  const copied=[],app=await fileApp({directoryPicker:null,address:'https://preview.example/app/?private=secret#note',navigator:{clipboard:{writeText:async value=>copied.push(value)}}}),doc=app.doc;
-  await doc.querySelector('#chrome-copy-url').onclick();assert.deepEqual(copied,[PUBLIC_APP_URL]);assert.equal(doc.querySelector('#chrome-app-url').value,PUBLIC_APP_URL);assert.match(doc.querySelector('#chrome-copy-status').textContent,/복사했습니다/);assert.equal(doc.querySelector('#dialog').open,true);
-  for(const navigator of [{},{clipboard:{writeText:async()=>{throw new Error('denied');}}}]){
-    const a=await fileApp({directoryPicker:null,navigator}),input=a.doc.querySelector('#chrome-app-url');let selected=0;input.select=()=>selected++;
-    await a.doc.querySelector('#chrome-copy-url').onclick();assert.equal(selected,1);assert.equal(a.doc.activeElement,input);assert.match(a.doc.querySelector('#chrome-copy-status').textContent,/직접 복사/);assert.equal(a.doc.querySelector('#chrome-copy-url').disabled,false);assert.equal(a.databaseOpens,0);
-  }
+test('folder-free storage guidance is dismissible and exposes sync without a clipboard or login',async()=>{
+  const app=await fileApp({firstRun:true,directoryPicker:null}),doc=app.doc;
+  assert.match(doc.querySelector('[data-browser-storage]').textContent,/폴더 선택이나 로그인 없이/);assert.ok(doc.querySelector('#storage-sync'));doc.querySelector('#storage-start').onclick();
+  doc.querySelector('#settings-button').onclick();assert.equal(doc.querySelector('#settings-folder').textContent,'저장 안내');assert.ok(doc.querySelector('#settings-sync'));assert.match(doc.querySelector('[data-folder-guide]').textContent,/브라우저 데이터를 지우거나/);
+  doc.querySelector('#settings-folder').onclick();assert.ok(doc.querySelector('[data-browser-storage]'));assert.equal(doc.querySelector('#select-storage-folder'),null);assert.equal(doc.querySelector('#dialog').oncancel,null);
 });
-test('a missing safe folder-write lock also shows the Chrome requirement before accessing library data',async()=>{
-  const app=await fileApp({navigator:{locks:undefined}});assert.ok(app.doc.querySelector('[data-chrome-required]'));assert.equal(app.databaseOpens,0);assert.equal(app.doc.querySelector('#hero-import').onclick,null);
+test('a missing safe folder-write lock leaves internal storage available without requesting a folder',async()=>{
+  const app=await fileApp({firstRun:true,navigator:{locks:undefined},directoryPicker:()=>assert.fail('Never request a directory without a safe write lock')});assert.ok(app.doc.querySelector('[data-browser-storage]'));assert.equal(app.databaseOpens,1);assert.equal(typeof app.doc.querySelector('#hero-import').onclick,'function');
+});
+
+test('a replaced library heading text node is repaired without losing the count or stored documents',async()=>{
+  const app=await fileApp(),doc=app.doc,heading=doc.querySelector('.library-heading h2'),count=doc.querySelector('#document-count');heading.firstChild.remove();doc.querySelector('#library-filter').oninput();assert.match(heading.textContent,/내 서재/);assert.equal(doc.querySelector('#document-count'),count);assert.equal(count.textContent,'0');assert.equal(doc.querySelector('#toast').hidden,true);
 });
 
 test('an existing connected folder or revoked permission never reopens the new-folder welcome',async()=>{
@@ -501,10 +501,10 @@ test('folder cancellation, blocked access and failed persistence preserve the pr
   assert.equal(app.settings.get('folder'),next);assert.equal(doc.querySelector('#dialog').open,true);assert.equal(doc.querySelector('#dialog h2').textContent,'HTMLMemo 설정');assert.match(doc.querySelector('#status-left').textContent,/New HTMLMemo 자동 저장/);
 });
 
-test('settings and status bar expose folder setup without a duplicate library banner, with a Chrome requirement if folder support becomes unavailable',async()=>{
+test('settings and status bar expose folder setup and fall back to local storage guidance if folder support becomes unavailable',async()=>{
   const app=await fileApp(),doc=app.doc;
   assert.equal(!!doc.querySelector('#choose-folder,#menu-folder'),false);assert.equal(doc.querySelector('.library-footer'),null);
   doc.querySelector('#settings-button').onclick();assert.equal(doc.querySelectorAll('#settings-folder').length,1);assert.equal(doc.querySelector('#settings-folder').textContent,'폴더 연결');
-  app.context.window.showDirectoryPicker=undefined;doc.querySelector('#settings-folder').onclick();await new Promise(resolve=>setImmediate(resolve));assert.ok(doc.querySelector('[data-chrome-required]'));assert.match(doc.querySelector('#chrome-required-message').textContent,/구글 크롬에서만 정상적으로 작동/);assert.equal(app.settings.get('folder'),undefined);
+  app.context.window.showDirectoryPicker=undefined;doc.querySelector('#settings-folder').onclick();await new Promise(resolve=>setImmediate(resolve));assert.ok(doc.querySelector('[data-browser-storage]'));assert.match(doc.querySelector('[data-browser-storage]').textContent,/기기 내부 저장소/);assert.equal(app.settings.get('folder'),undefined);
   assert.equal(doc.querySelector('#data-folder-card,#data-folder-summary,#data-folder-description,#library-data-folder'),null);assert.ok(doc.querySelector('#data-folder-status'));assert.match(doc.querySelector('#data-folder-status').title,/브라우저 데이터 삭제 시 잃을 수 있습니다/);
 });
