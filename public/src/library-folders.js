@@ -50,11 +50,12 @@ export function editLibraryFolders(current,records,change) {
     folders.push({id:change.id,parentId:change.parentId,name:folderName(change.name)});
   }else if(change.type==='move-documents'){
     requireFolder(change.parentId);if(!Array.isArray(change.ids)||!change.ids.length)throw Error('이동할 문서를 선택해주세요.');
-    const byId=new Map(records.map(r=>[r.id,r]));for(const id of new Set(change.ids)){const record=byId.get(id);if(!record)throw Error('이동할 문서가 삭제되었습니다.');if((record.folderId||'')!==change.parentId)updates.push({...record,folderId:change.parentId});}
+    const byId=new Map(records.map(r=>[r.id,r]));for(const id of new Set(change.ids)){const record=byId.get(id);if(!record||record.trashedAt)throw Error('이동할 문서가 삭제되었습니다. 휴지통에 있다면 먼저 복원해주세요.');if((record.folderId||'')!==change.parentId)updates.push({...record,folderId:change.parentId});}
   }else{
     if(!change.id)throw Error('전용 폴더(root)는 이름 변경·이동·삭제할 수 없습니다.');requireFolder(change.id);
     if(change.type==='delete'){
-      if(folders.some(f=>f.parentId===change.id)||records.some(r=>r.folderId===change.id))throw Error('비어 있는 폴더만 삭제할 수 있습니다. 문서와 하위 폴더를 먼저 다른 폴더로 옮기세요.');
+      if(folders.some(f=>f.parentId===change.id)||records.some(r=>r.folderId===change.id&&!r.trashedAt))throw Error('비어 있는 폴더만 삭제할 수 있습니다. 문서와 하위 폴더를 먼저 다른 폴더로 옮기세요.');
+      for(const record of records)if(record.folderId===change.id&&record.trashedAt)updates.push({...record,folderId:''});
       folders=folders.filter(f=>f.id!==change.id);
     }else if(change.type==='move'){
       requireFolder(change.parentId);if(folderDescendants(folders,change.id).has(change.parentId))throw Error('폴더를 자기 자신이나 하위 폴더로 옮길 수 없습니다.');
@@ -98,16 +99,16 @@ export class LibraryIndex {
     const item=this.byId.get(id);if(!item)return this.root;
     const path=this.label(item.parentId)+' / '+item.name;this.paths.set(id,path);return path;
   }
-  select({filter='',folderId='',sort='modified',direction='desc'}={}) {
-    filter=filter.toLocaleLowerCase();const key=JSON.stringify([filter,folderId,sort,direction]);
+  select({filter='',folderId='',sort='modified',direction='desc',allFolders=false}={}) {
+    filter=filter.toLocaleLowerCase();const key=JSON.stringify([filter,folderId,sort,direction,allFolders]);
     if(this.queries.has(key)){const result=this.queries.get(key);this.queries.delete(key);this.queries.set(key,result);return result;}
     const documents=filter?this.records.filter(record=>{
       if(!this.searchText.has(record))this.searchText.set(record,`${record.title} ${record.source} ${record.name} ${this.label(record.folderId||'')}`.toLocaleLowerCase());
       return this.searchText.get(record).includes(filter);
-    }):[...(this.documents.get(folderId)||[])];
+    }):allFolders?[...this.records]:[...(this.documents.get(folderId)||[])];
     const order=direction==='asc'?1:-1;
     documents.sort((a,b)=>order*(sort==='title'?libraryCollator.compare(a.title,b.title):a[sort]-b[sort]));
-    const folders=filter?this.folders.filter(f=>this.label(f.id).toLocaleLowerCase().includes(filter)).sort((a,b)=>libraryCollator.compare(a.name,b.name)):(this.children.get(folderId)||[]);
+    const folders=allFolders?[]:filter?this.folders.filter(f=>this.label(f.id).toLocaleLowerCase().includes(filter)).sort((a,b)=>libraryCollator.compare(a.name,b.name)):(this.children.get(folderId)||[]);
     const result={documents,folders};this.queries.set(key,result);while(this.queries.size>8)this.queries.delete(this.queries.keys().next().value);return result;
   }
 }

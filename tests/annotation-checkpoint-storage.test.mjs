@@ -43,6 +43,15 @@ test('a failed restore rolls back both the pre-restore snapshot and restored cur
 test('a checkpoint for a deleted document never resurrects it or adds an orphan revision',async()=>{
   const f=fixture();await f.api.putDocumentRevision(record(),{baseline:true});f.remove();assert.equal(await f.api.checkpointAnnotations('book'),false);assert.equal(f.current,undefined);assert.equal(f.history.length,1);
 });
+test('stale reader saves preserve a later trash decision and cannot undo a later restore',async()=>{
+  const f=fixture(),r=record();await f.api.putDocumentRevision(r,{baseline:true});f.current.trashedAt=12345;r.metadata.annotations=[{id:'pending-note'}];
+  await f.api.saveDocumentHTML(r,undefined,{revision:{checkpoint:false,mustExist:true}});assert.equal(f.current.trashedAt,12345);assert.equal(r.trashedAt,12345);assert.equal(f.current.metadata.annotations[0].id,'pending-note');
+  delete f.current.trashedAt;await f.api.saveDocumentHTML(r,undefined,{revision:{checkpoint:false,mustExist:true}});assert.equal(f.current.trashedAt,undefined);assert.equal(r.trashedAt,undefined);
+});
+test('an old reader cannot recreate a permanently deleted document or add orphan history',async()=>{
+  const f=fixture(),r=record();await f.api.putDocumentRevision(r,{baseline:true});const count=f.history.length;f.remove();r.metadata.annotations=[{id:'stale'}];
+  await assert.rejects(f.api.putDocumentRevision(r,{mustExist:true}),/영구 삭제/);assert.equal(f.current,undefined);assert.equal(f.history.length,count);
+});
 test('date headers commit with snapshots, carry only counts and leave fast saves unindexed',async()=>{
   const f=fixture(),r=record();await f.api.putDocumentRevision(r,{baseline:true});assert.equal(f.headers.length,1);r.metadata.annotations=[{id:'note',text:'Private annotation content'}];await f.api.putDocumentRevision(r,{checkpoint:false});assert.equal(f.headers.length,1);await f.api.checkpointAnnotations('book');assert.equal(f.headers.length,2);const header=f.headers[1];assert.equal(header.id,f.history[1].id);assert.equal(header.created,f.history[1].created);assert.equal(header.annotationCount,1);assert.equal(header.bookmarkCount,0);assert.equal(Object.hasOwn(header,'annotations'),false);assert.ok(!JSON.stringify(header).includes('Private annotation content'));
 });

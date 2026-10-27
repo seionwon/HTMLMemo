@@ -5,6 +5,7 @@ import vm from 'node:vm';
 import {SaveQueue,AnnotationCheckpoints} from '../public/src/model.js';
 const source=await readFile(new URL('../public/src/app.js',import.meta.url),'utf8');
 const code=source.slice(source.indexOf('async function openRecord('),source.indexOf('function saveStatus('));
+const cacheCode=source.slice(source.indexOf('function cacheLibraryDocument('),source.indexOf('async function refreshLibrary('));
 const identity={version:1,size:123,digest:'a'.repeat(64)};
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 function setup(t){
@@ -23,7 +24,7 @@ function setup(t){
     putDocumentView:async(id,view)=>{writes.push({kind:'view'});return {...record,sourceIdentity:identity,metadata:{...metadata,view}};},
     saveDocumentHTML:async value=>{writes.push({kind:'edit',record:structuredClone(value)});},
   });
-  vm.runInContext('var tabs=[],records=[],activeId="library";'+code,context);
+  vm.runInContext('var tabs=[],records=[],trashRecords=[],libraryTrash=false,activeId="library";'+cacheCode+code,context);
   t.after(()=>context.tabs.forEach(tab=>tab.checkpoints?.dispose()));
   return {context,record,parsed,fingerprint,resolve,reject,writes,get disposed(){return disposed;}};
 }
@@ -51,4 +52,10 @@ test('a reading-position change immediately updates folder status without turnin
   const a=setup(t);let reports=0;a.context.renderFolderState=()=>reports++;
   const opening=a.context.openRecord(a.record,a.parsed,{sourceIdentity:a.fingerprint});a.resolve(identity);const tab=await opening;const before=reports;
   tab.reader.callbacks.onPosition();assert.equal(reports,before+1);assert.equal(tab.queue.pending,true);assert.equal(tab.queue.editsPending,false);await tab.queue.flush();
+});
+test('a new import can retry its failed first save before later saves require an existing document',async t=>{
+  const a=setup(t),requirements=[];a.context.putDocumentRevision=async()=>{throw Error('Temporary initial write failure');};
+  a.context.saveDocumentHTML=async(record,html,options)=>requirements.push(options.revision.mustExist);
+  const opening=a.context.openRecord(a.record,a.parsed,{sourceIdentity:a.fingerprint});a.resolve(identity);const tab=await opening;
+  assert.deepEqual(requirements,[false]);assert.equal(tab.persisted,true);tab.reader.callbacks.onChange();await tab.queue.flush();assert.deepEqual(requirements,[false,true]);
 });

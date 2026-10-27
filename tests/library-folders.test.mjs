@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFile} from 'node:fs/promises';
-import {validateFolders,folderName,folderPath,folderDescendants,editLibraryFolders,mergeLibraryFolders,documentCopyName,LIBRARY_FOLDERS_KEY} from '../public/src/library-folders.js';
+import {validateFolders,folderName,folderPath,folderDescendants,editLibraryFolders,mergeLibraryFolders,documentCopyName,LIBRARY_FOLDERS_KEY,LibraryIndex} from '../public/src/library-folders.js';
 
 const tree=()=>[{id:'books',parentId:'',name:'책'},{id:'study',parentId:'books',name:'공부'},{id:'archive',parentId:'',name:'보관'}];
 test('library folders form a rooted, ordered path and include descendants without reading documents',()=>{
@@ -34,6 +34,16 @@ test('only empty folders can be deleted, while moving documents preserves every 
 test('reconnecting merges equal paths and remaps ID conflicts without losing either hierarchy',()=>{
   const incoming=[{id:'remote-books',parentId:'',name:'책'},{id:'study',parentId:'remote-books',name:'다른 공부'},{id:'notes',parentId:'study',name:'주석'}],merged=mergeLibraryFolders(tree(),incoming,()=> 'conflict-copy');
   assert.equal(merged.mapping.get('remote-books'),'books');assert.equal(merged.mapping.get('study'),'conflict-copy');assert.deepEqual(folderPath(merged.folders,'notes').map(f=>f.name),['책','다른 공부','주석']);assert.equal(merged.folders.length,5);
+});
+test('deleting an otherwise empty folder keeps its trashed documents recoverable at root',()=>{
+  const record={id:'trashed',folderId:'study',trashedAt:123,metadata:{annotations:[{id:'note'}]}},before=structuredClone(record);
+  const next=editLibraryFolders(tree(),[record],{type:'delete',id:'study'});assert.equal(next.folders.some(folder=>folder.id==='study'),false);assert.deepEqual(next.documents,[{...before,folderId:''}]);assert.deepEqual(record,before);
+  assert.throws(()=>editLibraryFolders(tree(),[record],{type:'move-documents',ids:['trashed'],parentId:'archive'}),/복원/);
+});
+test('the trash index spans all original folders and reuses queries without mixing ordinary folder results',()=>{
+  const index=new LibraryIndex(),records=[{id:'one',folderId:'study',title:'첫 책',name:'first.html',trashedAt:200},{id:'two',folderId:'archive',title:'둘째 책',name:'second.html',trashedAt:100}];index.update(records,tree());
+  const query={allFolders:true,sort:'trashedAt',direction:'desc'},all=index.select(query);assert.deepEqual(all.documents.map(record=>record.id),['one','two']);assert.equal(all.folders.length,0);assert.equal(index.select(query),all);
+  assert.deepEqual(index.select({...query,filter:'공부'}).documents.map(record=>record.id),['one']);assert.equal(index.select({folderId:''}).documents.length,0);assert.equal(index.select({folderId:''}).folders.length,2);
 });
 test('raw copy names are safe, retain the original extension and distinguish same-name documents',()=>{
   const ref={name:'a'.repeat(64)+'.mhtml'};const a=documentCopyName({id:'one',name:'../받은 <문서>.MHTML'},ref),b=documentCopyName({id:'two',name:'../받은 <문서>.MHTML'},ref);

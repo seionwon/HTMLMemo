@@ -62,7 +62,10 @@ async function withContent(record) {
   return {...record,html:content.html,file:content.file,originalFile:content.originalFile};
 }
 // Library cards never load book bodies; getDocument is the explicit lazy read.
-export const listDocuments = () => transaction('documents','readonly',store=>store.getAll());
+export const listDocuments = async ({includeTrashed=false}={}) => {
+  const records=await transaction('documents','readonly',store=>store.getAll());
+  return includeTrashed?records:records.filter(record=>!record.trashedAt);
+};
 export const getDocument = async id => withContent(await transaction('documents', 'readonly', store => store.get(id)));
 export const putDocument = record => putDocumentRevision(record);
 export const getSetting = key => transaction('settings', 'readonly', store => store.get(key));
@@ -119,17 +122,47 @@ export async function putDocumentView(id, view) {
     tx.onabort = () => reject(failure || tx.error || new Error('읽기 위치를 저장하지 못했습니다.'));
   });
 }
-export async function deleteDocument(id) {
+/** Trash/restore change headers only; immutable bodies and every history entry stay intact. */
+async function changeTrashState(id, restore) {
+  const connection=await db();
+  return new Promise((resolve,reject)=>{
+    const tx=connection.transaction(['documents','settings'],'readwrite'),store=tx.objectStore('documents');
+    const request=store.get(id),folders=tx.objectStore('settings').get('library-folders-v1');let saved,failure,ready=0;
+    const apply=()=>{if(++ready!==2)return;try{
+      saved=request.result;if(!saved)throw Error('문서가 삭제되었거나 다른 창에서 변경되었습니다. 서재를 다시 확인해주세요.');
+      if(restore){
+        delete saved.trashedAt;
+        if(saved.folderId&&!(folders.result||[]).some(folder=>folder.id===saved.folderId))saved.folderId='';
+      }else if(!saved.trashedAt)saved.trashedAt=Date.now();
+      store.put(saved);
+    }catch(error){failure=error;tx.abort();}};
+    request.onsuccess=apply;folders.onsuccess=apply;
+    tx.oncomplete=()=>{changed(id);resolve(saved);};tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(failure||tx.error||new Error('휴지통 변경을 저장하지 못했습니다. 문서와 주석은 유지됩니다.'));
+  });
+}
+export const trashDocument = id => changeTrashState(id,false);
+export const restoreDocument = id => changeTrashState(id,true);
+/** A confirmed purge is atomic and cannot delete a document another window has restored. */
+export async function deleteTrashedDocuments(ids) {
+  const selected=[...new Set(ids)];if(!selected.length)return;
   const connection=await db();
   await new Promise((resolve,reject)=>{
-    const tx=connection.transaction(['documents','contents','revisions','revisionHeaders'],'readwrite');tx.objectStore('documents').delete(id);tx.objectStore('contents').delete(id);
-    const request=tx.objectStore('revisions').index('documentId').openCursor(IDBKeyRange.only(id));
-    request.onsuccess=()=>{const cursor=request.result;if(cursor){tx.objectStore('revisionHeaders').delete(cursor.primaryKey);cursor.delete();cursor.continue();}};
-    tx.oncomplete=resolve;tx.onabort=()=>reject(tx.error);tx.onerror=()=>reject(tx.error);
+    const tx=connection.transaction(['documents','contents','revisions','revisionHeaders'],'readwrite'),store=tx.objectStore('documents');let failure;
+    for(const id of selected){const request=store.get(id);request.onsuccess=()=>{try{
+      if(!request.result)return;
+      if(!request.result.trashedAt)throw Error('복원된 문서는 영구 삭제하지 않습니다. 휴지통을 다시 확인해주세요.');
+      store.delete(id);tx.objectStore('contents').delete(id);
+      const revisions=tx.objectStore('revisions').index('documentId').openCursor(IDBKeyRange.only(id));
+      revisions.onsuccess=()=>{const cursor=revisions.result;if(cursor){tx.objectStore('revisionHeaders').delete(cursor.primaryKey);cursor.delete();cursor.continue();}};
+    }catch(error){failure=error;tx.abort();}};}
+    tx.oncomplete=resolve;tx.onabort=()=>reject(failure||tx.error||new Error('휴지통을 비우지 못했습니다. 기존 문서와 주석은 유지됩니다.'));tx.onerror=()=>reject(tx.error);
   });
-  try { const root = await navigator.storage.getDirectory(); await root.removeEntry(id + '.html'); } catch { /* IndexedDB also contains the complete HTML. */ }
-  changed(id);
+  for(const id of selected){
+    try{const root=await navigator.storage.getDirectory();await root.removeEntry(id+'.html');}catch{/* Legacy OPFS copies are best-effort cleanup only. */}
+    changed(id);
+  }
 }
+export const deleteDocument = id => deleteTrashedDocuments([id]);
 export async function permission(handle, request = false) {
   if (!handle) return false;
   if (!handle.queryPermission) return true;
@@ -227,7 +260,7 @@ export async function adjacentRevisionDay(id, date, direction) {
 }
 
 /** The current document and its annotation revision commit atomically. No source-file permission is needed. */
-export async function putDocumentRevision(record, {baseline = false, restoredFrom = null, checkpoint = true} = {}) {
+export async function putDocumentRevision(record, {baseline = false, restoredFrom = null, checkpoint = true, mustExist = false} = {}) {
   const connection=await db();
   const state={annotations:record.metadata?.annotations || [],bookmarks:record.metadata?.bookmarks || []};
   const {html,file,originalFile,...value}=record;value.diskPending=false;value.diskError=null;
@@ -243,11 +276,13 @@ export async function putDocumentRevision(record, {baseline = false, restoredFro
       try {
         const last=latest.result;
         const old=previous.result;
+        if(mustExist&&!old)throw Error('문서가 영구 삭제되었습니다. 이전 탭의 내용으로 다시 만들지 않습니다.');
         // A still-open legacy tab must not erase a later duplicate-check cache.
         if(!value.sourceIdentity&&old?.sourceIdentity)value.sourceIdentity=old.sourceIdentity;
         // Moving a document is independent of an open reader's annotation saves.
         if(old)value.folderId=old.folderId||'';
         else if(value.folderId&&(!Array.isArray(folders.result)||!folders.result.some(f=>f.id===value.folderId)))value.folderId='';
+        if(old?.trashedAt)value.trashedAt=old.trashedAt;else delete value.trashedAt;
         value.historyVersion=Number.isSafeInteger(old?.historyVersion)?old.historyVersion:0;
         let previousState=last?.value;
         const add=(metadata,kind)=>{addRevision(tx,{documentId:record.id,created:Date.now(),kind,restoredFrom:kind==='restore'?restoredFrom:null,...annotationState(metadata)});previousState=metadata;value.historyVersion++;};
@@ -313,5 +348,6 @@ export async function saveDocumentHTML(record, html, operations = {}) {
   const saved=await put(record,operations.revision);
   if(saved?.byteSize)record.byteSize=saved.byteSize;
   if(saved?.folderId!==undefined)record.folderId=saved.folderId;
+  if(saved?.trashedAt)record.trashedAt=saved.trashedAt;else delete record.trashedAt;
   return record;
 }

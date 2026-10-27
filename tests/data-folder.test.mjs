@@ -32,6 +32,16 @@ test('a fresh device restores only folder files with complete history and prefer
   const receiver=library([]),local=memoryLocal();let restored;await manager(t,receiver,local,{onRestored:value=>restored=value}).connect(disk);
   assert.equal(receiver.records.size,1);assert.equal(receiver.records.get('doc').metadata.annotations[0].text,'Separate annotation');assert.equal(receiver.histories.get('doc').length,2);assert.equal(receiver.records.get('doc').fileHandle,undefined);assert.equal(JSON.parse(local.getItem(PREFERENCES_KEY)).annotation.width,7);assert.equal(restored.count,1);assert.match(await receiver.contents.get('doc').originalFile.text(),/Raw received bytes/);
 });
+test('trash status travels with the complete source, notes and history to a fresh device without rewriting HTML',async t=>{
+  const lib=library(),control={writes:[]},disk=memoryFolder('HTMLMemo',control),backup=manager(t,lib);await backup.connect(disk);const before=await manifest(disk),reads=lib.reads;control.writes.length=0;
+  lib.records.get('doc').trashedAt=123456789;backup.schedule({id:'doc'});await backup.flush();const trashed=await manifest(disk),state=JSON.parse(await readObject(disk,trashed.documents[0].state));
+  assert.equal(state.record.trashedAt,123456789);assert.deepEqual(trashed.documents[0].source,before.documents[0].source);assert.deepEqual(trashed.documents[0].original,before.documents[0].original);assert.deepEqual(trashed.documents[0].history,before.documents[0].history);assert.equal(lib.reads,reads);assert.ok(!control.writes.some(name=>name.endsWith('.html')));
+  const recipient=library([]);await manager(t,recipient).connect(disk);assert.equal(recipient.records.get('doc').trashedAt,123456789);assert.equal(recipient.records.get('doc').metadata.annotations[0].text,'Separate annotation');assert.equal(recipient.histories.get('doc').length,2);assert.match(await recipient.contents.get('doc').originalFile.text(),/Raw received bytes/);
+  delete lib.records.get('doc').trashedAt;backup.schedule({id:'doc'});await backup.flush();assert.equal(JSON.parse(await readObject(disk,(await manifest(disk)).documents[0].state)).record.trashedAt,undefined);
+});
+test('invalid trash dates never replace the last complete portable snapshot',async t=>{
+  const lib=library(),disk=memoryFolder(),backup=manager(t,lib);await backup.connect(disk);const before=await manifest(disk);lib.records.get('doc').trashedAt=-1;backup.schedule({id:'doc'});await assert.rejects(backup.flush(),/삭제일/);assert.deepEqual(await manifest(disk),before);
+});
 test('a history-only checkpoint updates the portable history without changing annotations or rewriting source files',async t=>{
   const lib=library(),control={writes:[]},disk=memoryFolder('HTMLMemo',control),backup=manager(t,lib);lib.records.get('doc').historyVersion=1;
   await backup.connect(disk);const first=await manifest(disk),reads=lib.reads;control.writes.length=0;

@@ -3,7 +3,7 @@ import { parseHTML, SCRIPT_CSP, serializeBookSource } from './document.js';
 import { SaveQueue, AnnotationCheckpoints, ANNOTATION_LABELS } from './model.js';
 import { openEditionProbe, migrateAnnotations } from './migrate.js';
 import { Reader } from './reader.js';
-import { listDocuments, getDocument, deleteDocument, getSetting, setSetting, saveDocumentHTML, listRevisionPeriods, listRevisionDay, adjacentRevisionDay, getRevision, putDocumentRevision, checkpointAnnotations, putDocumentView, putDocumentSourceIdentity, writeExternalHTML, updateLibraryFolders, onStorageChange, readLibrary } from './storage.js';
+import { listDocuments, getDocument, trashDocument, restoreDocument, deleteDocument, deleteTrashedDocuments, getSetting, setSetting, saveDocumentHTML, listRevisionPeriods, listRevisionDay, adjacentRevisionDay, getRevision, putDocumentRevision, checkpointAnnotations, putDocumentView, putDocumentSourceIdentity, writeExternalHTML, updateLibraryFolders, onStorageChange, readLibrary } from './storage.js';
 import {readWebPage,pastedPage,PASTE_LIMIT,isWebSearch,BrowserTabs} from './web.js';
 import { readLocalHTML, droppedHTMLFiles, findLocalDuplicates, identifyLocalFile, htmlExportName } from './local-files.js';
 import { normalizePreferences, loadPreferences, storePreferences, serializeSettings, readSettingsFile, PRESET_COLORS, PRESET_PALETTES, normalizeHexColor, hexToRgb, rgbToHex, hexToHsv, hsvToHex } from './preferences.js';
@@ -15,6 +15,8 @@ import {validateFolders,folderPath,folderDescendants,editLibraryFolders,LibraryI
 
 let records = []; const tabs = []; let activeId = 'library'; let folder = null; let popoverName = ''; let sidebarMode = '';
 let libraryFolders=[],libraryFolderId='',libraryCollapsed=new Set(),libraryRefresh=0,libraryRead=null,libraryReloadTimer;
+let trashRecords=[],libraryTrash=false,trashSort='trashedAt:desc',trashBusy=false;
+const trashIndex=new LibraryIndex();
 const libraryIndex=new LibraryIndex();let libraryIndexVersion=0,libraryTreeVersion=0,libraryTreeState='',libraryGridState=null;
 let libraryFolderById=new Map(),libraryFolderChildren=new Map(),libraryFolderCounts=new Map();
 let preferences=normalizePreferences(), settingsFileHandle=null, settingsFolderHint='';
@@ -120,12 +122,16 @@ async function saveSettingsBackup(){
   if(savePicker()){try{const handle=await window.showSaveFilePicker({suggestedName:settingsFileHandle?.name||'HTMLMemo-settings.json',types:[{description:'HTMLMemo 설정',accept:{'application/json':['.json']}}]});const writer=await handle.createWritable();try{await writer.write(json);await writer.close();}catch(error){await writer.abort().catch(()=>{});throw error;}settingsFileHandle=handle;await setSetting('settings-file',handle);settingsDialog();toast('설정을 로컬 파일로 저장했습니다.');return;}catch(error){if(!['SecurityError','NotSupportedError'].includes(error.name))throw error;}}
   download(json,'HTMLMemo-settings.json','application/json;charset=utf-8');toast('설정 JSON 파일을 저장했습니다. 「설정 파일 불러오기」로 다시 열 수 있어요.');
 }
+function cacheLibraryDocument(record) {
+  records=records.filter(item=>item.id!==record.id);trashRecords=trashRecords.filter(item=>item.id!==record.id);
+  if(record.trashedAt)trashRecords.push(record);else records.push(record);
+}
 async function refreshLibrary() {
   clearTimeout(libraryReloadTimer);libraryRefresh++;
   if(!libraryRead)libraryRead=(async()=>{
     let refresh,snapshot;
     do{refresh=libraryRefresh;snapshot=await readLibrary();}while(refresh!==libraryRefresh);
-    records=snapshot.documents;libraryFolders=validateFolders(snapshot.folders);
+    trashRecords=snapshot.documents.filter(record=>record.trashedAt);records=trashRecords.length?snapshot.documents.filter(record=>!record.trashedAt):snapshot.documents;libraryFolders=validateFolders(snapshot.folders);
     if(libraryFolderId&&!libraryFolders.some(f=>f.id===libraryFolderId))libraryFolderId='';renderLibrary();
   })().finally(()=>{libraryRead=null;});
   return libraryRead;
@@ -133,15 +139,25 @@ async function refreshLibrary() {
 function renderLibrary() {
   indexLibraryFolders();
   if(activeId!=='library')return;
-  const filter=$('#library-filter').value.toLocaleLowerCase(),sort=preferences.librarySort;
-  const result=libraryIndex.select({filter,folderId:libraryFolderId,sort,direction:preferences.librarySortDirection}),{documents:shown,folders:shownFolders}=result;
-  const dateField=sort==='created'?'created':'modified',dateLabel=dateField==='created'?'저장일':'수정일';
+  const filter=$('#library-filter').value.toLocaleLowerCase(),[sort,direction]=libraryTrash?trashSort.split(':'):[preferences.librarySort,preferences.librarySortDirection];
+  if(libraryTrash)trashIndex.update(trashRecords,libraryFolders,folder?.name||'전용 폴더');
+  const result=(libraryTrash?trashIndex:libraryIndex).select({filter,folderId:libraryFolderId,sort,direction,allFolders:libraryTrash}),{documents:shown,folders:shownFolders}=result;
+  const dateField=sort==='created'?'created':sort==='trashedAt'?'trashedAt':'modified',dateLabel=dateField==='created'?'저장일':dateField==='trashedAt'?'삭제일':'수정일';
+  const sortControl=$('#library-sort');
+  if(libraryTrash&&!$('[data-trash-sort]',sortControl))sortControl.insertAdjacentHTML('afterbegin','<option value="trashedAt:desc" data-trash-sort>삭제일 · 최신순</option><option value="trashedAt:asc" data-trash-sort>삭제일 · 오래된순</option>');
+  if(!libraryTrash)$$('[data-trash-sort]',sortControl).forEach(option=>option.remove());sortControl.value=sort+':'+direction;
+  $('#library .library-heading h2').firstChild.nodeValue=libraryTrash?'휴지통 ':'내 서재 ';
+  $('#library-trash').innerHTML=icon('trash',15)+'<span>휴지통</span><small>'+trashRecords.length+'</small>';
+  $('#library-trash').setAttribute('aria-pressed',String(libraryTrash));$('#library-trash').title=libraryTrash?'내 서재로 돌아가기':'휴지통 · '+trashRecords.length+'개';$('#library-trash').setAttribute('aria-label',$('#library-trash').title);
+  $('#library-empty-trash').hidden=!libraryTrash;$('#library-empty-trash').disabled=!trashRecords.length;
+  $('#library-trash-info').hidden=!libraryTrash;
   const grid=$('#document-grid');grid.dataset.view=preferences.libraryView;
   $$('[data-library-view]').forEach(button=>{const active=button.dataset.libraryView===preferences.libraryView;button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active));});
-  $('#document-count').textContent=records.length; $('#empty-library').hidden=shown.length+shownFolders.length>0;
-  $('#empty-library h3').textContent=filter?'검색 결과가 없습니다.':libraryFolderId?'이 폴더는 비어 있습니다.':records.length||libraryFolders.length?'이 위치에는 문서가 없습니다.':'첫 HTML 문서를 보관해보세요.';
-  $('#empty-library p').innerHTML=filter?'다른 제목·파일명·폴더 이름으로 찾아보세요.':libraryFolderId||records.length||libraryFolders.length?'HTML 파일을 가져오거나 문서 메뉴의 「폴더로 이동」을 사용하세요.':'웹에서 저장하거나, 가지고 있는 HTML 파일을 열면<br>이곳에서 계속 읽고 메모할 수 있어요.';
-  $('#open-example').hidden=!!records.length||!!filter;
+  $('#document-count').textContent=libraryTrash?trashRecords.length:records.length; $('#empty-library').hidden=shown.length+shownFolders.length>0;
+  $('#empty-library h3').textContent=filter?'검색 결과가 없습니다.':libraryTrash?'휴지통이 비어 있습니다.':libraryFolderId?'이 폴더는 비어 있습니다.':records.length||libraryFolders.length?'이 위치에는 문서가 없습니다.':'첫 HTML 문서를 보관해보세요.';
+  $('#empty-library p').innerHTML=filter?'다른 제목·파일명·폴더 이름으로 찾아보세요.':libraryTrash?'내 서재에서 삭제한 문서는 이곳에서 복원할 수 있습니다.':libraryFolderId||records.length||libraryFolders.length?'HTML 파일을 가져오거나 문서 메뉴의 「폴더로 이동」을 사용하세요.':'웹에서 저장하거나, 가지고 있는 HTML 파일을 열면<br>이곳에서 계속 읽고 메모할 수 있어요.';
+  $('#open-example').hidden=libraryTrash||!!records.length||!!filter;
+  $('#empty-icon').innerHTML=icon(libraryTrash?'trash':'file');
   // A theme/tool change or a repeated input event must not rebuild identical cards.
   if(libraryGridState!==result){
   grid.innerHTML=shownFolders.map(item=>`<article class="library-folder-card" data-library-item="folder" data-library-id="${item.id}" data-folder-target="${item.id}" draggable="true"><button class="library-folder-open" data-library-folder="${item.id}" title="${esc(libraryPathLabel(item.id))}">${icon('folder',22)}<span><strong>${esc(item.name)}</strong><small>${folderDocumentCount(item.id)}개 문서 · ${libraryFolderChildren.get(item.id)?.length||0}개 하위 폴더</small></span></button><button class="icon-button card-menu" data-folder-menu="${item.id}" aria-label="${esc(item.name)} 폴더 메뉴">${icon('more',17)}</button></article>`).join('')+shown.map(record=>{
@@ -150,13 +166,13 @@ function renderLibrary() {
     const date=formatDate(record[dateField]),dateTitle=esc(dateLabel+': '+formatDate(record[dateField],true));
     // Both layouts share one title/source. A decorative preview used to repeat
     // them above the details, and list mode kept a third hidden copy.
-    const place=esc(libraryPathLabel(record.folderId||'')),progressLabel=filter?place:progress?'이어서 읽기':'새 문서';
-    return `<article class="document-card" data-record="${record.id}" data-library-item="document" data-library-id="${record.id}" draggable="true"><button class="card-open" data-open="${record.id}"><div class="card-details"><span class="list-file-icon" aria-hidden="true">${icon('file',16)}</span><div class="library-title"><h3 class="list-title" title="${title}">${title}</h3>${originalName?`<span class="list-filename" title="${originalName}">${originalName}</span>`:''}</div><p class="card-source"><span class="list-host" title="${host}">${host}</span><span class="list-date" title="${dateTitle}" aria-label="${dateTitle}">${date}</span></p><div class="card-meta"><span class="list-annotations" title="주석 ${count}개" aria-label="주석 ${count}개">${icon('highlight',13)} <span>${count}</span></span><span class="list-size">${size}</span><span class="list-progress" title="${progressLabel}">${progressLabel} ${icon('forward',13)}</span></div></div></button><button class="card-menu icon-button" data-card-menu="${record.id}" aria-label="${title} 문서 메뉴">${icon('more',17)}</button></article>`;
+    const place=esc(libraryPathLabel(record.folderId||'')),progressLabel=libraryTrash||filter?place:progress?'이어서 읽기':'새 문서';
+    return `<article class="document-card" data-record="${record.id}" ${libraryTrash?'':`data-library-item="document" data-library-id="${record.id}"`} draggable="${!libraryTrash}"><button class="card-open" ${libraryTrash?'data-trash-menu':'data-open'}="${record.id}" ${libraryTrash?`aria-label="${title} 복원 또는 영구 삭제"`:''}><div class="card-details"><span class="list-file-icon" aria-hidden="true">${icon(libraryTrash?'trash':'file',16)}</span><div class="library-title"><h3 class="list-title" title="${title}">${title}</h3>${originalName?`<span class="list-filename" title="${originalName}">${originalName}</span>`:''}</div><p class="card-source"><span class="list-host" title="${host}">${host}</span><span class="list-date" title="${dateTitle}" aria-label="${dateTitle}">${date}</span></p><div class="card-meta"><span class="list-annotations" title="주석 ${count}개" aria-label="주석 ${count}개">${icon('highlight',13)} <span>${count}</span></span><span class="list-size">${size}</span><span class="list-progress" title="${progressLabel}">${progressLabel} ${icon(libraryTrash?'undo':'forward',13)}</span></div></div></button><button class="card-menu icon-button" ${libraryTrash?'data-trash-menu':'data-card-menu'}="${record.id}" aria-label="${title} ${libraryTrash?'휴지통':'문서'} 메뉴">${icon('more',17)}</button></article>`;
   }).join('');
   libraryGridState=result;
   }
   renderLibraryFolders();
-  if(activeId==='library')$('#status-left').textContent=`${records.length}개의 문서 · ${folder?folder.name+' 자동 저장':'이 기기에 보관'}`;
+  if(activeId==='library')$('#status-left').textContent=libraryTrash?`휴지통 ${trashRecords.length}개의 문서 · 복원 가능`:`${records.length}개의 문서 · ${folder?folder.name+' 자동 저장':'이 기기에 보관'}`;
   renderFolderState();
 }
 function indexLibraryFolders() {
@@ -169,17 +185,20 @@ function libraryPathLabel(id) {
 }
 function navigateLibraryFolder(id) {
   if(id&&!libraryFolderById.has(id))throw Error('폴더가 변경되었습니다. 다시 선택해주세요.');
-  libraryFolderId=id;$('#library-filter').value='';for(const item of folderPath(libraryFolders,id,libraryFolderById))libraryCollapsed.delete(item.id);libraryTreeVersion++;renderLibrary();
+  libraryTrash=false;libraryFolderId=id;$('#library-filter').value='';for(const item of folderPath(libraryFolders,id,libraryFolderById))libraryCollapsed.delete(item.id);libraryTreeVersion++;renderLibrary();
 }
+function toggleLibraryTrash(){libraryTrash=!libraryTrash;$('#library-filter').value='';libraryTreeVersion++;renderLibrary();}
 function renderLibraryFolders() {
-  const state=JSON.stringify([libraryIndexVersion,libraryFolderId,libraryTreeVersion,!!$('#library-filter').value]);
+  const state=JSON.stringify([libraryIndexVersion,libraryFolderId,libraryTreeVersion,!!$('#library-filter').value,libraryTrash]);
   if(libraryTreeState===state)return;libraryTreeState=state;
   const path=folderPath(libraryFolders,libraryFolderId,libraryFolderById),root=folder?.name||'전용 폴더';
-  $('#library-folder-up').innerHTML=icon('back',16);$('#library-folder-up').disabled=!libraryFolderId;
+  $('#library-folder-up').innerHTML=icon('back',16);$('#library-folder-up').disabled=!libraryTrash&&!libraryFolderId;$('#library-folder-up').title=libraryTrash?'내 서재로 돌아가기':'상위 폴더';$('#library-folder-up').setAttribute('aria-label',$('#library-folder-up').title);
   $('#library-folder-help').innerHTML=icon('info',15);
   $('#library-new-folder').innerHTML=icon('folder',15)+'<span>새 폴더</span>';
+  $('#library-new-folder').hidden=libraryTrash;$('#library-folder-help').hidden=libraryTrash;
   $('#library-breadcrumbs').innerHTML=[{id:'',name:root},...path].map(item=>`<button type="button" data-library-folder="${item.id}" data-folder-target="${item.id}" title="${esc(libraryPathLabel(item.id))}" ${item.id===libraryFolderId?'aria-current="page"':''}>${item.id?'':icon('folder',15)}<span>${esc(item.name)}</span></button>`).join('<span class="breadcrumb-divider" aria-hidden="true">/</span>');
-  const tree=$('#library-folder-tree');tree.hidden=!libraryFolders.length;$('#library-layout').classList.toggle('has-folders',!!libraryFolders.length);$('#library-search-scope').hidden=!$('#library-filter').value;
+  if(libraryTrash)$('#library-breadcrumbs').innerHTML='<span class="library-trash-location">휴지통</span>';
+  const tree=$('#library-folder-tree');tree.hidden=libraryTrash||!libraryFolders.length;$('#library-layout').classList.toggle('has-folders',!libraryTrash&&!!libraryFolders.length);$('#library-search-scope').hidden=libraryTrash||!$('#library-filter').value;
   const branch=(id,depth)=> (libraryFolderChildren.get(id)||[]).map(item=>{
     const children=libraryFolderChildren.get(item.id)?.length,collapsed=libraryCollapsed.has(item.id);
     return `<div class="library-tree-row ${item.id===libraryFolderId?'active':''}" style="--folder-depth:${depth}" data-folder-target="${item.id}">${children?`<button class="library-tree-toggle" type="button" data-folder-toggle="${item.id}" aria-label="${esc(item.name)} ${collapsed?'펼치기':'접기'}" aria-expanded="${!collapsed}">${icon(collapsed?'forward':'down',12)}</button>`:'<span class="library-tree-spacer"></span>'}<button class="library-tree-open" type="button" data-library-folder="${item.id}" title="${esc(libraryPathLabel(item.id))}">${icon('folder',14)}<span>${esc(item.name)}</span><small>${folderDocumentCount(item.id)}</small></button></div>${!collapsed?branch(item.id,depth+1):''}`;
@@ -223,7 +242,8 @@ function libraryMoveDialog(type,item) {
 function bindLibraryFolderDrag() {
   const library=$('#library'),mime='application/x-htmlmemo-library-item';let dragged=null;
   library.addEventListener('click',safely(event=>{
-    const button=event.target.closest('[data-open],[data-card-menu],[data-folder-menu],[data-library-folder],[data-folder-toggle]');if(!button)return;
+    const button=event.target.closest('[data-open],[data-card-menu],[data-trash-menu],[data-folder-menu],[data-library-folder],[data-folder-toggle]');if(!button)return;
+    if(button.hasAttribute('data-trash-menu'))return trashDocumentMenu(trashRecords.find(r=>r.id===button.dataset.trashMenu));
     if(button.hasAttribute('data-open'))return openRecord(records.find(r=>r.id===button.dataset.open));
     if(button.hasAttribute('data-card-menu'))return documentMenu(records.find(r=>r.id===button.dataset.cardMenu));
     if(button.hasAttribute('data-folder-menu'))return libraryFolderMenu(button.dataset.folderMenu);
@@ -327,8 +347,11 @@ function updateChrome() {
 }
 function createHost(id,type) { const host=document.createElement('div');host.id='workspace-'+id;host.className='workspace-host '+type+'-host';host.hidden=true;$('#workspaces').append(host);return host; }
 async function openRecord(record, prepared = null, {deferReady = false, sourceIdentity = null} = {}) {
+  if(!record||record.trashedAt)throw Error('휴지통의 문서는 먼저 복원한 뒤 열어주세요.');
+  libraryTrash=false;
   const existing=tabs.find(tab=>tab.record?.id===record.id);if(existing){if(existing.closePromise){await existing.closePromise;return openRecord(record,prepared,{deferReady,sourceIdentity});}activate(existing.id);return existing;}
   if(!prepared && typeof record.html!=='string' && !record.file)record=await getDocument(record.id);
+  if(!record||record.trashedAt)throw Error('문서가 휴지통으로 이동했거나 삭제되었습니다. 서재를 다시 확인해주세요.');
   const opened=tabs.find(tab=>tab.record?.id===record.id);if(opened){if(opened.closePromise){await opened.closePromise;return openRecord(record,prepared,{deferReady,sourceIdentity});}activate(opened.id);return opened;}
   // The library already holds a prepared, sanitized snapshot. Reopening it
   // should parse it once in the iframe, not clone the entire book in DOMParser first.
@@ -340,7 +363,7 @@ async function openRecord(record, prepared = null, {deferReady = false, sourceId
       : record.html;
     return {html, metadata, nativeScroll: record.nativeScroll || metadata.execution?.allowScripts || record.byteSize >= 4 * 1024 * 1024, savedMetadata: true};
   })() : parseHTML(record.html,{title:record.title,source:record.source,allowScripts:true}));
-  const tab={id:uid(),type:'document',title:record.title,opening:true,record:{...record,nativeScroll:!!parsed.nativeScroll},host:null};tab.host=createHost(tab.id,'document');
+  const tab={id:uid(),type:'document',title:record.title,opening:true,persisted:!prepared,record:{...record,nativeScroll:!!parsed.nativeScroll},host:null};tab.host=createHost(tab.id,'document');
   tab.queue=new SaveQueue(async()=>{
     await tab.reader.ready;
     // Early scrolling/edits must not save before the import identity is ready.
@@ -348,15 +371,16 @@ async function openRecord(record, prepared = null, {deferReady = false, sourceId
     if (!tab.queue.editsPending) {
       const saved = await putDocumentView(tab.record.id, tab.reader.metadata.view);
       tab.record.metadata = saved.metadata;tab.record.folderId=saved.folderId||'';
-      records=records.filter(r=>r.id!==record.id).concat(saved);
+      cacheLibraryDocument(saved);
       return;
     }
     const html=tab.record.html; const metadata=structuredClone(tab.reader.metadata);
     tab.record.html=html;tab.record.metadata=metadata;tab.record.title=metadata.title;tab.record.modified=Date.now();
-    await saveDocumentHTML(tab.record, html, {revision:{checkpoint:!!tab.restoredFrom,...(tab.restoredFrom?{restoredFrom:tab.restoredFrom}:{})}});
+    await saveDocumentHTML(tab.record, html, {revision:{mustExist:tab.persisted,checkpoint:!!tab.restoredFrom,...(tab.restoredFrom?{restoredFrom:tab.restoredFrom}:{})}});
+    tab.persisted=true;
     tab.restoredFrom=null;
     const {html:body,file:sourceFile,originalFile,...summary}=tab.record;
-    records=records.filter(r=>r.id!==record.id).concat(summary);
+    cacheLibraryDocument(summary);
     delete tab.record.html;delete tab.record.file;delete tab.record.originalFile;
   },()=>{if(activeId===tab.id)saveStatus(tab);renderTabs();renderFolderState();});
   tab.checkpoints=new AnnotationCheckpoints(async()=>{await tab.queue.flush();await checkpointAnnotations(tab.record.id);},()=>{if(activeId===tab.id)saveStatus(tab);});
@@ -388,7 +412,7 @@ async function openRecord(record, prepared = null, {deferReady = false, sourceId
   renderToolbar();
   updateChrome();
   // Preserve the imported/current annotation baseline before the first new edit.
-  try{const saved=await putDocumentRevision({...tab.record,metadata:baselineMetadata},{baseline:true});tab.record.byteSize=saved.byteSize;tab.record.folderId=saved.folderId||'';delete tab.record.html;delete tab.record.file;delete tab.record.originalFile;}
+  try{const saved=await putDocumentRevision({...tab.record,metadata:baselineMetadata},{baseline:true,mustExist:tab.persisted});tab.persisted=true;tab.record.byteSize=saved.byteSize;tab.record.folderId=saved.folderId||'';delete tab.record.html;delete tab.record.file;delete tab.record.originalFile;}
   catch(error){tab.queue.schedule();try{await tab.queue.flush();}catch{showError(error);}}
   record.html=null;record.file=null;record.originalFile=null;parsed.html=null;parsed.file=null;
   if(!deferReady){tab.opening=false;renderTabs();if(activeId===tab.id)updateChrome();}
@@ -1343,12 +1367,48 @@ async function migrateEdition(tab) {
     dialog.addEventListener('close',done);
   });
 }
+async function finishTrashChange(message) {
+  await refreshLibrary();
+  try{await dataFolder?.flush();}catch(error){showError(error);return;}
+  toast(message);
+}
+async function moveLibraryDocumentToTrash(record) {
+  if(trashBusy||!record)return;
+  if(!await confirmDialog('휴지통으로 옮길까요?','본문·주석·북마크·저장 이력을 보관합니다. 내 서재의 휴지통에서 복원할 수 있습니다.','휴지통으로 이동'))return;
+  if(trashBusy)return;trashBusy=true;
+  try{
+    const tab=tabs.find(tab=>tab.record?.id===record.id);if(tab)await closeTab(tab.id);
+    await trashDocument(record.id);await finishTrashChange('휴지통으로 옮겼습니다. 내 서재의 휴지통에서 복원할 수 있습니다.');
+  }finally{trashBusy=false;}
+}
+function trashDocumentMenu(record) {
+  if(!record)return;
+  modal(`<div class="dialog-heading"><h2>${esc(record.title)}</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><p class="dialog-description small">${esc(record.name)}<br>복원 위치: ${esc(libraryPathLabel(record.folderId||''))}<br>삭제일: ${esc(formatDate(record.trashedAt,true))}</p><p class="dialog-description">본문·주석·북마크·저장 이력을 함께 복원합니다.</p><div class="document-actions"><button id="trash-restore" class="menu-button">${icon('undo')} 복원</button><button id="trash-delete" class="menu-button danger">${icon('trash')} 영구 삭제</button></div>`,dialog=>{
+    $('#trash-restore').onclick=safely(async()=>{
+      if(trashBusy)return;trashBusy=true;
+      try{const restored=await restoreDocument(record.id);dialog.close();await finishTrashChange('복원했습니다. 위치: '+libraryPathLabel(restored.folderId||''));}finally{trashBusy=false;}
+    });
+    $('#trash-delete').onclick=safely(async()=>{
+      if(trashBusy)return;
+      if(!await confirmDialog('영구 삭제할까요?',record.title+' · 문서·주석·북마크·저장 이력을 앱에서 복원할 수 없게 됩니다. 가져오기 전의 원본 파일은 삭제하지 않습니다.','영구 삭제'))return;
+      if(trashBusy)return;trashBusy=true;
+      try{await deleteDocument(record.id);await finishTrashChange('휴지통에서 영구 삭제했습니다.');}finally{trashBusy=false;}
+    });
+  });
+}
+async function emptyLibraryTrash() {
+  if(trashBusy||!trashRecords.length)return;
+  const ids=trashRecords.map(record=>record.id);
+  if(!await confirmDialog('휴지통을 비울까요?',ids.length+'개 문서와 주석·북마크·저장 이력을 영구 삭제합니다. 앱에서 복원할 수 없습니다. 가져오기 전의 원본 파일은 삭제하지 않습니다.','휴지통 비우기'))return;
+  if(trashBusy)return;trashBusy=true;
+  try{await deleteTrashedDocuments(ids);await finishTrashChange('휴지통을 비웠습니다.');}finally{trashBusy=false;}
+}
 function documentMenu(record) {
-  modal(`<div class="dialog-heading"><h2>${esc(record.title)}</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><div class="document-actions"><button class="menu-button" id="menu-open">${icon('file')} 열기</button><button class="menu-button" id="menu-export">${icon('download')} HTML 내보내기</button><button class="menu-button" id="menu-history">${icon('undo')} 주석 저장 이력</button><button class="menu-button" id="menu-migrate">${icon('file')} 새 판으로 주석 옮기기</button><button class="menu-button danger" id="menu-remove">${icon('trash')} 서재에서 삭제</button></div><p class="dialog-description small">HTML 내보내기는 본문·현재 주석·북마크를 HTML 파일 하나로 저장합니다.</p>${annotationExportGuide()}`,()=>{
+  modal(`<div class="dialog-heading"><h2>${esc(record.title)}</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><div class="document-actions"><button class="menu-button" id="menu-open">${icon('file')} 열기</button><button class="menu-button" id="menu-export">${icon('download')} HTML 내보내기</button><button class="menu-button" id="menu-history">${icon('undo')} 주석 저장 이력</button><button class="menu-button" id="menu-migrate">${icon('file')} 새 판으로 주석 옮기기</button><button class="menu-button danger" id="menu-remove">${icon('trash')} 휴지통으로 이동</button></div><p class="dialog-description small">HTML 내보내기는 본문·현재 주석·북마크를 HTML 파일 하나로 저장합니다.</p>${annotationExportGuide()}`,()=>{
     $('#menu-open').onclick=safely(async()=>{$('#dialog').close();await openRecord(record);});$('#menu-export').onclick=safely(async()=>{$('#dialog').close();const tab=await openRecord(record);await exportDocument(tab);});
     $('#menu-history').onclick=safely(async()=>{$('#dialog').close();await annotationHistory(await openRecord(record));});
     $('#menu-migrate').onclick=safely(async()=>{$('#dialog').close();await migrateEdition(await openRecord(record));});
-    $('#menu-remove').onclick=safely(async()=>{if(!await confirmDialog('서재에서 삭제할까요?','앱 보관함에서만 삭제합니다. 연결된 외부 HTML 파일은 남습니다.','삭제'))return;const tab=tabs.find(t=>t.record?.id===record.id);if(tab)await closeTab(tab.id);await deleteDocument(record.id);await refreshLibrary();});
+    $('#menu-remove').onclick=safely(()=>moveLibraryDocumentToTrash(record));
   });
   const actions=$('#dialog .document-actions'),button=document.createElement('button');button.className='menu-button';button.id='menu-folder-move';button.innerHTML=icon('folder')+' 폴더로 이동';actions.insertBefore(button,$('#menu-remove'));button.onclick=()=>libraryMoveDialog('document',record);
   const location=document.createElement('p');location.className='dialog-description small';location.textContent='위치: '+libraryPathLabel(record.folderId||'');actions.before(location);
@@ -1423,8 +1483,8 @@ function bindUI() {
   $('#save-page').onclick=safely(savePage);$('#hero-import').onclick=safely(importFiles);
   $('#file-input').onchange=safely(async event=>{const files=[...event.target.files],parentId=libraryFolderId;event.target.value='';for(const file of files)await openLocalFile(file,parentId);});
   $('#settings-file-input').onchange=safely(async event=>{const file=event.target.files[0];event.target.value='';if(file){await restoreSettings(file);settingsDialog();}});
-  $('#library-filter').oninput=renderLibrary;$('#library-sort').onchange=safely(e=>{const [librarySort,librarySortDirection]=e.target.value.split(':');changePreferences({librarySort,librarySortDirection});});$$('[data-library-view]').forEach(button=>button.onclick=safely(()=>changePreferences({libraryView:button.dataset.libraryView})));$('#settings-button').onclick=settingsDialog;$('#web-help-button').onclick=()=>webHelpDialog();$('#paste-button').onclick=()=>pasteTextDialog();
-  $('#library-new-folder').onclick=()=>libraryFolderNameDialog();$('#library-folder-up').onclick=()=>navigateLibraryFolder(libraryFolderById.get(libraryFolderId)?.parentId||'');$('#library-folder-help').onclick=()=>modal(`<div class="dialog-heading"><h2>서재 폴더 사용 안내</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div>${$('#library-folder-help-content').innerHTML}<div class="dialog-actions"><button class="primary-button" data-dialog-close>확인</button></div>`);bindLibraryFolderDrag();
+  $('#library-filter').oninput=renderLibrary;$('#library-sort').onchange=safely(e=>{if(libraryTrash){trashSort=e.target.value;renderLibrary();return;}const [librarySort,librarySortDirection]=e.target.value.split(':');changePreferences({librarySort,librarySortDirection});});$$('[data-library-view]').forEach(button=>button.onclick=safely(()=>changePreferences({libraryView:button.dataset.libraryView})));$('#settings-button').onclick=settingsDialog;$('#web-help-button').onclick=()=>webHelpDialog();$('#paste-button').onclick=()=>pasteTextDialog();
+  $('#library-trash').onclick=toggleLibraryTrash;$('#library-empty-trash').onclick=safely(emptyLibraryTrash);$('#library-new-folder').onclick=()=>libraryFolderNameDialog();$('#library-folder-up').onclick=()=>libraryTrash?toggleLibraryTrash():navigateLibraryFolder(libraryFolderById.get(libraryFolderId)?.parentId||'');$('#library-folder-help').onclick=()=>modal(`<div class="dialog-heading"><h2>서재 폴더 사용 안내</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div>${$('#library-folder-help-content').innerHTML}<div class="dialog-actions"><button class="primary-button" data-dialog-close>확인</button></div>`);bindLibraryFolderDrag();
   $('#open-example').onclick=safely(async()=>{let html=await bundledExample();if(html===null){const response=await fetch('./example.html');if(!response.ok)throw new Error('예제 문서를 불러오지 못했습니다.');html=await response.text();}await createDocument({html,title:'천천히 읽는다는 것',viewport:{width:960,height:800}});});
   document.addEventListener('keydown',handleKey);document.addEventListener('pointerdown',event=>{if(!event.target.closest('#toolbar,#tool-popover,[data-htmlmemo-reading-controls]')&&!$('#tool-popover').hidden)closePopover();});
   $('#dialog').addEventListener('click',event=>{if(event.target===$('#dialog')&&!$('#dialog [data-chrome-required]'))$('#dialog').close();});

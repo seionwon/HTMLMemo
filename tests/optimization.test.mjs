@@ -50,6 +50,7 @@ function libraryApp(){
     readLibrary:async()=>{calls.read++;return {documents:records,folders};},renderFolderState:()=>{},
     initialRecords:records,initialFolders:folders});
   vm.runInContext(`var records=initialRecords,libraryFolders=initialFolders,activeId='library',folder=null,libraryFolderId='',libraryCollapsed=new Set(),libraryRefresh=0,libraryRead=null,libraryReloadTimer;
+    var trashRecords=[],libraryTrash=false,trashSort='trashedAt:desc',trashIndex=new LibraryIndex();
     var libraryIndex=new LibraryIndex(),libraryIndexVersion=0,libraryTreeVersion=0,libraryTreeState='',libraryGridState=null,libraryFolderById=new Map(),libraryFolderChildren=new Map(),libraryFolderCounts=new Map();
     var preferences={librarySort:'modified',librarySortDirection:'desc',libraryView:'card'};\n`+libraryCode,context);
   return {context,doc,records,folders,calls};
