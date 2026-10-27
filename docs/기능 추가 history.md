@@ -3524,14 +3524,21 @@ CodeMemo의 제한된 로컬 검증기로 iframe 요소를 클릭한 시도는 �
 
 
 <a id="hist-20261027-019"></a>
-### 2026-10-27 18:26:21 +09:00 — 교재,논문 마킹 팔레트를 첫 번째로 배치
+### 2026-10-27 18:39:17 +09:00 — 교재,논문 마킹 팔레트를 첫 번째로 배치
 
 | ID | change-kind | status |
 |---|---|---|
-| hist-20261027-019 | 팔레트 순서 · 문구 변경 | 구현·로컬 검증 완료, Pages 게시 전 |
+| hist-20261027-019 | 팔레트 순서 · 문구 변경 | 구현·전체/공개 Chrome·GitHub Pages 게시 확인 완료 |
 
 **목적·사용:** 문서를 열고 **플로팅 툴바 → 펜과 색상 → 팔레트 프리셋**을 열면 기존 7번이 새 **1번 교재,논문 마킹**으로 나옵니다. 기존 **1~6번은 2~7번**이 되고 **8~20번은 같은 번호**를 유지합니다. 요청한 쉼표를 사용해 이름을 정확히 **교재,논문 마킹**으로 바꿨습니다. 순서는 프리셋 데이터 배열에서 변경하고 번호는 기존 메뉴가 표시 순서대로 매깁니다. 색상 구성·현재 선택한 팔레트의 고유 ID와 펜/형광펜 색상 설정은 유지합니다. 별도 데이터 이전이나 새로운 기능·검사 시나리오는 추가하지 않았습니다.
 
 **로컬 검증:** `npm test` 단위 **576개**, `npm run check` JavaScript **116개·JSON**, Tailwind CSS **4.3.3** 빌드와 git diff --check를 통과했습니다. 신뢰된 CodeMemo 브라우저의 **320px**에서 시험 문서를 붙여넣어 메뉴를 실제 열었고, 렌더링된 프리셋 **20개 전체의 번호·문구·순서**를 확인했습니다. 해당 요청은 HTTP **200**, 예외 **0개**였으며 화면을 직접 확인하고 임시 검증 서버를 종료했습니다. 동시에 요청한 1280px 검증은 서비스가 **Browser verification busy or quota reached**를 반환해 실행되지 않았습니다. 이 요청을 재시도하지 않았으며 데스크톱은 기존 CI Chrome 검사로 확인합니다. 증거는 `test-results/palette-order-unit.log`, `palette-order-check.log`, `palette-order-build.log`, `palette-order-preview/320-result.json`·화면과 `1280-result.json`입니다. 개인 문서는 사용하지 않았습니다.
 
 **게시 상태:** 이 시점에는 로컬 검증만 완료했습니다. 기존 GitHub Actions의 전체 Chrome·Pages 게시·공개 URL Chrome과 온라인 파일 일치를 확인한 뒤 같은 항목에 결과를 보충합니다. 정식 서비스 주소는 https://seionwon.github.io/HTMLMemo/ 입니다.
+
+
+**최종 검증·게시 완료 (18:39:17 +09:00):** 초기 기록(18:26:21) 이후 소스 `7d4da709c90d021e83a939f7df2d5a580f029df9`의 [Actions 40480849180](https://github.com/seionwon/HTMLMemo/actions/runs/40480849180)에서 우선 Chrome **6개**, 전체 Chrome **73개**, 실제 [공개 URL](https://seionwon.github.io/HTMLMemo/)의 Chrome **47개**가 모두 통과했습니다. 우선 검사는 전체 검사에 포함된 시나리오입니다. 빌드 완료는 **18:33:47**, Pages 게시 완료는 **18:33:59**, 공개 검증 완료는 **18:37:41 +09:00**입니다. CI 단위 **576개 중 575개 통과·실패 0·건너뜀 1**이며 Linux 대상이 아닌 macOS Chrome 실행 보호 검사만 건너뛰었습니다. 해당 검사는 로컬 macOS에서 통과했습니다. 로컬 단위 **576개**, 로컬 JavaScript **116개·JSON**, CI JavaScript **97개·JSON**, Tailwind CSS **4.3.3** 빌드와 관련 파일의 git diff --check도 통과했습니다.
+
+기존 전체/공개 팔레트 Chrome 검사에서 **1280/390/320px**, 밝은/어두운 테마의 창 배치, 색상·굵기·투명도·표시 시간, 펜/형광펜 전용 색상·주석 저장·다시 열기와 창 이동을 유지했습니다. 공개 **1280/320px**의 팔레트 화면을 직접 확인했고 기존 기본 팔레트가 **2번**, 형광펜 베스트가 **3번**으로 표시됐습니다. **1번 교재,논문 마킹부터 20번까지의 전체 메뉴 순서**는 앞서 통과한 로컬 320px의 실제 렌더링된 DOM으로 확인했습니다. 로컬 1280px 검증 서비스의 미실행 기록은 그대로 보존하고 재요청하지 않았습니다. CI Ubuntu의 일부 한글은 글꼴 부재로 네모로 보이므로 정확한 문구는 로컬 DOM 결과와 게시 소스로 확인했습니다.
+
+공개 파일 **40개(2,466,297바이트)** 모두 HTTP **200**이며 실제 Pages 아티팩트와 바이트·SHA-256이 일치했습니다. 증거는 `test-results/palette-order-ci`, `palette-order-published`의 팔레트 화면·XML·`pages-only-pen-settings-summary.json`, `palette-order-build-ci.log`, `palette-order-published-ci.log`, `palette-order-actions.json`, `palette-order-pages`, `palette-order-online-files.json`에 있습니다. 정식 서비스는 GitHub Pages이며 이력 보충 커밋은 앱 파일을 바꾸지 않습니다. 새로고침 후 펜과 색상의 프리셋 목록에서 새 순서와 이름을 사용할 수 있습니다.
