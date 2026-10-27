@@ -7,13 +7,13 @@ export const PRESET_COLORS = Object.freeze([
   '#14b8a6', '#77bdab', '#22c55e', '#366558', '#374151',
 ]);
 export const PRESET_PALETTES = Object.freeze([
+  Object.freeze({id:'preset-7',name:'교재,논문 마킹',colors:Object.freeze(['#fde047','#86efac','#7dd3fc','#c4b5fd','#fda4af','#dc2626','#2563eb','#1e293b'])}),
   Object.freeze({id:'preset-1',name:'기본 20색 팔레트',colors:PRESET_COLORS}),
   Object.freeze({id:'preset-2',name:'형광펜 베스트',colors:Object.freeze(['#edcf67','#fde047','#a7f3d0','#77bdab','#9fc8f0','#bdace0','#f39da2','#fdba74'])}),
   Object.freeze({id:'preset-3',name:'따뜻한 필기',colors:Object.freeze(['#edcf67','#f59e0b','#f97316','#da8b55','#ef4444','#e11d48','#9a3412','#78350f'])}),
   Object.freeze({id:'preset-4',name:'차분한 블루·그린',colors:Object.freeze(['#9fc8f0','#38bdf8','#3b82f6','#1d4ed8','#77bdab','#14b8a6','#366558','#1e293b'])}),
   Object.freeze({id:'preset-5',name:'파스텔 노트',colors:Object.freeze(['#fef08a','#fed7aa','#fbcfe8','#f39da2','#e9d5ff','#bdace0','#bae6fd','#a7f3d0'])}),
   Object.freeze({id:'preset-6',name:'선명한 강조',colors:Object.freeze(['#eab308','#f97316','#ef4444','#ec4899','#8b5cf6','#3b82f6','#06b6d4','#22c55e'])}),
-  Object.freeze({id:'preset-7',name:'논문·교재 마킹',colors:Object.freeze(['#fde047','#86efac','#7dd3fc','#c4b5fd','#fda4af','#dc2626','#2563eb','#1e293b'])}),
   Object.freeze({id:'preset-8',name:'포레스트 데스크',colors:Object.freeze(['#d9f99d','#84cc16','#22c55e','#15803d','#77bdab','#366558','#57534e','#292524'])}),
   Object.freeze({id:'preset-9',name:'오션 브리즈',colors:Object.freeze(['#cffafe','#67e8f9','#06b6d4','#0284c7','#3b82f6','#1d4ed8','#312e81','#0f172a'])}),
   Object.freeze({id:'preset-10',name:'선셋 글로우',colors:Object.freeze(['#fde68a','#fbbf24','#fb923c','#f97316','#ef4444','#ec4899','#a855f7','#581c87'])}),

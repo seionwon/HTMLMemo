@@ -3521,3 +3521,17 @@ CodeMemo의 제한된 로컬 검증기로 iframe 요소를 클릭한 시도는 �
 **1280/390/320px**에서 세 줄이 모두 버튼 안에 들어오고 서로 겹치지 않으며 왼쪽 시작 위치가 같았습니다. 버튼 크기는 데스크톱 **32×19px**, 모바일 **29×19px**, 가운데 줄 폭은 각각 **18/17px**로 다른 버튼 및 기존 아이콘과 같았습니다. 버튼 간격·테두리·스타일 일치, 굵기 1/18px, 투명도 10/90%, 표시 시간 영구/3/10/30초, 밝은/어두운 테마와 팔레트 창 이동 검사도 유지했습니다. 공개 화면 세 크기를 직접 확인했습니다. CI Ubuntu에서 일부 한글은 글꼴 부재로 네모로 보이므로 문구는 DOM으로 확인했고 신뢰된 로컬 브라우저에서는 한글도 확인했습니다.
 
 공개 파일 **40개(2,466,299바이트)** 모두 HTTP **200**이며 실제 Pages 아티팩트와 바이트·SHA-256이 일치했습니다. 증거는 `test-results/highlighter-color-ci`, `highlighter-color-published`의 `pages-only-pen-settings-summary.json`·`palette-controls-*.png`·XML, `highlighter-color-build-ci.log`, `highlighter-color-published-ci.log`, `highlighter-color-actions.json`, `highlighter-color-pages`, `highlighter-color-online-files.json`에 보관했습니다. 정식 서비스는 GitHub Pages이며 이력 보충 커밋은 앱 파일을 바꾸지 않습니다. 새로고침하면 적용됩니다.
+
+
+<a id="hist-20261027-019"></a>
+### 2026-10-27 18:26:21 +09:00 — 교재,논문 마킹 팔레트를 첫 번째로 배치
+
+| ID | change-kind | status |
+|---|---|---|
+| hist-20261027-019 | 팔레트 순서 · 문구 변경 | 구현·로컬 검증 완료, Pages 게시 전 |
+
+**목적·사용:** 문서를 열고 **플로팅 툴바 → 펜과 색상 → 팔레트 프리셋**을 열면 기존 7번이 새 **1번 교재,논문 마킹**으로 나옵니다. 기존 **1~6번은 2~7번**이 되고 **8~20번은 같은 번호**를 유지합니다. 요청한 쉼표를 사용해 이름을 정확히 **교재,논문 마킹**으로 바꿨습니다. 순서는 프리셋 데이터 배열에서 변경하고 번호는 기존 메뉴가 표시 순서대로 매깁니다. 색상 구성·현재 선택한 팔레트의 고유 ID와 펜/형광펜 색상 설정은 유지합니다. 별도 데이터 이전이나 새로운 기능·검사 시나리오는 추가하지 않았습니다.
+
+**로컬 검증:** `npm test` 단위 **576개**, `npm run check` JavaScript **116개·JSON**, Tailwind CSS **4.3.3** 빌드와 git diff --check를 통과했습니다. 신뢰된 CodeMemo 브라우저의 **320px**에서 시험 문서를 붙여넣어 메뉴를 실제 열었고, 렌더링된 프리셋 **20개 전체의 번호·문구·순서**를 확인했습니다. 해당 요청은 HTTP **200**, 예외 **0개**였으며 화면을 직접 확인하고 임시 검증 서버를 종료했습니다. 동시에 요청한 1280px 검증은 서비스가 **Browser verification busy or quota reached**를 반환해 실행되지 않았습니다. 이 요청을 재시도하지 않았으며 데스크톱은 기존 CI Chrome 검사로 확인합니다. 증거는 `test-results/palette-order-unit.log`, `palette-order-check.log`, `palette-order-build.log`, `palette-order-preview/320-result.json`·화면과 `1280-result.json`입니다. 개인 문서는 사용하지 않았습니다.
+
+**게시 상태:** 이 시점에는 로컬 검증만 완료했습니다. 기존 GitHub Actions의 전체 Chrome·Pages 게시·공개 URL Chrome과 온라인 파일 일치를 확인한 뒤 같은 항목에 결과를 보충합니다. 정식 서비스 주소는 https://seionwon.github.io/HTMLMemo/ 입니다.
