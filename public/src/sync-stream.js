@@ -10,8 +10,8 @@ const validDescriptor=value=>Number.isSafeInteger(value?.id)&&value.id>=0&&Numbe
 // One persisted window must be acknowledged before the next is sent. Network
 // buffers and receiver JS heap therefore cannot grow with the book's size.
 export class SyncStream{
-  constructor({send,onBundle,onCommitted,findFiles=null,onProgress=()=>{},storeFactory=()=>new SyncTempStore()}){
-    Object.assign(this,{send,onBundle,onCommitted,findFiles,onProgress,storeFactory});this.waiters=new Map();this.closed=false;this.sending=false;this.incoming=null;this.maxPendingBytes=0;
+  constructor({send,onBundle,onCommitted,onManifest=async()=>{},findFiles=null,onProgress=()=>{},storeFactory=()=>new SyncTempStore()}){
+    Object.assign(this,{send,onBundle,onCommitted,onManifest,findFiles,onProgress,storeFactory});this.waiters=new Map();this.closed=false;this.sending=false;this.incoming=null;this.maxPendingBytes=0;
   }
   check(){if(this.closed)throw new DOMException('전송을 취소했습니다.','AbortError');}
   json(message){this.check();return this.send(JSON.stringify({p:'HTMLMemo.transfer',v:2,...message}));}
@@ -43,7 +43,8 @@ export class SyncStream{
           await this.request({type:'window-end',transfer,file:descriptor.id,offset:windowEnd},transfer+':window:'+descriptor.id+':'+windowEnd);
           this.onProgress({direction:'send',bytes:sent+windowEnd,total,file:descriptor.id,files:all.length-1,reusedBytes,reusedFiles});
         }
-        await this.request({type:'file-end',transfer,file:descriptor.id},transfer+':end:'+descriptor.id);if(!reused)sent+=descriptor.size;
+        // App settings can require a user choice before original files are sent.
+        await this.request({type:'file-end',transfer,file:descriptor.id},transfer+':end:'+descriptor.id,descriptor.id===0?0:undefined);if(!reused)sent+=descriptor.size;
         this.onProgress({direction:'send',bytes:sent,total,file:descriptor.id,files:all.length-1,reusedBytes,reusedFiles});
       }
       // Database merging may ask the user to resolve a conflict. The open peer
@@ -95,7 +96,7 @@ export class SyncStream{
     if(type==='file-end'){
       const file=incoming.file;if(!file||file.descriptor.id!==message.file||file.pendingBytes||file.received!==file.descriptor.size)throw Error('파일 전송이 끝나지 않았습니다.');
       const blob=file.reused||await incoming.store.blob(message.file,file.descriptor.mime);this.check();if(blob.size!==file.descriptor.size||!sameLocalFile(await localFileIdentity(blob),file.descriptor.identity))throw Error('받은 원본 파일의 검증에 실패했습니다. 기존 서재는 유지됩니다.');
-      if(message.file===0){const manifest=JSON.parse(await blob.text()),descriptors=validateStreamManifest(manifest);if(descriptors.size!==incoming.fileCount||Array.from(descriptors.values()).reduce((n,d)=>n+d.size,blob.size)!==incoming.total)throw Error('전송할 파일의 총 크기나 개수가 다릅니다.');incoming.manifest=manifest;incoming.descriptors=descriptors;}
+      if(message.file===0){const manifest=JSON.parse(await blob.text()),descriptors=validateStreamManifest(manifest);if(descriptors.size!==incoming.fileCount||Array.from(descriptors.values()).reduce((n,d)=>n+d.size,blob.size)!==incoming.total)throw Error('전송할 파일의 총 크기나 개수가 다릅니다.');await this.onManifest(manifest);this.check();incoming.manifest=manifest;incoming.descriptors=descriptors;}
       else incoming.files.set(message.file,blob);
       if(file.reused){incoming.reusedBytes+=blob.size;incoming.reusedFiles++;}
       incoming.seen.add(message.file);incoming.received+=blob.size;incoming.file=null;

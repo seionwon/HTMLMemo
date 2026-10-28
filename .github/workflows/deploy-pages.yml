@@ -29,7 +29,7 @@ jobs:
       - run: npm run check
       - run: mkdir -p test-results
       - name: Verify source navigation, library trash and folder startup before the full Chrome suite
-        run: node --test --test-concurrency=1 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/browser-results.xml --test-name-pattern='Pages-only body links and previous-next|Pages-only first-run folder welcome|Pages-only script-driven TOC|Pages-only library trash|native sidebar view choices are visible|sidebar view choices preserve search drafts|Android saved folder|PWA startup updates' tests/browser.integration.mjs tests/browser-library-folders.integration.mjs tests/browser-mobile.integration.mjs tests/browser-updates.integration.mjs
+        run: node --test --test-concurrency=1 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/browser-results.xml --test-name-pattern='Pages-only body links and previous-next|Pages-only first-run folder welcome|Pages-only script-driven TOC|Pages-only library trash|native sidebar view choices are visible|sidebar view choices preserve search drafts|Android saved folder|PWA startup updates|device sync settings choices' tests/browser.integration.mjs tests/browser-library-folders.integration.mjs tests/browser-mobile.integration.mjs tests/browser-updates.integration.mjs tests/browser-device-sync.integration.mjs
       - run: npm run test:browser
       - name: Keep structured Chrome results and fixture screenshots
         if: always()

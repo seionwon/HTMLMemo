@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {DeviceSyncAdapter,DEVICE_SYNC_FORMAT} from '../public/src/sync-adapter.js';
+import {DeviceSyncAdapter,DEVICE_SYNC_FORMAT,syncSettingsSnapshot,sameSyncSettings,syncSettingsDifferences} from '../public/src/sync-adapter.js';
+import {PREFERENCES_KEY,storePreferences,normalizePreferences} from '../public/src/preferences.js';
 import {encryptData,decryptData,deriveTopic} from '../public/src/sync-crypto.js';
 import {cleanRoomId} from '../public/src/sync-service.js';
 import {localFileIdentity} from '../public/src/local-files.js';
@@ -20,6 +21,46 @@ function fixture(rows=[],folders=[],root='My root'){
  };
  return {docs,history,storage,calls,operations,get folders(){return current;},adapter:options=>new DeviceSyncAdapter({operations,storage,...options})};
 }
+test('settings compare effective defaults and JSON key order without asking or changing them',async()=>{
+ const a=fixture(),b=fixture([],[],'Other root');storePreferences(normalizePreferences(),a.storage);a.storage.setItem(PREFERENCES_KEY,JSON.stringify(Object.fromEntries(Object.entries(JSON.parse(a.storage.getItem(PREFERENCES_KEY))).reverse())));a.storage.setItem('msuite_tts_rate','1.0');
+ const before=[...b.storage.values],packet=await a.adapter().getStreamBundle();let prompts=0;
+ const receiver=b.adapter({isHost:()=>false,resolveSettings:()=>{prompts++;throw Error('Same settings must not ask');}});
+ assert.ok(sameSyncSettings(syncSettingsSnapshot(a.storage),syncSettingsSnapshot(b.storage)));assert.deepEqual(syncSettingsDifferences(syncSettingsSnapshot(a.storage),syncSettingsSnapshot(b.storage)),[]);
+ await receiver.prepareSettings(packet.manifest);await receiver.mergeStreamBundle(packet);assert.equal(prompts,0);assert.deepEqual([...b.storage.values],before);
+});
+test('either settings choice is reflected to both peers once while roots and originals remain local',async()=>{
+ for(const choice of ['local','remote']){
+  const a=fixture([await record('a')],[],'Laptop'),b=fixture([await record('b')],[],'Phone');storePreferences({theme:'dark',annotation:{width:9}},a.storage);storePreferences({theme:'light',annotation:{width:2}},b.storage);a.storage.setItem('msuite_tts_voice_en','Laptop voice');b.storage.setItem('msuite_tts_voice_ko','Phone voice');
+  const expected=syncSettingsSnapshot(choice==='local'?b.storage:a.storage);let questions=0;
+  const host=a.adapter({isHost:()=>true}),join=b.adapter({isHost:()=>false,resolveSettings:async({differences})=>{questions++;assert.ok(differences.some(d=>d.label==='화면 테마'));assert.equal(b.calls.length,0);return choice;}}),bundle=await host.getStreamBundle();
+  await join.prepareSettings(bundle.manifest);assert.equal(b.calls.length,0);const mirrored=await join.mergeStreamBundle(bundle);const reply=await join.getStreamBundle(undefined,mirrored);assert.equal(reply.manifest.settingsChoice,1);await host.prepareSettings(reply.manifest);await host.mergeStreamBundle(reply);
+  assert.equal(questions,1);assert.ok(sameSyncSettings(syncSettingsSnapshot(a.storage),expected));assert.ok(sameSyncSettings(syncSettingsSnapshot(b.storage),expected));assert.equal(a.storage.getItem('root-folder-name'),'Laptop');assert.equal(b.storage.getItem('root-folder-name'),'Phone');assert.equal(a.docs.get('b').html,'<h1>b</h1>');assert.equal(b.docs.get('a').html,'<h1>a</h1>');
+  assert.equal(a.storage.getItem(choice==='local'?'msuite_tts_voice_en':'msuite_tts_voice_ko'),null);assert.equal(b.storage.getItem(choice==='local'?'msuite_tts_voice_en':'msuite_tts_voice_ko'),null);
+ }
+});
+test('canceling settings selection aborts before any document or settings commit',async()=>{
+ const a=fixture([await record('a')]),b=fixture([await record('b')]);storePreferences({theme:'dark'},a.storage);const original=syncSettingsSnapshot(b.storage),receiver=b.adapter({resolveSettings:async()=>null}),bundle=await a.adapter().getStreamBundle();
+ await assert.rejects(receiver.prepareSettings(bundle.manifest),{name:'AbortError'});assert.equal(b.calls.length,0);assert.deepEqual([...b.docs.keys()],['b']);assert.ok(sameSyncSettings(syncSettingsSnapshot(b.storage),original));assert.equal(a.calls.length,0);
+});
+test('either unchecked peer skips settings in both directions while documents still synchronize',async()=>{
+ for(const[hostEnabled,joinEnabled]of [[false,true],[true,false],[false,false]]){
+  const a=fixture([await record('a')]),b=fixture([await record('b')]);storePreferences({theme:'dark'},a.storage);const left=syncSettingsSnapshot(a.storage),right=syncSettingsSnapshot(b.storage);
+  const host=a.adapter({includeSettings:hostEnabled}),join=b.adapter({includeSettings:joinEnabled,isHost:()=>false,resolveSettings:()=>{throw Error('Disabled settings must not ask');}}),bundle=await host.getStreamBundle();
+  await join.prepareSettings(bundle.manifest);const mirrored=await join.mergeStreamBundle(bundle),reply=await join.getStreamBundle(undefined,mirrored);assert.equal(reply.manifest.settings,null);await host.mergeStreamBundle(reply);assert.ok(sameSyncSettings(syncSettingsSnapshot(a.storage),left));assert.ok(sameSyncSettings(syncSettingsSnapshot(b.storage),right));assert.equal(a.docs.size,2);assert.equal(b.docs.size,2);
+ }
+});
+test('settings edited during a choice or a closed sync cannot be overwritten by a late decision',async()=>{
+ const a=fixture([await record('a')]),b=fixture();storePreferences({theme:'dark'},a.storage);const bundle=await a.adapter().getStreamBundle();
+ const receiver=b.adapter({resolveSettings:async()=>{storePreferences({theme:'system'},b.storage);return 'remote';}});await receiver.prepareSettings(bundle.manifest);await assert.rejects(receiver.mergeStreamBundle(bundle),/설정이 바뀌었습니다/);assert.equal(b.calls.length,0);assert.equal(JSON.parse(b.storage.getItem(PREFERENCES_KEY)).theme,'system');
+ let active=true,finish;const closed=b.adapter({isActive:()=>active,resolveSettings:()=>new Promise(resolve=>finish=resolve)}),pending=closed.prepareSettings(bundle.manifest);while(!finish)await new Promise(resolve=>setImmediate(resolve));active=false;finish('remote');await assert.rejects(pending,{name:'AbortError'});assert.equal(b.calls.length,0);
+});
+test('an unrequested settings decision is rejected and storage failure restores the old portable values',async()=>{
+ const a=fixture(),b=fixture();storePreferences({theme:'dark'},a.storage);const bundle=await a.adapter().getStreamBundle(),forged={...bundle,manifest:{...bundle.manifest,settingsChoice:1}};await assert.rejects(b.adapter().mergeStreamBundle(forged),/선택을 확인/);assert.equal(b.calls.length,0);
+ const original=syncSettingsSnapshot(b.storage),set=b.storage.setItem.bind(b.storage);let failed=false;b.storage.setItem=(key,value)=>{if(key===PREFERENCES_KEY&&!failed){failed=true;throw Error('Fixture quota');}return set(key,value);};await assert.rejects(b.adapter({resolveSettings:async()=>'remote'}).mergeStreamBundle(bundle),/Fixture quota/);assert.ok(sameSyncSettings(syncSettingsSnapshot(b.storage),original));
+});
+test('current document sharing never carries app settings or triggers a settings question',async()=>{
+ const a=fixture([await record('a')]),b=fixture();storePreferences({theme:'dark'},a.storage);const data=await a.adapter().getStreamBundle(['a']);assert.equal(data.manifest.settings,null);const before=syncSettingsSnapshot(b.storage);await b.adapter({resolveSettings:()=>{throw Error('Document sharing must not ask');}}).mergeStreamBundle(data);assert.ok(sameSyncSettings(syncSettingsSnapshot(b.storage),before));assert.equal(b.docs.size,1);
+});
 test('MemoSuite room normalization, topic derivation and AES encryption remain compatible',async()=>{
  assert.equal(cleanRoomId(' a b_c '),'A-B_C');
  const key='HM-TEST-ROOM-KEY';assert.equal(await deriveTopic(key),'ms'+createHash('sha256').update('memosuite-sync-topic:'+key).digest('hex').slice(0,48));

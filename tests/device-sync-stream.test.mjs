@@ -45,7 +45,7 @@ test('a relay connection without a host stays waiting and reports a bounded hand
  t.mock.timers.enable({apis:['setTimeout','setInterval']});
  service=new DeviceSyncService({adapter:{},onStatusChange:(state,message)=>states.push({state,message}),onDataReceived:()=>{assert.fail('No host has sent any data');}});
  await service.connect('HM-NOBODY-IS-HERE');assert.equal(states.at(-1).state,'waiting');assert.ok(!states.some(v=>v.state==='connected'));
- t.mock.timers.tick(30001);assert.equal(states.at(-1).state,'error');assert.match(states.at(-1).message,/基準|기준 기기의 응답/);
+ t.mock.timers.tick(30001);assert.equal(states.at(-1).state,'error');assert.match(states.at(-1).message,/상대 기기의 응답/);
 });
 
 test('identical local originals send metadata only and do not write original bytes to temporary storage',async()=>{
