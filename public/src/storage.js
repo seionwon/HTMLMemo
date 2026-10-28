@@ -348,6 +348,9 @@ export async function restoreFolderDocuments(entries, folders = null, expectedFo
  */
 export const syncRecordSnapshot = record => record ? JSON.stringify({id:record.id,title:record.title,name:record.name,modified:record.modified,metadata:record.metadata,folderId:record.folderId||'',trashedAt:record.trashedAt,historyVersion:record.historyVersion,sourceIdentity:record.sourceIdentity,syncEpoch:record.syncEpoch}) : null;
 export async function commitDeviceSync(entries, folders, expectedFolders) {
+  const foldersChanged=JSON.stringify(folders)!==JSON.stringify(expectedFolders);
+  if(!entries.length&&!foldersChanged)return;
+  if(entries.some(entry=>entry.content===null&&entry.expected===null))throw Error('새 문서에는 원본 파일이 필요합니다.');
   const connection=await db();
   await new Promise((resolve,reject)=>{
     const tx=connection.transaction(['documents','contents','revisions','revisionHeaders','settings'],'readwrite');let failure,pending=entries.length+1;
@@ -358,10 +361,10 @@ export async function commitDeviceSync(entries, folders, expectedFolders) {
         const documents=tx.objectStore('documents');
         if(expected===null)documents.add({...record,historyVersion:revisions.length});
         else documents.put({...record,historyVersion:(entry.previousHistoryVersion||0)+revisions.length});
-        tx.objectStore('contents').put({documentId:record.id,...content});
+        if(content!==null)tx.objectStore('contents').put({documentId:record.id,...content});
         for(const revision of revisions){const {id:oldId,documentId:oldDocumentId,...value}=revision;addRevision(tx,{...value,documentId:record.id});}
       }
-      tx.objectStore('settings').put(folders,'library-folders-v1');
+      if(foldersChanged)tx.objectStore('settings').put(folders,'library-folders-v1');
     }catch(error){fail(error);}};
     for(const entry of entries){const request=tx.objectStore('documents').get(entry.record.id);request.onsuccess=()=>{
       if(syncRecordSnapshot(request.result)!==entry.expected)return fail(Error('동기화 중 다른 창에서 문서가 바뀌었습니다. 기존 내용은 유지했습니다. 다시 시도해주세요.'));
@@ -373,7 +376,7 @@ export async function commitDeviceSync(entries, folders, expectedFolders) {
     };
     tx.oncomplete=resolve;tx.onerror=()=>reject(failure||tx.error||Error('동기화 데이터를 저장하지 못했습니다.'));tx.onabort=()=>reject(failure||tx.error||Error('받은 데이터를 저장하지 못했습니다. 기존 데이터는 유지됩니다.'));
   });
-  for(const entry of entries)changed(entry.record.id);changed(null);
+  for(const entry of entries)changed(entry.record.id);if(foldersChanged)changed(null);
 }
 
 /** Autosave never writes the imported file. HTML is retained once; edits are separate metadata. */

@@ -17,7 +17,7 @@ function fixture(rows=[],folders=[],root='My root'){
  const storage=memoryLocal([['htmlmemo-theme','light'],['root-folder-name',root]]),calls=[];let current=folders;
  const operations={
   listDocuments:async()=>[...docs.values()],readLibrary:async()=>({documents:[...docs.values()],folders:current}),getDocument:async id=>structuredClone(docs.get(id)),listRevisions:async id=>structuredClone(history.get(id)||[]),
-  commitDeviceSync:async(entries,tree,expected)=>{assert.deepEqual(current,expected);calls.push(entries);for(const entry of entries){docs.set(entry.record.id,{...entry.record,...entry.content});history.set(entry.record.id,entry.revisions);}current=tree;}
+  commitDeviceSync:async(entries,tree,expected)=>{assert.deepEqual(current,expected);calls.push(entries);for(const entry of entries){const previous=docs.get(entry.record.id);docs.set(entry.record.id,{...(entry.content===null?previous:{}),...entry.record,...entry.content});history.set(entry.record.id,[...(entry.expected===null?[]:history.get(entry.record.id)||[]),...entry.revisions]);}current=tree;}
  };
  return {docs,history,storage,calls,operations,get folders(){return current;},adapter:options=>new DeviceSyncAdapter({operations,storage,...options})};
 }
@@ -80,6 +80,31 @@ test('relative folders merge into this device root despite different folder IDs 
 });
 test('selected item sharing and mirrored exclusions do not send unrelated items',async()=>{
  const a=fixture([await record('one'),await record('two')]);const adapter=a.adapter();assert.deepEqual(await adapter.getSyncTargetIds('two'),['two']);assert.deepEqual((await adapter.getBackupData(['two'])).documents.map(d=>d.record.id),['two']);assert.deepEqual((await adapter.getBackupData(undefined,['one'])).documents.map(d=>d.record.id),['two']);
+});
+test('a single annotation after a completed sync applies without a conflict, backup or source rewrite in either direction',async()=>{
+ const a=fixture([await record('book')]),b=fixture();
+ const round=async()=>{const host=a.adapter({includeSettings:false}),join=b.adapter({includeSettings:false}),sent=await host.getStreamBundle();const mirrored=await join.mergeStreamBundle(sent,()=>assert.fail('A one-sided edit must not wait for a conflict choice'));await host.mergeStreamBundle(await join.getStreamBundle(undefined,mirrored),()=>assert.fail('The reply must not wait for a conflict choice'));};
+ await round();
+ const mark=id=>({id,type:'note',text:id,color:'#edcf67',width:3,opacity:1,points:[{x:20,y:30}]});
+ for(const[device,id]of [[a,'mac-note'],[b,'phone-note'],[a,'second-mac-note']]){
+  device.docs.get('book').metadata.annotations.push(mark(id));await round();
+  assert.equal(a.docs.size,1);assert.equal(b.docs.size,1);assert.deepEqual(a.docs.get('book').metadata.annotations,b.docs.get('book').metadata.annotations);assert.equal(a.docs.get('book').html,'<h1>book</h1>');assert.equal(b.docs.get('book').html,'<h1>book</h1>');
+  const receiver=device===a?b:a;assert.equal(receiver.calls.at(-1)[0].content,null,'Verified immutable content must remain in the existing contents record');
+ }
+});
+test('both edited peers still ask and retain the full safety copy, while stale ancestry cannot silently replace a newer state',async()=>{
+ const a=fixture([await record('book')]),b=fixture();await b.adapter().mergeStreamBundle(await a.adapter().getStreamBundle());
+ a.docs.get('book').metadata.bookmarks.push({id:'mac',title:'Mac',top:5,left:0});b.docs.get('book').metadata.bookmarks.push({id:'phone',title:'Phone',top:10,left:0});
+ let questions=0;await b.adapter().mergeStreamBundle(await a.adapter().getStreamBundle(),items=>{questions++;assert.equal(items.length,1);return ['remote'];});assert.equal(questions,1);assert.equal(b.docs.size,2);assert.ok([...b.docs.values()].some(r=>r.title.includes('보관본')&&r.metadata.bookmarks[0].id==='phone'));
+ const stale=fixture([await record('book')]),newer=fixture();await newer.adapter().mergeStreamBundle(await stale.adapter().getStreamBundle());const oldBase=newer.docs.get('book').syncFingerprint;newer.docs.get('book').metadata.bookmarks.push({id:'new',title:'New',top:20,left:0});
+ const relay=fixture();await relay.adapter().mergeStreamBundle(await newer.adapter().getStreamBundle());Object.assign(stale.docs.get('book'),{syncSourceId:'book',syncFingerprint:oldBase});stale.docs.get('book').metadata.view.scrollTop=500;questions=0;await relay.adapter().mergeStreamBundle(await stale.adapter().getStreamBundle(),()=>{questions++;return ['local'];});assert.equal(questions,1,'A different advertised base cannot prove this stale copy is current');
+});
+test('canceling document conflicts commits nothing and keeping both retains verified original content for the new copy',async()=>{
+ for(const choice of [null,'both']){
+  const a=fixture([await record('book')]),b=fixture();await b.adapter().mergeStreamBundle(await a.adapter().getStreamBundle());a.docs.get('book').metadata.view.scrollTop=200;b.docs.get('book').metadata.view.scrollTop=300;const before=b.calls.length,packet=await a.adapter().getStreamBundle();
+  if(choice===null){await assert.rejects(b.adapter().mergeStreamBundle(packet,()=>null),{name:'AbortError'});assert.equal(b.calls.length,before);assert.equal(b.docs.size,1);assert.equal(b.docs.get('book').metadata.view.scrollTop,300);}
+  else{await b.adapter().mergeStreamBundle(packet,()=>['both']);assert.equal(b.docs.size,2);for(const doc of b.docs.values())assert.equal(doc.html,'<h1>book</h1>');assert.deepEqual([...b.docs.values()].map(r=>r.metadata.view.scrollTop).sort(),[200,300]);}
+ }
 });
 test('conflicts support local, remote with a full safety copy, and keep both without repeated copies',async()=>{
  const a=fixture([await record('same',{html:'<p>remote</p>',trash:true})]);const packet=await a.adapter().getBackupData();

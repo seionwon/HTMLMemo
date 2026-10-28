@@ -133,7 +133,7 @@ function deviceSyncDialog() {
   const currentId=active()?.record?.id;let reopen=[],selected=currentId;
   openDeviceSync({modal,currentId,onError:showError,
     prepare:async()=>{await flushInternalDocuments();reopen=tabs.filter(t=>t.reader).map(t=>t.record.id);for(const tab of [...tabs])if(tab.reader)await closeTab(tab.id);},
-    afterCommit:async()=>{preferences=loadPreferences(localStorage);applyTheme(preferences.theme);dataFolder?.schedule();if(dataFolder?.handle)await dataFolder.flush();await refreshLibrary();},
+    afterCommit:async()=>{preferences=loadPreferences(localStorage);applyTheme(preferences.theme);dataFolder?.schedule({settingsOnly:true});if(dataFolder?.handle)await dataFolder.flush();await refreshLibrary();},
     onClose:async()=>{for(const id of reopen){const record=await getDocument(id);if(record&&!record.trashedAt)await openRecord(record);}const original=tabs.find(t=>t.record?.id===selected);if(original)activate(original.id);else activate('library');}
   });
 }

@@ -18,6 +18,24 @@ async function unpack(body){
   if(!sameLocalFile(await localFileIdentity(blob),body.identity))throw Error('받은 원본 파일의 검증에 실패했습니다. 기존 문서는 유지됩니다.');return blob;
 }
 const contentOf=record=>record.file?{file:record.file,...(record.originalFile?{originalFile:record.originalFile}:{})}:{html:record.html,...(record.originalFile?{originalFile:record.originalFile}:{})};
+const validStamp=value=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value);
+// A linked, identical original can advance automatically only when one peer
+// still matches an advertised common version. Different bases remain a choice.
+function oneSidedResolution(previous,record,localStamp,remoteStamp){
+  if(previous.id!==record.id||!sameLocalFile(previous.sourceIdentity,record.sourceIdentity))return null;
+  const localBase=previous.syncSourceId===record.id&&validStamp(previous.syncFingerprint)?previous.syncFingerprint:null;
+  const remoteBase=record.syncSourceId===previous.id&&validStamp(record.syncFingerprint)?record.syncFingerprint:null;
+  if(remoteBase===localStamp||localBase===localStamp&&(!remoteBase||remoteBase===localBase))return 'remote';
+  if(localBase===remoteStamp||remoteBase===remoteStamp)return 'local';
+  return null;
+}
+async function sameStoredContent(previous,value){
+  // Prove reuse with the actual prepared/raw bytes, never just a cached header.
+  if(!sameLocalFile(previous.sourceIdentity,value.record.sourceIdentity))return false;
+  const body=previous.file||typeof previous.html==='string'&&new Blob([previous.html],{type:'text/html'});
+  if(!(body instanceof Blob)||value.body&&!sameLocalFile(await localFileIdentity(body),await localFileIdentity(value.body)))return false;
+  return !value.original||previous.originalFile instanceof Blob&&sameLocalFile(await localFileIdentity(previous.originalFile),await localFileIdentity(value.original));
+}
 
 export function normalizeSyncSettings(value){
   const {entries}=validateSettings(value),preferences=normalizePreferences(entries[PREFERENCES_KEY]?JSON.parse(entries[PREFERENCES_KEY]):{theme:entries['htmlmemo-theme']||'light'});
@@ -69,10 +87,10 @@ export function validateStreamManifest(data){
 
 /** MemoSuite SyncAdapter, backed by HTMLMemo's IndexedDB. Roots are intentionally absent. */
 export class DeviceSyncAdapter {
-  constructor({storage=localStorage,includeSources=true,includeSettings=true,isHost=()=>true,isActive=()=>true,afterCommit=async()=>{},resolveSettings,operations={}}={}){
+  constructor({storage=localStorage,includeSources=true,includeSettings=true,isHost=()=>true,isActive=()=>true,afterCommit=async()=>{},onStage=()=>{},resolveSettings,operations={}}={}){
     this.storage=storage;this.includeSources=includeSources;this.includeSettings=includeSettings;this.isHost=isHost;this.isActive=isActive;this.afterCommit=afterCommit;
     this.ops={listDocuments,getDocument,listRevisions,readLibrary,commitDeviceSync,...operations};
-    this.resolveSettings=resolveSettings;this.settingsSelection=undefined;this.sentSettings=null;this.settingsPlans=new WeakMap();
+    this.resolveSettings=resolveSettings;this.onStage=onStage;this.settingsSelection=undefined;this.sentSettings=null;this.settingsPlans=new WeakMap();
   }
   settingsPayload(ids){
     const settings=!ids&&this.includeSettings&&this.settingsSelection!==null?(this.settingsSelection||syncSettingsSnapshot(this.storage)):null;
@@ -156,6 +174,7 @@ export class DeviceSyncAdapter {
     return found;
   }
   async mergeStreamBundle({manifest,files},resolver){
+    this.onStage('받은 원본 파일을 검증하는 중…');
     this.check();const descriptors=validateStreamManifest(manifest),verified=new Map();
     if(!(files instanceof Map)||files.size!==descriptors.size)throw Error('전송이 끝나지 않았습니다. 기존 문서는 유지됩니다.');
     for(const [id,descriptor] of descriptors){const blob=files.get(id);if(!(blob instanceof Blob)||blob.size!==descriptor.size||!sameLocalFile(await localFileIdentity(blob),descriptor.identity))throw Error('받은 원본 파일의 검증에 실패했습니다. 기존 문서는 유지됩니다.');verified.set(id,blob);this.check();}
@@ -178,40 +197,43 @@ export class DeviceSyncAdapter {
   async mergePreparedData(data,incoming,resolver){
     this.check();const remoteFolders=validateFolders(data.folders);if(data.settings!==null)validateSettings(data.settings);
     const settingsPlan=await this.prepareSettings(data);this.check();
+    this.onStage('마지막 동기화 이후의 주석 변경을 비교하는 중…');
     const local=await this.ops.readLibrary(),tree=mergeLibraryFolders(local.folders,remoteFolders,()=>crypto.randomUUID()),entries=[],mirrored=[],conflicts=[],plans=[];
     for(const value of incoming){
       const record=value.record,stamp=value.fingerprint;
       if(local.documents.some(d=>d.syncSourceId===record.id&&d.syncFingerprint===stamp&&(d.folderId||'')===(tree.mapping.get(record.folderId||'')||''))){continue;}
       const match=local.documents.find(d=>d.id===record.id)||local.documents.find(d=>sameLocalFile(d.sourceIdentity,record.sourceIdentity));
       const previous=match?await this.ops.getDocument(match.id):null;
-      if(previous&&await fingerprint(previous)===stamp&&(previous.folderId||'')===(tree.mapping.get(record.folderId||'')||'')){mirrored.push(previous.id);continue;}
+      const localStamp=previous?await fingerprint(previous):null,sameFolder=previous&&(previous.folderId||'')===(tree.mapping.get(record.folderId||'')||'');
+      if(previous&&localStamp===stamp&&sameFolder){mirrored.push(previous.id);continue;}
       if(!value.body&&!previous)throw Error('이 기기에 ‘'+record.title+'’의 원본이 없습니다. 두 기기를 최신 버전으로 열고 다시 연결해주세요.');
       if(!value.body&&previous&&!sameLocalFile(previous.sourceIdentity||await localFileIdentity(previous.originalFile||previous.file||new Blob([previous.html],{type:'text/html'})),record.sourceIdentity))throw Error('문서 원본이 다릅니다. 원본 파일을 포함해 다시 보내주세요.');
-      const plan={value,previous,resolution:previous?null:'remote'};plans.push(plan);
-      if(previous)conflicts.push({id:plans.length-1,type:'memo',title:record.title,localDate:new Date(previous.modified),remoteDate:new Date(record.modified),localContent:`이 기기: 주석 ${previous.metadata.annotations.length}개 · 북마크 ${previous.metadata.bookmarks.length}개`,remoteContent:`상대 기기: 주석 ${record.metadata.annotations.length}개 · 북마크 ${record.metadata.bookmarks.length}개`});
+      const automatic=previous&&sameFolder?oneSidedResolution(previous,record,localStamp,stamp):null,plan={value,previous,resolution:previous?automatic:'remote',automatic:!!automatic};plans.push(plan);
+      if(previous&&!automatic)conflicts.push({id:plans.length-1,type:'memo',title:record.title,localDate:new Date(previous.modified),remoteDate:new Date(record.modified),localContent:`이 기기: 주석 ${previous.metadata.annotations.length}개 · 북마크 ${previous.metadata.bookmarks.length}개`,remoteContent:`상대 기기: 주석 ${record.metadata.annotations.length}개 · 북마크 ${record.metadata.bookmarks.length}개`});
     }
-    if(conflicts.length){if(!resolver)throw Error('양쪽에서 바뀐 문서가 있어 보관 방법을 선택해야 합니다.');const choices=await resolver(conflicts);if(!Array.isArray(choices)||choices.length!==conflicts.length||choices.some(c=>!['local','remote','both'].includes(c)))throw Error('충돌 선택을 완료하지 않았습니다.');conflicts.forEach((c,i)=>plans[c.id].resolution=choices[i]);}
-    for(const {value,previous,resolution} of plans){
+    if(conflicts.length){if(!resolver)throw Error('양쪽에서 바뀐 문서가 있어 보관 방법을 선택해야 합니다.');const choices=await resolver(conflicts);this.check();if(choices===null)throw new DOMException('동기화를 취소했습니다. 문서와 앱 설정은 변경하지 않았습니다.','AbortError');if(!Array.isArray(choices)||choices.length!==conflicts.length||choices.some(c=>!['local','remote','both'].includes(c)))throw Error('충돌 선택을 완료하지 않았습니다.');conflicts.forEach((c,i)=>plans[c.id].resolution=choices[i]);}
+    for(const {value,previous,resolution,automatic} of plans){
       if(resolution==='local')continue;
       const record={...value.record,folderId:tree.mapping.get(value.record.folderId||'')||'',syncSourceId:value.record.id,syncFingerprint:value.fingerprint};
-      const content=value.body?(value.sourceType==='file'||value.body.size>=4*1024*1024?{file:value.body}:{html:await value.body.text()}):contentOf(previous);
-      if(value.original)content.originalFile=value.original;
+      const reuse=previous&&await sameStoredContent(previous,value),content=reuse?null:value.body?(value.sourceType==='file'||value.body.size>=4*1024*1024?{file:value.body}:{html:await value.body.text()}):contentOf(previous);
+      if(value.original&&content)content.originalFile=value.original;
       if(previous&&resolution==='remote'){
-        // Preserve an entire prior version, including its original bytes and history.
-        const backup={...portableRecord(previous),id:crypto.randomUUID(),title:previous.title+' (동기화 전 보관본)'};
-        entries.push({record:backup,content:contentOf(previous),revisions:await this.ops.listRevisions(previous.id),expected:null});
+        // Explicit conflict replacement keeps a full copy. One-sided updates
+        // retain the existing source record and append only unseen revisions.
+        if(!automatic){const backup={...portableRecord(previous),id:crypto.randomUUID(),title:previous.title+' (동기화 전 보관본)'};
+        entries.push({record:backup,content:contentOf(previous),revisions:await this.ops.listRevisions(previous.id),expected:null});}
         record.id=previous.id;
       }else if(previous){record.id=crypto.randomUUID();record.title+=' (상대 기기)';}
       let revisions=value.revisions;if(previous&&resolution==='remote'){const key=revision=>{const {id,documentId,...state}=revision;return JSON.stringify(state);};const known=new Set((await this.ops.listRevisions(previous.id)).map(key));revisions=revisions.filter(revision=>!known.has(key(revision)));}
-      entries.push({record,content,revisions,expected:previous&&resolution==='remote'?syncRecordSnapshot(previous):null,previousHistoryVersion:previous?.historyVersion||0});mirrored.push(record.id);
+      entries.push({record,content:previous&&resolution==='both'&&content===null?contentOf(previous):content,revisions,expected:previous&&resolution==='remote'?syncRecordSnapshot(previous):null,previousHistoryVersion:previous?.historyVersion||0});mirrored.push(record.id);
     }
     this.check();if(settingsPlan.expected&&!sameSyncSettings(syncSettingsSnapshot(this.storage),settingsPlan.expected))throw Error('선택 중 이 기기의 앱 설정이 바뀌었습니다. 다시 연결해주세요.');
-    await this.ops.commitDeviceSync(entries,tree.folders,local.folders);
+    this.onStage('변경된 주석과 이력을 앱에 저장하는 중…');await this.ops.commitDeviceSync(entries,tree.folders,local.folders);
     if(settingsPlan.settings&&!sameSyncSettings(syncSettingsSnapshot(this.storage),settingsPlan.settings)){
       if(!sameSyncSettings(syncSettingsSnapshot(this.storage),settingsPlan.expected))throw Error('저장 중 앱 설정이 바뀌어 설정 적용을 멈췄습니다. 문서는 보존됩니다. 다시 연결해주세요.');
       replaceSyncSettings(this.storage,settingsPlan.settings);
     }
     this.settingsSelection=settingsPlan.settings;
-    await this.afterCommit();this.check();return mirrored;
+    this.onStage('변경 내용을 전용 저장 폴더에 반영하는 중…');await this.afterCommit();this.check();return mirrored;
   }
 }

@@ -7,7 +7,7 @@ test('completed progress without a file number states completion without undefin
  assert.match(text,/전송 완료/);assert.doesNotMatch(text,/undefined|NaN|파일/);
 });
 test('commit progress clearly distinguishes sending from saving received data',()=>{
- assert.match(syncProgressDetail({direction:'send',bytes:10,total:10,files:2,phase:'commit'}),/상대 기기 저장 확인 중/);
+ assert.match(syncProgressDetail({direction:'send',bytes:10,total:10,files:2,phase:'commit'}),/상대 기기의 저장·선택 확인 중/);
  assert.match(syncProgressDetail({direction:'receive',bytes:10,total:10,files:2,phase:'commit'}),/받은 문서 저장 중/);
 });
 test('only valid file numbers are shown and reused originals remain visible after a reply',()=>{
