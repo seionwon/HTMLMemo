@@ -384,12 +384,16 @@ export class Reader {
     this.bound = true;
     this.startFontObserver();
     this.doc.addEventListener('wheel', event => this.forwardWheel(event), {capture:true,passive:false});
+    this.doc.addEventListener('touchstart', event => this.startTouchScroll(event), {capture:true,passive:false});
+    this.doc.addEventListener('touchmove', event => this.moveTouchScroll(event), {capture:true,passive:false});
+    this.doc.addEventListener('touchend', event => this.endTouchScroll(event), true);
+    this.doc.addEventListener('touchcancel', event => this.endTouchScroll(event), true);
     this.doc.addEventListener('pointerdown', event => { if(this.startTocResize(event))return; if(this.startMiddleScroll(event))return;this.stopMiddleScroll();this.callbacks.onSelectionDismiss?.(); this.pointerDown(event); }, true);
     this.doc.addEventListener('mousedown', event => { if(this.startTocResize(event))return;this.selectSentenceAtClick(event); }, true);
     this.doc.addEventListener('dragstart', event => { if(this.annotationDrag||this.tocDrag||this.isTocResizeTarget(event))event.preventDefault(); }, true);
     this.doc.addEventListener('pointermove', event => { if(this.tocDrag)return; if(this.moveMiddleScroll(event))return;this.pointerMove(event); }, true);
     this.doc.addEventListener('pointerup', event => { if(this.tocDrag)return; if(this.endMiddleScroll(event))return;this.pointerUp(event); }, true);
-    this.doc.addEventListener('pointercancel', () => { this.cancelAnnotationDrag();this.stopMiddleScroll();this.gesture = null; this.preview?.remove(); this.preview = null; });
+    this.doc.addEventListener('pointercancel', () => { this.cancelAnnotationDrag();this.stopMiddleScroll();this.cancelDrawingGesture();this.touchErase=null; });
     // Touch starts with implicit capture on the mark. Moving capture to the
     // document root also releases that mark; only losing our own capture cancels.
     this.doc.addEventListener('lostpointercapture', event => {if(event.target===this.doc.documentElement&&this.annotationDrag?.pointerId===event.pointerId)this.cancelAnnotationDrag();});
@@ -1380,7 +1384,11 @@ export class Reader {
     if (event.ctrlKey) return;
     const scale=event.deltaMode===1?16:event.deltaMode===2?this.viewport.clientHeight:1;
     const left=event.deltaX*scale,top=event.deltaY*scale;
-    for(let node=event.target;node?.nodeType===1;node=node.parentElement){
+    this.scrollDocumentBy(event.target,left,top);
+    event.preventDefault();
+  }
+  scrollDocumentBy(target,left,top,{touch=false}={}) {
+    for(let node=target;node?.nodeType===1;node=node.parentElement){
       if (node===this.doc.documentElement) break;
       if (node===this.doc.body && this.doc.scrollingElement===this.doc.documentElement) {
         const htmlStyle=this.doc.defaultView.getComputedStyle(this.doc.documentElement);
@@ -1394,17 +1402,60 @@ export class Reader {
       const canVertical=vertical&&(top<0&&node.scrollTop>0||top>0&&node.scrollTop<node.scrollHeight-node.clientHeight-1);
       const canHorizontal=horizontal&&(left<0&&node.scrollLeft>0||left>0&&node.scrollLeft<node.scrollWidth-node.clientWidth-1);
       if (canVertical || canHorizontal) {
-        node.scrollBy?.({left,top});
+        node.scrollBy?.({left,top,behavior:'instant'});
         if (!node.scrollBy) { node.scrollLeft+=left;node.scrollTop+=top; }
-        event.preventDefault();return;
+        return;
       }
     }
     if(this.nativeScroll) {
       const root=this.findAnnotationScrollHost()||this.doc.scrollingElement||this.doc.documentElement||this.doc.body;
-      root.scrollBy?.({left,top});
+      root.scrollBy?.({left,top,behavior:'instant'});
       if (!root.scrollBy) { root.scrollLeft+=left;root.scrollTop+=top; }
-    } else this.viewport.scrollBy({left,top});
-    event.preventDefault();
+    } else this.viewport.scrollBy({left:left*(touch?this.zoom:1),top:top*(touch?this.zoom:1),behavior:'instant'});
+  }
+  cancelDrawingGesture() {
+    if(!this.gesture)return;
+    const gesture=this.gesture;this.gesture=null;
+    this.preview?.remove();this.preview=null;
+    try{gesture?.target?.releasePointerCapture?.(gesture.pointerId);}catch{/* A cancelled pointer may already have released capture. */}
+  }
+  startTouchScroll(event) {
+    if(event.touches.length<2&&!this.touchScroll)return;
+    this.touchErase=null;
+    if(!this.touchScroll){
+      // touch-action is fixed when a gesture begins. Cancelling a pen stroke
+      // cannot restore native panning halfway through that gesture.
+      const target=event.touches[0]?.target||event.target;
+      const manual=!this.nativeScroll||DRAW_TOOLS.includes(this.tool)||['note','text'].includes(this.tool)||!!this.annotationDrag||[event.target,...event.touches].some(t=>(t.target||t).closest?.('#'+LAYER_ID+',[data-htmlmemo-id],[data-htmlmemo-hit]'));
+      this.touchScroll={target,manual};
+      this.cancelAnnotationDrag();this.cancelDrawingGesture();this.stopMiddleScroll();
+      this.callbacks.onSelectionDismiss?.();
+    }
+    const touches=[...event.touches].slice(0,2);
+    this.touchScroll.points=touches.length===2?touches.map(t=>({id:t.identifier,x:t.clientX,y:t.clientY})):null;
+    this.suppressAnnotationClick=performance.now()+500;
+    if(this.touchScroll.manual&&event.cancelable)event.preventDefault();
+  }
+  moveTouchScroll(event) {
+    const state=this.touchScroll;if(!state)return;
+    if(state.manual){
+      if(event.cancelable)event.preventDefault();
+      event.stopPropagation();
+      const previous=state.points,touches=[...event.touches];
+      const next=previous?.map(p=>touches.find(t=>t.identifier===p.id));
+      if(next?.every(Boolean)){
+        const left=previous.reduce((sum,p,i)=>sum+p.x-next[i].clientX,0)/2,top=previous.reduce((sum,p,i)=>sum+p.y-next[i].clientY,0)/2;
+        this.scrollDocumentBy(state.target,left,top,{touch:true});
+        state.points=next.map(t=>({id:t.identifier,x:t.clientX,y:t.clientY}));
+      }
+    }
+    this.suppressAnnotationClick=performance.now()+500;
+  }
+  endTouchScroll(event) {
+    if(!this.touchScroll)return;
+    this.suppressAnnotationClick=performance.now()+500;this.annotationDragEndedAt=performance.now();
+    if(event.touches.length===0)this.touchScroll=null;
+    else this.startTouchScroll(event);
   }
   startMiddleScroll(event) {
     if (event.button!==1) return false;
@@ -1768,6 +1819,7 @@ export class Reader {
   }
   setTool(tool) {
     this.cancelAnnotationDrag();
+    this.cancelDrawingGesture();this.touchErase=null;
     this.tool = tool; this.doc.documentElement.toggleAttribute('data-htmlmemo-drawing', DRAW_TOOLS.includes(tool) || ['note','text'].includes(tool));
     this.syncAnnotationPicking();
     if (TEXT_TOOLS.includes(tool) && this.selection) this.addText(tool, this.selection);
@@ -2072,27 +2124,27 @@ export class Reader {
   }
   pointerDown(event) {
     if (event.button !== 0) return;
+    if(this.touchScroll&&event.pointerType==='touch')return;
     this.suppressAnnotationClick=0;
     if(this.annotationDrag){this.cancelAnnotationDrag();return;}
     if(this.tool==='select'&&this.startAnnotationDrag(event))return;
     if (this.tool === 'eraser') {
-      const id = this.annotationIdAt(event.target); if (id) { event.preventDefault(); this.remove(id); } return;
+      const id = this.annotationIdAt(event.target); if (id) { event.preventDefault(); if(event.pointerType==='touch')this.touchErase={pointerId:event.pointerId,id};else this.remove(id); } return;
     }
     if (this.isInteractiveControl(event.target)) return;
     if (DRAW_TOOLS.includes(this.tool) || ['note','text'].includes(this.tool)) {
-      // Touch scroll remains available in selection mode; a second pointer
-      // cancels a stroke instead of accidentally recording a two-finger gesture.
-      if (this.gesture) { this.gesture = null; this.preview?.remove(); return; }
+      if (this.gesture) { this.cancelDrawingGesture(); return; }
       event.preventDefault(); event.stopPropagation();
       const scrollHost = this.findAnnotationScrollHost();
       if (!this.layer?.isConnected || (scrollHost && this.layer.parentElement !== scrollHost)) this.renderDrawingLayer();
       const anchor = this.elementAnchor(event.target,true); const p = this.point(event);
-      this.gesture = {pointerId:event.pointerId, type:this.tool, anchor, points:[p]};
+      this.gesture = {pointerId:event.pointerId, target:event.target, type:this.tool, anchor, points:[p]};
       this.callbacks.onAnnotationInput?.();
       event.target.setPointerCapture?.(event.pointerId);
     }
   }
   pointerMove(event) {
+    if(this.touchScroll&&event.pointerType==='touch')return;
     if(this.moveAnnotationDrag(event))return;
     if (!this.gesture || this.gesture.pointerId !== event.pointerId) return;
     this.callbacks.onAnnotationInput?.();
@@ -2104,6 +2156,8 @@ export class Reader {
     if (this.preview) { this.preview.setAttribute('data-htmlmemo-preview', ''); this.layer.append(this.preview); }
   }
   async pointerUp(event) {
+    if(this.touchScroll&&event.pointerType==='touch')return;
+    if(this.touchErase?.pointerId===event.pointerId){const {id}=this.touchErase;this.touchErase=null;if(this.tool==='eraser')this.remove(id);return;}
     if(this.finishAnnotationDrag(event))return;
     if (this.gesture && this.gesture.pointerId === event.pointerId) {
       event.preventDefault(); const g = this.gesture; this.gesture = null; this.preview?.remove(); this.preview = null;
@@ -2705,6 +2759,7 @@ export class Reader {
   stopSpeech() { this.readAloud?.close(); this.host?.ownerDocument?.defaultView?.speechSynthesis?.cancel(); }
   dispose() {
     this.cancelAnnotationDrag();
+    this.cancelDrawingGesture();this.touchScroll=null;this.touchErase=null;
     this.searchGeneration=(this.searchGeneration||0)+1;this.searchIndexCache?.dispose();
     this.cancelBookSearchJump?.();this.documentBookSearchObserver?.disconnect();if(this.documentBookSearchResults)this.clearDocumentBookSearchHighlight();
     this.stopMiddleScroll();this.readAloud?.dispose();this.readAloud=null;this.stopSpeech(); this.disposed=true;this.cancelOpeningWait?.();this.cancelAnnotationJump?.();this.cancelFrameOpen?.();this.runtime?.dispose(); clearTimeout(this.positionTimer);clearTimeout(this.dynamicTimer);clearTimeout(this.documentSidebarUI?.sidebarSearchTimer);this.dynamicObserver?.disconnect();this.fontObserver?.disconnect();if(this.fontFrame)this.doc.defaultView?.cancelAnimationFrame(this.fontFrame); this.resizeObserver?.disconnect(); this.hostObserver?.disconnect(); this.frame.srcdoc=''; if(this.documentURL){URL.revokeObjectURL(this.documentURL);this.documentURL=null;} this.host.remove();

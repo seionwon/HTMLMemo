@@ -82,3 +82,12 @@ test('touch implicit capture can transfer from a mark to the root; losing root c
 test('a touch release saves the last visible preview even when its release coordinates differ',async()=>{
   const f=fixture(),{r}=f,before=r.drawingGeometry(r.metadata.annotations[0]);r.pointerDown(f.event(80,40,{pointerType:'touch'}));r.pointerMove(f.event(120,70,{pointerType:'touch'}));await r.pointerUp(f.event(0,0,{pointerType:'touch'}));assert.equal(f.changes,1);for(const [i,p] of r.drawingGeometry(r.metadata.annotations[0]).points.entries()){assert.ok(Math.abs(p.x-before.points[i].x-40)<1e-8);assert.ok(Math.abs(p.y-before.points[i].y-30)<1e-8);}
 });
+test('two fingers abandon an annotation preview without saving its move, including different initial targets',async()=>{
+  const f=fixture(),{r,doc,to}=f,before=structuredClone(r.metadata.annotations),mark=doc.querySelector('[data-htmlmemo-id]');
+  r.nativeScroll=true;r.pointerDown(f.event(80,40,{pointerType:'touch'}));r.pointerMove(f.event(120,70,{pointerType:'touch'}));assert.ok(r.annotationDrag?.moved);
+  // The second pointer cancels the preview before touchstart is dispatched.
+  r.pointerDown(f.event(140,70,{pointerType:'touch',pointerId:2}));assert.equal(r.annotationDrag,null);
+  let prevented=false;r.startTouchScroll({target:to,touches:[{identifier:1,target:mark,clientX:120,clientY:70},{identifier:2,target:to,clientX:180,clientY:70}],cancelable:true,preventDefault(){prevented=true;}});
+  assert.equal(prevented,true);assert.equal(r.touchScroll.manual,true);assert.equal(f.captured,false);assert.equal(doc.querySelector('[data-htmlmemo-preview],[data-htmlmemo-drag-source]'),null);
+  await r.pointerUp(f.event(150,90,{pointerType:'touch'}));assert.deepEqual(r.metadata.annotations,before);assert.equal(f.changes,0);assert.equal(r.history.entries.length,1);
+});

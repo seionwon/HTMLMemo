@@ -18,6 +18,69 @@ const phoneAPIs=`
 `;
 const androidUA='Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36';
 const ready='document.querySelector("#status-left")?.textContent.includes("개의 문서")';
+
+test('real Chrome: Pages-only two-finger scrolling cancels ink and annotation drags without changing saved marks',{timeout:180000},async()=>{
+  await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-two-finger-'));await cp(join(root,'public'),folder,{recursive:true});const server=createServer(folder);let chrome;
+  const report={cases:[],hardwareMacAndAndroidTested:false,input:'Chrome CDP touch and trackpad-style wheel events in an isolated profile'};
+  try{
+    await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));chrome=await launchChrome();const {page}=chrome,url=process.env.HTMLMEMO_SIDEBAR_TEST_URL||`http://127.0.0.1:${server.address().port}/`;
+    await page.send('Emulation.setUserAgentOverride',{userAgent:androidUA,platform:'Android'});
+    await page.send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
+    await page.send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:3});await page.navigate(url);await page.waitFor(ready);
+    const frame='document.querySelector(".document-host:not([hidden]) iframe.document-frame")',doc=frame+'.contentDocument',viewport='document.querySelector(".document-host:not([hidden]) .reader-viewport")';
+    const settled=`${frame}?.style.visibility==='visible'&&!document.querySelector('.tab-dirty:not([hidden])')`;
+    const send=(type,points=[])=>page.send('Input.dispatchTouchEvent',{type,touchPoints:points.map((p,i)=>({id:i+1,radiusX:2,radiusY:2,force:1,...p}))});
+    const snapshot=id=>page.evaluate(`(async()=>JSON.stringify((await(await import('./src/storage.js')).getDocument(${JSON.stringify(id)})).metadata.annotations))()`);
+    const tool=async name=>{await page.click('#toolbar [data-action='+name+']');if(await page.evaluate('!document.querySelector("#tool-popover").hidden'))await page.click('[data-popover-close]');};
+    const scroll=()=>page.evaluate(`(()=>{const d=${doc};return {root:d.scrollingElement.scrollTop,inner:d.querySelector('main').scrollTop,outer:${viewport}.scrollTop};})()`);
+    const reset=async()=>{await page.evaluate(`(()=>{const d=${doc};for(const node of [d.scrollingElement,d.querySelector('main'),${viewport}])node.scrollTo({top:0,left:0,behavior:'instant'});})()`);await page.evaluate('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');};
+    const point=()=>page.evaluate(`(()=>{const f=${frame},r=f.getBoundingClientRect();return {x:Math.max(90,r.left+100),y:Math.max(r.top+150,Math.min(r.bottom-180,390))};})()`);
+    const pan=async(p,{preview=false}={})=>{
+      await send('touchStart',[p]);
+      if(preview)await send('touchMove',[{x:p.x+8,y:p.y}]);
+      const first={x:p.x+(preview?8:0),y:p.y},second={x:first.x+65,y:first.y};
+      await send('touchStart',[first,second]);
+      for(let step=1;step<=6;step++)await send('touchMove',[{x:first.x,y:first.y-step*12},{x:second.x,y:second.y-step*12}]);
+      await send('touchEnd',[{x:first.x,y:first.y-72}]);
+      await send('touchMove',[{x:first.x+15,y:first.y-90}]);await send('touchEnd');
+      await page.waitFor(`${doc}.querySelector('[data-htmlmemo-preview],[data-htmlmemo-drag-source]')===null`);
+    };
+    for(const mode of ['static','root','inner']){
+      const id='two-finger-'+mode;
+      await page.evaluate(`(async()=>{
+        const {parseHTML}=await import('./src/document.js'),{putDocumentRevision}=await import('./src/storage.js');
+        const mode=${JSON.stringify(mode)},html='<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Two finger '+mode+'</title><style>html,body{margin:0;font:18px/1.6 system-ui;scroll-behavior:smooth}main{padding:22px;box-sizing:border-box;scroll-behavior:smooth}article{min-height:3000px}p{margin:0 0 100px}'+(mode==='inner'?'html,body{height:100%;overflow:hidden}main{height:100%;overflow:auto}':'')+'</style></head><body><main><article><h1>Two finger '+mode+'</h1>'+Array.from({length:24},(_,i)=>'<p>Reading paragraph '+i+'. Scroll without changing your annotations.</p>').join('')+'</article></main></body></html>';
+        const parsed=parseHTML(html,{viewport:{width:390,height:844}},{allowScripts:mode!=='static'});await putDocumentRevision({id:${JSON.stringify(id)},title:parsed.metadata.title,name:${JSON.stringify(id+'.html')},kind:'import',html:parsed.html,nativeScroll:parsed.nativeScroll,metadata:parsed.metadata});document.querySelector('#library-tab').click();
+      })()`);
+      await page.waitFor('document.querySelector("[data-open='+id+']")');await page.click('[data-open='+id+']');await page.waitFor(settled);
+      await tool('pen');await reset();let p=await point();
+      // A normal single-finger stroke still creates one mark.
+      await send('touchStart',[p]);await send('touchMove',[{x:p.x+28,y:p.y+5}]);await send('touchEnd');
+      await page.waitFor(`(async()=>(await(await import('./src/storage.js')).getDocument(${JSON.stringify(id)})).metadata.annotations.length===1)()`);await page.waitFor(settled);
+      const saved=await snapshot(id),before=await scroll();await pan(p,{preview:true});
+      await page.waitFor(`(()=>{const d=${doc};return Math.max(d.scrollingElement.scrollTop,d.querySelector('main').scrollTop,${viewport}.scrollTop)>50;})()`);const after=await scroll();assert.equal(await snapshot(id),saved,'scrolling must not commit unfinished ink');
+      await tool('select');await reset();
+      const markPoint=()=>page.evaluate(`(()=>{const f=${frame},d=f.contentDocument,n=d.querySelector('[data-htmlmemo-hit]'),r=n.getBoundingClientRect(),b=f.getBoundingClientRect(),s=b.width/f.offsetWidth;return {x:b.left+(r.left+r.width/2)*s,y:b.top+(r.top+r.height/2)*s};})()`);
+      p=await markPoint();await pan(p,{preview:true});assert.equal(await snapshot(id),saved,'a second finger cancels the annotation move');
+      const movedScroll=await scroll();assert.ok(Math.max(...Object.values(movedScroll))>50);assert.equal(await page.evaluate('document.querySelector("#dialog").open'),false);
+      await tool('eraser');await reset();p=await markPoint();await pan(p);assert.equal(await snapshot(id),saved,'two-finger scrolling cannot erase the initial mark');
+      await tool('pen');await reset();p=await point();await send('touchStart',[p]);await send('touchMove',[{x:p.x+26,y:p.y+6}]);await send('touchEnd');
+      await page.waitFor(`(async()=>(await(await import('./src/storage.js')).getDocument(${JSON.stringify(id)})).metadata.annotations.length===2)()`);
+      // A cancel event clears the gesture and leaves saved annotations intact.
+      await page.waitFor(settled);const beforeCancel=await snapshot(id);await send('touchStart',[p,{x:p.x+65,y:p.y}]);await send('touchCancel');assert.equal(await snapshot(id),beforeCancel);
+      await reset();await page.send('Emulation.setTouchEmulationEnabled',{enabled:false});await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
+      p=await point();for(let n=0;n<8;n++)await page.send('Input.dispatchMouseEvent',{type:'mouseWheel',...p,deltaX:.25,deltaY:12});
+      const wheel=await scroll();assert.ok(Math.max(...Object.values(wheel))>=90,'a burst of small wheel deltas must not repeatedly restart smooth scrolling');
+      const unchanged=await snapshot(id);assert.equal(unchanged,beforeCancel);await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,`test-results/pages-only-two-finger-${mode}-1280.png`),await page.screenshot());
+      await page.send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await page.send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:3});
+      await writeFile(join(root,`test-results/pages-only-two-finger-${mode}-390.png`),await page.screenshot());
+      report.cases.push({mode,before,after,annotationDragScroll:movedScroll,wheel,savedMarksPreserved:true,singleFingerDrawingResumes:true,touchCancel:true});
+      await page.waitFor(settled);await page.click('.tab.document.active .tab-close');await page.waitFor('!document.querySelector(".tab.document")');
+    }
+    assert.deepEqual(chrome.errors,[]);report.status='pass';report.errors=chrome.errors;
+  }catch(error){report.status='failed';report.error=error.stack;if(chrome){report.errors=chrome.errors;report.state=await chrome.page.evaluate('({dialog:document.querySelector("#dialog")?.textContent,toast:document.querySelector("#toast")?.textContent,status:document.querySelector("#status-left")?.textContent})').catch(()=>null);await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/pages-only-two-finger-failure.png'),await chrome.page.screenshot());}throw error;}
+  finally{await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/pages-only-two-finger.json'),JSON.stringify(report,null,2));await chrome?.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
+});
 async function phone(page){
   await page.send('Emulation.setUserAgentOverride',{userAgent:androidUA,platform:'Android'});
   await page.send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
