@@ -580,9 +580,16 @@ test('real Chrome: toolbar mode groups preserve selected text when creating note
     const quote='A selected text with inline formatting deserves its own note.',prose='<h1>Selected text notes</h1>'+[1280,390,320].map(width=>`<p id="target-${width}" style="min-height:180px">Before ${width}. A <em>selected text</em> with <strong>inline formatting</strong> deserves its own note. After ${width}.</p>`).join('');
     const frame='document.querySelector(".document-host:not([hidden]) iframe")',doc=frame+'.contentDocument',ready=`${frame}?.style.visibility==='visible'&&!document.querySelector('.tab-dirty:not([hidden])')`,metrics=[];
     const selectedTarget=`(()=>{const s=${doc}.getSelection();return s?.rangeCount?s.getRangeAt(0).startContainer.parentElement.closest('p')?.id:'';})()`,selectionAt=width=>`${doc}.getSelection().toString()===${JSON.stringify(quote)}&&${selectedTarget}===${JSON.stringify('target-'+width)}`;
+    // This is fixture preparation: the app may finish closing its fallback
+    // sidebar while the iframe becomes ready. Check and close in one turn.
+    // Native note input and every selection-preservation assertion stay below.
+    const hideAppSidebar=async()=>{
+      await page.evaluate(`(()=>{if(!document.querySelector('#sidebar').hidden)document.querySelector('#close-sidebar').click();})()`);
+      await page.waitFor('document.querySelector("#sidebar").hidden');
+    };
     const select=async(width,mode)=>{
       await page.click('#toolbar [data-action=select]');
-      if(await page.evaluate('!document.querySelector("#sidebar").hidden'))await page.click('#close-sidebar');
+      await hideAppSidebar();
       const point=await page.evaluate(`(async()=>{const f=${frame},d=f.contentDocument,e=d.querySelector(${JSON.stringify('#target-'+width+' em')});e.scrollIntoView({block:'center'});await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));const range=d.createRange();range.setStart(e.firstChild,0);range.setEnd(e.firstChild,8);const r=range.getClientRects()[0],b=f.getBoundingClientRect(),scale=b.width/f.offsetWidth;return{x:b.left+(r.left+r.width/2)*scale,y:b.top+(r.top+r.height/2)*scale};})()`);
       for(let clickCount=1;clickCount<=3;clickCount++){await page.send('Input.dispatchMouseEvent',{type:'mousePressed',...point,button:'left',clickCount});await page.send('Input.dispatchMouseEvent',{type:'mouseReleased',...point,button:'left',clickCount});}
       await page.waitFor(selectionAt(width));
@@ -599,11 +606,12 @@ test('real Chrome: toolbar mode groups preserve selected text when creating note
       await page.waitFor('document.querySelector("#dialog").open&&document.querySelector("#note-text")');assert.equal(await page.evaluate(`${doc}.getSelection().toString()`),quote);assert.equal(await page.evaluate(selectedTarget),'target-'+width);assert.equal(await page.evaluate(`${doc}.documentElement.hasAttribute('data-htmlmemo-drawing')`),false);
     };
     for(const mode of ['body','book']){
+      const expectedTitle=mode==='book'?'Selection note book':'Selection note body';
       await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});await page.send('Emulation.setTouchEmulationEnabled',{enabled:false,maxTouchPoints:1});
       const css='html,body{margin:0;font:18px/1.8 system-ui}main{padding:40px}p{max-width:650px}';
       const html=mode==='book'?editionHTML('Selection note book',[{key:'v0:one',id:'one',title:'Selected text notes',markdown:'# Selected text notes\n'+quote,html:prose},{key:'v0:two',id:'two',title:'Another chapter',markdown:'# Another chapter\nOther text.',html:'<h1>Another chapter</h1><p>Other text.</p>'}],[]).replace('<nav id="reader-nav">','<div class="layout"><nav id="reader-nav">').replace('</main>','</main></div>').replace('</style>',css+'html,body{height:100%;overflow:hidden}.layout{height:100%;display:grid;grid-template-columns:200px minmax(0,1fr)}nav,main{overflow:auto}nav{padding:12px}</style>').replace('"autoFit":false','"autoFit":true'):`<!doctype html><html lang="en"><head><title>Selection note body</title><style>${css}</style></head><body><main>${prose}</main></body></html>`;
-      await page.evaluate(`(()=>{const files=new DataTransfer();files.items.add(new File([${JSON.stringify(html)}],${JSON.stringify('selection-note-'+mode+'.html')},{type:'text/html'}));const input=document.querySelector('#file-input');input.files=files.files;input.dispatchEvent(new Event('change',{bubbles:true}));})()`);await page.waitFor(`${ready}&&${doc}.querySelector('#target-1280 em')`);
-      if(await page.evaluate('!document.querySelector("#sidebar").hidden'))await page.click('#close-sidebar');
+      await page.evaluate(`(()=>{const files=new DataTransfer();files.items.add(new File([${JSON.stringify(html)}],${JSON.stringify('selection-note-'+mode+'.html')},{type:'text/html'}));const input=document.querySelector('#file-input');input.files=files.files;input.dispatchEvent(new Event('change',{bubbles:true}));})()`);await page.waitFor(`${ready}&&${doc}.title===${JSON.stringify(expectedTitle)}&&${doc}.querySelector('#target-1280 em')`);
+      await hideAppSidebar();
       const savedState=`(async()=>{const{listDocuments,getDocument}=await import('./src/storage.js'),row=(await listDocuments()).find(r=>r.name===${JSON.stringify('selection-note-'+mode+'.html')});return row?await getDocument(row.id):null;})()`;await page.waitFor(savedState);const original=await page.evaluate(savedState);
       for(const width of [1280,390,320]){
         await page.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});await page.send('Emulation.setTouchEmulationEnabled',{enabled:width===390,maxTouchPoints:1});
