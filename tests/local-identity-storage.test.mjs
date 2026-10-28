@@ -19,7 +19,7 @@ function storage(record=original){
     });
     return tx;
   }};
-  const context=vm.createContext({connection,structuredClone,Blob,Date,IDBKeyRange:{only:id=>id}});
+  const context=vm.createContext({connection,structuredClone,Blob,crypto,Date,IDBKeyRange:{only:id=>id}});
   vm.runInContext(source+'\ndatabase=Promise.resolve(connection);',context);
   return {context,transactions,writes,get current(){return current;}};
 }

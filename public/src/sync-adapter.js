@@ -1,6 +1,6 @@
-import {listDocuments,getDocument,listRevisions,readLibrary,commitDeviceSync,syncRecordSnapshot} from './storage.js';
+import {listDocuments,getDocument,listRevisions,readLibrary,commitDeviceSync,syncRecordSnapshot,documentSource} from './storage.js';
 import {portableRecord,validateState,validateSettings,folderSettings} from './data-folder.js';
-import {localFileIdentity,sameLocalFile} from './local-files.js';
+import {localFileIdentity,localFileWithType,sameLocalFile} from './local-files.js';
 import {mergeLibraryFolders,validateFolders} from './library-folders.js';
 import {PREFERENCES_KEY,PRESET_PALETTES,normalizePreferences} from './preferences.js';
 
@@ -32,7 +32,7 @@ function oneSidedResolution(previous,record,localStamp,remoteStamp){
 async function sameStoredContent(previous,value){
   // Prove reuse with the actual prepared/raw bytes, never just a cached header.
   if(!sameLocalFile(previous.sourceIdentity,value.record.sourceIdentity))return false;
-  const body=previous.file||typeof previous.html==='string'&&new Blob([previous.html],{type:'text/html'});
+  const body=documentSource(previous);
   if(!(body instanceof Blob)||value.body&&!sameLocalFile(await localFileIdentity(body),await localFileIdentity(value.body)))return false;
   return !value.original||previous.originalFile instanceof Blob&&sameLocalFile(await localFileIdentity(previous.originalFile),await localFileIdentity(value.original));
 }
@@ -119,7 +119,7 @@ export class DeviceSyncAdapter {
     for(const header of library.documents){
       if(wanted&&!wanted.has(header.id)||excluded.has(header.id))continue;
       const doc=await this.ops.getDocument(header.id);if(!doc)throw Error('전송할 문서가 변경되었습니다. 다시 시작해주세요.');
-      const source=doc.file||new Blob([doc.html],{type:'text/html'}),record=portableRecord(doc);
+      const source=documentSource(doc),record=portableRecord(doc);
       if(!record.sourceIdentity)record.sourceIdentity=await localFileIdentity(doc.originalFile||source);
       const state=validateState({record,revisions:await this.ops.listRevisions(doc.id)},doc.id);
       const body=this.includeSources?await pack(source):null,original=this.includeSources&&doc.originalFile?await pack(doc.originalFile):null;
@@ -139,7 +139,7 @@ export class DeviceSyncAdapter {
     for(const header of library.documents){
       if(wanted&&!wanted.has(header.id)||excluded.has(header.id))continue;
       const doc=await this.ops.getDocument(header.id);if(!doc)throw Error('전송할 문서가 변경되었습니다. 다시 시작해주세요.');
-      const source=doc.file||new Blob([doc.html],{type:'text/html'}),record=portableRecord(doc);
+      const source=documentSource(doc),record=portableRecord(doc);
       if(!record.sourceIdentity)record.sourceIdentity=await localFileIdentity(doc.originalFile||source);
       const state=validateState({record,revisions:await this.ops.listRevisions(doc.id)},doc.id);
       documents.push({...state,body:this.includeSources?await add(source):null,original:this.includeSources&&doc.originalFile?await add(doc.originalFile):null,sourceType:doc.file?'file':'html'});this.check();
@@ -164,10 +164,10 @@ export class DeviceSyncAdapter {
       this.check();if(!wanted.size)break;
       if(!likely(header)&&Number.isSafeInteger(header.byteSize)&&!sizes.has(header.byteSize)&&!sizes.has(header.sourceIdentity?.size))continue;
       const doc=await this.ops.getDocument(header.id);this.check();if(!doc)continue;
-      for(const blob of [doc.file||typeof doc.html==='string'&&new Blob([doc.html],{type:'text/html'}),doc.originalFile]){
+      for(const blob of [documentSource(doc),doc.originalFile]){
         if(!(blob instanceof Blob)||!sizes.has(blob.size))continue;
         const identity=await localFileIdentity(blob);this.check();const identityKey=key(identity),matches=wanted.get(identityKey);if(!matches)continue;
-        for(const descriptor of matches)found.set(descriptor.id,blob.type===descriptor.mime?blob:blob.slice(0,blob.size,descriptor.mime));
+        for(const descriptor of matches)found.set(descriptor.id,localFileWithType(blob,descriptor.mime));
         wanted.delete(identityKey);const remaining=sizes.get(blob.size)-1;if(remaining)sizes.set(blob.size,remaining);else sizes.delete(blob.size);
       }
     }

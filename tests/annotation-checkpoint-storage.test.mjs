@@ -16,7 +16,7 @@ function fixture(){
       index:()=>({openKeyCursor:()=>request(rows.length?{primaryKey:rows.at(-1).id}:null),openCursor:()=>request(rows.length?{primaryKey:rows.at(-1).id,value:rows.at(-1)}:null)}),
     });return tx;
   }};
-  const context=vm.createContext({connection,structuredClone,Blob,Date,IDBKeyRange:{only:id=>id}});vm.runInContext(source+'\ndatabase=Promise.resolve(connection);',context);
+  const context=vm.createContext({connection,structuredClone,Blob,crypto,Date,IDBKeyRange:{only:id=>id}});vm.runInContext(source+'\ndatabase=Promise.resolve(connection);',context);
   return {api:context,control,transactions,get current(){return current;},get history(){return history;},get headers(){return headers;},remove(){current=undefined;}};
 }
 test('fast autosave persists every change without a new revision until a checkpoint',async()=>{

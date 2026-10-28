@@ -19,6 +19,12 @@ export function localFileIdentity(file) {
   }
   return pending;
 }
+/** A full immutable slice changes only MIME; its proven bytes stay identical. */
+export function localFileWithType(file,type){
+  if(file.type===type)return file;
+  const typed=file.slice(0,file.size,type),pending=localFileIdentity(file);identities.set(typed,pending);
+  pending.catch(()=>{if(identities.get(typed)===pending)identities.delete(typed);});return typed;
+}
 // Four bounded workers hide file-read/digest round trips without buffering a
 // whole book. Keep the original v1 chunk size/order for existing libraries.
 async function hashLocalFile(file) {

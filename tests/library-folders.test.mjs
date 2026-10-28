@@ -60,7 +60,7 @@ function storageFixture(){
     tx.abort=()=>{aborted=true;queueMicrotask(()=>tx.onabort?.());};
     tx.objectStore=name=>{if(!snapshot.has(name))snapshot.set(name,new Map());const map=snapshot.get(name);return {get:key=>request(map.get(key)),getAll:()=>request([...map.values()]),getKey:()=>request('retained'),put:(value,key)=>{if(control.failWrite)throw Error('Disk full');writes.push(name);map.set(key??value.id,structuredClone(value));return request(key??value.id);},index:()=>({openKeyCursor:()=>request({primaryKey:1}),openCursor:()=>request({primaryKey:1,value:map.get('book')?.metadata})})};};return tx;
   }};
-  const context=vm.createContext({connection,structuredClone,Blob,Date,IDBKeyRange:{only:id=>id}});vm.runInContext(source+'\ndatabase=Promise.resolve(connection);',context);
+  const context=vm.createContext({connection,structuredClone,Blob,crypto,Date,IDBKeyRange:{only:id=>id}});vm.runInContext(source+'\ndatabase=Promise.resolve(connection);',context);
   return {api:context,writes,transactions,control,get folders(){return stores.get('settings').get(LIBRARY_FOLDERS_KEY);},get record(){return stores.get('documents').get('book');}};
 }
 test('folder edits atomically update only metadata; stale reader autosaves cannot reverse a document move',async()=>{

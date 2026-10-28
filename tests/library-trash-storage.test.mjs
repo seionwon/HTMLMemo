@@ -31,7 +31,7 @@ function fixture(){
     };return tx;
   }};
   class Clock extends Date{static now(){return control.now;}}
-  const context=vm.createContext({connection,structuredClone,Blob,Date:Clock,IDBKeyRange:{only:id=>id},navigator:{storage:{getDirectory:async()=>({removeEntry:async name=>removed.push(name)})}}});
+  const context=vm.createContext({connection,structuredClone,Blob,crypto,Date:Clock,IDBKeyRange:{only:id=>id},navigator:{storage:{getDirectory:async()=>({removeEntry:async name=>removed.push(name)})}}});
   vm.runInContext(source+'\ndatabase=Promise.resolve(connection);this.api={listDocuments,getDocument,listRevisions,readLibrary,trashDocument,restoreDocument,deleteDocument,deleteTrashedDocuments};',context);
   return {api:context.api,control,transactions,reads,writes,removed,get stores(){return stores;},get record(){return stores.get('documents').get('book');}};
 }

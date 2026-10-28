@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readLocalHTML, droppedHTMLFiles, localFileIdentity, identifyLocalFile, sameLocalFile, findLocalDuplicates } from '../public/src/local-files.js';
+import { readLocalHTML, droppedHTMLFiles, localFileIdentity, localFileWithType, identifyLocalFile, sameLocalFile, findLocalDuplicates } from '../public/src/local-files.js';
 import { parseHTML, serializeHTML, prepareLoadedHTML } from '../public/src/document.js';
 import { documentFor, installDOM } from './dom.mjs';
 import { writeExternalHTML } from '../public/src/storage.js';
@@ -166,4 +166,12 @@ test('fresh annotations remove imported notes and bookmarks on both parsed and s
     assert.deepEqual(parseHTML(result.html,{}, {allowScripts:true}).metadata.annotations,[]);
   }
   assert.equal(html,before);assert.equal(parsed.metadata.annotations.length,1);assert.equal(parsed.metadata.bookmarks.length,1);
+});
+
+test('MIME-only copies reuse proof of the same complete immutable bytes',async()=>{
+  const raw=file('same bytes'),slice=raw.slice.bind(raw);let reads=0;
+  raw.slice=(...args)=>{const part=slice(...args),read=part.arrayBuffer.bind(part);part.arrayBuffer=()=>{reads++;return read();};return part;};
+  const expected=await localFileIdentity(raw),before=reads,typed=localFileWithType(raw,'application/octet-stream');
+  assert.equal(typed.type,'application/octet-stream');assert.equal(await typed.text(),'same bytes');assert.deepEqual(await localFileIdentity(typed),expected);assert.equal(reads,before);
+  assert.strictEqual(localFileWithType(raw,raw.type),raw);assert.equal(sameLocalFile(await localFileIdentity(file('same byteX')),expected),false);
 });

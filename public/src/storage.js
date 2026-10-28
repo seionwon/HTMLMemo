@@ -1,5 +1,27 @@
 const DB_NAME = 'HTMLMemo-v1';
 let database;
+const contentCache=new Map(),contentToken=Symbol('stored-content');
+let cachedTextBytes=0;
+function forgetContent(id){const previous=contentCache.get(id);if(previous)cachedTextBytes-=previous.textBytes;contentCache.delete(id);}
+function retainContent(id,key,content){
+  forgetContent(id);
+  const entry={key,content:Object.freeze({html:content.html,file:content.file,originalFile:content.originalFile}),textBytes:typeof content.html==='string'?content.html.length*2:0};
+  if(entry.textBytes>32*1024*1024)return entry;
+  contentCache.set(id,entry);cachedTextBytes+=entry.textBytes;
+  while(contentCache.size>512||cachedTextBytes>32*1024*1024){const first=contentCache.keys().next().value;cachedTextBytes-=contentCache.get(first).textBytes;contentCache.delete(first);}
+  return entry;
+}
+function attachContent(record,entry){
+  const value={...record,html:entry.content.html,file:entry.content.file,originalFile:entry.content.originalFile};
+  Object.defineProperty(value,contentToken,{value:entry});return value;
+}
+/** Reuse only the exact immutable content read from IndexedDB, never source metadata. */
+export function documentSource(record){
+  if(record.file instanceof Blob)return record.file;
+  const entry=record[contentToken];
+  if(entry)return entry.blob??=new Blob([entry.content.html],{type:'text/html'});
+  return new Blob([record.html],{type:'text/html'});
+}
 const storageListeners = new Set();
 let storageChannel;
 export function onStorageChange(listener) {
@@ -57,9 +79,16 @@ async function transaction(store, mode, action) {
 }
 async function withContent(record) {
   if(!record || typeof record.html === 'string')return record;
-  const content=await transaction('contents','readonly',store=>store.get(record.id));
-  if(!content)throw new Error('보관한 HTML 본문을 찾지 못했습니다.');
-  return {...record,html:content.html,file:content.file,originalFile:content.originalFile};
+  const cached=contentCache.get(record.id);
+  if(record.contentKey&&cached?.key===record.contentKey){contentCache.delete(record.id);contentCache.set(record.id,cached);return attachContent(record,cached);}
+  const connection=await db();return new Promise((resolve,reject)=>{
+    // The key is local and changes atomically with every source replacement.
+    // Existing books acquire one without reading or rewriting their bytes.
+    const tx=connection.transaction(['documents','contents'],record.contentKey?'readonly':'readwrite'),documents=tx.objectStore('documents'),header=documents.get(record.id),body=tx.objectStore('contents').get(record.id);let failure;
+    header.onsuccess=()=>{if(!record.contentKey&&header.result&&!header.result.contentKey){try{header.result.contentKey=crypto.randomUUID();documents.put(header.result);}catch(error){failure=error;tx.abort();}}};
+    tx.oncomplete=()=>{if(!header.result){resolve(undefined);return;}if(!body.result){reject(Error('보관한 HTML 본문을 찾지 못했습니다.'));return;}if(!header.result.contentKey){withContent(header.result).then(resolve,reject);return;}resolve(attachContent(header.result,retainContent(record.id,header.result.contentKey,body.result)));};
+    tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(failure||tx.error||Error('보관한 HTML 본문을 읽지 못했습니다.'));
+  });
 }
 // Library cards never load book bodies; getDocument is the explicit lazy read.
 export const listDocuments = async ({includeTrashed=false}={}) => {
@@ -159,6 +188,7 @@ export async function deleteTrashedDocuments(ids) {
     tx.oncomplete=resolve;tx.onabort=()=>reject(failure||tx.error||new Error('휴지통을 비우지 못했습니다. 기존 문서와 주석은 유지됩니다.'));tx.onerror=()=>reject(tx.error);
   });
   for(const id of selected){
+    forgetContent(id);
     try{const root=await navigator.storage.getDirectory();await root.removeEntry(id+'.html');}catch{/* Legacy OPFS copies are best-effort cleanup only. */}
     changed(id);
   }
@@ -295,6 +325,7 @@ export async function putDocumentRevision(record, {baseline = false, restoredFro
         if(restoredFrom&&old&&!sameAnnotationState(previousState,old.metadata))add(old.metadata,'edit');
         if(checkpoint&&!sameAnnotationState(previousState,state))add(state,restoredFrom?'restore':'edit');
         if(!content.result){const original=originalFile instanceof Blob?{originalFile}:{};if(file instanceof Blob)contents.add({documentId:record.id,file,...original});else{const source=old?.html ?? html;if(typeof source!=='string')throw Error('HTML 본문을 보관하지 못했습니다. 문서를 다시 열어주세요.');contents.add({documentId:record.id,html:source,...original});}}
+        value.contentKey=content.result&&old?.contentKey||crypto.randomUUID();
         documents.put(value);
       } catch(error){failure=error;tx.abort();}
     };
@@ -327,7 +358,7 @@ export async function restoreFolderDocuments(entries, folders = null, expectedFo
     const tx=connection.transaction(['documents','contents','revisions','revisionHeaders',...(folders===null?[]:['settings'])],'readwrite');let failure;
     const apply=()=>{try {
       for(const {record,content,revisions} of entries){
-        tx.objectStore('documents').add({...record,historyVersion:revisions.length});
+        tx.objectStore('documents').add({...record,contentKey:crypto.randomUUID(),historyVersion:revisions.length});
         tx.objectStore('contents').add({documentId:record.id,...content});
         for(const revision of revisions){const {id:oldId,...value}=revision;addRevision(tx,{...value,documentId:record.id});}
       }
@@ -346,35 +377,36 @@ export async function restoreFolderDocuments(entries, folders = null, expectedFo
 /** Optimistic, atomic device import. Incoming entries are validated before opening the transaction.
  * No file handle, root folder name or filesystem permission can enter this path.
  */
-export const syncRecordSnapshot = record => record ? JSON.stringify({id:record.id,title:record.title,name:record.name,modified:record.modified,metadata:record.metadata,folderId:record.folderId||'',trashedAt:record.trashedAt,historyVersion:record.historyVersion,sourceIdentity:record.sourceIdentity,syncEpoch:record.syncEpoch}) : null;
+export const syncRecordSnapshot = record => record ? JSON.stringify({id:record.id,title:record.title,name:record.name,modified:record.modified,metadata:record.metadata,folderId:record.folderId||'',trashedAt:record.trashedAt,historyVersion:record.historyVersion,sourceIdentity:record.sourceIdentity,syncEpoch:record.syncEpoch,contentKey:record.contentKey}) : null;
 export async function commitDeviceSync(entries, folders, expectedFolders) {
   const foldersChanged=JSON.stringify(folders)!==JSON.stringify(expectedFolders);
   if(!entries.length&&!foldersChanged)return;
   if(entries.some(entry=>entry.content===null&&entry.expected===null))throw Error('새 문서에는 원본 파일이 필요합니다.');
   const connection=await db();
   await new Promise((resolve,reject)=>{
-    const tx=connection.transaction(['documents','contents','revisions','revisionHeaders','settings'],'readwrite');let failure,pending=entries.length+1;
+    const tx=connection.transaction(['documents','contents','revisions','revisionHeaders','settings'],'readwrite');let failure,pending=entries.length+1;const previousRecords=new Map(),retained=[];
     const fail=error=>{failure=error;tx.abort();};
     const apply=()=>{if(--pending)return;try{
       for(const entry of entries){
-        const {content,revisions,expected}=entry;const record={...entry.record,syncEpoch:crypto.randomUUID()};
+        const {content,revisions,expected}=entry,previous=previousRecords.get(entry.record.id);const record={...entry.record,syncEpoch:crypto.randomUUID(),contentKey:content===null&&previous?.contentKey||crypto.randomUUID()};
         const documents=tx.objectStore('documents');
         if(expected===null)documents.add({...record,historyVersion:revisions.length});
         else documents.put({...record,historyVersion:(entry.previousHistoryVersion||0)+revisions.length});
-        if(content!==null)tx.objectStore('contents').put({documentId:record.id,...content});
+        if(content!==null){tx.objectStore('contents').put({documentId:record.id,...content});retained.push({id:record.id,key:record.contentKey,content});}
         for(const revision of revisions){const {id:oldId,documentId:oldDocumentId,...value}=revision;addRevision(tx,{...value,documentId:record.id});}
       }
       if(foldersChanged)tx.objectStore('settings').put(folders,'library-folders-v1');
     }catch(error){fail(error);}};
     for(const entry of entries){const request=tx.objectStore('documents').get(entry.record.id);request.onsuccess=()=>{
       if(syncRecordSnapshot(request.result)!==entry.expected)return fail(Error('동기화 중 다른 창에서 문서가 바뀌었습니다. 기존 내용은 유지했습니다. 다시 시도해주세요.'));
+      previousRecords.set(entry.record.id,request.result);
       apply();
     };}
     const current=tx.objectStore('settings').get('library-folders-v1');current.onsuccess=()=>{
       if(JSON.stringify(current.result||[])!==JSON.stringify(expectedFolders))return fail(Error('동기화 중 폴더가 바뀌었습니다. 다시 시도해주세요.'));
       apply();
     };
-    tx.oncomplete=resolve;tx.onerror=()=>reject(failure||tx.error||Error('동기화 데이터를 저장하지 못했습니다.'));tx.onabort=()=>reject(failure||tx.error||Error('받은 데이터를 저장하지 못했습니다. 기존 데이터는 유지됩니다.'));
+    tx.oncomplete=()=>{for(const value of retained)retainContent(value.id,value.key,value.content);resolve();};tx.onerror=()=>reject(failure||tx.error||Error('동기화 데이터를 저장하지 못했습니다.'));tx.onabort=()=>reject(failure||tx.error||Error('받은 데이터를 저장하지 못했습니다. 기존 데이터는 유지됩니다.'));
   });
   for(const entry of entries)changed(entry.record.id);if(foldersChanged)changed(null);
 }
