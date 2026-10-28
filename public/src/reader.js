@@ -1419,6 +1419,12 @@ export class Reader {
     this.preview?.remove();this.preview=null;
     try{gesture?.target?.releasePointerCapture?.(gesture.pointerId);}catch{/* A cancelled pointer may already have released capture. */}
   }
+  touchScrollPoints(touches) {
+    // In a static reader, scrolling its parent also moves the iframe beneath
+    // the fingers. Include that offset so our own scroll cannot cancel the next delta.
+    const bounds=this.frame?.getBoundingClientRect?.(),scale=this.zoom||1;
+    return touches.map(t=>({id:t.identifier,x:t.clientX+(bounds?.left||0)/scale,y:t.clientY+(bounds?.top||0)/scale}));
+  }
   startTouchScroll(event) {
     if(event.touches.length<2&&!this.touchScroll)return;
     this.touchErase=null;
@@ -1432,7 +1438,7 @@ export class Reader {
       this.callbacks.onSelectionDismiss?.();
     }
     const touches=[...event.touches].slice(0,2);
-    this.touchScroll.points=touches.length===2?touches.map(t=>({id:t.identifier,x:t.clientX,y:t.clientY})):null;
+    this.touchScroll.points=touches.length===2?this.touchScrollPoints(touches):null;
     this.suppressAnnotationClick=performance.now()+500;
     if(this.touchScroll.manual&&event.cancelable)event.preventDefault();
   }
@@ -1442,11 +1448,12 @@ export class Reader {
       if(event.cancelable)event.preventDefault();
       event.stopPropagation();
       const previous=state.points,touches=[...event.touches];
-      const next=previous?.map(p=>touches.find(t=>t.identifier===p.id));
-      if(next?.every(Boolean)){
-        const left=previous.reduce((sum,p,i)=>sum+p.x-next[i].clientX,0)/2,top=previous.reduce((sum,p,i)=>sum+p.y-next[i].clientY,0)/2;
+      const matching=previous?.map(p=>touches.find(t=>t.identifier===p.id));
+      if(matching?.every(Boolean)){
+        const next=this.touchScrollPoints(matching);
+        const left=previous.reduce((sum,p,i)=>sum+p.x-next[i].x,0)/2,top=previous.reduce((sum,p,i)=>sum+p.y-next[i].y,0)/2;
         this.scrollDocumentBy(state.target,left,top,{touch:true});
-        state.points=next.map(t=>({id:t.identifier,x:t.clientX,y:t.clientY}));
+        state.points=next;
       }
     }
     this.suppressAnnotationClick=performance.now()+500;

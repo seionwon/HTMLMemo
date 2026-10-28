@@ -62,6 +62,14 @@ test('two-finger scrolling uses a native inner panel and chains at its end',()=>
   r.moveTouchScroll(touches(r,[touch(1,30,160),touch(2,80,160)],panel));assert.deepEqual(panel.moves,[[{left:0,top:40,behavior:'instant'}]]);
   panel.scrollTop=600;r.moveTouchScroll(touches(r,[touch(1,30,140),touch(2,80,140)],panel));assert.deepEqual(root.moves,[[{left:0,top:20,behavior:'instant'}]]);
 });
+test('scrolling the outer viewport does not reduce the next touch delta as its iframe moves',()=>{
+  const {reader:r,viewport}=scrollingReader();let frameTop=80;
+  Object.assign(r,{tool:'pen',zoom:2,callbacks:{},frame:{getBoundingClientRect:()=>({left:0,top:frameTop})}});
+  r.startTouchScroll(touches(r,[touch(1,20,100),touch(2,80,100)]));
+  r.moveTouchScroll(touches(r,[touch(1,20,90),touch(2,80,90)]));frameTop=60;
+  r.moveTouchScroll(touches(r,[touch(1,20,90),touch(2,80,90)]));
+  assert.deepEqual(viewport.moves,[[{left:0,top:20,behavior:'instant'}],[{left:0,top:20,behavior:'instant'}]]);
+});
 test('ordinary native touch selection and pinch retain browser handling',()=>{
   const {reader:r,root}=scrollingReader(true);Object.assign(r,{tool:'select',callbacks:{}});
   const one=touches(r,[touch(1,20,100)]);r.startTouchScroll(one);assert.equal(r.touchScroll,undefined);assert.equal(one.prevented,false);

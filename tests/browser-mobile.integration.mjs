@@ -53,6 +53,8 @@ test('real Chrome: Pages-only two-finger scrolling cancels ink and annotation dr
         const parsed=parseHTML(html,{viewport:{width:390,height:844}},{allowScripts:mode!=='static'});await putDocumentRevision({id:${JSON.stringify(id)},title:parsed.metadata.title,name:${JSON.stringify(id+'.html')},kind:'import',html:parsed.html,nativeScroll:parsed.nativeScroll,metadata:parsed.metadata});document.querySelector('#library-tab').click();
       })()`);
       await page.waitFor('document.querySelector("[data-open='+id+']")');await page.click('[data-open='+id+']');await page.waitFor(settled);
+      if(await page.evaluate('!document.querySelector("#sidebar").hidden'))await page.click('#close-sidebar');
+      assert.equal(await page.evaluate(`${viewport}.classList.contains('reader-native-scroll')`),mode!=='static');
       await tool('pen');await reset();let p=await point();
       // A normal single-finger stroke still creates one mark.
       await send('touchStart',[p]);await send('touchMove',[{x:p.x+28,y:p.y+5}]);await send('touchEnd');
