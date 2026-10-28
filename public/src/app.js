@@ -10,6 +10,7 @@ import { normalizePreferences, loadPreferences, storePreferences, serializeSetti
 import {bundledExample} from './distribution.js';
 import { InstallController, isIOS, installableLocation, installationURL, PUBLIC_APP_URL } from './install.js';
 import { APP_VERSION } from './version.js';
+import {UpdateController} from './updates.js';
 import { openDeviceSync } from './sync-ui.js';
 import {openHelp} from './help.js';
 import { DataFolder, supportsDataFolder, CHROME_REQUIRED_MESSAGE, createStorageSubfolder, storageFolderName } from './data-folder.js';
@@ -26,6 +27,7 @@ let dataFolder, browserStorageProtection;
 const FOLDER_WELCOME_KEY='htmlmemo-data-folder-welcome-v1';
 let folderSetupPending=false,folderSetupBusy=false,lastSetupAttempt=null;const folderSetupWaiters=[];
 let sharingApp=false, installController;
+let updateController,showPendingUpdate;
 let readerFocused=false, nativeReaderFullscreen=false, focusBusy=false;
 let tabLayout='';
 let localImportQueue=Promise.resolve();
@@ -53,6 +55,34 @@ function annotationExportGuide() {
 function aboutDialog() {
   modal(`<div class="dialog-heading"><h2>About</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div>${$('#about-content').innerHTML}<div class="dialog-actions"><button class="primary-button" data-dialog-close>확인</button></div>`,()=>{$('#app-version').textContent=APP_VERSION;});
   $('#dialog [data-dialog-close]').focus();
+}
+function offerAppUpdate(info){
+  return new Promise(resolve=>{
+    const dialog=$('#app-update-dialog'),other=$('#dialog');let answered=false,shown=false;
+    const finish=choice=>{if(answered)return;answered=true;resolve(choice);};
+    const show=()=>{
+      if(shown||other.open||folderSetupBusy)return;
+      shown=true;showPendingUpdate=null;other.removeEventListener('close',show);
+      $('#app-update-version').textContent=info.version===info.currentVersion?'새 업데이트를 적용할 수 있습니다.':`${info.currentVersion} → ${info.version}`;
+      $('#app-update-status').textContent='설치하면 저장을 마친 뒤 앱을 다시 엽니다. 취소하면 기존 버전을 유지하고 다음 실행 때 다시 확인합니다.';
+      dialog.onclose=()=>{updateController.cancel();finish(false);};
+      $('#app-update-cancel').onclick=()=>dialog.close();$('#app-update-close').onclick=()=>dialog.close();
+      $('#app-update-install').onclick=()=>{if(!answered)finish(true);else void updateController.install();};
+      dialog.showModal();$('#app-update-install').focus();
+    };
+    showPendingUpdate=show;other.addEventListener('close',show);show();
+  });
+}
+function appUpdateState(state,error){
+  document.documentElement.dataset.appUpdate=state;
+  const dialog=$('#app-update-dialog'),busy=['saving','applying','reloading'].includes(state),committing=['applying','reloading'].includes(state);
+  $('#app').inert=committing;$('#folder-setup-paused').inert=committing;
+  $('#app-update-install').disabled=busy;$('#app-update-cancel').disabled=committing;$('#app-update-close').disabled=committing;
+  $('#app-update-install').textContent=busy?'설치 중…':'설치';
+  if(!dialog.open)return;
+  if(state==='saving')$('#app-update-status').textContent='문서·주석·설정을 저장하는 중입니다…';
+  else if(committing)$('#app-update-status').textContent='새 버전을 적용하고 앱을 다시 여는 중입니다…';
+  else if(state==='error')$('#app-update-status').textContent='업데이트하지 못했습니다. 기존 버전과 자료는 유지됩니다. '+(error?.message||'다시 시도해주세요.');
 }
 function installGuide(kind) {
   const heading=kind==='installed'?'설치된 HTMLMemo입니다.':'HTMLMemo 앱 설치';
@@ -594,7 +624,7 @@ function bindFolderConnection(onConnected) {
       if(error?.name==='AbortError')status.textContent=usePrevious?'폴더 연결 확인을 취소했습니다. 기존 폴더로 계속을 눌러 다시 확인해주세요.':folderSetupPending?'폴더 선택을 취소했습니다. 저장 폴더를 설정해야 앱을 사용할 수 있습니다. 다시 선택해주세요.':'폴더 연결은 변경하지 않았습니다. 연결하려면 전용 하위 폴더를 선택하세요.';
       else if(['NotAllowedError','SecurityError'].includes(error?.name))status.textContent=usePrevious?'기존 저장 폴더의 쓰기를 허용해야 계속할 수 있습니다. 기존 폴더로 계속을 눌러 다시 허용해주세요.':'브라우저가 폴더 연결을 허용하지 않았습니다. 문서/HTMLMemo 같은 전용 하위 폴더를 선택하고 쓰기를 허용하세요.';
       else status.textContent='폴더에 저장하지 못했습니다. 기존 문서는 유지됩니다. '+(error?.message||String(error));
-    }finally{for(const control of [button,create,resume,name])if(control)control.disabled=false;if(setup){folderSetupBusy=false;const retry=$('#folder-setup-resume');retry.disabled=false;retry.textContent='저장 폴더 연결';if(document.documentElement.dataset.storageSetup==='paused')retry.focus();}}
+    }finally{for(const control of [button,create,resume,name])if(control)control.disabled=false;if(setup){folderSetupBusy=false;const retry=$('#folder-setup-resume');retry.disabled=false;retry.textContent='저장 폴더 연결';if(document.documentElement.dataset.storageSetup==='paused')retry.focus();showPendingUpdate?.();}}
   };
   button.onclick=safely(()=>connect());if(create)create.onclick=safely(()=>connect(false,true));if($('#resume-data-folder'))$('#resume-data-folder').onclick=safely(()=>connect(true));
 }
@@ -622,6 +652,7 @@ function duplicateImportDialog(local, matches) {
   }));
 }
 function openLocalFile(input,parentId=libraryFolderId) {
+  if(['saving','applying','reloading'].includes(document.documentElement.dataset.appUpdate))return Promise.resolve(null);
   if(folderSetupPending&&document.documentElement.dataset.storageSetup==='paused')return Promise.resolve(null);
   if(folderSetupPending&&$('#dialog').open&&$('[data-folder-welcome]'))return new Promise(resolve=>folderSetupWaiters.push(resolve)).then(connected=>connected?openLocalFile(input,parentId):null);
   // File picker, input, drop and launch events share one queue. Concurrent
@@ -1458,6 +1489,7 @@ function documentMenu(record) {
   const location=document.createElement('p');location.className='dialog-description small';location.textContent='위치: '+libraryPathLabel(record.folderId||'');actions.before(location);
 }
 function handleKey(event) {
+  if($('#app-update-dialog').open)return;
   if(folderSetupPending&&($('#dialog').open&&$('[data-folder-welcome]')||document.documentElement.dataset.storageSetup==='paused'))return;
   const isField=/^(INPUT|TEXTAREA|SELECT)$/.test(event.target?.tagName)||event.target?.isContentEditable;
   if(event.key==='Escape'&&reader()?.cancelAnnotationDrag?.()){event.preventDefault();return;}
@@ -1512,6 +1544,7 @@ function bindUI() {
   [['#web-help-button','info','웹페이지 가져오기 안내'],['#address-open','external'],['#save-page','save'],['#library-search-icon','search'],['#empty-icon','file'],['#library-card-view','grid','카드'],['#library-list-view','list','목록']].forEach(([id,name,label])=>setButton(id,name,label));
   setIconButton('#library-tab','library','내 서재');
   setIconButton('#settings-button','settings','설정');bindTabs();
+  setIconButton('#app-update-close','close','업데이트 취소');
   $('#execution-export-guide').innerHTML=annotationExportGuide();
   $('#data-folder-status').onclick=()=>chooseFolder();
   $('#folder-setup-resume').onclick=resumeFolderSetup;
@@ -1574,6 +1607,7 @@ async function initialize() {
   if(folder){try{await dataFolder.connect(folder,{resume:true});await refreshLibrary();}catch(error){renderFolderState();if(!['NotAllowedError','SecurityError'].includes(error?.name))showError(error);}}
   if(needsFolderWelcome())folderWelcomeDialog();else document.documentElement.dataset.storageSetup='ready';
   if(typeof window.launchQueue?.setConsumer==='function')window.launchQueue.setConsumer(safely(async params=>{if(folderSetupPending&&(document.documentElement.dataset.storageSetup==='paused'||!await new Promise(resolve=>folderSetupWaiters.push(resolve))))return;const parentId=libraryFolderId;for(const handle of params.files||[])await openLocalFile(handle,parentId);}));
-  if(installableLocation(location)&&'serviceWorker'in navigator)await navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'}).then(reg=>reg?.update?.().catch(()=>{})).catch(()=>toast('오프라인 준비를 완료하지 못했습니다. 다음 접속에서 다시 준비합니다.',true));
+  updateController=new UpdateController({navigator,location,onOffer:offerAppUpdate,onState:appUpdateState,beforeUpdate:async()=>{if(folderSetupBusy)throw Error('진행 중인 폴더 연결을 마친 뒤 다시 시도해주세요.');await flushInternalDocuments();await dataFolder.flush();},reload:()=>location.reload()});
+  await updateController.start();
 }
 initialize().catch(error=>{$('#status-left').textContent='서재를 준비하지 못했습니다.';showError(error);});

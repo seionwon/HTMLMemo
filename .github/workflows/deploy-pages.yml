@@ -29,7 +29,7 @@ jobs:
       - run: npm run check
       - run: mkdir -p test-results
       - name: Verify source navigation, library trash and folder startup before the full Chrome suite
-        run: node --test --test-concurrency=1 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/browser-results.xml --test-name-pattern='Pages-only body links and previous-next|Pages-only first-run folder welcome|Pages-only script-driven TOC|Pages-only library trash|native sidebar view choices are visible|sidebar view choices preserve search drafts|Android saved folder' tests/browser.integration.mjs tests/browser-library-folders.integration.mjs tests/browser-mobile.integration.mjs
+        run: node --test --test-concurrency=1 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/browser-results.xml --test-name-pattern='Pages-only body links and previous-next|Pages-only first-run folder welcome|Pages-only script-driven TOC|Pages-only library trash|native sidebar view choices are visible|sidebar view choices preserve search drafts|Android saved folder|PWA startup updates' tests/browser.integration.mjs tests/browser-library-folders.integration.mjs tests/browser-mobile.integration.mjs tests/browser-updates.integration.mjs
       - run: npm run test:browser
       - name: Keep structured Chrome results and fixture screenshots
         if: always()
@@ -50,6 +50,7 @@ jobs:
             test-results/sidebar-views-collapse-*.json
             test-results/toolbar-modes-selection-note-*.json
             test-results/pages-only-*.json
+            test-results/pwa-startup-*.json
             test-results/*.png
           if-no-files-found: ignore
       - run: npm run build
@@ -84,7 +85,7 @@ jobs:
         run: |
           node --input-type=module <<'NODE'
           import {readFile} from 'node:fs/promises';
-          const files=['index.html','src/app.js','src/help.js','src/help-content.js','src/utils.js','src/preferences.js','src/web.js','src/reader.js','src/isolated-runtime.js','src/read-aloud.js','src/search-index.js','src/model.js','src/document.js','src/local-files.js','src/mhtml.js','src/storage.js','src/data-folder.js','src/library-folders.js','src/folder-tree.js','manifest.webmanifest','styles.css','src/sync-service.js','src/sync-crypto.js','src/sync-adapter.js','src/sync-ui.js','src/sync-device-service.js','src/sync-peer.js','src/sync-stream.js','src/sync-temp.js','src/sync-qr.js','vendor/html5-qrcode.min.js','vendor/html5-qrcode-LICENSE.txt','vendor/qrcodegen-LICENSE.txt'];
+          const files=['index.html','src/app.js','src/updates.js','src/help.js','src/help-content.js','src/utils.js','src/preferences.js','src/web.js','src/reader.js','src/isolated-runtime.js','src/read-aloud.js','src/search-index.js','src/model.js','src/document.js','src/local-files.js','src/mhtml.js','src/storage.js','src/data-folder.js','src/library-folders.js','src/folder-tree.js','manifest.webmanifest','styles.css','src/sync-service.js','src/sync-crypto.js','src/sync-adapter.js','src/sync-ui.js','src/sync-device-service.js','src/sync-peer.js','src/sync-stream.js','src/sync-temp.js','src/sync-qr.js','vendor/html5-qrcode.min.js','vendor/html5-qrcode-LICENSE.txt','vendor/qrcodegen-LICENSE.txt'];
           const expected=await Promise.all(files.map(file=>readFile('public/'+file,'utf8')));
           let matched=false;
           for(let attempt=0;attempt<30;attempt++){
@@ -101,7 +102,7 @@ jobs:
           console.log('Published app, reader and model match this commit.');
           NODE
           mkdir -p test-results
-          node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/published-browser-results.xml --test-name-pattern='MHTML import|compact library|folder setup|whole-book search|long-document search|duplicate HTML import|reading controls|palette controls|toolbar mode groups|sidebar view choices|annotation tree|font-scaled pen|Pages-only|Chrome companion|adaptive file tabs|TTS paused resume|TTS transport controls|TTS selection|device sync entry' tests/browser.integration.mjs tests/browser-library-folders.integration.mjs tests/browser-annotation-jump.integration.mjs tests/browser-security.integration.mjs tests/browser-annotation-picking.integration.mjs tests/browser-device-sync.integration.mjs tests/browser-mobile.integration.mjs tests/browser-help.integration.mjs
+          node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/published-browser-results.xml --test-name-pattern='MHTML import|compact library|folder setup|whole-book search|long-document search|duplicate HTML import|reading controls|palette controls|toolbar mode groups|sidebar view choices|annotation tree|font-scaled pen|Pages-only|Chrome companion|adaptive file tabs|TTS paused resume|TTS transport controls|TTS selection|device sync entry' tests/browser.integration.mjs tests/browser-library-folders.integration.mjs tests/browser-annotation-jump.integration.mjs tests/browser-security.integration.mjs tests/browser-annotation-picking.integration.mjs tests/browser-device-sync.integration.mjs tests/browser-mobile.integration.mjs tests/browser-help.integration.mjs tests/browser-updates.integration.mjs
       - name: Keep published desktop and mobile verification screenshots
         if: always()
         uses: actions/upload-artifact@v4
