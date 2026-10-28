@@ -40,12 +40,12 @@ export class DeviceSyncService extends SyncService{
     this.peer=new DirectSyncConnection({signal:message=>this.sendSignal(message),onOpen:()=>{
       this.clearWaiting();this.setStatus('connected','상대 기기의 응답을 확인했습니다. 파일 전송 연결이 준비됐습니다.');if(this.isHost)void this.syncDirectData();
     },onMessage:data=>this.stream.receive(data),onError:error=>void this.fail(error)});
-    this.stream=new SyncStream({send:data=>this.peer.send(data),onManifest:manifest=>this.options.adapter.prepareSettings?.(manifest),findFiles:typeof this.options.adapter.findReusableStreamFiles==='function'?manifest=>this.options.adapter.findReusableStreamFiles(manifest):null,onProgress:progress=>this.options.onProgress?.(progress),onBundle:async(bundle)=>{
+    this.stream=new SyncStream({send:data=>this.peer.send(data),onManifest:manifest=>this.options.adapter.prepareSettings?.(manifest),findFiles:typeof this.options.adapter.findReusableStreamFiles==='function'?manifest=>this.options.adapter.findReusableStreamFiles(manifest):null,onProgress:progress=>this.options.onProgress?.(progress),onBundle:async(bundle,{partial})=>{
       this.setStatus('merging','받은 파일을 검증하고 문서·주석을 저장하는 중…');this.updateSyncInfoMeta(bundle.manifest,!this.isHost&&!!this.remotePartial);
-      const exclude=await this.options.adapter.mergeStreamBundle(bundle,this.options.onConflict);this.mergedExcludeIds=Array.isArray(exclude)?exclude:[];this.hasReceivedData=true;return exclude;
-    },onCommitted:({partial,confirmed})=>{
+      const exclude=await this.options.adapter.mergeStreamBundle(bundle,this.options.onConflict);this.mergedExcludeIds=Array.isArray(exclude)?exclude:[];this.hasReceivedData=true;this.receivedPartial=partial;return {replyRequired:!!this.options.adapter.annotationReplyIds?.().length};
+    },onCommitted:({partial,confirmed,replyRequired})=>{
       if(this.isDestroyed)return;
-      if(this.isHost||partial)void this.confirmCompletion({direct:confirmed});else if(!this.hasSentInitialSync)void this.syncDirectData();
+      if(this.isHost||partial&&!replyRequired)void this.confirmCompletion({direct:confirmed});else if(!this.hasSentInitialSync)void this.syncDirectData();
     }});
   }
   async syncDirectData(){
@@ -53,10 +53,12 @@ export class DeviceSyncService extends SyncService{
     this.isSyncing=true;this.hasSentInitialSync=true;
     try{
       this.setStatus('syncing','원본 파일과 주석·이력을 검사하고 전송 목록을 준비하는 중…');
-      const ids=await this.options.adapter.getSyncTargetIds(this.options.initialDataLogId),bundle=await this.options.adapter.getStreamBundle(ids,this.mergedExcludeIds);
+      const ids=!this.isHost&&this.receivedPartial?this.options.adapter.annotationReplyIds():await this.options.adapter.getSyncTargetIds(this.options.initialDataLogId);
+      if(Array.isArray(ids)&&!ids.length)throw Error('선택한 주석을 돌려보낼 문서가 없습니다. 다시 연결해주세요.');
+      const bundle=await this.options.adapter.getStreamBundle(ids,this.mergedExcludeIds);
       if(this.isDestroyed)return;this.setStatus('syncing','기기 간 암호화 연결로 파일을 나누어 전송하는 중…');
       const result=await this.stream.sendBundle(bundle,{partial:!!ids});
-      if(result?.committed&&(ids||!this.isHost&&this.hasReceivedData)){await this.confirmCompletion({direct:true});return;}
+      if(result?.committed&&!result.replyRequired&&(ids||!this.isHost&&this.hasReceivedData)){await this.confirmCompletion({direct:true});return;}
       if(!this.isDestroyed&&!this.finished)this.setStatus('syncing',this.isHost?'원본 전송을 마쳤습니다. 상대 기기의 저장·응답을 기다리는 중…':'이 기기의 변경을 보냈습니다. 상대 기기의 저장 확인을 기다리는 중…');
     }catch(error){if(!this.isDestroyed)await this.fail(error);}finally{this.isSyncing=false;}
   }

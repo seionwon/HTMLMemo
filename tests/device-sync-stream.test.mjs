@@ -81,6 +81,20 @@ test('the final acknowledgement and completed progress wait for the receiver dat
   release();assert.equal((await sending).committed,true);await p.settle();assert.equal(p.sentProgress.at(-1).complete,true);assert.equal(p.committed[0].confirmed,true);
  }finally{release();p.close();}
 });
+test('a partial transfer acknowledges a required annotation reply before completing both devices',async()=>{
+ const p=pair({onBundle:async()=>({replyRequired:true})});
+ try{const result=await p.left.sendBundle(await bundle(2000),{partial:true});await p.settle();assert.equal(result.committed,true);assert.equal(result.replyRequired,true);assert.equal(p.committed[0].partial,true);assert.equal(p.committed[0].replyRequired,true);}finally{p.close();}
+});
+test('the sender waits for a chosen partial reply and the receiver sends only those document IDs',async()=>{
+ for(const replyRequired of [true,false]){
+  let completed=0;const service=new DeviceSyncService({adapter:{getSyncTargetIds:async()=>['selected'],getStreamBundle:async ids=>{assert.deepEqual(ids,['selected']);return {}; }},onStatusChange:()=>{},onDataReceived:()=>{}});
+  service.isHost=true;service.stream={sendBundle:async()=>({committed:true,replyRequired}),destroy(){}};service.confirmCompletion=async()=>{completed++;};
+  try{await service.syncDirectData();assert.equal(completed,replyRequired?0:1);}finally{service.destroy();}
+ }
+ let completed=0;const service=new DeviceSyncService({adapter:{annotationReplyIds:()=>['chosen'],getSyncTargetIds:()=>assert.fail('A selected reply must not send the whole library'),getStreamBundle:async ids=>{assert.deepEqual(ids,['chosen']);return {}; }},onStatusChange:()=>{},onDataReceived:()=>{}});
+ service.isHost=false;service.receivedPartial=true;service.hasReceivedData=true;service.stream={sendBundle:async(_bundle,options)=>{assert.equal(options.partial,true);return {committed:true};},destroy(){}};service.confirmCompletion=async()=>{completed++;};
+ try{await service.syncDirectData();assert.equal(completed,1);}finally{service.destroy();}
+});
 test('closing while matching local files never commits a partial synchronization',async()=>{
  let announce,release;const started=new Promise(resolve=>announce=resolve),ready=new Promise(resolve=>release=resolve);let writes=0;
  const p=pair({findFiles:async()=>{announce();await ready;return new Map();},onBundle:async()=>writes++});

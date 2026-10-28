@@ -20,8 +20,30 @@ async function unpack(body){
 }
 const contentOf=record=>record.file?{file:record.file,...(record.originalFile?{originalFile:record.originalFile}:{})}:{html:record.html,...(record.originalFile?{originalFile:record.originalFile}:{})};
 const validStamp=value=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value);
-// A linked, identical original can advance automatically only when one peer
-// still matches an advertised common version. Different bases remain a choice.
+const stableJSON=value=>JSON.stringify(value,(_key,item)=>item&&typeof item==='object'&&!Array.isArray(item)?Object.fromEntries(Object.keys(item).sort().map(key=>[key,item[key]])):item);
+const markState=record=>({annotations:record.metadata.annotations,bookmarks:record.metadata.bookmarks});
+const sameMarks=(a,b)=>stableJSON(markState(a))===stableJSON(markState(b));
+const markContent=item=>{const {id,...content}=item;return stableJSON(content);};
+const containsMarks=(result,original)=>['annotations','bookmarks'].every(key=>{const known=new Set(result.metadata[key].map(markContent));return original.metadata[key].every(item=>known.has(markContent(item)));});
+function mergeMarks(local,remote){
+  const merge=(a,b)=>{
+    const result=[],known=new Set(),ids=new Set();
+    for(const item of [...a,...b]){
+      const key=markContent(item);if(known.has(key))continue;
+      const copy=structuredClone(item);if(ids.has(copy.id))do{copy.id=crypto.randomUUID();}while(ids.has(copy.id));
+      known.add(key);ids.add(copy.id);result.push(copy);
+    }
+    return result;
+  };
+  return {annotations:merge(local.metadata.annotations,remote.metadata.annotations),bookmarks:merge(local.metadata.bookmarks,remote.metadata.bookmarks)};
+}
+function validateChoiceEnvelope(value){
+  if(value.choiceToken!==undefined&&!idOK(value.choiceToken))throw Error('주석 선택 확인 정보가 손상되었습니다.');
+  const decision=value.annotationDecision;
+  if(decision!==undefined&&(!decision||typeof decision!=='object'||!idOK(decision.target)||!idOK(decision.token)||!['merge','local'].includes(decision.choice)))throw Error('주석 선택 결과가 올바르지 않습니다.');
+}
+// Non-annotation changes can advance from a common version. Annotation
+// differences instead require the explicit four-way choice below.
 function oneSidedResolution(previous,record,localStamp,remoteStamp){
   if(previous.id!==record.id||!sameLocalFile(previous.sourceIdentity,record.sourceIdentity))return null;
   const localBase=previous.syncSourceId===record.id&&validStamp(previous.syncFingerprint)?previous.syncFingerprint:null;
@@ -79,7 +101,7 @@ export function validateStreamManifest(data){
   }
   const ids=new Set(),used=new Set();
   for(const value of data.documents){
-    if(!idOK(value?.record?.id)||ids.has(value.record.id)||!['html','file'].includes(value.sourceType))throw Error('받은 문서 목록이 손상되었습니다.');ids.add(value.record.id);validateState(value,value.record.id);
+    if(!idOK(value?.record?.id)||ids.has(value.record.id)||!['html','file'].includes(value.sourceType))throw Error('받은 문서 목록이 손상되었습니다.');ids.add(value.record.id);validateState(value,value.record.id);validateChoiceEnvelope(value);
     if(value.record.folderId&&!data.folders.some(f=>f.id===value.record.folderId))throw Error('받은 문서의 상대 폴더가 없습니다.');
     for(const ref of [value.body,value.original])if(ref!==null){if(!files.has(ref))throw Error('문서가 참조하는 원본 파일이 없습니다.');used.add(ref);}
   }
@@ -92,6 +114,16 @@ export class DeviceSyncAdapter {
     this.storage=storage;this.includeSources=includeSources;this.includeSettings=includeSettings;this.isHost=isHost;this.isActive=isActive;this.afterCommit=afterCommit;
     this.ops={listDocuments,getDocument,listRevisions,readLibrary,commitDeviceSync,...operations};
     this.resolveSettings=resolveSettings;this.onStage=onStage;this.settingsSelection=undefined;this.sentSettings=null;this.settingsPlans=new WeakMap();
+    this.sentChoices=new Map();this.annotationReplies=new Map();
+  }
+  annotationReplyIds(){return [...this.annotationReplies.keys()];}
+  // Session-only receipts let the sender apply the peer choice once, after
+  // checking that its previously sent version has not changed.
+  async outgoingState(state){
+    const stamp=await fingerprint(state.record),reply=this.annotationReplies.get(state.record.id);
+    if(reply&&reply.stamp!==stamp)throw Error('선택 후 이 기기의 문서가 바뀌었습니다. 새 내용을 보존하고 동기화를 멈췄습니다. 다시 연결해주세요.');
+    const choiceToken=crypto.randomUUID();this.sentChoices.set(choiceToken,{id:state.record.id,stamp});
+    return {...state,choiceToken,...(reply?{annotationDecision:reply.decision}:{})};
   }
   settingsPayload(ids){
     const settings=!ids&&this.includeSettings&&this.settingsSelection!==null?(this.settingsSelection||syncSettingsSnapshot(this.storage)):null;
@@ -116,7 +148,7 @@ export class DeviceSyncAdapter {
   async analyzeSyncData(initial){const ids=await this.getSyncTargetIds(initial),docs=(await this.ops.listDocuments({includeTrashed:false})).filter(syncEligible),targets=ids?docs.filter(d=>ids.includes(d.id)):docs;return {type:ids?'single':'full',count:targets.length,label:ids?targets[0]?.title:'서재 전체'};}
   async getSyncTargetIds(initial){return initial?(Array.isArray(initial)?initial:[initial]):undefined;}
   async getBackupData(ids,exclude=[]){
-    this.check();const library=await this.ops.readLibrary(),documents=[],wanted=ids?new Set(ids):null,excluded=new Set(exclude);let packedBytes=0;
+    this.check();this.sentChoices.clear();const library=await this.ops.readLibrary(),documents=[],wanted=ids?new Set(ids):null,excluded=new Set(exclude);let packedBytes=0;
     for(const header of library.documents){
       if(!syncEligible(header)||wanted&&!wanted.has(header.id)||excluded.has(header.id))continue;
       const doc=await this.ops.getDocument(header.id);if(!doc)throw Error('전송할 문서가 변경되었습니다. 다시 시작해주세요.');
@@ -125,13 +157,13 @@ export class DeviceSyncAdapter {
       if(!record.sourceIdentity)record.sourceIdentity=await localFileIdentity(doc.originalFile||source);
       const state=validateState({record,revisions:await this.ops.listRevisions(doc.id)},doc.id);
       const body=this.includeSources?await pack(source):null,original=this.includeSources&&doc.originalFile?await pack(doc.originalFile):null;
-      const entry={...state,body,original,sourceType:doc.file?'file':'html'};packedBytes+=new Blob([JSON.stringify(entry)]).size;if(packedBytes>DEVICE_SYNC_LIMIT)throw sizeError();documents.push(entry);this.check();
+      const entry={...await this.outgoingState(state),body,original,sourceType:doc.file?'file':'html'};packedBytes+=new Blob([JSON.stringify(entry)]).size;if(packedBytes>DEVICE_SYNC_LIMIT)throw sizeError();documents.push(entry);this.check();
     }
     const result={format:DEVICE_SYNC_FORMAT,version:1,documents,folders:validateFolders(library.folders),...this.settingsPayload(ids),logs:documents.map(d=>({title:d.record.title}))};
     if(new Blob([JSON.stringify(result)]).size>DEVICE_SYNC_LIMIT)throw sizeError();return result;
   }
   async getStreamBundle(ids,exclude=[]){
-    this.check();const library=await this.ops.readLibrary(),documents=[],files=new Map(),descriptors=[],identities=new Map(),wanted=ids?new Set(ids):null,excluded=new Set(exclude);let total=0;
+    this.check();this.sentChoices.clear();const library=await this.ops.readLibrary(),documents=[],files=new Map(),descriptors=[],identities=new Map(),wanted=ids?new Set(ids):null,excluded=new Set(exclude);let total=0;
     const add=async blob=>{
       this.check();const identity=await localFileIdentity(blob),mime=blob.type||'text/html',key=identity.digest+':'+identity.size+':'+mime;
       if(identities.has(key))return identities.get(key);
@@ -145,7 +177,7 @@ export class DeviceSyncAdapter {
       const source=documentSource(doc),record=portableRecord(doc);
       if(!record.sourceIdentity)record.sourceIdentity=await localFileIdentity(doc.originalFile||source);
       const state=validateState({record,revisions:await this.ops.listRevisions(doc.id)},doc.id);
-      documents.push({...state,body:this.includeSources?await add(source):null,original:this.includeSources&&doc.originalFile?await add(doc.originalFile):null,sourceType:doc.file?'file':'html'});this.check();
+      documents.push({...await this.outgoingState(state),body:this.includeSources?await add(source):null,original:this.includeSources&&doc.originalFile?await add(doc.originalFile):null,sourceType:doc.file?'file':'html'});this.check();
     }
     const manifest={format:DEVICE_SYNC_FORMAT,version:2,documents,files:descriptors,folders:validateFolders(library.folders),...this.settingsPayload(ids),logs:documents.map(d=>({title:d.record.title}))};
     validateStreamManifest(manifest);return {manifest,files};
@@ -182,7 +214,7 @@ export class DeviceSyncAdapter {
     if(!(files instanceof Map)||files.size!==descriptors.size)throw Error('전송이 끝나지 않았습니다. 기존 문서는 유지됩니다.');
     const documents=manifest.documents.filter(value=>syncEligible(value.record)),used=new Set(documents.flatMap(value=>[value.body,value.original]).filter(id=>id!==null));
     for(const [id,descriptor] of descriptors){if(!used.has(id))continue;const blob=files.get(id);if(!(blob instanceof Blob)||blob.size!==descriptor.size||!sameLocalFile(await localFileIdentity(blob),descriptor.identity))throw Error('받은 원본 파일의 검증에 실패했습니다. 기존 문서는 유지됩니다.');verified.set(id,blob);this.check();}
-    const incoming=await Promise.all(documents.map(async value=>({...validateState(value,value.record.id),body:value.body===null?null:verified.get(value.body),original:value.original===null?null:verified.get(value.original),sourceType:value.sourceType,fingerprint:await fingerprint(value.record)})));
+    const incoming=await Promise.all(documents.map(async value=>({...validateState(value,value.record.id),choiceToken:value.choiceToken,annotationDecision:value.annotationDecision,body:value.body===null?null:verified.get(value.body),original:value.original===null?null:verified.get(value.original),sourceType:value.sourceType,fingerprint:await fingerprint(value.record)})));
     return this.mergePreparedData(manifest,incoming,resolver);
   }
   async mergeBackupData(data,resolver){
@@ -191,11 +223,11 @@ export class DeviceSyncAdapter {
     const remoteFolders=validateFolders(data.folders),settings=data.settings===null?null:validateSettings(data.settings),seen=new Set(),incoming=[];
     for(const value of data.documents){
       if(!idOK(value?.record?.id)||seen.has(value.record.id)||!['html','file'].includes(value.sourceType))throw Error('받은 문서 목록이 손상되었습니다.');seen.add(value.record.id);
-      const state=validateState(value,value.record.id);
+      const state=validateState(value,value.record.id);validateChoiceEnvelope(value);
       if(state.record.folderId&&!remoteFolders.some(f=>f.id===state.record.folderId))throw Error('받은 문서의 상대 폴더가 없습니다.');
       if(!syncEligible(state.record))continue;
       const body=value.body?await unpack(value.body):null,original=value.original?await unpack(value.original):null;
-      incoming.push({...state,body,original,sourceType:value.sourceType,fingerprint:await fingerprint(state.record)});
+      incoming.push({...state,choiceToken:value.choiceToken,annotationDecision:value.annotationDecision,body,original,sourceType:value.sourceType,fingerprint:await fingerprint(state.record)});
     }
     return this.mergePreparedData(data,incoming,resolver);
   }
@@ -203,27 +235,61 @@ export class DeviceSyncAdapter {
     this.check();const remoteFolders=validateFolders(data.folders);if(data.settings!==null)validateSettings(data.settings);
     const settingsPlan=await this.prepareSettings(data);this.check();
     this.onStage('마지막 동기화 이후의 주석 변경을 비교하는 중…');
-    const local=await this.ops.readLibrary(),tree=mergeLibraryFolders(local.folders,remoteFolders,()=>crypto.randomUUID()),entries=[],mirrored=[],conflicts=[],plans=[];
-    const available=local.documents.filter(syncEligible),protectedIds=new Set(local.documents.filter(record=>!syncEligible(record)).map(record=>record.id));
+    const local=await this.ops.readLibrary(),tree=mergeLibraryFolders(local.folders,remoteFolders,()=>crypto.randomUUID()),entries=[],mirrored=[],conflicts=[],plans=[],replies=new Map(),consumedTokens=new Set(),assigned=new Set();
+    const available=local.documents.filter(syncEligible),protectedIds=new Set(local.documents.filter(record=>!syncEligible(record)).map(record=>record.id)),reserved=new Set(incoming.flatMap(value=>[value.record.id,...(value.annotationDecision?[value.annotationDecision.target]:[])]));
     for(const value of incoming){
       const record=value.record,stamp=value.fingerprint;
       if(!syncEligible(record)||protectedIds.has(record.id))continue;
-      if(available.some(d=>d.syncSourceId===record.id&&d.syncFingerprint===stamp&&(d.folderId||'')===(tree.mapping.get(record.folderId||'')||''))){continue;}
-      const match=available.find(d=>d.id===record.id)||available.find(d=>sameLocalFile(d.sourceIdentity,record.sourceIdentity));
+      const decision=value.annotationDecision,proof=decision?this.sentChoices.get(decision.token):null;
+      if(decision&&(!this.isHost()||!proof||proof.id!==decision.target||consumedTokens.has(decision.token)))throw Error('요청하지 않은 주석 선택 결과입니다. 기존 내용은 유지했습니다. 다시 연결해주세요.');
+      if(!decision&&available.some(d=>d.syncSourceId===record.id&&d.syncFingerprint===stamp&&sameMarks(d,record)&&(d.folderId||'')===(tree.mapping.get(record.folderId||'')||''))){continue;}
+      const match=decision?available.find(d=>d.id===decision.target):available.find(d=>d.id===record.id)||available.find(d=>!reserved.has(d.id)&&!assigned.has(d.id)&&sameLocalFile(d.sourceIdentity,record.sourceIdentity));
       const previous=match?await this.ops.getDocument(match.id):null;
       if(previous&&!syncEligible(previous))continue;
+      if(previous&&assigned.has(previous.id))throw Error('같은 문서에 여러 선택 결과가 도착했습니다. 기존 내용은 유지했습니다. 다시 연결해주세요.');
+      if(previous)assigned.add(previous.id);
       const localStamp=previous?await fingerprint(previous):null,sameFolder=previous&&(previous.folderId||'')===(tree.mapping.get(record.folderId||'')||'');
-      if(previous&&localStamp===stamp&&sameFolder){mirrored.push(previous.id);continue;}
+      if(decision&&(!previous||localStamp!==proof.stamp))throw Error('선택 중 이 기기의 문서가 바뀌었습니다. 새 내용을 보존하고 동기화를 멈췄습니다. 다시 연결해주세요.');
+      if(!decision&&previous&&localStamp===stamp&&sameFolder){mirrored.push(previous.id);continue;}
       if(!value.body&&!previous)throw Error('이 기기에 ‘'+record.title+'’의 원본이 없습니다. 두 기기를 최신 버전으로 열고 다시 연결해주세요.');
       if(!value.body&&previous&&!sameLocalFile(previous.sourceIdentity||await localFileIdentity(previous.originalFile||previous.file||new Blob([previous.html],{type:'text/html'})),record.sourceIdentity))throw Error('문서 원본이 다릅니다. 원본 파일을 포함해 다시 보내주세요.');
-      const automatic=previous&&sameFolder?oneSidedResolution(previous,record,localStamp,stamp):null,plan={value,previous,resolution:previous?automatic:'remote',automatic:!!automatic};plans.push(plan);
+      const reuse=previous&&await sameStoredContent(previous,value);
+      if(decision){
+        if(!reuse)throw Error('선택한 주석의 원본 HTML이 다릅니다. 기존 내용은 유지했습니다.');
+        if(decision.choice==='merge'&&!containsMarks(record,previous))throw Error('합친 주석에 이 기기의 내용이 빠져 있습니다. 기존 내용은 유지했습니다.');consumedTokens.add(decision.token);
+        if(sameMarks(previous,record)){mirrored.push(previous.id);continue;}
+        plans.push({type:'annotations',value,previous,resolution:'remote',confirmed:true});continue;
+      }
+      if(reuse&&!sameMarks(previous,record)){
+        if(!value.choiceToken)throw Error('주석·북마크 선택을 사용하려면 두 기기 모두 앱을 최신 버전으로 업데이트해주세요.');
+        if(this.isHost()&&this.sentChoices.size)throw Error('상대 기기에서 주석 선택 확인을 받지 못했습니다. 기존 내용은 유지했습니다. 다시 연결해주세요.');
+        plans.push({type:'annotations',value,previous});
+        conflicts.push({id:plans.length-1,type:'annotations',title:record.title,localContent:`이 기기: 주석 ${previous.metadata.annotations.length}개 · 북마크 ${previous.metadata.bookmarks.length}개`,remoteContent:`상대 기기: 주석 ${record.metadata.annotations.length}개 · 북마크 ${record.metadata.bookmarks.length}개`});continue;
+      }
+      const automatic=previous&&sameFolder?oneSidedResolution(previous,record,localStamp,stamp):null,plan={value,previous,reuse,resolution:previous?automatic:'remote',automatic:!!automatic};plans.push(plan);
       if(previous&&!automatic)conflicts.push({id:plans.length-1,type:'memo',title:record.title,localDate:new Date(previous.modified),remoteDate:new Date(record.modified),localContent:`이 기기: 주석 ${previous.metadata.annotations.length}개 · 북마크 ${previous.metadata.bookmarks.length}개`,remoteContent:`상대 기기: 주석 ${record.metadata.annotations.length}개 · 북마크 ${record.metadata.bookmarks.length}개`});
     }
-    if(conflicts.length){if(!resolver)throw Error('양쪽에서 바뀐 문서가 있어 보관 방법을 선택해야 합니다.');const choices=await resolver(conflicts);this.check();if(choices===null)throw new DOMException('동기화를 취소했습니다. 문서와 앱 설정은 변경하지 않았습니다.','AbortError');if(!Array.isArray(choices)||choices.length!==conflicts.length||choices.some(c=>!['local','remote','both'].includes(c)))throw Error('충돌 선택을 완료하지 않았습니다.');conflicts.forEach((c,i)=>plans[c.id].resolution=choices[i]);}
-    for(const {value,previous,resolution,automatic} of plans){
+    if(conflicts.length){if(!resolver)throw Error('서로 다른 주석·문서가 있어 보관 방법을 선택해야 합니다.');const choices=await resolver(conflicts);this.check();if(choices===null)throw new DOMException('동기화를 취소했습니다. 문서와 앱 설정은 변경하지 않았습니다.','AbortError');if(!Array.isArray(choices)||choices.length!==conflicts.length||choices.some((c,i)=>!(conflicts[i].type==='annotations'?['merge','local','remote','skip']:['local','remote','both']).includes(c)))throw Error('충돌 선택을 완료하지 않았습니다.');conflicts.forEach((c,i)=>plans[c.id].resolution=choices[i]);}
+    for(const {type,value,previous,resolution,automatic,reuse,confirmed} of plans){
+      if(type==='annotations'){
+        // Keep each device document identity, source and view; replace marks only.
+        if(resolution==='skip'){mirrored.push(previous.id);continue;}
+        const marks=resolution==='merge'?mergeMarks(previous,value.record):markState(resolution==='local'?previous:value.record);
+        const record={...portableRecord(previous),modified:Date.now(),metadata:{...previous.metadata,...marks},syncSourceId:value.record.id,syncFingerprint:value.fingerprint};
+        validateState({record,revisions:[]},record.id);
+        if(!sameMarks(previous,record)){
+          const history=await this.ops.listRevisions(previous.id),key=revision=>{const {id,documentId,...state}=revision;return stableJSON(state);},known=new Set(history.map(key));
+          const revisions=value.revisions.filter(revision=>!known.has(key(revision))),created=Date.now();
+          revisions.push({created,kind:'sync-before',...structuredClone(markState(previous))},{created,kind:resolution==='merge'?'sync-merge':'sync-choice',...structuredClone(marks)});
+          entries.push({record,content:null,revisions,expected:syncRecordSnapshot(previous),previousHistoryVersion:previous.historyVersion||0});
+        }
+        if(!confirmed&&['merge','local'].includes(resolution))replies.set(previous.id,{stamp:await fingerprint(record),decision:{target:value.record.id,token:value.choiceToken,choice:resolution}});
+        else mirrored.push(previous.id);
+        continue;
+      }
       if(resolution==='local')continue;
       const record={...value.record,folderId:tree.mapping.get(value.record.folderId||'')||'',syncSourceId:value.record.id,syncFingerprint:value.fingerprint};
-      const reuse=previous&&await sameStoredContent(previous,value),content=reuse?null:value.body?(value.sourceType==='file'||value.body.size>=4*1024*1024?{file:value.body}:{html:await value.body.text()}):contentOf(previous);
+      const content=reuse?null:value.body?(value.sourceType==='file'||value.body.size>=4*1024*1024?{file:value.body}:{html:await value.body.text()}):contentOf(previous);
       if(value.original&&content)content.originalFile=value.original;
       if(previous&&resolution==='remote'){
         // Explicit conflict replacement keeps a full copy. One-sided updates
@@ -242,6 +308,6 @@ export class DeviceSyncAdapter {
       replaceSyncSettings(this.storage,settingsPlan.settings);
     }
     this.settingsSelection=settingsPlan.settings;
-    this.onStage('변경 내용을 전용 저장 폴더에 반영하는 중…');await this.afterCommit();this.check();return mirrored;
+    this.onStage('변경 내용을 전용 저장 폴더에 반영하는 중…');await this.afterCommit();this.check();this.annotationReplies=replies;for(const token of consumedTokens)this.sentChoices.delete(token);return mirrored;
   }
 }

@@ -51,7 +51,7 @@ export class SyncStream{
       // connection supplies disconnect detection without timing out that choice.
       this.onProgress({direction:'send',bytes:sent,total,files:all.length-1,reusedBytes,reusedFiles,phase:'commit'});
       const done=await this.request({type:'bundle-end',transfer},transfer+':done',0);this.onProgress({direction:'send',bytes:total,total,files:all.length-1,reusedBytes,reusedFiles,complete:true});
-      return {committed:commitAck&&done?.committed===true};
+      return {committed:commitAck&&done?.committed===true,replyRequired:done?.replyRequired===true};
     }finally{this.sending=false;}
   }
   async receive(data){
@@ -106,9 +106,9 @@ export class SyncStream{
     if(type==='bundle-end'){
       if(incoming.file||!incoming.manifest||incoming.files.size!==incoming.fileCount||incoming.received!==incoming.total)throw Error('원본 파일을 모두 받지 못했습니다. 기존 서재는 유지됩니다.');
       this.onProgress({direction:'receive',bytes:incoming.received-incoming.reusedBytes,total:incoming.total-incoming.reusedBytes,files:incoming.fileCount,reusedBytes:incoming.reusedBytes,reusedFiles:incoming.reusedFiles,phase:'commit'});
-      const result=await this.onBundle({manifest:incoming.manifest,files:incoming.files},{partial:incoming.partial});this.check();await this.ack(transfer,transfer+':done',{committed:incoming.commitAck});this.incoming=null;await incoming.store.clear();
+      const result=await this.onBundle({manifest:incoming.manifest,files:incoming.files},{partial:incoming.partial}),replyRequired=result?.replyRequired===true;this.check();await this.ack(transfer,transfer+':done',{committed:incoming.commitAck,...(replyRequired?{replyRequired:true}:{})});this.incoming=null;await incoming.store.clear();
       this.onProgress({direction:'receive',bytes:incoming.received-incoming.reusedBytes,total:incoming.total-incoming.reusedBytes,files:incoming.fileCount,reusedBytes:incoming.reusedBytes,reusedFiles:incoming.reusedFiles,complete:true});
-      this.onCommitted({partial:incoming.partial,confirmed:incoming.commitAck},result);return;
+      this.onCommitted({partial:incoming.partial,confirmed:incoming.commitAck,replyRequired},result);return;
     }
     throw Error('알 수 없는 파일 전송 단계입니다.');
   }

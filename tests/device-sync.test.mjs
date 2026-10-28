@@ -81,9 +81,9 @@ test('relative folders merge into this device root despite different folder IDs 
 test('selected item sharing and mirrored exclusions do not send unrelated items',async()=>{
  const a=fixture([await record('one'),await record('two')]);const adapter=a.adapter();assert.deepEqual(await adapter.getSyncTargetIds('two'),['two']);assert.deepEqual((await adapter.getBackupData(['two'])).documents.map(d=>d.record.id),['two']);assert.deepEqual((await adapter.getBackupData(undefined,['one'])).documents.map(d=>d.record.id),['two']);
 });
-test('a single annotation after a completed sync applies without a conflict, backup or source rewrite in either direction',async()=>{
+test('a single annotation after a completed sync asks once and keeps the original in either direction',async()=>{
  const a=fixture([await record('book')]),b=fixture();
- const round=async()=>{const host=a.adapter({includeSettings:false}),join=b.adapter({includeSettings:false}),sent=await host.getStreamBundle();const mirrored=await join.mergeStreamBundle(sent,()=>assert.fail('A one-sided edit must not wait for a conflict choice'));await host.mergeStreamBundle(await join.getStreamBundle(undefined,mirrored),()=>assert.fail('The reply must not wait for a conflict choice'));};
+ let questions=0;const round=async()=>{const host=a.adapter({includeSettings:false,isHost:()=>true}),join=b.adapter({includeSettings:false,isHost:()=>false}),sent=await host.getStreamBundle();const mirrored=await join.mergeStreamBundle(sent,items=>{questions++;assert.ok(items.every(item=>item.type==='annotations'));return items.map(()=>'merge');});await host.mergeStreamBundle(await join.getStreamBundle(undefined,mirrored),()=>assert.fail('The chosen reply must not ask a second time'));};
  await round();
  const mark=id=>({id,type:'note',text:id,color:'#edcf67',width:3,opacity:1,points:[{x:20,y:30}]});
  for(const[device,id]of [[a,'mac-note'],[b,'phone-note'],[a,'second-mac-note']]){
@@ -91,11 +91,12 @@ test('a single annotation after a completed sync applies without a conflict, bac
   assert.equal(a.docs.size,1);assert.equal(b.docs.size,1);assert.deepEqual(a.docs.get('book').metadata.annotations,b.docs.get('book').metadata.annotations);assert.equal(a.docs.get('book').html,'<h1>book</h1>');assert.equal(b.docs.get('book').html,'<h1>book</h1>');
   const receiver=device===a?b:a;assert.equal(receiver.calls.at(-1)[0].content,null,'Verified immutable content must remain in the existing contents record');
  }
+ assert.equal(questions,3);
 });
-test('both edited peers still ask and retain the full safety copy, while stale ancestry cannot silently replace a newer state',async()=>{
+test('both edited annotations ask and retain the prior annotation history while stale ancestry still needs a choice',async()=>{
  const a=fixture([await record('book')]),b=fixture();await b.adapter().mergeStreamBundle(await a.adapter().getStreamBundle());
  a.docs.get('book').metadata.bookmarks.push({id:'mac',title:'Mac',top:5,left:0});b.docs.get('book').metadata.bookmarks.push({id:'phone',title:'Phone',top:10,left:0});
- let questions=0;await b.adapter().mergeStreamBundle(await a.adapter().getStreamBundle(),items=>{questions++;assert.equal(items.length,1);return ['remote'];});assert.equal(questions,1);assert.equal(b.docs.size,2);assert.ok([...b.docs.values()].some(r=>r.title.includes('보관본')&&r.metadata.bookmarks[0].id==='phone'));
+ let questions=0;await b.adapter().mergeStreamBundle(await a.adapter().getStreamBundle(),items=>{questions++;assert.equal(items.length,1);assert.equal(items[0].type,'annotations');return ['remote'];});assert.equal(questions,1);assert.equal(b.docs.size,1);assert.ok(b.history.get('book').some(r=>r.kind==='sync-before'&&r.bookmarks[0].id==='phone'));
  const stale=fixture([await record('book')]),newer=fixture();await newer.adapter().mergeStreamBundle(await stale.adapter().getStreamBundle());const oldBase=newer.docs.get('book').syncFingerprint;newer.docs.get('book').metadata.bookmarks.push({id:'new',title:'New',top:20,left:0});
  const relay=fixture();await relay.adapter().mergeStreamBundle(await newer.adapter().getStreamBundle());Object.assign(stale.docs.get('book'),{syncSourceId:'book',syncFingerprint:oldBase});stale.docs.get('book').metadata.view.scrollTop=500;questions=0;await relay.adapter().mergeStreamBundle(await stale.adapter().getStreamBundle(),()=>{questions++;return ['local'];});assert.equal(questions,1,'A different advertised base cannot prove this stale copy is current');
 });
@@ -204,4 +205,100 @@ test('reuse includes both a prepared HTML and its unchanged original with the re
  const bundle=await fixture([remote]).adapter().getStreamBundle(),local={...remote,id:'other',file:new Blob([prepared],{type:'text/html'}),originalFile:new Blob([original],{type:'application/octet-stream'})},b=fixture([local]);
  const files=await b.adapter().findReusableStreamFiles(bundle.manifest);assert.equal(files.size,2);
  for(const descriptor of bundle.manifest.files){assert.equal(files.get(descriptor.id).type,descriptor.mime);assert.deepEqual(await localFileIdentity(files.get(descriptor.id)),descriptor.identity);}
+});
+
+const syncNote=(id,text=id)=>({id,type:'note',text,anchor:'body',points:[{x:20,y:30}],color:'#445566',width:2,opacity:1});
+async function choiceRound(a,b,choice,{version=2,ids}={}){
+ const host=a.adapter({includeSettings:false,isHost:()=>true}),join=b.adapter({includeSettings:false,isHost:()=>false});let questions=0;
+ const get=(adapter,targets,exclude)=>version===2?adapter.getStreamBundle(targets,exclude):adapter.getBackupData(targets,exclude);
+ const receive=(adapter,data,resolve)=>version===2?adapter.mergeStreamBundle(data,resolve):adapter.mergeBackupData(data,resolve);
+ const sent=await get(host,ids),exclude=await receive(join,sent,items=>{questions++;assert.ok(items.every(item=>item.type==='annotations'));return items.map(()=>choice);});
+ const replyIds=ids?join.annotationReplyIds():undefined;
+ if(!ids||replyIds.length)await receive(host,await get(join,replyIds,exclude),()=>assert.fail('A confirmed choice must apply without a second question'));
+ return {questions,host,join,exclude};
+}
+test('annotation choices apply merge, local, remote and skip once to both devices in both packet formats',async()=>{
+ for(const version of [1,2])for(const choice of ['merge','local','remote','skip']){
+  const left=await record('book',{annotations:[syncNote('mac')]}),right=await record('book',{annotations:[syncNote('phone')]});
+  left.metadata.bookmarks=[{id:'mac-mark',title:'Mac',top:1,left:0}];right.metadata.bookmarks=[{id:'phone-mark',title:'Phone',top:2,left:0}];
+  const a=fixture([left]),b=fixture([right]),before=structuredClone([left,right]);const result=await choiceRound(a,b,choice,{version});
+  assert.equal(result.questions,1);assert.equal(a.docs.size,1);assert.equal(b.docs.size,1);
+  for(const [index,device]of [a,b].entries()){
+   const actual=device.docs.get('book');assert.equal(actual.html,'<h1>book</h1>');
+   const expected=choice==='skip'?before[index].metadata:choice==='local'?before[1].metadata:choice==='remote'?before[0].metadata:null;
+   if(expected){assert.deepEqual(actual.metadata.annotations,expected.annotations);assert.deepEqual(actual.metadata.bookmarks,expected.bookmarks);}
+   else{assert.deepEqual(new Set(actual.metadata.annotations.map(n=>n.id)),new Set(['mac','phone']));assert.deepEqual(new Set(actual.metadata.bookmarks.map(n=>n.id)),new Set(['mac-mark','phone-mark']));}
+   assert.ok(device.calls.flat().every(entry=>entry.content===null));
+  }
+  if(choice!=='skip')assert.deepEqual(a.docs.get('book').metadata.annotations,b.docs.get('book').metadata.annotations);
+  else{assert.equal(a.calls.flat().length,0);assert.equal(b.calls.flat().length,0);}
+ }
+});
+test('annotation merge deduplicates identical content and preserves both edits of a shared ID across repeated syncs',async()=>{
+ const left=await record('book',{annotations:[syncNote('shared','Mac edit'),syncNote('equal','Same note')]}),right=await record('book',{annotations:[syncNote('shared','Phone edit'),syncNote('equal','Same note')]});
+ left.metadata.bookmarks=[{id:'place',title:'Mac title',top:10,left:0},{id:'a',title:'Same bookmark',top:20,left:0}];right.metadata.bookmarks=[{id:'place',title:'Phone title',top:10,left:0},{id:'b',title:'Same bookmark',top:20,left:0}];
+ const a=fixture([left]),b=fixture([right]);await choiceRound(a,b,'merge');
+ const state=a.docs.get('book').metadata;assert.equal(state.annotations.length,3);assert.equal(new Set(state.annotations.map(n=>n.id)).size,3);assert.equal(state.bookmarks.length,3);assert.equal(new Set(state.bookmarks.map(n=>n.id)).size,3);assert.deepEqual(state.annotations.map(n=>n.text).sort(),['Mac edit','Phone edit','Same note']);
+ const again=await choiceRound(a,b,'merge');assert.equal(again.questions,0);assert.equal(a.docs.size,1);assert.equal(b.docs.size,1);assert.deepEqual(a.docs.get('book').metadata.annotations,b.docs.get('book').metadata.annotations);assert.equal(a.docs.get('book').metadata.annotations.length,3);
+ for(const device of [a,b])assert.ok(device.history.get('book').some(r=>r.kind==='sync-before'));
+});
+test('annotation choice keeps each document identity, title, folder and reading position and limits partial replies',async()=>{
+ for(const choice of ['merge','local','remote','skip']){
+  const html='<p>The same actual original</p>',left=await record('mac-book',{html,folderId:'mac-folder',annotations:[syncNote('mac')]}),right=await record('phone-book',{html,folderId:'phone-folder',annotations:[syncNote('phone')]});
+  left.metadata.view.scrollTop=123;right.metadata.view.scrollTop=456;
+  const a=fixture([left,await record('host-only')],[{id:'mac-folder',parentId:'',name:'Mac'}]),b=fixture([right,await record('peer-only')],[{id:'phone-folder',parentId:'',name:'Phone'}]);
+  const outcome=await choiceRound(a,b,choice,{ids:['mac-book']});assert.equal(outcome.questions,1);assert.equal(a.docs.size,2);assert.equal(b.docs.size,2);
+  for(const[device,id,top,folder]of [[a,'mac-book',123,'mac-folder'],[b,'phone-book',456,'phone-folder']]){const r=device.docs.get(id);assert.equal(r.title,id);assert.equal(r.folderId,folder);assert.equal(r.metadata.view.scrollTop,top);assert.equal(r.html,html);}
+  if(choice!=='skip')assert.deepEqual(a.docs.get('mac-book').metadata.annotations,b.docs.get('phone-book').metadata.annotations);
+ }
+});
+test('skipping annotations leaves both versions and history intact while other documents continue',async()=>{
+ const a=fixture([await record('book',{annotations:[syncNote('mac')]}),await record('new-book')]),b=fixture([await record('book',{annotations:[syncNote('phone')]})]);
+ const beforeA=structuredClone(a.docs.get('book')),beforeB=structuredClone(b.docs.get('book')),historyA=structuredClone(a.history.get('book')),historyB=structuredClone(b.history.get('book'));
+ await choiceRound(a,b,'skip');assert.deepEqual(a.docs.get('book'),beforeA);assert.deepEqual(b.docs.get('book'),beforeB);assert.deepEqual(a.history.get('book'),historyA);assert.deepEqual(b.history.get('book'),historyB);assert.ok(b.docs.has('new-book'));
+});
+test('annotation replies reject stale, forged, replayed and mismatched-original decisions before writing',async()=>{
+ for(const kind of ['stale','forged','replay','source']){
+  const a=fixture([await record('book',{annotations:[syncNote('mac')]})]),b=fixture([await record('book',{annotations:[syncNote('phone')]})]),host=a.adapter({includeSettings:false,isHost:()=>true}),join=b.adapter({includeSettings:false,isHost:()=>false});
+  await join.mergeStreamBundle(await host.getStreamBundle(),()=>['merge']);const reply=await join.getStreamBundle();
+  if(kind==='stale')a.docs.get('book').metadata.annotations.push(syncNote('new-mac'));
+  if(kind==='forged')reply.manifest.documents[0].annotationDecision.token='not-issued';
+  if(kind==='replay')await host.mergeStreamBundle(reply,()=>assert.fail('Confirmed reply'));
+  if(kind==='source'){
+   const blob=new Blob(['<p>Different original</p>'],{type:'text/html'}),identity=await localFileIdentity(blob);reply.files=new Map([[1,blob]]);reply.manifest.files=[{id:1,size:blob.size,mime:blob.type,identity}];reply.manifest.documents[0].body=1;
+  }
+  const before=structuredClone(a.docs.get('book')),count=a.calls.length;
+  await assert.rejects(host.mergeStreamBundle(reply,()=>assert.fail('Invalid confirmations cannot ask another question')),/선택|원본/);assert.deepEqual(a.docs.get('book'),before);assert.equal(a.calls.length,count);
+ }
+});
+test('annotation choices cancel atomically, require peer support and reject keep-both document copying',async()=>{
+ const a=fixture([await record('book',{annotations:[syncNote('mac')]}),await record('new')]);
+ for(const decision of [null,'both','unknown']){
+  const b=fixture([await record('book',{annotations:[syncNote('phone')]})]),before=structuredClone(b.docs.get('book'));
+  await assert.rejects(b.adapter().mergeStreamBundle(await a.adapter().getStreamBundle(),()=>decision===null?null:[decision]),decision===null?{name:'AbortError'}:/선택/);assert.equal(b.calls.length,0);assert.deepEqual(b.docs.get('book'),before);
+ }
+ const b=fixture([await record('book',{annotations:[syncNote('phone')]})]),old=await a.adapter().getStreamBundle();for(const entry of old.manifest.documents)delete entry.choiceToken;
+ await assert.rejects(b.adapter().mergeStreamBundle(old,()=>assert.fail('An old sender cannot confirm a four-way choice')),/최신 버전/);assert.equal(b.calls.length,0);
+});
+test('a local edit after selecting annotations cannot be sent as the earlier choice',async()=>{
+ const a=fixture([await record('book',{annotations:[syncNote('mac')]})]),b=fixture([await record('book',{annotations:[syncNote('phone')]})]),join=b.adapter({includeSettings:false,isHost:()=>false});
+ await join.mergeStreamBundle(await a.adapter().getStreamBundle(),()=>['local']);b.docs.get('book').metadata.annotations.push(syncNote('newer'));
+ await assert.rejects(join.getStreamBundle(),/선택 후/);assert.equal(b.docs.get('book').metadata.annotations.length,2);
+});
+test('an annotation union beyond the document limit fails before any document or history is written',async()=>{
+ for(const type of ['annotations','bookmarks']){
+  const left=await record('book'),right=await record('book');
+  if(type==='annotations'){left.metadata.annotations=Array.from({length:20000},(_,i)=>syncNote('n'+i));right.metadata.annotations=[syncNote('extra')];}
+  else{left.metadata.bookmarks=Array.from({length:10000},(_,i)=>({id:'b'+i,title:'Bookmark '+i,top:i,left:0}));right.metadata.bookmarks=[{id:'extra',title:'Extra',top:20000,left:0}];}
+  const a=fixture([left]),b=fixture([right]),before=structuredClone(right);await assert.rejects(b.adapter().mergeStreamBundle(await a.adapter().getStreamBundle(),()=>['merge']),/주석 수|북마크/);assert.equal(b.calls.length,0);assert.deepEqual(b.docs.get('book'),before);
+ }
+});
+test('same-source matching reserves exact document IDs and preserves separate annotation sets',async()=>{
+ const html='<p>Shared source with separate readings</p>',a=fixture([await record('separate',{html,annotations:[syncNote('separate')]}),await record('matched',{html,annotations:[syncNote('mac')]})]),b=fixture([await record('matched',{html,annotations:[syncNote('phone')]})]);
+ await choiceRound(a,b,'merge');assert.equal(a.docs.size,2);assert.equal(b.docs.size,2);for(const device of [a,b]){assert.deepEqual(device.docs.get('separate').metadata.annotations.map(n=>n.id),['separate']);assert.deepEqual(new Set(device.docs.get('matched').metadata.annotations.map(n=>n.id)),new Set(['mac','phone']));}
+});
+test('a returned merge cannot omit this device original annotations',async()=>{
+ const a=fixture([await record('book',{annotations:[syncNote('mac')]})]),b=fixture([await record('book',{annotations:[syncNote('phone')]})]),host=a.adapter({includeSettings:false,isHost:()=>true}),join=b.adapter({includeSettings:false,isHost:()=>false});
+ await join.mergeStreamBundle(await host.getStreamBundle(),()=>['merge']);const reply=await join.getStreamBundle();reply.manifest.documents[0].record.metadata.annotations=reply.manifest.documents[0].record.metadata.annotations.filter(n=>n.id!=='mac');
+ await assert.rejects(host.mergeStreamBundle(reply),/합친 주석/);assert.deepEqual(a.docs.get('book').metadata.annotations.map(n=>n.id),['mac']);assert.equal(a.calls.length,0);
 });
