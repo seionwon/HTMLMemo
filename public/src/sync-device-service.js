@@ -41,7 +41,7 @@ export class DeviceSyncService extends SyncService{
       this.clearWaiting();this.setStatus('connected','상대 기기의 응답을 확인했습니다. 파일 전송 연결이 준비됐습니다.');if(this.isHost)void this.syncDirectData();
     },onMessage:data=>this.stream.receive(data),onError:error=>void this.fail(error)});
     this.stream=new SyncStream({send:data=>this.peer.send(data),onManifest:manifest=>this.options.adapter.prepareSettings?.(manifest),findFiles:typeof this.options.adapter.findReusableStreamFiles==='function'?manifest=>this.options.adapter.findReusableStreamFiles(manifest):null,onProgress:progress=>this.options.onProgress?.(progress),onBundle:async(bundle)=>{
-      this.setStatus('merging','받은 파일을 검증하고 문서·주석·휴지통을 저장하는 중…');this.updateSyncInfoMeta(bundle.manifest,!this.isHost&&!!this.remotePartial);
+      this.setStatus('merging','받은 파일을 검증하고 문서·주석을 저장하는 중…');this.updateSyncInfoMeta(bundle.manifest,!this.isHost&&!!this.remotePartial);
       const exclude=await this.options.adapter.mergeStreamBundle(bundle,this.options.onConflict);this.mergedExcludeIds=Array.isArray(exclude)?exclude:[];this.hasReceivedData=true;return exclude;
     },onCommitted:({partial,confirmed})=>{
       if(this.isDestroyed)return;

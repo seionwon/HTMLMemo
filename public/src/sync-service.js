@@ -315,7 +315,10 @@ export class SyncService {
     if (!this.options.onSyncInfo) return;
     let count = 0;
     let label = this.options.remoteItemsLabel || "Remote items";
-    if (data.memos && Array.isArray(data.memos)) {
+    if (Array.isArray(data.documents)) {
+      const documents=data.documents.filter(value=>value?.record&&!value.record.trashedAt);
+      count=documents.length;label=documents[0]?.record.title||"Combined Documents";
+    } else if (data.memos && Array.isArray(data.memos)) {
       count = data.memos.length;
       label = data.memos[0]?.title || "Combined Memos";
     } else if (data.logs && Array.isArray(data.logs)) {

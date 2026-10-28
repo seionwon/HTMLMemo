@@ -4,7 +4,7 @@ import {createHash} from 'node:crypto';
 import {DeviceSyncAdapter,DEVICE_SYNC_FORMAT,syncSettingsSnapshot,sameSyncSettings,syncSettingsDifferences} from '../public/src/sync-adapter.js';
 import {PREFERENCES_KEY,storePreferences,normalizePreferences} from '../public/src/preferences.js';
 import {encryptData,decryptData,deriveTopic} from '../public/src/sync-crypto.js';
-import {cleanRoomId} from '../public/src/sync-service.js';
+import {SyncService,cleanRoomId} from '../public/src/sync-service.js';
 import {localFileIdentity} from '../public/src/local-files.js';
 import {memoryLocal} from './folder-fixture.mjs';
 
@@ -68,11 +68,11 @@ test('MemoSuite room normalization, topic derivation and AES encryption remain c
  assert.equal(await decryptData(encrypted,key),text);await assert.rejects(decryptData(encrypted,'different-key'));
  const tampered=encrypted.slice(0,-20)+(encrypted.at(-20)==='A'?'B':'A')+encrypted.slice(-19);await assert.rejects(decryptData(tampered,key));
 });
-test('all documents, trash contents, bookmarks, positions and history transfer; root names never enter the package',async()=>{
+test('live documents, bookmarks, positions and history transfer while trash stays local',async()=>{
  const a=fixture([await record('live'),await record('trash',{trash:true})],[],'원래-루트'),b=fixture([],[],'다른-루트');
- const data=await a.adapter().getBackupData();assert.equal(data.documents.length,2);assert.ok(!JSON.stringify(data).includes('원래-루트'));assert.ok(!JSON.stringify(data).includes('root-folder-name'));
- assert.equal((await a.adapter().analyzeSyncData()).count,2);await b.adapter({isHost:()=>false}).mergeBackupData(data);
- assert.equal(b.docs.get('trash').trashedAt,3000);assert.equal(b.docs.get('trash').html,'<h1>trash</h1>');assert.equal(b.docs.get('live').metadata.view.scrollTop,100);assert.equal(b.history.get('trash').length,1);assert.equal(b.storage.getItem('root-folder-name'),'다른-루트');
+ const data=await a.adapter().getBackupData();assert.equal(data.documents.length,1);assert.ok(!JSON.stringify(data).includes('원래-루트'));assert.ok(!JSON.stringify(data).includes('root-folder-name'));
+ assert.equal((await a.adapter().analyzeSyncData()).count,1);await b.adapter({isHost:()=>false}).mergeBackupData(data);
+ assert.equal(b.docs.has('trash'),false);assert.equal(a.docs.get('trash').trashedAt,3000);assert.equal(b.docs.get('live').metadata.view.scrollTop,100);assert.equal(b.history.has('trash'),false);assert.equal(b.storage.getItem('root-folder-name'),'다른-루트');
 });
 test('relative folders merge into this device root despite different folder IDs and root names',async()=>{
  const a=fixture([await record('book',{folderId:'source-sub'})],[{id:'source-sub',parentId:'',name:'책'}],'A'),b=fixture([],[{id:'target-sub',parentId:'',name:'책'}],'B');
@@ -107,12 +107,12 @@ test('canceling document conflicts commits nothing and keeping both retains veri
  }
 });
 test('conflicts support local, remote with a full safety copy, and keep both without repeated copies',async()=>{
- const a=fixture([await record('same',{html:'<p>remote</p>',trash:true})]);const packet=await a.adapter().getBackupData();
+ const a=fixture([await record('same',{html:'<p>remote</p>'})]);const packet=await a.adapter().getBackupData();
  for(const choice of ['local','remote','both']){
   const local=await record('same',{html:'<p>local</p>'}),b=fixture([local]);await b.adapter().mergeBackupData(packet,async conflicts=>{assert.equal(conflicts.length,1);return [choice];});
   assert.equal(b.docs.size,choice==='local'?1:2);
   if(choice==='local')assert.equal(b.docs.get('same').html,'<p>local</p>');
-  else if(choice==='remote'){assert.equal(b.docs.get('same').html,'<p>remote</p>');assert.equal(b.docs.get('same').trashedAt,3000);assert.ok([...b.docs.values()].some(d=>d.title.includes('보관본')&&d.html==='<p>local</p>'));}
+  else if(choice==='remote'){assert.equal(b.docs.get('same').html,'<p>remote</p>');assert.equal(b.docs.get('same').trashedAt,undefined);assert.ok([...b.docs.values()].some(d=>d.title.includes('보관본')&&d.html==='<p>local</p>'));}
   else{assert.equal(b.docs.get('same').html,'<p>local</p>');assert.ok([...b.docs.values()].some(d=>d.html==='<p>remote</p>'));await b.adapter().mergeBackupData(packet);assert.equal(b.docs.size,2);}
  }
 });
@@ -132,13 +132,13 @@ test('legacy relay packets keep their size bound while metadata-only remains ava
  const a=fixture([await record('large',{html:'x'.repeat(900000)})]);await assert.rejects(a.adapter().getBackupData(),/전송 용량/);assert.equal((await a.adapter({includeSources:false}).getBackupData()).documents[0].body,null);
 });
 
-test('stream bundles transfer large originals and trash without base64 relay limits or duplicate source bytes',async()=>{
- const blob=new Blob(Array(12).fill(new Uint8Array(1024*1024).fill(65)),{type:'text/html'}),large=await record('large-trash',{trash:true});delete large.html;large.file=blob;large.originalFile=blob;large.sourceIdentity=await localFileIdentity(blob);
+test('stream bundles transfer large live originals without base64 relay limits or duplicate source bytes',async()=>{
+ const blob=new Blob(Array(12).fill(new Uint8Array(1024*1024).fill(65)),{type:'text/html'}),large=await record('large-book');delete large.html;large.file=blob;large.originalFile=blob;large.sourceIdentity=await localFileIdentity(blob);
  const a=fixture([large],[],'맥북 원본'),b=fixture([],[],'폰의 다른 루트'),bundle=await a.adapter().getStreamBundle();
  assert.equal(bundle.files.size,1);assert.equal(bundle.manifest.files[0].size,12*1024*1024);assert.equal(bundle.manifest.documents[0].body,bundle.manifest.documents[0].original);assert.ok(JSON.stringify(bundle.manifest).length<5000);
  assert.ok(!JSON.stringify(bundle.manifest).includes('맥북 원본'));await b.adapter({isHost:()=>false}).mergeStreamBundle(bundle);
- const received=b.docs.get('large-trash');assert.equal(received.trashedAt,3000);assert.equal(received.file.size,blob.size);assert.equal(received.originalFile.size,blob.size);assert.deepEqual(await localFileIdentity(received.file),large.sourceIdentity);assert.equal(b.storage.getItem('root-folder-name'),'폰의 다른 루트');assert.equal(b.history.get('large-trash').length,1);
- const reply=await b.adapter().getStreamBundle(undefined,['large-trash']);assert.equal(reply.files.size,0);assert.equal(reply.manifest.documents.length,0);
+ const received=b.docs.get('large-book');assert.equal(received.trashedAt,undefined);assert.equal(received.file.size,blob.size);assert.equal(received.originalFile.size,blob.size);assert.deepEqual(await localFileIdentity(received.file),large.sourceIdentity);assert.equal(b.storage.getItem('root-folder-name'),'폰의 다른 루트');assert.equal(b.history.get('large-book').length,1);
+ const reply=await b.adapter().getStreamBundle(undefined,['large-book']);assert.equal(reply.files.size,0);assert.equal(reply.manifest.documents.length,0);
 });
 test('stream manifest, original digest, missing files and cancellation reject before library changes',async()=>{
  const a=fixture([await record('stream')]),bundle=await a.adapter().getStreamBundle(),b=fixture();
@@ -148,12 +148,50 @@ test('stream manifest, original digest, missing files and cancellation reject be
  await assert.rejects(b.adapter({isActive:()=>false}).mergeStreamBundle(bundle),/닫았/);assert.equal(b.calls.length,0);
 });
 
-test('existing sources are reused across different IDs, filenames and trash without library writes',async()=>{
+test('live existing sources are reused across different IDs and filenames without library writes',async()=>{
  const remote=await record('remote'),a=fixture([remote]),bundle=await a.adapter().getStreamBundle();
- const local=await record('phone-copy',{html:remote.html,trash:true});local.name='renamed-on-phone.html';
+ const local=await record('phone-copy',{html:remote.html});local.name='renamed-on-phone.html';
  const b=fixture([local],[],'Other root'),files=await b.adapter().findReusableStreamFiles(bundle.manifest);
  assert.equal(files.size,bundle.files.size);assert.deepEqual(await localFileIdentity(files.get(1)),bundle.manifest.files[0].identity);
- assert.equal(b.calls.length,0);assert.equal(b.docs.get('phone-copy').trashedAt,3000);
+ assert.equal(b.calls.length,0);assert.equal(b.docs.get('phone-copy').trashedAt,undefined);
+});
+
+test('both outgoing formats and selected shares exclude trash before reading originals or history',async()=>{
+ const a=fixture([await record('live'),await record('deleted',{trash:true})]),reads=[];
+ const adapter=a.adapter({operations:{...a.operations,getDocument:async id=>{assert.notEqual(id,'deleted');reads.push(id);return a.operations.getDocument(id);},listRevisions:async id=>{assert.notEqual(id,'deleted');return a.operations.listRevisions(id);}}});
+ assert.equal((await adapter.analyzeSyncData()).count,1);assert.equal((await adapter.analyzeSyncData('deleted')).count,0);
+ assert.deepEqual((await adapter.getBackupData()).documents.map(v=>v.record.id),['live']);assert.deepEqual((await adapter.getStreamBundle()).manifest.documents.map(v=>v.record.id),['live']);
+ assert.equal((await adapter.getBackupData(['deleted'])).documents.length,0);const empty=await adapter.getStreamBundle(['deleted']);assert.equal(empty.files.size,0);assert.equal(empty.manifest.files.length,0);assert.equal(empty.manifest.logs.length,0);assert.deepEqual(reads,['live','live']);
+});
+test('remote summaries count live documents rather than older peers trash logs',async()=>{
+ const events=[],service=new SyncService({onSyncInfo:value=>events.push(value)});
+ const live={record:await record('live')},trash={record:await record('deleted',{trash:true})},data={documents:[trash,live],logs:[{title:'deleted'},{title:'live'}]};
+ service.updateSyncInfoMeta(data,false);assert.equal(events.at(-1).count,1);service.updateSyncInfoMeta(data,true);assert.equal(events.at(-1).label,'live');assert.equal(events.at(-1).type,'single');service.destroy();
+});
+test('trash is never a reusable source, and a document trashed after the header snapshot is skipped',async()=>{
+ const remote=await record('remote'),bundle=await fixture([remote]).adapter().getStreamBundle(),local=await record('deleted',{trash:true,html:remote.html}),a=fixture([local]);
+ const adapter=a.adapter({operations:{...a.operations,getDocument:()=>assert.fail('A trash body must not be read')}});assert.equal((await adapter.findReusableStreamFiles(bundle.manifest)).size,0);
+ const live=fixture([await record('changed')]),raced=live.adapter({operations:{...live.operations,getDocument:async id=>({...await live.operations.getDocument(id),trashedAt:4000}),listRevisions:()=>assert.fail('A newly trashed history must not be read')}});
+ assert.equal((await raced.getStreamBundle()).files.size,0);assert.equal((await raced.getBackupData()).documents.length,0);
+});
+test('received trash from an older peer cannot alter live documents or import its history',async()=>{
+ for(const format of [1,2]){
+  const source=fixture([await record('same')]),target=fixture([await record('same',{html:'<p>local</p>'})]),before=structuredClone(target.docs.get('same'));
+  if(format===1){const data=await source.adapter().getBackupData();data.documents[0].record.trashedAt=3000;data.documents[0].body={bytes:'not decoded'};await target.adapter().mergeBackupData(data,()=>assert.fail('Trash cannot create a conflict'));}
+  else{const data=await source.adapter().getStreamBundle();data.manifest.documents[0].record.trashedAt=3000;data.files.set(1,new Blob(['Ignored trash bytes']));await target.adapter().mergeStreamBundle(data,()=>assert.fail('Trash cannot create a conflict'));}
+  assert.deepEqual(target.docs.get('same'),before);assert.equal(target.calls.flat().length,0);assert.equal(target.docs.size,1);
+ }
+});
+test('local trash with the same document ID is never restored or overwritten by sync',async()=>{
+ const source=fixture([await record('same')]),target=fixture([await record('same',{trash:true,html:'<p>my deleted copy</p>'})]),before=structuredClone(target.docs.get('same')),history=structuredClone(target.history.get('same'));
+ await target.adapter({operations:{...target.operations,getDocument:()=>assert.fail('Protected local trash must not be read')}}).mergeStreamBundle(await source.adapter().getStreamBundle(),()=>assert.fail('Trash must not ask a conflict choice'));
+ assert.deepEqual(target.docs.get('same'),before);assert.deepEqual(target.history.get('same'),history);assert.equal(target.calls.flat().length,0);
+ delete target.docs.get('same').trashedAt;assert.equal((await target.adapter().getStreamBundle()).manifest.documents.length,1,'an explicit library restore makes the document eligible again');
+});
+test('a distinct incoming live document does not use or replace a same-source trash copy',async()=>{
+ const remote=await record('remote'),local=await record('deleted',{trash:true,html:remote.html}),target=fixture([local]),before=structuredClone(local);
+ await target.adapter().mergeStreamBundle(await fixture([remote]).adapter().getStreamBundle(),()=>assert.fail('A trash copy is not a live match'));
+ assert.deepEqual(target.docs.get('deleted'),before);assert.equal(target.docs.get('remote').trashedAt,undefined);assert.equal(target.docs.size,2);
 });
 test('cached source identity, matching names and matching sizes cannot hide different original bytes',async()=>{
  const a=fixture([await record('same')]),bundle=await a.adapter().getStreamBundle(),changed=await record('same',{html:'x'.repeat(bundle.files.get(1).size)});

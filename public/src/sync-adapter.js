@@ -8,6 +8,7 @@ export const DEVICE_SYNC_FORMAT='HTMLMemo.sync';
 export const DEVICE_SYNC_LIMIT=1300000;
 export const DEVICE_SYNC_STREAM_LIMIT=2*1024*1024*1024;
 const idOK=id=>typeof id==='string'&&/^[\w-]{1,80}$/.test(id);
+const syncEligible=record=>!record.trashedAt;
 const sizeError=()=>Error('중계 서비스의 전송 용량을 넘습니다. 두 기기의 앱을 최신 버전으로 열고, 문서를 나누어 동기화해주세요.');
 const b64=bytes=>{let text='';for(let i=0;i<bytes.length;i+=32768)text+=String.fromCharCode(...bytes.subarray(i,i+32768));return btoa(text);};
 const fingerprint=async record=>{const text=JSON.stringify({title:record.title,name:record.name,sourceIdentity:record.sourceIdentity,metadata:record.metadata,trashedAt:record.trashedAt});return [...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text)))].map(n=>n.toString(16).padStart(2,'0')).join('');};
@@ -112,13 +113,14 @@ export class DeviceSyncAdapter {
   }
   prepareSettings(data){if(!this.settingsPlans.has(data))this.settingsPlans.set(data,this.planSettings(data));return this.settingsPlans.get(data);}
   check(){if(!this.isActive())throw new DOMException('동기화를 닫았습니다.','AbortError');}
-  async analyzeSyncData(initial){const ids=await this.getSyncTargetIds(initial),docs=await this.ops.listDocuments({includeTrashed:true});return {type:ids?'single':'full',count:ids?ids.length:docs.length,label:ids?docs.find(d=>d.id===ids[0])?.title:'서재 전체'};}
+  async analyzeSyncData(initial){const ids=await this.getSyncTargetIds(initial),docs=(await this.ops.listDocuments({includeTrashed:false})).filter(syncEligible),targets=ids?docs.filter(d=>ids.includes(d.id)):docs;return {type:ids?'single':'full',count:targets.length,label:ids?targets[0]?.title:'서재 전체'};}
   async getSyncTargetIds(initial){return initial?(Array.isArray(initial)?initial:[initial]):undefined;}
   async getBackupData(ids,exclude=[]){
     this.check();const library=await this.ops.readLibrary(),documents=[],wanted=ids?new Set(ids):null,excluded=new Set(exclude);let packedBytes=0;
     for(const header of library.documents){
-      if(wanted&&!wanted.has(header.id)||excluded.has(header.id))continue;
+      if(!syncEligible(header)||wanted&&!wanted.has(header.id)||excluded.has(header.id))continue;
       const doc=await this.ops.getDocument(header.id);if(!doc)throw Error('전송할 문서가 변경되었습니다. 다시 시작해주세요.');
+      if(!syncEligible(doc))continue;
       const source=documentSource(doc),record=portableRecord(doc);
       if(!record.sourceIdentity)record.sourceIdentity=await localFileIdentity(doc.originalFile||source);
       const state=validateState({record,revisions:await this.ops.listRevisions(doc.id)},doc.id);
@@ -137,8 +139,9 @@ export class DeviceSyncAdapter {
       const id=descriptors.length+1;descriptors.push({id,size:blob.size,mime,identity});files.set(id,blob);identities.set(key,id);return id;
     };
     for(const header of library.documents){
-      if(wanted&&!wanted.has(header.id)||excluded.has(header.id))continue;
+      if(!syncEligible(header)||wanted&&!wanted.has(header.id)||excluded.has(header.id))continue;
       const doc=await this.ops.getDocument(header.id);if(!doc)throw Error('전송할 문서가 변경되었습니다. 다시 시작해주세요.');
+      if(!syncEligible(doc))continue;
       const source=documentSource(doc),record=portableRecord(doc);
       if(!record.sourceIdentity)record.sourceIdentity=await localFileIdentity(doc.originalFile||source);
       const state=validateState({record,revisions:await this.ops.listRevisions(doc.id)},doc.id);
@@ -156,14 +159,14 @@ export class DeviceSyncAdapter {
       wanted.get(identityKey).push(descriptor);
     }
     const sourceIds=new Set(manifest.documents.map(value=>value.record.id)),sourceKeys=new Set(manifest.documents.filter(value=>sameLocalFile(value.record.sourceIdentity,value.record.sourceIdentity)).map(value=>key(value.record.sourceIdentity)));
-    const headers=(await this.ops.readLibrary()).documents;
+    const headers=(await this.ops.readLibrary()).documents.filter(syncEligible);
     // Local document IDs, filenames and root names may differ. Try likely
     // sources first, but prove every reuse with the actual immutable bytes.
     const likely=header=>sourceIds.has(header.id)||sameLocalFile(header.sourceIdentity,header.sourceIdentity)&&sourceKeys.has(key(header.sourceIdentity));
     for(const header of [...headers.filter(likely),...headers.filter(header=>!likely(header))]){
       this.check();if(!wanted.size)break;
       if(!likely(header)&&Number.isSafeInteger(header.byteSize)&&!sizes.has(header.byteSize)&&!sizes.has(header.sourceIdentity?.size))continue;
-      const doc=await this.ops.getDocument(header.id);this.check();if(!doc)continue;
+      const doc=await this.ops.getDocument(header.id);this.check();if(!doc||!syncEligible(doc))continue;
       for(const blob of [documentSource(doc),doc.originalFile]){
         if(!(blob instanceof Blob)||!sizes.has(blob.size))continue;
         const identity=await localFileIdentity(blob);this.check();const identityKey=key(identity),matches=wanted.get(identityKey);if(!matches)continue;
@@ -177,8 +180,9 @@ export class DeviceSyncAdapter {
     this.onStage('받은 원본 파일을 검증하는 중…');
     this.check();const descriptors=validateStreamManifest(manifest),verified=new Map();
     if(!(files instanceof Map)||files.size!==descriptors.size)throw Error('전송이 끝나지 않았습니다. 기존 문서는 유지됩니다.');
-    for(const [id,descriptor] of descriptors){const blob=files.get(id);if(!(blob instanceof Blob)||blob.size!==descriptor.size||!sameLocalFile(await localFileIdentity(blob),descriptor.identity))throw Error('받은 원본 파일의 검증에 실패했습니다. 기존 문서는 유지됩니다.');verified.set(id,blob);this.check();}
-    const incoming=await Promise.all(manifest.documents.map(async value=>({...validateState(value,value.record.id),body:value.body===null?null:verified.get(value.body),original:value.original===null?null:verified.get(value.original),sourceType:value.sourceType,fingerprint:await fingerprint(value.record)})));
+    const documents=manifest.documents.filter(value=>syncEligible(value.record)),used=new Set(documents.flatMap(value=>[value.body,value.original]).filter(id=>id!==null));
+    for(const [id,descriptor] of descriptors){if(!used.has(id))continue;const blob=files.get(id);if(!(blob instanceof Blob)||blob.size!==descriptor.size||!sameLocalFile(await localFileIdentity(blob),descriptor.identity))throw Error('받은 원본 파일의 검증에 실패했습니다. 기존 문서는 유지됩니다.');verified.set(id,blob);this.check();}
+    const incoming=await Promise.all(documents.map(async value=>({...validateState(value,value.record.id),body:value.body===null?null:verified.get(value.body),original:value.original===null?null:verified.get(value.original),sourceType:value.sourceType,fingerprint:await fingerprint(value.record)})));
     return this.mergePreparedData(manifest,incoming,resolver);
   }
   async mergeBackupData(data,resolver){
@@ -189,6 +193,7 @@ export class DeviceSyncAdapter {
       if(!idOK(value?.record?.id)||seen.has(value.record.id)||!['html','file'].includes(value.sourceType))throw Error('받은 문서 목록이 손상되었습니다.');seen.add(value.record.id);
       const state=validateState(value,value.record.id);
       if(state.record.folderId&&!remoteFolders.some(f=>f.id===state.record.folderId))throw Error('받은 문서의 상대 폴더가 없습니다.');
+      if(!syncEligible(state.record))continue;
       const body=value.body?await unpack(value.body):null,original=value.original?await unpack(value.original):null;
       incoming.push({...state,body,original,sourceType:value.sourceType,fingerprint:await fingerprint(state.record)});
     }
@@ -199,11 +204,14 @@ export class DeviceSyncAdapter {
     const settingsPlan=await this.prepareSettings(data);this.check();
     this.onStage('마지막 동기화 이후의 주석 변경을 비교하는 중…');
     const local=await this.ops.readLibrary(),tree=mergeLibraryFolders(local.folders,remoteFolders,()=>crypto.randomUUID()),entries=[],mirrored=[],conflicts=[],plans=[];
+    const available=local.documents.filter(syncEligible),protectedIds=new Set(local.documents.filter(record=>!syncEligible(record)).map(record=>record.id));
     for(const value of incoming){
       const record=value.record,stamp=value.fingerprint;
-      if(local.documents.some(d=>d.syncSourceId===record.id&&d.syncFingerprint===stamp&&(d.folderId||'')===(tree.mapping.get(record.folderId||'')||''))){continue;}
-      const match=local.documents.find(d=>d.id===record.id)||local.documents.find(d=>sameLocalFile(d.sourceIdentity,record.sourceIdentity));
+      if(!syncEligible(record)||protectedIds.has(record.id))continue;
+      if(available.some(d=>d.syncSourceId===record.id&&d.syncFingerprint===stamp&&(d.folderId||'')===(tree.mapping.get(record.folderId||'')||''))){continue;}
+      const match=available.find(d=>d.id===record.id)||available.find(d=>sameLocalFile(d.sourceIdentity,record.sourceIdentity));
       const previous=match?await this.ops.getDocument(match.id):null;
+      if(previous&&!syncEligible(previous))continue;
       const localStamp=previous?await fingerprint(previous):null,sameFolder=previous&&(previous.folderId||'')===(tree.mapping.get(record.folderId||'')||'');
       if(previous&&localStamp===stamp&&sameFolder){mirrored.push(previous.id);continue;}
       if(!value.body&&!previous)throw Error('이 기기에 ‘'+record.title+'’의 원본이 없습니다. 두 기기를 최신 버전으로 열고 다시 연결해주세요.');

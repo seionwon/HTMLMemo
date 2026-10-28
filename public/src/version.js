@@ -1,2 +1,2 @@
 // Generated from package.json by scripts/assets.mjs.
-export const APP_VERSION = "1.2.27";
+export const APP_VERSION = "1.2.28";
