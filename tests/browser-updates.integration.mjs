@@ -8,7 +8,7 @@ import {launchChrome,CDP} from './chrome.mjs';
 
 const saved='document.querySelector("#data-folder-status").textContent==="폴더 저장 완료"';
 async function seed(page){
-  await page.evaluate(`(async()=>{const s=await import('./src/storage.js');await s.putDocumentRevision({id:'update-kept',name:'kept.html',title:'Update kept document',html:'<h1>Kept document</h1><p>Original text stays.</p>',created:1000,modified:2000,metadata:{version:1,title:'Update kept document',annotations:[{id:'kept-note',type:'note',anchor:'body',points:[{x:20,y:20}],text:'Keep this note',color:'#334155',width:3,opacity:1}],bookmarks:[{id:'kept-bookmark',title:'Keep this place',top:120,left:0}]}});})()`);
+  await page.evaluate(`(async()=>{const s=await import('./src/storage.js'),{parseHTML}=await import('./src/document.js'),p=parseHTML('<html><head><title>Update kept document</title></head><body><h1>Kept document</h1><p>Original text stays.</p></body></html>');p.metadata.annotations=[{id:'kept-note',type:'note',anchor:'body',points:[{x:20,y:20}],text:'Keep this note',color:'#334155',width:3,opacity:1}];p.metadata.bookmarks=[{id:'kept-bookmark',title:'Keep this place',top:120,left:0}];await s.putDocumentRevision({id:'update-kept',name:'kept.html',title:p.metadata.title,html:p.html,created:1000,modified:2000,metadata:p.metadata});})()`);
   await page.waitFor(saved);
 }
 const data=page=>page.evaluate(`(async()=>{const s=await import('./src/storage.js'),r=await s.getDocument('update-kept');return {id:r.id,html:r.html,metadata:r.metadata,history:(await s.listRevisions(r.id)).length,ids:(await s.listDocuments({includeTrashed:true})).map(r=>r.id).sort(),folder:(await s.getSetting('folder')).name};})()`);
