@@ -26,6 +26,10 @@ async function phone(page){
 async function dialogFits(page){
   assert.equal(await page.evaluate(`(()=>{const d=document.querySelector('#dialog'),r=d.getBoundingClientRect();return d.open&&r.left>=0&&r.right<=innerWidth+1&&r.top>=0&&r.bottom<=innerHeight+1&&d.scrollWidth<=d.clientWidth+1;})()`),true);
 }
+async function pausedSetup(page){
+  await page.waitFor('document.documentElement.dataset.storageSetup==="paused"&&!document.querySelector("#dialog").open');
+  assert.deepEqual(await page.evaluate(`(()=>{const b=document.querySelector('#folder-setup-resume'),r=b.getBoundingClientRect();return {appHidden:document.querySelector('#app').hidden,waiting:!document.querySelector('#folder-setup-paused').hidden,focused:document.activeElement===b,inside:r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight,reachable:b.contains(document.elementFromPoint(r.left+r.width/2,r.top+r.height/2))};})()`),{appHidden:true,waiting:true,focused:true,inside:true,reachable:true});
+}
 
 test('real Chrome: cold startup waits for a streamed document before binding UI',{timeout:60000},async()=>{
   await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-cold-shell-'));await cp(join(root,'public'),folder,{recursive:true});
@@ -69,10 +73,20 @@ test('real Chrome: Pages-only Android first-run folder welcome is error-free and
     await page.click('#select-storage-folder');await page.waitFor('!document.querySelector("#select-storage-folder").disabled&&document.querySelector("#folder-connection-status").textContent.includes("취소")');assert.equal(await page.evaluate('window.phonePickerCalls'),1);
     await page.evaluate(`window.showDirectoryPicker=async()=>{throw new DOMException('Denied','NotAllowedError')}`);await page.click('#select-storage-folder');await page.waitFor('document.querySelector("#folder-connection-status").textContent.includes("쓰기를 허용")');
     assert.equal(await page.evaluate('document.querySelector("#toast.error:not([hidden])")'),null);report.cancelAndPermissionHandled=true;
-    assert.equal(await page.evaluate('document.querySelector("#folder-welcome-later,[data-dialog-close]")'),null);
+    assert.equal(await page.evaluate('document.querySelector("#folder-welcome-later")'),null);assert.ok(await page.evaluate('document.querySelector("#cancel-folder-setup")'));
+    const historyBefore=await page.send('Page.getNavigationHistory');
     for(const type of ['keyDown','keyUp'])await page.send('Input.dispatchKeyEvent',{type,key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
-    assert.equal(await page.evaluate('document.querySelector("#dialog").open'),true);
-    await page.evaluate(`localStorage.removeItem('htmlmemo-data-folder-welcome-v1')`);await page.navigate(url);await page.waitFor('document.querySelector("#dialog").open&&document.querySelector("[data-folder-welcome]")');await page.evaluate('navigator.serviceWorker.ready.then(()=>true)');
+    await pausedSetup(page);assert.equal(await page.evaluate(`(async()=> (await import('./src/storage.js')).getSetting('folder'))()`),undefined);report.escapeCancelsWithoutReopening=true;
+    for(const [width,height] of [[320,568],[390,844],[844,390]]){
+      await page.send('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:true});await pausedSetup(page);await writeFile(join(root,`test-results/pages-only-android-folder-cancel-${width}.png`),await page.screenshot());
+    }
+    await page.send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
+    await page.click('#folder-setup-resume');await page.waitFor('document.querySelector("#dialog").open');await page.evaluate(`document.querySelector('#dialog').requestClose()`);await pausedSetup(page);report.nativeBackCloseRequestAllowed=true;
+    await page.click('#folder-setup-resume');await page.waitFor('document.querySelector("#dialog").open');await page.click('#cancel-folder-setup');await pausedSetup(page);report.explicitCancelWorks=true;
+    await page.click('#folder-setup-resume');await page.waitFor('document.querySelector("#dialog").open');await page.click('[aria-label="저장 폴더 연결 취소"]');await pausedSetup(page);report.closeButtonWorks=true;
+    const historyAfter=await page.send('Page.getNavigationHistory');assert.equal(historyAfter.entries.length,historyBefore.entries.length);assert.equal(historyAfter.currentIndex,historyBefore.currentIndex);report.noHistoryTrap=true;
+    const previous=historyAfter.entries[historyAfter.currentIndex-1];assert.ok(previous);await page.send('Page.navigateToHistoryEntry',{entryId:previous.id});await page.waitFor(`location.href===${JSON.stringify(previous.url)}`);report.browserBackLeavesApp=true;
+    await page.navigate(url);await page.waitFor('document.querySelector("#dialog").open&&document.querySelector("[data-folder-welcome]")');await page.evaluate('navigator.serviceWorker.ready.then(()=>true)');
     assert.equal(await page.evaluate('document.querySelector("#toast.error:not([hidden])")'),null);assert.deepEqual(await page.evaluate('window.startupIssues'),[]);assert.deepEqual(chrome.errors,[]);report.repeatVisitAlsoErrorFree=true;report.status='pass';
   }catch(error){report.status='failed';report.error=error.stack;if(chrome){report.browserErrors=chrome.errors;report.state=await chrome.page.evaluate('({status:document.querySelector("#status-left")?.textContent,dialog:document.querySelector("#dialog")?.textContent,toast:document.querySelector("#toast")?.textContent,errors:window.startupIssues})').catch(()=>null);await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/pages-only-android-first-run-failure.png'),await chrome.page.screenshot());}throw error;
   }finally{await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/pages-only-android-first-run.json'),JSON.stringify(report,null,2)+'\n');await chrome?.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
@@ -109,6 +123,8 @@ test('real Chrome: Pages-only Android saved folder resumes across launches witho
     assert.equal(await page.evaluate('document.querySelector("#dialog h2").textContent'),'저장 폴더 연결 확인');
     assert.equal(await page.evaluate('document.querySelector("#create-storage-folder,#storage-folder-name")'),null);assert.equal(await page.evaluate('document.activeElement.id'),'resume-data-folder');
     assert.equal(await page.evaluate('window.phonePickerCalls+window.folderResumeRequests'),0);assert.equal(await page.evaluate('document.querySelector("#toast.error:not([hidden])")'),null);
+    await page.click('#cancel-folder-setup');await pausedSetup(page);assert.deepEqual(await state(),before);assert.equal(await manifest(),diskBefore);assert.equal(await page.evaluate('window.phonePickerCalls+window.folderResumeRequests'),0);report.cancelPreservesData=true;
+    await page.click('#folder-setup-resume');await page.waitFor('document.querySelector("#dialog").open&&document.querySelector("[data-folder-resume]")');assert.equal(await page.evaluate('document.querySelector("#create-storage-folder,#storage-folder-name")'),null);
     await mkdir(join(root,'test-results'),{recursive:true});
     for(const [width,height] of [[320,568],[390,844],[844,390]]){
       await page.send('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:true});await dialogFits(page);

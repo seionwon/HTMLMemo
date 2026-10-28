@@ -24,7 +24,7 @@ let libraryFolderById=new Map(),libraryFolderChildren=new Map(),libraryFolderCou
 let preferences=normalizePreferences(), settingsFileHandle=null, settingsFolderHint='';
 let dataFolder, browserStorageProtection;
 const FOLDER_WELCOME_KEY='htmlmemo-data-folder-welcome-v1';
-let folderSetupPending=false,lastSetupAttempt=null;const folderSetupWaiters=[];
+let folderSetupPending=false,folderSetupBusy=false,lastSetupAttempt=null;const folderSetupWaiters=[];
 let sharingApp=false, installController;
 let readerFocused=false, nativeReaderFullscreen=false, focusBusy=false;
 let tabLayout='';
@@ -526,9 +526,24 @@ function protectBrowserStorage() {
 async function connectDataFolder(selected,onConnected,{resume=false}={}) {
   await flushInternalDocuments();
   await dataFolder.connect(selected,{resume});folder=dataFolder.handle;void protectBrowserStorage();await refreshLibrary();
-  folderSetupPending=false;lastSetupAttempt=null;document.documentElement.dataset.storageSetup='ready';for(const resolve of folderSetupWaiters.splice(0))resolve();
   rememberFolderWelcome();
+  if(document.documentElement.dataset.storageSetup==='paused')return;
+  completeFolderSetup();
   $('#dialog').close();if(typeof onConnected==='function')onConnected();toast('문서·주석·설정을 '+folder.name+' 폴더에 자동 저장했습니다. 새 기기로는 폴더 전체를 옮기세요.');
+}
+function completeFolderSetup() {
+  folderSetupPending=false;lastSetupAttempt=null;document.documentElement.dataset.storageSetup='ready';for(const resolve of folderSetupWaiters.splice(0))resolve(true);
+}
+function pauseFolderSetup() {
+  if(!folderSetupPending)return;
+  document.documentElement.dataset.storageSetup='paused';$('#app').hidden=true;$('#folder-setup-paused').hidden=false;
+  const button=$('#folder-setup-resume');button.disabled=folderSetupBusy;button.textContent=folderSetupBusy?'연결 마무리 중…':'저장 폴더 연결';$(folderSetupBusy?'#folder-setup-paused-title':'#folder-setup-resume').focus();
+  for(const resolve of folderSetupWaiters.splice(0))resolve(false);
+}
+function resumeFolderSetup() {
+  if(folderSetupBusy)return;
+  $('#folder-setup-paused').hidden=true;$('#app').hidden=false;
+  if(needsFolderWelcome())folderWelcomeDialog();else{completeFolderSetup();$('#library-tab').focus();}
 }
 function rememberFolderWelcome() { try{localStorage.setItem(FOLDER_WELCOME_KEY,'1');}catch{/* The unconnected reminder remains visible if this device cannot retain the choice. */} }
 function needsFolderWelcome() { return !folder||dataFolder?.state==='error'; }
@@ -552,21 +567,26 @@ function folderWelcomeDialog() {
   folderSetupPending=true;document.documentElement.dataset.storageSetup='required';
   const content=folder?`<section class="folder-welcome" data-folder-welcome data-folder-resume><div class="dialog-heading"><h2>저장 폴더 연결 확인</h2></div><p class="folder-welcome-intro">이미 설정한 <strong>${esc(folder.name||'기존 저장 폴더')}</strong> 폴더로 이어서 사용합니다.</p><p class="dialog-description">아래 버튼을 눌러 기존 폴더의 읽기·쓰기 권한을 확인해주세요. 폴더를 다시 선택하거나 새로 만들 필요가 없습니다.</p><p class="dialog-description small">권한 창에 <strong>방문할 때마다 허용</strong>이 있으면 선택하세요. 권한이 유지되면 다음 실행부터 자동으로 연결합니다.</p><p id="folder-connection-status" class="folder-welcome-status" role="status" aria-live="polite">${esc(dataFolder?.failureMessage||'기존 저장 폴더의 연결을 확인해주세요.')}</p><div class="dialog-actions folder-welcome-actions"><button id="resume-data-folder" class="primary-button" type="button">기존 폴더로 계속</button><button id="select-storage-folder" class="secondary-button" type="button">다른 저장 폴더 선택</button></div></section>`:`<section class="folder-welcome" data-folder-welcome><div class="dialog-heading"><h2>저장 폴더를 먼저 설정하세요</h2></div><p class="folder-welcome-intro">문서·주석·설정을 자동 저장할 <strong>전용 폴더를 연결해야 앱을 사용할 수 있습니다.</strong></p><label class="paste-label" for="storage-folder-name">새 저장 폴더 이름</label><input id="storage-folder-name" class="paste-title" maxlength="120" value="HTMLMemo" autocomplete="off" spellcheck="false"><ol class="folder-welcome-steps"><li><strong>문서(Documents) 폴더를 선택하세요.</strong><p>새 폴더 만들기는 Documents(문서)에서 시작합니다. 문서 폴더가 없는 기기에서는 저장할 상위 폴더를 선택하세요.</p></li><li><strong>하위에 전용 폴더를 만듭니다.</strong><p>선택한 위치에 Documents 또는 문서 폴더가 있으면 그 안에 만듭니다. 기본 위치는 <b>문서/HTMLMemo</b>이며 원하는 이름을 사용할 수 있습니다.</p></li><li><strong>폴더 사용과 쓰기를 허용하세요.</strong><p>연결과 첫 자동 저장이 끝나면 앱이 열립니다. <b>방문할 때마다 허용</b>이 있으면 선택하세요.</p></li></ol><details class="folder-welcome-existing"><summary>기존 저장 폴더를 연결하거나 옮겨 왔나요?</summary><p>아래 <b>기존 저장 폴더 연결</b>로 전용 폴더 자체를 선택하세요. 그 안의 문서·주석·설정을 자동 복원합니다. 브라우저가 문서 폴더 전체 선택을 제한하면 선택 창에서 하위 폴더를 만든 뒤 이 버튼으로 연결할 수도 있습니다.</p></details><p class="folder-welcome-move">새 기기로 옮길 때는 <strong>이 폴더 전체</strong>를 복사하면 됩니다.</p><p id="folder-connection-status" class="folder-welcome-status" role="status" aria-live="polite">버튼을 누른 뒤에만 폴더 선택 창이 열립니다. 설정을 마쳐야 계속할 수 있습니다.</p><div class="dialog-actions folder-welcome-actions"><button id="create-storage-folder" class="primary-button" type="button">새 저장 폴더 만들기</button><button id="select-storage-folder" class="secondary-button" type="button">기존 저장 폴더 연결</button></div></section>`;
   modal(content,dialog=>{
-    dialog.oncancel=event=>event.preventDefault();
-    dialog.onclose=()=>{if(folderSetupPending&&dialog.querySelector('[data-folder-welcome]')&&!dialog.open)dialog.showModal();};
+    const heading=$('.dialog-heading',dialog),close=document.createElement('button');close.type='button';close.className='icon-button';close.setAttribute('aria-label','저장 폴더 연결 취소');close.innerHTML=icon('close');close.onclick=()=>dialog.close();heading.append(close);
+    const cancel=document.createElement('button');cancel.type='button';cancel.id='cancel-folder-setup';cancel.className='secondary-button';cancel.textContent='취소';cancel.onclick=()=>dialog.close();$('.dialog-actions',dialog).prepend(cancel);
+    // Native close requests include Android Back and desktop Escape. Never reopen a canceled dialog.
+    dialog.onclose=()=>{if(dialog.querySelector('[data-folder-welcome]')&&!dialog.open)pauseFolderSetup();};
     bindFolderConnection();$(folder?'#resume-data-folder':'#create-storage-folder').focus();
   });
 }
 function bindFolderConnection(onConnected) {
-  const button=$('#select-storage-folder'),create=$('#create-storage-folder'),name=$('#storage-folder-name'),status=$('#folder-connection-status');
+  const dialog=$('#dialog'),setup=$('[data-folder-welcome]',dialog),button=$('#select-storage-folder'),create=$('#create-storage-folder'),name=$('#storage-folder-name'),status=$('#folder-connection-status');
+  const canceled=()=>setup&&(!dialog.open||!dialog.contains(setup));
   const connect=async(usePrevious=false,createNew=false)=>{
     if(button.disabled)return;
+    if(setup){folderSetupBusy=true;$('#folder-setup-resume').disabled=true;}
     const resume=$('#resume-data-folder');for(const control of [button,create,resume,name])if(control)control.disabled=true;let selected;
     try{
       // Keep the native permission picker in the user's click, before filesystem work.
       if(usePrevious){selected=folder;await selected.requestPermission?.({mode:'readwrite'});}
-      else if(createNew){const childName=storageFolderName(name.value);const parent=await window.showDirectoryPicker({id:'htmlmemo-storage-parent-v1',mode:'readwrite',startIn:'documents'});selected=await createStorageSubfolder(parent,childName,lastSetupAttempt);lastSetupAttempt=selected;}
+      else if(createNew){const childName=storageFolderName(name.value);const parent=await window.showDirectoryPicker({id:'htmlmemo-storage-parent-v1',mode:'readwrite',startIn:'documents'});if(canceled())return;selected=await createStorageSubfolder(parent,childName,lastSetupAttempt);lastSetupAttempt=selected;}
       else selected=await window.showDirectoryPicker({id:'htmlmemo-storage-v2',mode:'readwrite',startIn:folder||'documents'});
+      if(canceled())return;
       status.textContent='문서·주석·설정을 복원하고 폴더에 저장하는 중… 앱을 닫지 마세요.';
       await connectDataFolder(selected,onConnected,{resume:usePrevious});
     }catch(error){
@@ -574,7 +594,7 @@ function bindFolderConnection(onConnected) {
       if(error?.name==='AbortError')status.textContent=usePrevious?'폴더 연결 확인을 취소했습니다. 기존 폴더로 계속을 눌러 다시 확인해주세요.':folderSetupPending?'폴더 선택을 취소했습니다. 저장 폴더를 설정해야 앱을 사용할 수 있습니다. 다시 선택해주세요.':'폴더 연결은 변경하지 않았습니다. 연결하려면 전용 하위 폴더를 선택하세요.';
       else if(['NotAllowedError','SecurityError'].includes(error?.name))status.textContent=usePrevious?'기존 저장 폴더의 쓰기를 허용해야 계속할 수 있습니다. 기존 폴더로 계속을 눌러 다시 허용해주세요.':'브라우저가 폴더 연결을 허용하지 않았습니다. 문서/HTMLMemo 같은 전용 하위 폴더를 선택하고 쓰기를 허용하세요.';
       else status.textContent='폴더에 저장하지 못했습니다. 기존 문서는 유지됩니다. '+(error?.message||String(error));
-    }finally{for(const control of [button,create,resume,name])if(control)control.disabled=false;}
+    }finally{for(const control of [button,create,resume,name])if(control)control.disabled=false;if(setup){folderSetupBusy=false;const retry=$('#folder-setup-resume');retry.disabled=false;retry.textContent='저장 폴더 연결';if(document.documentElement.dataset.storageSetup==='paused')retry.focus();}}
   };
   button.onclick=safely(()=>connect());if(create)create.onclick=safely(()=>connect(false,true));if($('#resume-data-folder'))$('#resume-data-folder').onclick=safely(()=>connect(true));
 }
@@ -602,7 +622,8 @@ function duplicateImportDialog(local, matches) {
   }));
 }
 function openLocalFile(input,parentId=libraryFolderId) {
-  if(folderSetupPending&&$('#dialog').open&&$('[data-folder-welcome]'))return new Promise(resolve=>folderSetupWaiters.push(resolve)).then(()=>openLocalFile(input,parentId));
+  if(folderSetupPending&&document.documentElement.dataset.storageSetup==='paused')return Promise.resolve(null);
+  if(folderSetupPending&&$('#dialog').open&&$('[data-folder-welcome]'))return new Promise(resolve=>folderSetupWaiters.push(resolve)).then(connected=>connected?openLocalFile(input,parentId):null);
   // File picker, input, drop and launch events share one queue. Concurrent
   // imports must not overwrite a pending three-way choice or miss each other.
   const pending=localImportQueue.then(()=>importLocalFile(input,parentId));
@@ -1437,7 +1458,7 @@ function documentMenu(record) {
   const location=document.createElement('p');location.className='dialog-description small';location.textContent='위치: '+libraryPathLabel(record.folderId||'');actions.before(location);
 }
 function handleKey(event) {
-  if(folderSetupPending&&$('#dialog').open&&$('[data-folder-welcome]'))return;
+  if(folderSetupPending&&($('#dialog').open&&$('[data-folder-welcome]')||document.documentElement.dataset.storageSetup==='paused'))return;
   const isField=/^(INPUT|TEXTAREA|SELECT)$/.test(event.target?.tagName)||event.target?.isContentEditable;
   if(event.key==='Escape'&&reader()?.cancelAnnotationDrag?.()){event.preventDefault();return;}
   if((event.ctrlKey||event.metaKey)&&event.shiftKey&&event.key.toLowerCase()==='v'&&!isField&&!$('#dialog').open){event.preventDefault();pasteTextDialog();return;}
@@ -1493,6 +1514,7 @@ function bindUI() {
   setIconButton('#settings-button','settings','설정');bindTabs();
   $('#execution-export-guide').innerHTML=annotationExportGuide();
   $('#data-folder-status').onclick=()=>chooseFolder();
+  $('#folder-setup-resume').onclick=resumeFolderSetup;
   $('#library-tab').onclick=()=>activate('library');
   $('#execution-web').onclick=()=>webHelpDialog();
   $('#share-url').value=PUBLIC_APP_URL;$('#shared-app-link').href=PUBLIC_APP_URL;
@@ -1551,7 +1573,7 @@ async function initialize() {
   onStorageChange(()=>{if(activeId==='library'){clearTimeout(libraryReloadTimer);libraryReloadTimer=setTimeout(()=>{if(activeId==='library')refreshLibrary().catch(showError);},30);}});
   if(folder){try{await dataFolder.connect(folder,{resume:true});await refreshLibrary();}catch(error){renderFolderState();if(!['NotAllowedError','SecurityError'].includes(error?.name))showError(error);}}
   if(needsFolderWelcome())folderWelcomeDialog();else document.documentElement.dataset.storageSetup='ready';
-  if(typeof window.launchQueue?.setConsumer==='function')window.launchQueue.setConsumer(safely(async params=>{if(folderSetupPending)await new Promise(resolve=>folderSetupWaiters.push(resolve));const parentId=libraryFolderId;for(const handle of params.files||[])await openLocalFile(handle,parentId);}));
+  if(typeof window.launchQueue?.setConsumer==='function')window.launchQueue.setConsumer(safely(async params=>{if(folderSetupPending&&(document.documentElement.dataset.storageSetup==='paused'||!await new Promise(resolve=>folderSetupWaiters.push(resolve))))return;const parentId=libraryFolderId;for(const handle of params.files||[])await openLocalFile(handle,parentId);}));
   if(installableLocation(location)&&'serviceWorker'in navigator)await navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'}).then(reg=>reg?.update?.().catch(()=>{})).catch(()=>toast('오프라인 준비를 완료하지 못했습니다. 다음 접속에서 다시 준비합니다.',true));
 }
 initialize().catch(error=>{$('#status-left').textContent='서재를 준비하지 못했습니다.';showError(error);});

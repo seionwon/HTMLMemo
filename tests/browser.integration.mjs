@@ -2551,11 +2551,12 @@ test('real Chrome: Pages-only first-run folder welcome is automatic, readable an
     assert.deepEqual(await page.evaluate('window.firstRunOptions'),{id:'htmlmemo-storage-parent-v1',mode:'readwrite',startIn:'documents'});
     await page.evaluate(`window.showDirectoryPicker=async()=>{throw new DOMException('Denied','NotAllowedError');}`);await page.click('#select-storage-folder');await page.waitFor('!document.querySelector("#select-storage-folder").disabled&&document.querySelector("#folder-connection-status").textContent.includes("쓰기를 허용")');assert.equal(await page.evaluate('localStorage.getItem("htmlmemo-data-folder-welcome-v1")'),null);
     assert.deepEqual(await page.evaluate('window.storageProtection'),{checks:0,requests:0,saved:false},'cancelled or denied setup never asks for protection');
-    assert.equal(await page.evaluate('document.querySelector("#folder-welcome-later,[data-dialog-close]")'),null);
+    assert.equal(await page.evaluate('document.querySelector("#folder-welcome-later")'),null);assert.ok(await page.evaluate('document.querySelector("#cancel-folder-setup")'));
     for(const type of ['keyDown','keyUp'])await page.send('Input.dispatchKeyEvent',{type,key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
-    assert.equal(await page.evaluate(welcome),true);
+    await page.waitFor('document.documentElement.dataset.storageSetup==="paused"&&!document.querySelector("#dialog").open');assert.equal(await page.evaluate('document.querySelector("#app").hidden'),true);assert.equal(await page.evaluate('localStorage.getItem("htmlmemo-data-folder-welcome-v1")'),null);
+    await page.click('#folder-setup-resume');await page.waitFor(welcome);
     await page.send('Input.dispatchMouseEvent',{type:'mousePressed',x:2,y:2,button:'left',clickCount:1});await page.send('Input.dispatchMouseEvent',{type:'mouseReleased',x:2,y:2,button:'left',clickCount:1});assert.equal(await page.evaluate(welcome),true);
-    await page.evaluate('document.querySelector("#dialog").close()');await page.waitFor(welcome);
+    await page.evaluate('document.querySelector("#dialog").close()');await page.waitFor('document.documentElement.dataset.storageSetup==="paused"&&!document.querySelector("#dialog").open');await page.click('#folder-setup-resume');await page.waitFor(welcome);
     await page.evaluate(`localStorage.setItem('htmlmemo-data-folder-welcome-v1','1')`);await page.navigate(url);await page.waitFor(welcome);
     assert.equal(await page.evaluate('document.documentElement.dataset.storageSetup'),'required');
     await page.evaluate(`window.showDirectoryPicker=async()=> (await navigator.storage.getDirectory()).getDirectoryHandle('Documents',{create:true});document.querySelector('#storage-folder-name').value='내 HTMLMemo 서재'`);await page.click('#create-storage-folder');await page.waitFor('!document.querySelector("#dialog").open&&document.querySelector("#data-folder-status").textContent==="폴더 저장 완료"');
