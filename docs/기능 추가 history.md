@@ -3769,11 +3769,11 @@ CodeMemo의 제한된 로컬 검증기로 iframe 요소를 클릭한 시도는 �
 
 
 <a id="hist-20261028-005"></a>
-### 2026-10-28 11:12:47 +09:00 — 저장 폴더 안내 취소와 연결 대기 화면
+### 2026-10-28 11:33:44 +09:00 — 저장 폴더 안내 취소와 연결 대기 화면
 
 | ID | change-kind | status |
 |---|---|---|
-| hist-20261028-005 | 시작 화면 · 취소·뒤로 가기 | 구현·로컬 검사 완료 · 실제 Chrome·Pages 게시 확인 대기 |
+| hist-20261028-005 | 시작 화면 · 취소·뒤로 가기 | 구현·전체/공개 Chrome·GitHub Pages 게시 확인 완료 |
 
 **문제·변경:** 처음 저장 폴더 설정과 기존 폴더 연결 확인에서 취소 이벤트를 막고, 안내창을 닫아도 즉시 다시 열어 사용자가 빠져나오지 못했습니다. 두 안내에 **취소**와 상단 **닫기(×)**를 추가하고 강제로 다시 여는 동작을 제거했습니다. 폰 뒤로 가기와 Esc가 사용하는 기본 dialog 닫기 요청을 막지 않습니다. 브라우저 이력에 가짜 항목을 넣거나 뒤로 이동을 되돌리는 코드도 추가하지 않았습니다. [HTML 표준의 dialog 닫기 요청](https://html.spec.whatwg.org/multipage/interactive-elements.html#the-dialog-element)에 따릅니다.
 
@@ -3786,3 +3786,17 @@ CodeMemo의 제한된 로컬 검증기로 iframe 요소를 클릭한 시도는 �
 **완료한 로컬 검증:** 집중 단위 **11개**, 전체 단위 **613개**, JavaScript **128개·JSON**, Tailwind CSS **4.3.3** 빌드와 git diff --check를 통과했습니다. 취소 후 재개, 설정 미완료 유지, 기존 폴더 보존, 기다리던 파일 열기 취소, 늦은 선택 결과 무시, 저장 중 취소 후 안전한 완료·명시적 재개를 확인했습니다. 신뢰된 CodeMemo 브라우저의 **320×568 / 390×844 새 프로필**에서 실제 취소 클릭 → 재연결 → 상단 닫기 → 대기를 확인했습니다(HTTP **200**, 예외 **0개**). 두 화면을 직접 검토했습니다. 이 제한된 검사는 OS 폴더 선택 창이나 실제 폰의 뒤로 가기 제스처를 조작하지 않았습니다.
 
 **아직 남은 검증·게시:** 기존 실제 Chrome의 처음 설정·Android 화면·저장 폴더 재연결 시나리오를 새 취소 동작에 맞춰 보완했습니다. Esc와 native requestClose, 취소·닫기, 취소 후 재개, 이력 항목 증가 없음, 실제 이전 페이지 이동, 기존 원본·주석·북마크·이력 보존을 CI의 전체/공개 검사에서 확인합니다. 전용 Android 하드웨어·OS 권한 창 자체는 직접 검증하지 않습니다. 현재는 로컬 검사만 완료했으며 소스 게시·GitHub Actions·실제 공개 URL의 파일과 화면 결과는 같은 항목에 보충합니다. 증거는 `test-results/folder-cancel-focused.log`, `folder-cancel-unit.log`, `folder-cancel-check.log`, `folder-cancel-build.log`, `folder-cancel-preview/`입니다. 개인 문서를 사용하지 않았습니다.
+
+
+**첫 공개 검사 실패 기록:** 소스 `a67099f816d44220439c512cc0274b05d56b6e41`의 [Actions 40619604699 첫 실행](https://github.com/seionwon/HTMLMemo/actions/runs/40619604699/attempts/1)에서 우선 Chrome **7개**와 전체 Chrome **80개**가 통과하고 Pages 게시도 **11:21:39**에 성공했습니다. 공개 검사는 **51개 중 50개 통과·1개 실패**였습니다. 요청한 폴더 취소·기본 닫기 요청·브라우저 이력·기존 폴더 재연결 검사는 공개 주소에서도 모두 통과했습니다. 실패는 기존 「선택 텍스트에서 메모 만들기」 시나리오가 두 번째 책을 연 뒤 `#close-sidebar`를 누르는 지점에서 **Element is not visible**로 중단된 것입니다. 첫 실패 로그·XML·화면·실제 폴더 검사 결과를 `folder-cancel-first-published-ci.log`, `folder-cancel-first-published/`, `folder-cancel-first-actions.json`에 보존했습니다. 앱과 검사 소스를 바꾸거나 기대값을 완화하지 않고 실패한 공개 검사 작업만 재실행했습니다. 후속 결과는 아래에 보충합니다.
+
+
+**최종 검증·게시 완료 (2026-10-28 11:33:44 +09:00):** 초기 기록 **11:12:47** 이후 소스 `a67099f816d44220439c512cc0274b05d56b6e41`의 [Actions 40619604699 재실행](https://github.com/seionwon/HTMLMemo/actions/runs/40619604699/attempts/2)이 최종 성공했습니다. 우선 Chrome **7개**(전체에 포함), 전체 Chrome **80개**, 실제 [공개 주소](https://seionwon.github.io/HTMLMemo/) Chrome **51개 전부 통과**했습니다. 최초의 메모 검사 실패도 동일한 앱·검사 소스로 공개 검사를 다시 실행한 결과 통과했습니다. 최초 실패 기록을 지우거나 테스트를 완화하지 않았습니다. 소스 빌드는 **11:21:17**, Pages 게시 완료는 **11:21:39**, 최종 공개 검증 완료는 **11:32:01 +09:00**입니다. 재실행은 공개 검사만 수행했고 앱 파일을 다시 변경하지 않았습니다.
+
+CI 단위 **613개 중 612개 통과·실패 0·건너뜀 1**이며 Linux 대상이 아닌 macOS Chrome 실행 보호 검사만 건너뛰었습니다. 해당 보호 검사는 로컬 macOS에서 통과했습니다. 로컬 단위 **613개**, 로컬 JavaScript **128개·JSON**, CI JavaScript **109개·JSON**, Tailwind CSS **4.3.3** 빌드와 git diff --check도 통과했습니다. 로컬 검증용 서버는 종료했습니다.
+
+공개 Chrome에서 **취소·상단 닫기·Esc·native requestClose**로 안내가 닫히고 대기 화면에 남으며, 명시적 버튼으로 다시 시작하는 것을 확인했습니다. 이력 항목과 현재 인덱스가 늘지 않고 실제 이전 페이지로 이동했습니다. 기억한 폴더의 취소·권한 거부 후에는 디스크 목록 바이트, 원본·문서 ID·주석·북마크·이력 개수를 보존했고, 같은 실제 폴더 핸들을 재사용해 연결한 뒤 **3회 재실행**에서도 자료를 유지했습니다. 대기 화면은 **320×568 / 390×844 / 844×390**에서 화면 안의 버튼·초점·실제 클릭 가능성을 확인했고 공개 화면 세 크기를 직접 검토했습니다.
+
+Chrome 검사는 실제 OPFS 폴더 핸들과 IndexedDB, Android 사용자 에이전트·터치 화면 및 제어된 권한 상태를 사용했습니다. **실제 Android 하드웨어의 뒤로 가기 제스처와 OS 권한 창을 직접 조작한 검사는 아닙니다.** 기본 dialog 닫기 요청을 차단하지 않는 동작을 검증했습니다. CI Ubuntu에는 일부 한글 글꼴이 없어 문구를 DOM 결과와 한글이 표시되는 신뢰된 로컬 320/390px 화면으로 함께 확인했습니다.
+
+공개 파일 **46개(2,724,935바이트)**가 모두 HTTP **200**이며 실제 Pages 아티팩트와 바이트·SHA-256이 일치했습니다. 최종 근거는 `test-results/folder-cancel-ci/`, `folder-cancel-published/`의 XML·Android 결과 JSON·화면, `folder-cancel-build-ci.log`, `folder-cancel-published-ci.log`, `folder-cancel-actions.json`, `folder-cancel-artifacts.json`, `folder-cancel-pages/`, `folder-cancel-online-files.json`에 보존했습니다. 정식 서비스는 GitHub Pages의 **1.2.21**이며 새로고침하면 사용할 수 있습니다. 이 최종 이력 보충은 공개 앱 코드를 바꾸지 않습니다.
