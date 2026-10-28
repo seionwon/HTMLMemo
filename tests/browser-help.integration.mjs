@@ -17,6 +17,13 @@ const preserved=page=>page.evaluate(`(async()=>{const s=await import('./src/stor
 const openHelp=async page=>{await page.click('#settings-button');await page.click('#settings-help');await page.waitFor('document.querySelector(".help-browser h2")?.textContent==="HTMLMemo 도움말"');};
 const search=async(page,value)=>page.evaluate(`(()=>{const input=document.querySelector('#help-search');input.value=${JSON.stringify(value)};input.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText'}));})()`);
 const fits=page=>page.evaluate(`(()=>{const dialog=document.querySelector('#dialog'),r=dialog.getBoundingClientRect(),body=document.querySelector('#help-content'),b=body.getBoundingClientRect(),footer=document.querySelector('.help-footer').getBoundingClientRect();return r.left>=-1&&r.top>=-1&&r.right<=innerWidth+1&&r.bottom<=innerHeight+1&&dialog.scrollWidth<=dialog.clientWidth+1&&body.scrollWidth<=body.clientWidth+1&&footer.bottom<=r.bottom+1&&b.bottom<=footer.top+1;})()`);
+const helpContrast=page=>page.evaluate(`(()=>{
+ const canvas=document.createElement('canvas');canvas.width=canvas.height=1;const ctx=canvas.getContext('2d');
+ const luminance=color=>{ctx.clearRect(0,0,1,1);ctx.fillStyle=color;ctx.fillRect(0,0,1,1);const rgb=[...ctx.getImageData(0,0,1,1).data].slice(0,3).map(v=>{v/=255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4;});return rgb[0]*.2126+rgb[1]*.7152+rgb[2]*.0722;};
+ const pairs=[['title','#help-article-title','.help-browser'],['section','.help-section h4','.help-browser'],['category','.help-article .help-eyebrow','.help-browser'],['selected','#help-nav [aria-current=page]','#help-nav [aria-current=page]'],['group','#help-nav [aria-current=page]','#help-nav'],['note','.help-note strong','.help-note'],['table','.help-content thead th','.help-content thead']];
+ const checks={};for(const [name,front,back] of pairs){const f=name==='group'?document.querySelector('#help-nav [aria-current=page]')?.closest('.help-nav-group').querySelector('h3'):document.querySelector(front),b=document.querySelector(back);if(!f||!b)continue;const a=luminance(getComputedStyle(f).color),z=luminance(getComputedStyle(b).backgroundColor);checks[name]=(Math.max(a,z)+.05)/(Math.min(a,z)+.05);}
+ return checks;
+})()`);
 
 test('real Chrome: Pages-only searchable help keeps navigation, mobile layouts and document data intact',{timeout:90000},async()=>{
  const f=await setup(),{page}=f;
@@ -28,6 +35,15 @@ test('real Chrome: Pages-only searchable help keeps navigation, mobile layouts a
   assert.equal(await page.evaluate('document.activeElement.id'),'help-article-title');assert.equal(await page.evaluate('document.querySelectorAll(".help-nav-group").length'),4);
   assert.equal(await page.evaluate(`(()=>{const pane=document.querySelector('#help-content');pane.scrollTop=pane.scrollHeight;const bottom=document.querySelector('.help-page-nav').getBoundingClientRect().bottom,edge=pane.getBoundingClientRect().bottom;const ok=pane.scrollTop>0&&bottom<=edge;pane.scrollTop=0;return ok;})()`),true);
   await mkdir(root+'/test-results',{recursive:true});await writeFile(root+'/test-results/pages-only-help-desktop.png',await page.screenshot());
+  const colorChecks=[];
+  for(const theme of ['light','dark'])for(const topic of ['first-document','speech','storage-differences','save-problems']){
+   await page.evaluate(`(()=>{document.documentElement.dataset.theme=${JSON.stringify(theme)};const picker=document.querySelector('#help-topic-select');picker.value=${JSON.stringify(topic)};picker.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+   const ratios=await helpContrast(page);for(const [part,ratio] of Object.entries(ratios))assert.ok(ratio>=4.5,`${theme}/${topic}/${part}: contrast ${ratio}`);
+   colorChecks.push({theme,topic,ratios});assert.equal(await fits(page),true);
+   if(theme==='dark'&&topic==='first-document')await writeFile(root+'/test-results/pages-only-help-color-dark-1280.png',await page.screenshot());
+  }
+  await writeFile(root+'/test-results/pages-only-help-colors.json',JSON.stringify({checks:colorChecks,minimumTextContrast:4.5,status:'pass'},null,2)+'\n');
+  await page.evaluate(`(()=>{document.documentElement.dataset.theme='light';const picker=document.querySelector('#help-topic-select');picker.value='first-document';picker.dispatchEvent(new Event('change',{bubbles:true}));})()`);
   await search(page,'원본 생략');await page.click('.help-results [data-help-open="device-sync"]');assert.match(await page.evaluate('document.querySelector("#help-article-title").textContent'),/동기화/);
   assert.equal(await page.evaluate('document.querySelector("#help-search").value'),'원본 생략');assert.ok(await page.evaluate('document.querySelectorAll(".help-article mark").length>0'));
   await page.click('#help-results-back');assert.ok(await page.evaluate('!!document.querySelector(".help-results")'));
@@ -39,6 +55,7 @@ test('real Chrome: Pages-only searchable help keeps navigation, mobile layouts a
    await page.evaluate(`(()=>{const picker=document.querySelector('#help-topic-select');picker.value='storage-differences';picker.dispatchEvent(new Event('change',{bubbles:true}));})()`);
    if(width<=640)assert.equal(await page.evaluate('getComputedStyle(document.querySelector("#help-nav")).display'),'none');
    assert.equal(await fits(page),true);assert.equal(await page.evaluate('document.querySelector(".help-content table tbody").rows.length'),5);
+   await writeFile(root+`/test-results/pages-only-help-light-${width}.png`,await page.screenshot());
    await page.evaluate("document.documentElement.dataset.theme='dark'");await writeFile(root+`/test-results/pages-only-help-dark-${width}.png`,await page.screenshot());await page.evaluate("document.documentElement.dataset.theme='light'");
   }
   await page.send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await search(page,'데이터 복원');await writeFile(root+'/test-results/pages-only-help-phone-search.png',await page.screenshot());
