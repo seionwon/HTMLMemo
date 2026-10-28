@@ -13,6 +13,11 @@ async function seed(page){
 }
 const data=page=>page.evaluate(`(async()=>{const s=await import('./src/storage.js'),r=await s.getDocument('update-kept');return {id:r.id,html:r.html,metadata:r.metadata,history:(await s.listRevisions(r.id)).length,ids:(await s.listDocuments({includeTrashed:true})).map(r=>r.id).sort(),folder:(await s.getSetting('folder')).name};})()`);
 const offered='document.querySelector("#app-update-dialog").open';
+function foreground(page){
+  const click=page.click.bind(page),navigate=page.navigate.bind(page);
+  page.click=async selector=>{await page.send('Page.bringToFront');return click(selector);};
+  page.navigate=async url=>{await page.send('Page.bringToFront');return navigate(url);};
+}
 
 test('real Chrome: PWA startup updates preserve cancellation across complete closes, save before applying and keep other windows stable',{timeout:150000},async()=>{
   await prepareAssets();const assets=await packageAssets(),releases=new Map();
@@ -29,11 +34,11 @@ test('real Chrome: PWA startup updates preserve cancellation across complete clo
   });
   const report={hardwarePWAInstalled:false,simulation:'Real Chrome service workers, versioned app builds, persistent profile, OPFS folder and two windows; standalone media is simulated',layouts:[]};
   try{
-    await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const url=`http://127.0.0.1:${server.address().port}/app/`;chrome=await launchChrome();const {page}=chrome;
+    await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const url=`http://127.0.0.1:${server.address().port}/app/`;chrome=await launchChrome();const {page}=chrome;foreground(page);
     await page.send('Page.addScriptToEvaluateOnNewDocument',{source:`{const native=window.matchMedia.bind(window);window.matchMedia=q=>q==='(display-mode: standalone)'?{matches:true,addEventListener(){},removeEventListener(){}}:native(q);}`});
     await page.navigate(url);await page.waitFor('document.documentElement.dataset.appUpdate==="current"&&!!navigator.serviceWorker.controller');assert.equal(await page.evaluate(offered),false);await seed(page);const before=await data(page);
     const created=await page.send('Target.createTarget',{url:'about:blank'});otherId=created.targetId;
-    const list=await fetch('http://'+new URL(page.socket.url).host+'/json/list').then(r=>r.json());other=await CDP.connect(list.find(t=>t.id===otherId).webSocketDebuggerUrl);await other.send('Page.enable');await other.send('Runtime.enable');await other.navigate(url);await other.waitFor('document.documentElement.dataset.appUpdate==="current"');await other.evaluate('window.otherUpdateSentinel=true');
+    const list=await fetch('http://'+new URL(page.socket.url).host+'/json/list').then(r=>r.json());other=await CDP.connect(list.find(t=>t.id===otherId).webSocketDebuggerUrl);await other.send('Page.enable');await other.send('Runtime.enable');foreground(other);await other.navigate(url);await other.waitFor('document.documentElement.dataset.appUpdate==="current"');await other.evaluate('window.otherUpdateSentinel=true');
     published='0.0.2';await page.evaluate(`(async()=>{await(await navigator.serviceWorker.getRegistration()).update();})()`);await page.waitFor('(async()=>!!(await navigator.serviceWorker.getRegistration()).waiting)()');
     assert.equal(await page.evaluate(offered),false);assert.equal(await other.evaluate(offered),false);report.noMidSessionPrompt=true;
     await page.navigate(url);await page.waitFor(offered);assert.equal(await page.evaluate('document.documentElement.dataset.testRelease'),'0.0.1');assert.equal(await page.evaluate('document.querySelector("#app-update-title").textContent'),'이 앱의 새 버전이 있습니다. 설치하시겠습니까?');
@@ -55,7 +60,7 @@ test('real Chrome: PWA startup updates preserve cancellation across complete clo
     broken=false;await page.navigate(url);await page.waitFor(offered);for(const type of ['keyDown','keyUp'])await page.send('Input.dispatchKeyEvent',{type,key:'Escape',code:'Escape',windowsVirtualKeyCode:27});await page.waitFor('document.documentElement.dataset.appUpdate==="deferred"');report.escapeCancels=true;
     await page.navigate('about:blank');await new Promise(resolve=>setTimeout(resolve,300));await page.send('Network.enable');await page.send('Network.emulateNetworkConditions',{offline:true,latency:0,downloadThroughput:-1,uploadThroughput:-1});await page.navigate(url);await page.waitFor(offered);assert.equal(await page.evaluate('document.documentElement.dataset.testRelease'),'0.0.2');await page.click('#app-update-install');await page.waitFor('document.documentElement.dataset.testRelease==="0.0.3"&&document.documentElement.dataset.appUpdate==="current"&&'+saved);assert.deepEqual(await data(page),withNote);report.preparedUpdateInstallsOffline=true;
     assert.deepEqual(chrome.errors,[]);report.originalsNotesBookmarksHistoryAndFolderPreserved=true;report.status='pass';
-  }catch(error){report.status='failed';report.error=error.stack;if(chrome){report.errors=chrome.errors;report.state=await chrome.page.evaluate('({release:document.documentElement.dataset.testRelease,update:document.documentElement.dataset.appUpdate,dialog:document.querySelector("#app-update-dialog")?.outerHTML,status:document.querySelector("#status-left")?.textContent})').catch(()=>null);await mkdir(root+'/test-results',{recursive:true});await writeFile(root+'/test-results/pwa-startup-update-failure.png',await chrome.page.screenshot());}throw error;}
+  }catch(error){report.status='failed';report.error=error.stack;if(chrome){report.errors=chrome.errors;report.state=await chrome.page.evaluate('({release:document.documentElement.dataset.testRelease,update:document.documentElement.dataset.appUpdate,dialog:document.querySelector("#app-update-dialog")?.outerHTML,status:document.querySelector("#status-left")?.textContent})').catch(()=>null);await mkdir(root+'/test-results',{recursive:true});await chrome.page.send('Page.bringToFront').catch(()=>{});const screenshot=await chrome.page.screenshot().catch(()=>null);if(screenshot)await writeFile(root+'/test-results/pwa-startup-update-failure.png',screenshot);}throw error;}
   finally{await mkdir(root+'/test-results',{recursive:true});await writeFile(root+'/test-results/pwa-startup-update.json',JSON.stringify(report,null,2));await other?.close();if(otherId&&chrome)await chrome.page.send('Target.closeTarget',{targetId:otherId}).catch(()=>{});await chrome?.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}
 });
 

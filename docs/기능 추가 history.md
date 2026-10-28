@@ -3829,3 +3829,6 @@ Chrome 검사는 실제 OPFS 폴더 핸들과 IndexedDB, Android 사용자 에�
 
 
 **첫 CI 검사 실패 기록:** 소스 `68d4a7d1ee6230be139f6c387cefc85a03ce7d58`의 [Actions 40624451783](https://github.com/seionwon/HTMLMemo/actions/runs/40624451783)은 우선 Chrome **8개 중 7개 통과·1개 실패**로 게시 전 중단됐습니다. 새 업데이트 검사에서 손으로 만든 합성 문서의 metadata에 필수 viewport/view가 빠져 폴더 저장이 거부됐고, 저장 완료를 기다리는 지점에서 시간이 초과됐습니다. 제품의 저장 검사를 완화하지 않고 실제 HTML 가져오기와 같은 parseHTML로 유효한 테스트 문서를 만들도록 보완했습니다. 앱 코드와 기대하는 자료 보존 조건은 바꾸지 않았습니다. 최초 로그·구조화 결과·화면은 `test-results/pwa-updates/first-build-ci.log`, `first-ci/`에 보존했습니다. 이 실행은 GitHub Pages를 게시하지 않았습니다.
+
+
+**두 번째 CI 검사 보완:** [Actions 40624822392](https://github.com/seionwon/HTMLMemo/actions/runs/40624822392)에서도 게시 전에 중단됐습니다. 유효한 문서 저장, 사용 중 안내가 나오지 않는 점, 320/390/844/1280px 새 버전 확인창의 실제 클릭 가능성까지 통과한 뒤, 두 번째 탭을 만든 검사에서 원래 탭의 클릭 전 animation frame 대기가 멈춰 CDP 시간이 초과됐습니다. 검사에서 조작할 탭을 Page.bringToFront로 먼저 활성화하고, 실패 화면을 만들지 못해도 원래 실패 이유를 보존하도록 보완했습니다. 앱 코드나 확인 조건·제한 시간은 바꾸지 않았습니다. 최초 원본은 `second-build-ci.log`, `second-ci/`에 보존했습니다. 이 실행도 GitHub Pages를 게시하지 않았습니다.
