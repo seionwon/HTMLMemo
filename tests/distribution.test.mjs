@@ -443,15 +443,37 @@ test('a missing safe folder-write lock also shows the Chrome requirement before 
 });
 
 test('a saved folder resumes; revoked permission requires reconnecting the same folder',async()=>{
-  for(const permission of ['granted','denied']){
+  for(const permission of ['granted','prompt','denied']){
     const selected=memoryFolder('기존 폴더',{permission}),app=await fileApp({firstRun:true,settings:[['folder',selected]],directoryPicker:async()=>{assert.fail('Do not automatically open a picker');}});
     await settleUntil(()=>app.doc.querySelector('#data-folder-status').textContent.includes(permission==='granted'?'완료':'중단'));
-    assert.equal(!!app.doc.querySelector('#dialog').open,permission==='denied');assert.equal(app.settings.get('folder'),selected);
-    if(permission==='denied'){
+    assert.equal(!!app.doc.querySelector('#dialog').open,permission!=='granted');assert.equal(app.settings.get('folder'),selected);
+    if(permission!=='granted'){
+      assert.ok(app.doc.querySelector('[data-folder-resume]'));assert.equal(app.doc.querySelector('#create-storage-folder,#storage-folder-name'),null);assert.equal(app.doc.activeElement.id,'resume-data-folder');assert.doesNotMatch(app.doc.querySelector('#dialog').textContent,/저장 폴더를 먼저 설정하세요/);
       assert.ok(app.doc.querySelector('#resume-data-folder'));assert.equal(selected.children.size,0);selected.control.permission='granted';
       app.doc.querySelector('#resume-data-folder').onclick();await settleUntil(()=>!app.doc.querySelector('#dialog').open);assert.equal(app.settings.get('folder'),selected);
     }
   }
+});
+
+test('remembered phone storage asks only for renewed permission and reopens without first setup or another picker',async()=>{
+  const control={permission:'prompt'},selected=memoryFolder('<기존 & 폴더>',control),original=await selected.getFileHandle('original.html',{create:true});original.replace('Original data stays here.');
+  let requests=0,pickers=0,allow=false;selected.requestPermission=async options=>{assert.equal(options.mode,'readwrite');requests++;if(allow)control.permission='granted';return allow?'granted':'denied';};
+  const directoryPicker=async()=>{pickers++;throw Error('A saved folder must not open another picker');};
+  const app=await fileApp({firstRun:true,settings:[['folder',selected]],directoryPicker}),doc=app.doc;
+  assert.equal(requests,0);assert.equal(pickers,0);assert.ok(doc.querySelector('[data-folder-resume]'));assert.equal(doc.querySelector('#create-storage-folder,#storage-folder-name'),null);assert.equal(doc.querySelector('#dialog strong').textContent,selected.name);assert.equal(doc.querySelector('#dialog strong').children.length,0);assert.equal(doc.querySelector('#toast.error:not([hidden])'),null);
+  let prevented=false;doc.querySelector('#dialog').oncancel({preventDefault(){prevented=true;}});assert.equal(prevented,true);
+  doc.querySelector('#resume-data-folder').onclick();await settleUntil(()=>!doc.querySelector('#resume-data-folder').disabled);
+  assert.equal(requests,1);assert.equal(doc.documentElement.dataset.storageSetup,'required');assert.match(doc.querySelector('#folder-connection-status').textContent,/기존 저장 폴더의 쓰기를 허용/);assert.equal(selected.children.has('HTMLMemo-library.json'),false);assert.equal(app.settings.get('folder'),selected);
+  allow=true;doc.querySelector('#resume-data-folder').onclick();await settleUntil(()=>!doc.querySelector('#dialog').open);
+  assert.equal(requests,2);assert.equal(pickers,0);assert.equal(doc.documentElement.dataset.storageSetup,'ready');
+  const id=JSON.parse(await(await selected.getFileHandle('HTMLMemo-library.json')).getFile().then(f=>f.text())).id;
+  for(let i=0;i<3;i++){
+    const next=await fileApp({firstRun:true,settings:[...app.settings],localEntries:[...app.local],directoryPicker});
+    await settleUntil(()=>next.doc.documentElement.dataset.storageSetup!=='checking');
+    assert.equal(!!next.doc.querySelector('#dialog').open,false);assert.equal(next.doc.querySelector('[data-folder-resume],[data-folder-welcome]'),null);assert.equal(next.doc.documentElement.dataset.storageSetup,'ready');assert.equal(next.settings.get('folder'),selected);assert.equal(requests,2);assert.equal(pickers,0);
+    assert.equal(JSON.parse(await(await selected.getFileHandle('HTMLMemo-library.json')).getFile().then(f=>f.text())).id,id);
+  }
+  assert.equal(await(await original.getFile()).text(),'Original data stays here.');
 });
 
 test('first-run guidance does not wait for network-dependent offline registration',async()=>{
