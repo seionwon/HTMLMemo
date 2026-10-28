@@ -3,21 +3,21 @@ import assert from 'node:assert/strict';
 import {MessageChannel} from 'node:worker_threads';
 import {UpdateController} from '../public/src/updates.js';
 
-function fixture({available=true,accept=true,offline=false,beforeUpdate=async()=>{},failure=null}={}){
-  const states=[],calls=[],service=new EventTarget();let reloads=0,offers=0;
+function fixture({available=true,accept=true,offline=false,beforeUpdate=async()=>{},failure=null,navigationReady=false,activate=true,dropApplyReply=false,requestTimeout=15000}={}){
+  const states=[],calls=[],service=new EventTarget();let reloads=0,offers=0,selected=false;
   class Worker extends EventTarget{
     constructor(){super();this.state='activated';}
     postMessage(message,ports){
       calls.push(message.type);
-      if(message.type==='HTMLMEMO_UPDATE_INFO')ports[0].postMessage({ok:true,available,currentVersion:'1.0.0',version:'1.0.1',build:'test-new'});
+      if(message.type==='HTMLMEMO_UPDATE_INFO')ports[0].postMessage({ok:true,available,currentVersion:'1.0.0',version:'1.0.1',build:'test-new',selected});
       else if(failure)ports[0].postMessage({ok:false,error:failure});
-      else{service.controller=this;service.dispatchEvent(new Event('controllerchange'));ports[0].postMessage({ok:true});}
+      else{selected=true;if(activate){service.controller=this;service.dispatchEvent(new Event('controllerchange'));}if(!dropApplyReply)ports[0].postMessage({ok:true,...(navigationReady?{navigationReady:true}:{})});}
     }
   }
   const old=new Worker(),worker=new Worker();service.controller=old;
   const registration={active:worker,installing:null,waiting:null,update:async()=>{calls.push('update');if(offline)throw Error('offline');}};
   service.getRegistration=async()=>registration;service.register=async()=>{calls.push('register');return registration;};
-  const controller=new UpdateController({navigator:{serviceWorker:service},location:new URL('https://app.test/HTMLMemo/'),Channel:MessageChannel,onOffer:async info=>{offers++;assert.equal(info.version,'1.0.1');return accept;},beforeUpdate:async()=>{calls.push('save');await beforeUpdate();},onState:(state,error)=>states.push({state,error}),reload:()=>{calls.push('reload');reloads++;}});
+  const controller=new UpdateController({navigator:{serviceWorker:service},location:new URL('https://app.test/HTMLMemo/'),Channel:MessageChannel,requestTimeout,onOffer:async info=>{offers++;assert.equal(info.version,'1.0.1');return accept;},beforeUpdate:async()=>{calls.push('save');await beforeUpdate();},onState:(state,error)=>states.push({state,error}),reload:()=>{calls.push('reload');reloads++;}});
   return {controller,service,registration,worker,calls,states,get reloads(){return reloads;},get offers(){return offers;}};
 }
 test('startup checks once; cancel never activates or reloads and another launch offers the update again',async()=>{
@@ -56,4 +56,19 @@ test('first registration, pending installation and unsupported locations do not 
   for(const options of [{navigator:{},location:new URL('https://app.test/')},{navigator:{serviceWorker:f.service},location:new URL('file:///HTMLMemo.html')}]){
     const states=[],controller=new UpdateController({...options,onState:s=>states.push(s)});await controller.start();assert.deepEqual(states,['unavailable']);
   }
+});
+test('a durable navigation receipt does not wait for a delayed controller change',async()=>{
+ const f=fixture({navigationReady:true,activate:false}),old=f.service.controller;await f.controller.start();assert.equal(f.reloads,1);assert.equal(f.service.controller,old);assert.equal(f.states.at(-1).state,'reloading');assert.deepEqual(f.calls,['update','HTMLMEMO_UPDATE_INFO','save','HTMLMEMO_UPDATE_APPLY','reload']);
+});
+test('a lost apply reply reloads only when the exact proposed release proves it was selected',async()=>{
+ const f=fixture({dropApplyReply:true,activate:false,requestTimeout:50});await f.controller.start();assert.equal(f.reloads,1);assert.equal(f.states.at(-1).state,'reloading');assert.equal(f.calls.filter(v=>v==='HTMLMEMO_UPDATE_INFO').length,2);
+ const g=fixture({requestTimeout:50});g.worker.postMessage=(message,ports)=>{g.calls.push(message.type);if(message.type==='HTMLMEMO_UPDATE_INFO')ports[0].postMessage({ok:true,available:true,currentVersion:'1.0.0',version:'1.0.1',build:'test-new',selected:false});};await g.controller.start();assert.equal(g.reloads,0);assert.equal(g.states.at(-1).state,'error');assert.equal(g.states.at(-1).error.applying,true);
+});
+test('a replaced worker for the same build is refreshed while a different build is never silently accepted',async()=>{
+ for(const same of [true,false]){
+  const f=fixture();let replacement;f.controller.onOffer=async()=>{f.worker.state='redundant';replacement=new f.worker.constructor();if(!same)replacement.postMessage=(message,ports)=>ports[0].postMessage({ok:true,available:true,version:'1.0.2',build:'other-build'});f.registration.active=replacement;return true;};await f.controller.start();assert.equal(f.reloads,same?1:0);if(same)assert.equal(f.service.controller,replacement);else assert.match(f.states.at(-1).error.message,/새 버전이 바뀌었습니다/);
+ }
+});
+test('an installed offered worker remains the target before registration.waiting catches up',async()=>{
+ const f=fixture();f.controller.onOffer=async()=>{f.worker.state='installed';f.registration.active=f.service.controller;f.service.controller.postMessage=(message,ports)=>ports[0].postMessage({ok:true,build:'old-build'});return true;};await f.controller.start();assert.equal(f.reloads,1);assert.equal(f.service.controller,f.worker);
 });

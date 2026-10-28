@@ -16,16 +16,16 @@ class Cache{
 function fixture(){
   const stores=new Map(),clients=new Map(),network=new Map(),requests=[];
   const caches={async open(name){if(!stores.has(name))stores.set(name,new Cache());return stores.get(name);},async keys(){return[...stores.keys()];},async delete(name){return stores.delete(name);}};
-  function worker(version,{bad=false,networkFailure=false}={}){
+  function worker(version,{bad=false,networkFailure=false,activation=async()=>{}}={}){
     const files={'index.html':`<h1>release ${version}</h1>`,'styles.css':`/* ${version} */`,'src/version.js':`export const APP_VERSION = "${version}";`},events=new Map();
     for(const[name,body]of Object.entries(files))network.set(new URL(name,base).href,body);network.set(base,files['index.html']);
     const digests=Object.fromEntries(Object.entries(files).map(([name,body])=>[name,crc32(new TextEncoder().encode(body))]));
     if(bad)network.set(new URL('styles.css',base).href,'Wrong deployed file');if(networkFailure)network.delete(new URL('styles.css',base).href);
-    const self={location:new URL('sw.js',base),addEventListener:(type,fn)=>events.set(type,fn),clients:{async matchAll(){return[...clients.values()];},async get(id){return clients.get(id);},async claim(){}},skipWaiting:async()=>{w.skips++;}};
+    const self={location:new URL('sw.js',base),addEventListener:(type,fn)=>events.set(type,fn),clients:{async matchAll(){return[...clients.values()];},async get(id){return clients.get(id);},async claim(){}},skipWaiting:async()=>{w.skips++;await activation();}};
     const context=vm.createContext({self,caches,URL,Request,Response,Uint8Array,fetch:async request=>{requests.push(request.url);const body=network.get(request.url);return new Response(body??'Unavailable',{status:body===undefined?503:200});}});
     const script=source.replace(/const CACHE = '[^']+';/,`const CACHE = 'htmlmemo-${version}';`).replace(/const VERSION = [^;]+;/,`const VERSION = ${JSON.stringify(version)};`).replace(/const DIGESTS = [^;]+;/,`const DIGESTS = ${JSON.stringify(digests)};`).replace(/const SHELL = [^;]+;/,`const SHELL = ['./','./index.html','./styles.css','./src/version.js'];`);
     vm.runInContext(script,context);
-    const w={skips:0,async event(type,data={}){let pending;events.get(type)({...data,waitUntil:p=>pending=p});await pending;},async message(id,message){let result;await w.event('message',{source:{id},data:message,ports:[{postMessage:value=>result=value}]});return result;},async fetch(path,{id='page',navigation=false,next='next',method='GET'}={}){
+    const w={skips:0,async event(type,data={}){let pending;events.get(type)({...data,waitUntil:p=>pending=p});await pending;},async message(id,message,onReply=()=>{}){let result;await w.event('message',{source:{id},data:message,ports:[{postMessage:value=>{result=value;onReply(value);}}]});return result;},async fetch(path,{id='page',navigation=false,next='next',method='GET'}={}){
       let pending;const request={method,url:new URL(path,base).href,mode:navigation?'navigate':'cors'};
       events.get('fetch')({request,clientId:id,resultingClientId:next,respondWith:p=>pending=p});return pending?await pending:null;
     }};return w;
@@ -51,6 +51,12 @@ test('incomplete or mixed releases never replace the selected app or offer an in
     const two=f.worker('two',{[failure]:true});await assert.rejects(two.event('install'));
     assert.match(await(await one.fetch('',{navigation:true,next:'reopened'})).text(),/one/);assert.equal((await one.message('page',{type:'HTMLMEMO_UPDATE_INFO'})).available,false);assert.equal(two.skips,0);
   }
+});
+test('an accepted release acknowledges durable navigation before delayed worker activation, and can prove a lost reply',async()=>{
+ const f=fixture();f.client('page');const one=f.worker('one');await one.event('install');await one.event('activate');await one.fetch('',{navigation:true,next:'page'});
+ let finish;const activation=new Promise(resolve=>finish=resolve),two=f.worker('two',{activation:()=>activation});await two.event('install');let reply;
+ const pending=two.message('page',{type:'HTMLMEMO_UPDATE_APPLY',build:'htmlmemo-two'},value=>reply=value);
+ try{while(!two.skips)await new Promise(resolve=>setImmediate(resolve));assert.equal(reply?.navigationReady,true);assert.equal(reply.ok,true);assert.match(await(await one.fetch('',{navigation:true,next:'new-page'})).text(),/two/);assert.equal((await two.message('page',{type:'HTMLMEMO_UPDATE_INFO'})).selected,true);}finally{finish();await pending;}
 });
 test('messages reject document frames, other app paths and stale releases before applying anything',async()=>{
   const f=fixture();f.client('page');const one=f.worker('one');await one.event('install');await one.event('activate');await one.fetch('',{navigation:true,next:'page'});

@@ -62,15 +62,17 @@ self.addEventListener('message',event=>{
       const current=await chosen(client.id),latest=await read('latest');
       if(event.data.type==='HTMLMEMO_UPDATE_INFO'){
         await pin(client.id,current);
-        event.ports[0].postMessage({ok:true,available:latest?.cache===STORE&&current.cache!==STORE,version:VERSION,currentVersion:current.version,build:CACHE});
+        event.ports[0].postMessage({ok:true,available:latest?.cache===STORE&&current.cache!==STORE,version:VERSION,currentVersion:current.version,build:CACHE,selected:(await read('selected'))?.cache===STORE});
       }else{
         await locked(async()=>{
           if(event.data.build!==CACHE||(await read('latest'))?.cache!==STORE)throw Error('새 버전이 변경되었습니다. 앱을 다시 실행해주세요.');
           if(!await(await caches.open(STORE)).match(new URL('index.html',BASE).href))throw Error('새 버전 준비를 끝내지 못했습니다.');
           await write('selected',identity);
         });
+        // Selection is durable and the old worker can serve this cache on the
+        // next navigation. A delayed activation must not delay this receipt.
+        event.ports[0].postMessage({ok:true,navigationReady:true});
         await self.skipWaiting();
-        event.ports[0].postMessage({ok:true});
       }
     }catch(error){event.ports[0].postMessage({ok:false,error:error.message});}
   })());

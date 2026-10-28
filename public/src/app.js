@@ -82,7 +82,7 @@ function appUpdateState(state,error){
   if(!dialog.open)return;
   if(state==='saving')$('#app-update-status').textContent='문서·주석·설정을 저장하는 중입니다…';
   else if(committing)$('#app-update-status').textContent='새 버전을 적용하고 앱을 다시 여는 중입니다…';
-  else if(state==='error')$('#app-update-status').textContent='업데이트하지 못했습니다. 기존 버전과 자료는 유지됩니다. '+(error?.message||'다시 시도해주세요.');
+  else if(state==='error')$('#app-update-status').textContent=(error?.applying?'업데이트 적용을 확인하지 못했습니다. 현재 화면과 자료는 유지됩니다. ':'업데이트하지 못했습니다. 기존 버전과 자료는 유지됩니다. ')+(error?.message||'다시 시도해주세요.');
 }
 function installGuide(kind) {
   const heading=kind==='installed'?'설치된 HTMLMemo입니다.':'HTMLMemo 앱 설치';
