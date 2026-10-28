@@ -110,6 +110,7 @@ jobs:
           name: published-sidebar-screenshots
           path: |
             test-results/published-browser-results.xml
+            test-results/device-sync*.png
             test-results/duplicate-import-performance.json
             test-results/mhtml-import-diagnostics.json
             test-results/search-index-performance.json
