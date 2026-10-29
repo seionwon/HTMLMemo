@@ -61,6 +61,12 @@ test('real Chrome: PWA startup updates preserve cancellation across complete clo
       const fit=await page.evaluate(`(()=>{const d=document.querySelector('#app-update-dialog'),r=d.getBoundingClientRect(),b=document.querySelector('#app-update-install'),v=b.getBoundingClientRect();return d.open&&r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight&&d.scrollWidth<=d.clientWidth+1&&b.contains(document.elementFromPoint(v.left+v.width/2,v.top+v.height/2));})()`);assert.equal(fit,true);report.layouts.push({width,height,fit});await writeFile(root+`/test-results/pwa-startup-update-${width}.png`,await page.screenshot());
     }
     await page.click('#app-update-cancel');await page.waitFor('document.documentElement.dataset.appUpdate==="deferred"');assert.equal(await page.evaluate('document.documentElement.dataset.testRelease'),'0.0.1');assert.deepEqual(await data(page),before);
+    // Cancelling the update releases deferred folder startup. Let both windows
+    // finish that startup/save before navigation, rather than stalling on beforeunload.
+    report.phase='finish folder startup after cancelling the update';
+    await page.waitFor('document.documentElement.dataset.storageSetup==="ready"&&'+saved);
+    await other.waitFor('document.documentElement.dataset.storageSetup==="ready"&&'+saved);
+    report.phase='close both windows after their saves';
     await other.navigate('about:blank');await page.navigate('about:blank');await new Promise(resolve=>setTimeout(resolve,300));await page.navigate(url);await page.waitFor(offered);assert.equal(await page.evaluate('(async()=>!(await navigator.serviceWorker.getRegistration()).waiting)()'),true);assert.equal(await page.evaluate('document.documentElement.dataset.testRelease'),'0.0.1');report.cancellationSurvivesFullClose=true;
     // Keep a second old window live while the first window accepts the update.
     await other.navigate(url);await other.waitFor(offered);await other.click('#app-update-cancel');await other.waitFor('document.documentElement.dataset.storageSetup==="ready"&&'+saved);await other.evaluate('window.otherUpdateSentinel=true');

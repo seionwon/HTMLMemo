@@ -47,7 +47,16 @@ export async function auditLowResolution(w=window,onProgress=()=>{}) {
   for(const tool of ['highlight','rect','note']){await click('#toolbar [data-action='+tool+']');await click('#toolbar [data-action='+tool+']');await inspect(tool+'-options','#tool-popover');await popClose();}
   await click('#toolbar [data-action=more]');await inspect('document-tools','#tool-popover');
   if($('[data-more=sidebar]'))await click('[data-more=sidebar]');else await popClose();
-  if(!$('#sidebar').hidden){for(const view of ['outline','search','annotations','bookmarks']){const s='#sidebar [data-sidebar-view='+view+']';if($(s)&&!$(s).hidden){await click(s);await inspect('sidebar-'+view,'#sidebar');}}await click('#close-sidebar');}
+  if(!$('#sidebar').hidden){
+    for(const view of ['outline','search','annotations','bookmarks']){const s='#sidebar [data-sidebar-view='+view+']';if($(s)&&!$(s).hidden){await click(s);await inspect('sidebar-'+view,'#sidebar');}}
+    let controls=0;
+    for(const button of d.querySelectorAll('#toolbar .tool-button:not(:disabled)')){
+      button.scrollIntoView({block:'nearest',inline:'nearest',behavior:'instant'});const r=button.getBoundingClientRect();
+      if(!button.contains(d.elementFromPoint(r.x+r.width/2,r.y+r.height/2)))issue('toolbar-with-sidebar','covered tool: '+button.dataset.action);
+      controls++;
+    }
+    report.screens.push({name:'toolbar-with-sidebar',controls});await click('#close-sidebar');
+  }
   for(const mode of ['info','history']){await click('#toolbar [data-action=more]');await click('[data-more='+mode+']');await inspect('document-'+mode,'#dialog');await close();}
   const tts='.document-host:not([hidden]) > [data-htmlmemo-reading-controls] [data-action=speak]';
   await click(tts);await wait(()=>$('.mstts-player'));const bar=$('.mstts-player');

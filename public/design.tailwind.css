@@ -479,8 +479,11 @@ dialog:has(.help-browser) #dialog-content{height:100%;min-height:0}
 .document-info{grid-template-columns:65px minmax(0,1fr)}
 .device-sync fieldset{min-width:0}
 #sync-qr{max-width:min(170px,100%)}
-/* On phones this is an overlay drawer; its last rows must beat the floating bar. */
-@media(max-width:720px){.sidebar{z-index:41}}
+/* Leave room for both the drawer rows and the default floating bar in landscape. */
+@media(max-width:720px) and (max-height:420px){
+ .sidebar{bottom:82px}
+ #app.reader-focus .sidebar{bottom:36px}
+}
 @media(max-width:360px){
  dialog{padding:15px;max-width:calc(100vw - 20px)}
  .dialog-heading{gap:8px;margin-bottom:12px}

@@ -1588,7 +1588,13 @@ function bindUI() {
   window.addEventListener('online',network);window.addEventListener('offline',network);
   window.addEventListener('focus',resumeBrowser);document.addEventListener('visibilitychange',resumeBrowser);
   window.addEventListener('storage',()=>{try{preferences=loadPreferences(localStorage);applyTheme(preferences.theme);renderLibrary();dataFolder?.schedule({settingsOnly:true});}catch(error){showError(error);}});
-  window.addEventListener('resize',()=>{stopAppSidebarResize();applyAppSidebarWidth();applyToolbarPosition();requestAnimationFrame(()=>{if(!$('#tool-popover').hidden)positionPopover();revealActiveTab();});});
+  window.addEventListener('resize',()=>{
+    stopAppSidebarResize();applyAppSidebarWidth();
+    const pop=$('#tool-popover'),editing=!pop.hidden&&pop.contains(document.activeElement)&&document.activeElement.matches('input,textarea,select,[contenteditable=true]');
+    // An on-screen keyboard may resize the viewport while a palette field is being edited.
+    if(!editing)closePopover();applyToolbarPosition();
+    requestAnimationFrame(()=>{if(!pop.hidden)positionPopover();revealActiveTab();});
+  });
   window.addEventListener('dragover',event=>{if([...event.dataTransfer.types].includes('Files'))event.preventDefault();});window.addEventListener('drop',safely(async event=>{if(![...(event.dataTransfer.types||[])].includes('Files'))return;event.preventDefault();const parentId=libraryFolderId;for(const file of await droppedHTMLFiles(event.dataTransfer))await openLocalFile(file,parentId);}));
 }
 function network() {$('#network-status').textContent=navigator.onLine?'온라인':'오프라인';$('#network-status').classList.toggle('offline',!navigator.onLine);}
