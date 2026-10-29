@@ -239,7 +239,7 @@ export class DeviceSyncAdapter {
     const available=local.documents.filter(syncEligible),protectedIds=new Set(local.documents.filter(record=>!syncEligible(record)).map(record=>record.id)),reserved=new Set(incoming.flatMap(value=>[value.record.id,...(value.annotationDecision?[value.annotationDecision.target]:[])]));
     // Index this merge's immutable header snapshot once. Actual content and
     // the current record are still read and verified before any replacement.
-    const byId=new Map(),bySource=new Map(),mirrors=new Map(),histories=new Map();
+    const byId=new Map(),bySource=new Map(),mirrors=new Map();
     const sourceKey=identity=>sameLocalFile(identity,identity)?identity.digest+':'+identity.size:null;
     for(const header of available){
       byId.set(header.id,header);
@@ -248,7 +248,6 @@ export class DeviceSyncAdapter {
       if(key&&!reserved.has(header.id)){if(!bySource.has(key))bySource.set(key,{items:[],next:0});bySource.get(key).items.push(header);}
     }
     const sourceMatch=record=>{const group=bySource.get(sourceKey(record.sourceIdentity));if(!group)return;while(group.next<group.items.length&&assigned.has(group.items[group.next].id))group.next++;return group.items[group.next];};
-    const revisionsFor=id=>{if(!histories.has(id))histories.set(id,this.ops.listRevisions(id));return histories.get(id);};
     for(const value of incoming){
       const record=value.record,stamp=value.fingerprint;
       if(!syncEligible(record)||protectedIds.has(record.id))continue;
@@ -290,7 +289,7 @@ export class DeviceSyncAdapter {
         const record={...portableRecord(previous),modified:Date.now(),metadata:{...previous.metadata,...marks},syncSourceId:value.record.id,syncFingerprint:value.fingerprint};
         validateState({record,revisions:[]},record.id);
         if(!sameMarks(previous,record)){
-          const history=await revisionsFor(previous.id),key=revision=>{const {id,documentId,...state}=revision;return stableJSON(state);},known=new Set(history.map(key));
+          const history=await this.ops.listRevisions(previous.id),key=revision=>{const {id,documentId,...state}=revision;return stableJSON(state);},known=new Set(history.map(key));
           const revisions=value.revisions.filter(revision=>!known.has(key(revision))),created=Date.now();
           revisions.push({created,kind:'sync-before',...structuredClone(markState(previous))},{created,kind:resolution==='merge'?'sync-merge':'sync-choice',...structuredClone(marks)});
           entries.push({record,content:null,revisions,expected:syncRecordSnapshot(previous),previousHistoryVersion:previous.historyVersion||0});
@@ -300,6 +299,9 @@ export class DeviceSyncAdapter {
         continue;
       }
       if(resolution==='local')continue;
+      // Share a history read only within this document's replacement. Do not
+      // retain every old history until a large library merge has finished.
+      let priorHistory;const revisionsFor=()=>priorHistory??=this.ops.listRevisions(previous.id);
       const record={...value.record,folderId:tree.mapping.get(value.record.folderId||'')||'',syncSourceId:value.record.id,syncFingerprint:value.fingerprint};
       const content=reuse?null:value.body?(value.sourceType==='file'||value.body.size>=4*1024*1024?{file:value.body}:{html:await value.body.text()}):contentOf(previous);
       if(value.original&&content)content.originalFile=value.original;
@@ -307,10 +309,10 @@ export class DeviceSyncAdapter {
         // Explicit conflict replacement keeps a full copy. One-sided updates
         // retain the existing source record and append only unseen revisions.
         if(!automatic){const backup={...portableRecord(previous),id:crypto.randomUUID(),title:previous.title+' (동기화 전 보관본)'};
-        entries.push({record:backup,content:contentOf(previous),revisions:await revisionsFor(previous.id),expected:null});}
+        entries.push({record:backup,content:contentOf(previous),revisions:await revisionsFor(),expected:null});}
         record.id=previous.id;
       }else if(previous){record.id=crypto.randomUUID();record.title+=' (상대 기기)';}
-      let revisions=value.revisions;if(previous&&resolution==='remote'){const key=revision=>{const {id,documentId,...state}=revision;return JSON.stringify(state);};const known=new Set((await revisionsFor(previous.id)).map(key));revisions=revisions.filter(revision=>!known.has(key(revision)));}
+      let revisions=value.revisions;if(previous&&resolution==='remote'){const key=revision=>{const {id,documentId,...state}=revision;return JSON.stringify(state);};const known=new Set((await revisionsFor()).map(key));revisions=revisions.filter(revision=>!known.has(key(revision)));}
       entries.push({record,content:previous&&resolution==='both'&&content===null?contentOf(previous):content,revisions,expected:previous&&resolution==='remote'?syncRecordSnapshot(previous):null,previousHistoryVersion:previous?.historyVersion||0});mirrored.push(record.id);
     }
     this.check();if(settingsPlan.expected&&!sameSyncSettings(syncSettingsSnapshot(this.storage),settingsPlan.expected))throw Error('선택 중 이 기기의 앱 설정이 바뀌었습니다. 다시 연결해주세요.');
