@@ -4258,3 +4258,17 @@ Chrome 검사는 실제 OPFS 폴더 핸들과 IndexedDB, Android 사용자 에�
 **업데이트·온라인 확인:** 정식 URL의 최신 시작과 오프라인 재실행에서 **새 버전 확인 → 폴더 조회·권한 확인** 순서를 통과하고 문서·주석을 보존했습니다. 버전별 실제 서비스 워커 검사에서도 업데이트 제안·취소·실패·설치와 오프라인 순서를 통과했습니다. 실제 기기에 PWA를 설치한 검사는 아닙니다. [정식 URL](https://seionwon.github.io/HTMLMemo/)의 **47개 파일·2,876,405바이트**가 Pages 산출물과 모두 HTTP 200·크기·SHA-256이 일치했습니다. CI·공개 주소의 작은 재연결 화면과 공개 오프라인 도움말의 **1.2.35** 표시를 검토했습니다. CI의 한국어 글꼴 제한은 실제 DOM 문구와 소스 확인으로 구분했습니다. 기본 디자인·앱 아이콘·전용 폴더 자동 저장과 명시적 권한 요청을 유지합니다.
 
 **근거·기록:** `test-results/compact-folder-resume/`의 `focused.log`, `focused-initial.log`, `unit.log`, `check.log`, `build.log`, `actions.json`, `artifacts.json`, `build-ci.log`, `published-ci.log`, `ci/pages-only-android-folder-resume.json`, `ci/pwa-startup-before-folder.json`, `published/pages-only-android-folder-resume.json`, `published/pages-only-pwa-updater.json`, 관련 PNG, `pages/dist/`, `online-files.json`에 결과를 보관했습니다. 첫 Chrome 실패 자료와 수정 내역도 보존했습니다. 최종 이력 보충은 문서만 바꾸며 게시된 앱 파일은 그대로입니다.
+
+
+<a id="hist-20261029-006"></a>
+### 2026-10-29 14:37:05 +09:00 — 설정의 저장 안내와 데이터 폴더를 동기화 아래로 이동
+
+| ID | change-kind | status |
+|---|---|---|
+| hist-20261029-006 | 설정 화면 · 항목 순서 | 구현·로컬 검증 완료 / GitHub Pages 게시 전 |
+
+**변경·사용:** **1.2.36**의 상단 설정 아이콘을 누르면 **기기 간 동기화 → 기기에 저장한다는 안내 → 데이터 폴더** 순서로 표시합니다. 안내 문구와 데이터 폴더 항목을 기존 순서 그대로 함께 옮겼으며, 폴더 사용 안내도 데이터 폴더 바로 아래에 둡니다. 데이터 폴더의 관리·연결, 자동 저장 상태, 동기화의 연결 동작은 기존과 같습니다. 저장 폴더 권한·오류 처리나 문서·주석·설정 데이터를 바꾸지 않습니다.
+
+**디자인 검토:** A는 두 항목의 기존 모양을 유지해 위치만 옮기고, B는 옮긴 두 항목을 하나의 카드로 묶는 안입니다. 요청에 맞는 **A**를 적용했습니다. 원본 아이콘 후보 **자동 저장 확인 폴더 / 기기에서 폴더로 저장**, 주색 후보 **#334155 / #326e63**는 `test-results/settings-storage-order/design-options.svg`에 보관했습니다. 선택된 디자인의 기존 아이콘·색상과 Tailwind CSS **4.3.3** 로컬 빌드를 유지했으며 카탈로그를 재생성하지 않았습니다.
+
+**로컬 검증:** 기존 단위 **693개 전부**, JavaScript **138개·JSON** 문법 검사, 빌드와 diff 검사를 통과했습니다. 단순 항목 이동에 새 테스트를 추가하지 않았습니다. 샌드박스에서 Chrome을 직접 실행하지 않았으며 기존 GitHub Actions의 실제 Chrome 검사와 Pages 게시·공개 화면 확인 결과는 이 항목에 보충합니다. 현재 로컬 검증 결과를 배포 완료로 기록하지 않습니다. 근거는 `test-results/settings-storage-order/`의 `unit.log`, `check.log`, `build.log`에 보관합니다.
