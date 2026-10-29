@@ -1630,6 +1630,7 @@ async function initialize() {
   if(folder){try{await dataFolder.connect(folder,{resume:true});await refreshLibrary();}catch(error){renderFolderState();if(!['NotAllowedError','SecurityError'].includes(error?.name))showError(error);}}
   if(needsFolderWelcome())folderWelcomeDialog();else document.documentElement.dataset.storageSetup='ready';
   startupPending=false;updateAppInteraction();
+  if(!$('#folder-reconnect').hidden)$('#resume-data-folder',$('#folder-reconnect')).focus();
   if(typeof window.launchQueue?.setConsumer==='function')window.launchQueue.setConsumer(safely(async params=>{if(folderSetupPending&&(document.documentElement.dataset.storageSetup==='paused'||!await new Promise(resolve=>folderSetupWaiters.push(resolve))))return;const parentId=libraryFolderId;for(const handle of params.files||[])await openLocalFile(handle,parentId);}));
 }
 initialize().catch(error=>{startupPending=false;updateAppInteraction();$('#status-left').textContent='서재를 준비하지 못했습니다.';showError(error);});
