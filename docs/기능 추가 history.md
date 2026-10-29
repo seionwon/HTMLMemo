@@ -4229,11 +4229,11 @@ Chrome 검사는 실제 OPFS 폴더 핸들과 IndexedDB, Android 사용자 에�
 **근거:** `test-results/update-before-folder/`의 `actions.json`, `build-ci.log`, `published-ci.log`, `ci/pwa-startup-before-folder.json`, `ci/pwa-startup-update.json`, `ci/pwa-startup-waiting-update.json`, `published/pages-only-pwa-updater.json`, 관련 PNG, `pages/dist/`, `online-files.json`에 결과를 보관했습니다. 최초 단위 실패 기록도 보존했습니다. 이후 폴더 안내 변경의 검증·게시와 구분해 이 항목에 결과를 보충했습니다.
 
 <a id="hist-20261029-005"></a>
-### 2026-10-29 13:45:26 +09:00 — 기억한 저장 폴더의 반복 안내를 간단한 이어서 사용하기로 축소
+### 2026-10-29 14:16:56 +09:00 — 기억한 저장 폴더의 반복 안내를 간단한 이어서 사용하기로 축소
 
 | ID | change-kind | status |
 |---|---|---|
-| hist-20261029-005 | 폰·시작 화면 · 저장 폴더 재연결 | 구현·로컬 검증 완료 / 실제 Chrome·GitHub Pages 확인 예정 |
+| hist-20261029-005 | 폰·시작 화면 · 저장 폴더 재연결 | 완료 / GitHub Pages 1.2.35 게시·공개 검증 완료 |
 
 **목적·사용:** **1.2.35**부터 이미 설정한 폴더의 접근 권한을 다시 확인해야 할 때, 긴 **저장 폴더 연결 확인** 대화상자를 반복하지 않습니다. 작은 **이어서 사용하기** 화면에 기억한 폴더 이름과 **계속·취소**만 보여 주고, 계속을 누르면 같은 폴더의 권한을 확인합니다. 폴더를 다시 고르거나 새로 만들지 않습니다. **다른 폴더·권한 도움말**을 펼칠 때만 자세한 설명과 다른 저장 폴더 선택이 나타납니다. 폰과 데스크톱에 같은 동작을 적용했습니다. 처음 폴더를 지정하는 경우에는 기존의 친절한 설정 안내를 유지합니다.
 
@@ -4250,3 +4250,11 @@ Chrome 검사는 실제 OPFS 폴더 핸들과 IndexedDB, Android 사용자 에�
 **실제 Chrome 준비·게시 상태:** 기존 Android 재연결 Chrome 검사에 대화상자 미표시·접힌 도움말·간단한 계속 버튼, 320/390/844px에서 버튼 접근, 권한 유지 시 무안내 세 차례, 권한 재확인이 필요한 세 차례에도 폴더 재선택 0·사용자 클릭 권한 요청 1, 문서·주석·북마크·이력 보존 조건을 추가했습니다. 실제 외부 폴더 권한 창이나 물리 Android를 시험한 것으로 기록하지 않습니다. 샌드박스에서 Chrome을 직접 실행하지 않았으며 실제 Chrome·Pages 게시·온라인 파일·화면 검증 결과는 아래에 보충합니다. 근거는 `test-results/compact-folder-resume/`에 보관합니다.
 
 **최초 Chrome 실패와 수정:** 소스 `eddb47113f933fae3ebbf79c550d9997e08b6863`의 [Actions 40819634324](https://github.com/seionwon/HTMLMemo/actions/runs/40819634324)은 CI 단위 **693개 중 692개 통과·macOS 전용 1개 건너뜀**과 문법 검사를 통과했으나, 우선 Chrome **18개 중 17개 통과·1개 실패**로 게시하지 않았습니다. 새 재연결 화면을 시작 준비 중 비활성화한 상태에서 버튼에 너무 일찍 초점을 보내, Chrome에서 계속 버튼의 초점이 빠진 실제 문제가 확인됐습니다. 시작 준비와 비활성화 해제가 끝난 뒤 계속 버튼에 초점을 주도록 앱을 수정했습니다. 실패한 초점 단언은 그대로 유지합니다. 최초 로그·화면·구조화 결과는 `first-build-ci.log`, `first-actions.json`, `first-ci/`에 보존하며 수정 뒤 검사 결과는 아래에 보충합니다.
+
+**실제 Chrome·게시 완료 (2026-10-29 14:16:56 +09:00):** 초점을 수정한 소스 `6fb646a5e543aa1c1d23e40158327b12cfe91eef`의 [Actions 40820456360](https://github.com/seionwon/HTMLMemo/actions/runs/40820456360)이 성공했습니다. 수정 뒤 로컬 단위 **693개 전부**, JavaScript **138개·JSON**, 빌드를 다시 통과했습니다. CI 단위 **693개 중 692개 통과·macOS 전용 환경 검사 1개 건너뜀**, JavaScript **119개·JSON**, 우선 Chrome **18개**, 전체 Chrome **89개**, 공개 주소 Chrome **54개**를 통과했습니다. 우선 18개는 전체 89개에 포함되며 macOS 전용 검사는 로컬에서 통과했습니다. 빌드는 **14:10:08**, Pages 게시는 **14:10:21**, 공개 주소 검사는 **14:15:37 +09:00**에 완료됐습니다. 최초 실패 실행은 게시하지 않았으며 실패한 초점 단언을 그대로 둔 채 두 회차 모두 통과했습니다.
+
+**반복 실행·자료 확인:** CI와 정식 URL의 실제 Chrome에서 각각 **320×568 / 390×844 / 844×390** 화면의 간단한 시작 화면과 버튼 접근을 통과했습니다. **권한 유지 상태로 세 차례 재실행**하면 안내·권한 요청 없이 열렸고, **권한이 매번 prompt로 바뀌는 세 차례 재실행**에서도 긴 대화상자·초기 설정 안내·폴더 재선택 없이 계속 버튼 한 번으로 같은 폴더를 연결했습니다. 권한 요청은 실제 사용자 클릭의 활성화가 있는 때에만 한 번 발생했습니다. 취소·거부 후 자료·폴더 관리 파일을 보존했고, 재연결 뒤에도 원본·주석·북마크·이력이 유지됐습니다. 시작 준비가 끝난 뒤 계속 버튼의 실제 초점도 확인했습니다. 이 검사는 Android 사용자 에이전트·터치 화면과 실제 OPFS/IndexedDB를 사용해 권한 상태를 제어한 Chrome 자동 검사입니다. **물리 Android나 실제 외부 폴더 권한 창을 시험한 것은 아니며, Chrome이 권한을 영구 유지한다고 보장하지 않습니다.**
+
+**업데이트·온라인 확인:** 정식 URL의 최신 시작과 오프라인 재실행에서 **새 버전 확인 → 폴더 조회·권한 확인** 순서를 통과하고 문서·주석을 보존했습니다. 버전별 실제 서비스 워커 검사에서도 업데이트 제안·취소·실패·설치와 오프라인 순서를 통과했습니다. 실제 기기에 PWA를 설치한 검사는 아닙니다. [정식 URL](https://seionwon.github.io/HTMLMemo/)의 **47개 파일·2,876,405바이트**가 Pages 산출물과 모두 HTTP 200·크기·SHA-256이 일치했습니다. CI·공개 주소의 작은 재연결 화면과 공개 오프라인 도움말의 **1.2.35** 표시를 검토했습니다. CI의 한국어 글꼴 제한은 실제 DOM 문구와 소스 확인으로 구분했습니다. 기본 디자인·앱 아이콘·전용 폴더 자동 저장과 명시적 권한 요청을 유지합니다.
+
+**근거·기록:** `test-results/compact-folder-resume/`의 `focused.log`, `focused-initial.log`, `unit.log`, `check.log`, `build.log`, `actions.json`, `artifacts.json`, `build-ci.log`, `published-ci.log`, `ci/pages-only-android-folder-resume.json`, `ci/pwa-startup-before-folder.json`, `published/pages-only-android-folder-resume.json`, `published/pages-only-pwa-updater.json`, 관련 PNG, `pages/dist/`, `online-files.json`에 결과를 보관했습니다. 첫 Chrome 실패 자료와 수정 내역도 보존했습니다. 최종 이력 보충은 문서만 바꾸며 게시된 앱 파일은 그대로입니다.
