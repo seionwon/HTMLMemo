@@ -323,7 +323,8 @@ test('real Chrome: Pages-only low-resolution screens keep controls reachable and
     await page.waitFor('document.querySelector(".tab.document.active .tab-title")?.textContent==="Long mobile outline"&&document.querySelector(".document-host:not([hidden]) iframe.document-frame")?.style.visibility==="visible"');
     if(await page.evaluate('document.querySelector("#sidebar").hidden')){await page.click('#toolbar [data-action=more]');await page.click('[data-more=sidebar]');}
     await page.click('#sidebar [data-sidebar-view=outline]');await page.click('#sidebar [data-heading]:last-child');
-    await page.waitFor('document.querySelector(".document-host:not([hidden]) .reader-viewport").scrollTop>100');
+    await page.waitFor(`(()=>{const host=document.querySelector('.document-host:not([hidden])'),f=host.querySelector('iframe.document-frame'),v=host.querySelector('.reader-viewport'),d=f.contentDocument,r=d.querySelector('section:last-child h2').getBoundingClientRect(),b=f.getBoundingClientRect(),edge=v.getBoundingClientRect(),scale=b.width/f.offsetWidth,top=b.top+r.top*scale,bottom=b.top+r.bottom*scale,scroll=Math.max(v.scrollTop,d.scrollingElement.scrollTop);window.longOutlineProof={scroll,top,bottom,viewportTop:edge.top,viewportBottom:edge.bottom};return scroll>100&&top>=edge.top-1&&bottom<=edge.bottom+1;})()`);
+    report.longOutlineTarget=await page.evaluate('window.longOutlineProof');
     await page.click('#toolbar [data-action=palette]');await page.waitFor('!document.querySelector("#tool-popover").hidden&&!!document.querySelector("#pen-width")');
     report.longOutlineAndToolbar=true;await writeFile(join(root,'test-results/pages-only-low-resolution-long-outline.png'),await page.screenshot());
     await page.click('[data-popover-close]');await page.waitFor('document.querySelector("#data-folder-status").textContent==="폴더 저장 완료"');assert.deepEqual(chrome.errors,[]);report.status='pass';
