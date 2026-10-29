@@ -217,6 +217,11 @@ html[data-app-sidebar-resizing] iframe{pointer-events:none!important}
 [data-htmlmemo-doc-sidebar-ui] .sidebar-book-results .search-navigation{flex-wrap:wrap}
 [data-htmlmemo-doc-sidebar-ui] .sidebar-book-results button:disabled{opacity:.4;cursor:default}
 [data-htmlmemo-doc-sidebar-ui] .sidebar-bookmark-list{min-width:0}
+.bookmark-add-button,[data-htmlmemo-doc-sidebar-ui] .bookmark-add-button{display:inline-flex;align-items:center;justify-content:center;gap:6px;max-width:100%;min-width:0;min-height:32px;margin-top:8px;padding:6px 11px;border:1px solid color-mix(in srgb,var(--green) 30%,var(--line));border-radius:6px;background:var(--green-light);color:var(--green);font-size:12px;font-weight:600;line-height:1.5;text-align:center;white-space:normal;cursor:pointer}
+.bookmark-add-button span,[data-htmlmemo-doc-sidebar-ui] .bookmark-add-button span{min-width:0;overflow-wrap:anywhere}
+.bookmark-add-button:hover,[data-htmlmemo-doc-sidebar-ui] .bookmark-add-button:hover{background:color-mix(in srgb,var(--green-light) 85%,var(--green));border-color:color-mix(in srgb,var(--green) 50%,var(--line))}
+.bookmark-add-button:active,[data-htmlmemo-doc-sidebar-ui] .bookmark-add-button:active{background:color-mix(in srgb,var(--green-light) 75%,var(--green));border-color:var(--green)}
+.bookmark-add-button:focus-visible,[data-htmlmemo-doc-sidebar-ui] .bookmark-add-button:focus-visible{outline:2px solid var(--green);outline-offset:2px}
 [data-htmlmemo-doc-sidebar-ui] .bookmark-row{display:flex;align-items:center;min-width:0}
 [data-htmlmemo-doc-sidebar-ui] .outline-item{flex:1;min-width:0;gap:6px;overflow-wrap:anywhere}
 [data-htmlmemo-doc-sidebar-ui] [data-delete-bookmark]{flex-shrink:0}
