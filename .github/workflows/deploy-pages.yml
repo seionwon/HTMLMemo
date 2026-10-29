@@ -25,6 +25,10 @@ jobs:
           cache: npm
       - uses: actions/configure-pages@v5
       - run: npm ci
+      - name: Install Korean fonts for realistic mobile layout checks
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install --no-install-recommends -y fonts-noto-cjk
       - run: npm test
       - run: npm run check
       - run: mkdir -p test-results
@@ -79,6 +83,10 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
+      - name: Install Korean fonts for realistic mobile layout checks
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install --no-install-recommends -y fonts-noto-cjk
       - name: Verify the published URL-only app, sidebar, annotation tree and pen scaling in Chrome
         env:
           HTMLMEMO_SIDEBAR_TEST_URL: https://seionwon.github.io/HTMLMemo/
