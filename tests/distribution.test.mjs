@@ -465,15 +465,15 @@ test('a missing safe folder-write lock also shows the Chrome requirement before 
   const app=await fileApp({navigator:{locks:undefined}});assert.ok(app.doc.querySelector('[data-chrome-required]'));assert.equal(app.databaseOpens,0);assert.equal(app.doc.querySelector('#hero-import').onclick,null);
 });
 
-test('a saved folder resumes; revoked permission requires reconnecting the same folder',async()=>{
+test('a saved folder resumes silently; revoked permission offers a compact screen for the same folder',async()=>{
   for(const permission of ['granted','prompt','denied']){
     const selected=memoryFolder('기존 폴더',{permission}),app=await fileApp({firstRun:true,settings:[['folder',selected]],directoryPicker:async()=>{assert.fail('Do not automatically open a picker');}});
     await settleUntil(()=>app.doc.querySelector('#data-folder-status').textContent.includes(permission==='granted'?'완료':'중단'));
-    assert.equal(!!app.doc.querySelector('#dialog').open,permission!=='granted');assert.equal(app.settings.get('folder'),selected);
+    assert.equal(!!app.doc.querySelector('#dialog').open,false);assert.equal(app.doc.querySelector('#folder-reconnect').hidden,permission==='granted');assert.equal(app.settings.get('folder'),selected);
     if(permission!=='granted'){
       assert.ok(app.doc.querySelector('[data-folder-resume]'));assert.equal(app.doc.querySelector('#create-storage-folder,#storage-folder-name'),null);assert.equal(app.doc.activeElement.id,'resume-data-folder');assert.doesNotMatch(app.doc.querySelector('#dialog').textContent,/저장 폴더를 먼저 설정하세요/);
       assert.ok(app.doc.querySelector('#resume-data-folder'));assert.equal(selected.children.size,0);selected.control.permission='granted';
-      app.doc.querySelector('#resume-data-folder').onclick();await settleUntil(()=>!app.doc.querySelector('#dialog').open);assert.equal(app.settings.get('folder'),selected);
+      app.doc.querySelector('#resume-data-folder').onclick();await settleUntil(()=>app.doc.documentElement.dataset.storageSetup==='ready');assert.equal(app.settings.get('folder'),selected);assert.equal(app.doc.querySelector('#folder-reconnect').hidden,true);assert.equal(app.doc.querySelector('#folder-reconnect').children.length,0);
     }
   }
 });
@@ -483,13 +483,12 @@ test('remembered phone storage asks only for renewed permission and reopens with
   let requests=0,pickers=0,allow=false;selected.requestPermission=async options=>{assert.equal(options.mode,'readwrite');requests++;if(allow)control.permission='granted';return allow?'granted':'denied';};
   const directoryPicker=async()=>{pickers++;throw Error('A saved folder must not open another picker');};
   const app=await fileApp({firstRun:true,settings:[['folder',selected]],directoryPicker}),doc=app.doc;
-  assert.equal(requests,0);assert.equal(pickers,0);assert.ok(doc.querySelector('[data-folder-resume]'));assert.equal(doc.querySelector('#create-storage-folder,#storage-folder-name'),null);assert.equal(doc.querySelector('#dialog strong').textContent,selected.name);assert.equal(doc.querySelector('#dialog strong').children.length,0);assert.equal(doc.querySelector('#toast.error:not([hidden])'),null);
-  assert.equal(doc.querySelector('#dialog').oncancel,null);
-  doc.querySelector('#cancel-folder-setup').onclick();doc.querySelector('#dialog').onclose();assert.equal(doc.documentElement.dataset.storageSetup,'paused');assert.equal(app.settings.get('folder'),selected);assert.equal(selected.children.has('HTMLMemo-library.json'),false);assert.equal(requests,0);assert.equal(pickers,0);
+  assert.equal(requests,0);assert.equal(pickers,0);assert.ok(doc.querySelector('[data-folder-resume]'));assert.equal(doc.querySelector('#create-storage-folder,#storage-folder-name'),null);assert.equal(doc.querySelector('#folder-reconnect strong').textContent,selected.name);assert.equal(doc.querySelector('#folder-reconnect strong').children.length,0);assert.equal(!!doc.querySelector('#dialog').open,false);assert.equal(doc.querySelector('#app').hidden,true);assert.equal(doc.querySelector('#folder-reconnect details').hasAttribute('open'),false);assert.equal(doc.querySelector('#resume-data-folder').textContent,'계속');assert.equal(doc.querySelector('#toast.error:not([hidden])'),null);
+  doc.querySelector('#cancel-folder-setup').onclick();assert.equal(doc.querySelector('#folder-reconnect').hidden,true);assert.equal(doc.querySelector('#folder-reconnect').children.length,0);assert.equal(doc.documentElement.dataset.storageSetup,'paused');assert.equal(app.settings.get('folder'),selected);assert.equal(selected.children.has('HTMLMemo-library.json'),false);assert.equal(requests,0);assert.equal(pickers,0);
   doc.querySelector('#folder-setup-resume').onclick();assert.ok(doc.querySelector('[data-folder-resume]'));assert.equal(doc.querySelector('#create-storage-folder'),null);
   doc.querySelector('#resume-data-folder').onclick();await settleUntil(()=>!doc.querySelector('#resume-data-folder').disabled);
   assert.equal(requests,1);assert.equal(doc.documentElement.dataset.storageSetup,'required');assert.match(doc.querySelector('#folder-connection-status').textContent,/기존 저장 폴더의 쓰기를 허용/);assert.equal(selected.children.has('HTMLMemo-library.json'),false);assert.equal(app.settings.get('folder'),selected);
-  allow=true;doc.querySelector('#resume-data-folder').onclick();await settleUntil(()=>!doc.querySelector('#dialog').open);
+  allow=true;doc.querySelector('#resume-data-folder').onclick();await settleUntil(()=>doc.documentElement.dataset.storageSetup==='ready');
   assert.equal(requests,2);assert.equal(pickers,0);assert.equal(doc.documentElement.dataset.storageSetup,'ready');
   const id=JSON.parse(await(await selected.getFileHandle('HTMLMemo-library.json')).getFile().then(f=>f.text())).id;
   for(let i=0;i<3;i++){
@@ -499,6 +498,29 @@ test('remembered phone storage asks only for renewed permission and reopens with
     assert.equal(JSON.parse(await(await selected.getFileHandle('HTMLMemo-library.json')).getFile().then(f=>f.text())).id,id);
   }
   assert.equal(await(await original.getFile()).text(),'Original data stays here.');
+});
+
+test('repeatedly reset folder permission keeps each launch compact and never selects or creates another folder',async()=>{
+  const control={permission:'granted'},selected=memoryFolder('Phone storage',control),original=await selected.getFileHandle('kept.html',{create:true});original.replace('Kept document');
+  let requests=0;selected.requestPermission=async()=>{requests++;control.permission='granted';return 'granted';};
+  const directoryPicker=async()=>{assert.fail('A remembered folder needs no picker');};
+  let app=await fileApp({firstRun:true,settings:[['folder',selected]],directoryPicker});await settleUntil(()=>app.doc.documentElement.dataset.storageSetup==='ready');
+  const manifest=()=>selected.getFileHandle('HTMLMemo-library.json').then(h=>h.getFile()).then(f=>f.text()).then(JSON.parse),id=(await manifest()).id;
+  for(let i=0;i<3;i++){
+    control.permission='prompt';const next=await fileApp({firstRun:true,settings:[...app.settings],localEntries:[...app.local],directoryPicker}),doc=next.doc;
+    assert.equal(requests,i);assert.equal(!!doc.querySelector('#dialog').open,false);assert.equal(doc.querySelector('#folder-reconnect').hidden,false);assert.equal(doc.querySelector('#app').hidden,true);assert.equal(doc.querySelector('.folder-welcome-steps,#create-storage-folder'),null);assert.equal(doc.querySelector('#folder-reconnect details').hasAttribute('open'),false);
+    doc.querySelector('#resume-data-folder').onclick();await settleUntil(()=>doc.documentElement.dataset.storageSetup==='ready');assert.equal(requests,i+1);assert.equal((await manifest()).id,id);assert.equal(doc.querySelector('#folder-reconnect').children.length,0);assert.equal(doc.querySelector('#app').hidden,false);app=next;
+  }
+  assert.equal(await(await original.getFile()).text(),'Kept document');
+});
+
+test('canceling a remembered-folder permission request ignores a late grant until the user resumes',async()=>{
+  const control={permission:'prompt'},selected=memoryFolder('Pending permission',control);let grant;
+  selected.requestPermission=()=>new Promise(resolve=>{grant=()=>{control.permission='granted';resolve('granted');};});
+  const app=await fileApp({firstRun:true,settings:[['folder',selected]],directoryPicker:async()=>assert.fail('No picker needed')}),doc=app.doc;
+  doc.querySelector('#resume-data-folder').onclick();doc.querySelector('#cancel-folder-setup').onclick();assert.equal(doc.documentElement.dataset.storageSetup,'paused');assert.equal(doc.querySelector('#folder-setup-resume').disabled,true);
+  grant();await settleUntil(()=>!doc.querySelector('#folder-setup-resume').disabled);assert.equal(selected.children.size,0);assert.equal(doc.querySelector('#app').hidden,true);assert.equal(doc.querySelector('#folder-reconnect').children.length,0);
+  doc.querySelector('#folder-setup-resume').onclick();assert.equal(doc.querySelector('#folder-reconnect').hidden,false);doc.querySelector('#resume-data-folder').onclick();grant();await settleUntil(()=>doc.documentElement.dataset.storageSetup==='ready');assert.ok(selected.children.has('HTMLMemo-library.json'));
 });
 
 test('first-run guidance waits for the version check and follows it without touching the folder first',async()=>{

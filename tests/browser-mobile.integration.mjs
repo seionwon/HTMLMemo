@@ -185,17 +185,17 @@ test('real Chrome: Pages-only Android saved folder resumes across launches witho
     await page.waitFor(`(async()=>{if(!(${saved}))return false;const d=await(await navigator.storage.getDirectory()).getDirectoryHandle(${JSON.stringify(folderName)});return JSON.parse(await(await(await d.getFileHandle('HTMLMemo-library.json')).getFile()).text()).documents.some(r=>r.id==='phone-kept-book');})()`);
     const state=()=>page.evaluate(`(async()=>{const s=await import('./src/storage.js'),r=await s.getDocument('phone-kept-book');return {id:r.id,html:r.html,metadata:r.metadata,revisions:(await s.listRevisions(r.id)).length,documents:(await s.listDocuments({includeTrashed:true})).map(d=>d.id).sort()};})()`),before=await state(),diskBefore=await manifest();
     await page.evaluate(`localStorage.setItem(${JSON.stringify(grantKey)},'prompt')`);await page.navigate(url);await page.waitFor('document.querySelector("[data-folder-resume]")');
-    assert.equal(await page.evaluate('document.querySelector("#dialog h2").textContent'),'저장 폴더 연결 확인');
+    assert.equal(await page.evaluate('document.querySelector("#folder-reconnect h1").textContent'),'이어서 사용하기');assert.equal(await page.evaluate('document.querySelector("#dialog").open'),false);assert.equal(await page.evaluate('document.querySelector("#folder-reconnect details").open'),false);assert.equal(await page.evaluate('document.querySelector("#resume-data-folder").textContent'),'계속');report.noRepeatedModal=true;
     assert.equal(await page.evaluate('document.querySelector("#create-storage-folder,#storage-folder-name")'),null);assert.equal(await page.evaluate('document.activeElement.id'),'resume-data-folder');
     assert.equal(await page.evaluate('window.phonePickerCalls+window.folderResumeRequests'),0);assert.equal(await page.evaluate('document.querySelector("#toast.error:not([hidden])")'),null);
     await page.click('#cancel-folder-setup');await pausedSetup(page);assert.deepEqual(await state(),before);assert.equal(await manifest(),diskBefore);assert.equal(await page.evaluate('window.phonePickerCalls+window.folderResumeRequests'),0);report.cancelPreservesData=true;
-    await page.click('#folder-setup-resume');await page.waitFor('document.querySelector("#dialog").open&&document.querySelector("[data-folder-resume]")');assert.equal(await page.evaluate('document.querySelector("#create-storage-folder,#storage-folder-name")'),null);
+    await page.click('#folder-setup-resume');await page.waitFor('!document.querySelector("#folder-reconnect").hidden&&document.querySelector("[data-folder-resume]")');assert.equal(await page.evaluate('document.querySelector("#create-storage-folder,#storage-folder-name")'),null);
     await mkdir(join(root,'test-results'),{recursive:true});
     for(const [width,height] of [[320,568],[390,844],[844,390]]){
-      await page.send('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:true});await dialogFits(page);
+      await page.send('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:true});assert.equal(await page.evaluate(`(()=>{const d=document.querySelector('#folder-reconnect'),r=d.querySelector('section').getBoundingClientRect();return !d.hidden&&!document.querySelector('#dialog').open&&r.left>=0&&r.right<=innerWidth+1&&d.scrollWidth<=d.clientWidth+1;})()`),true);
       await page.evaluate(`document.querySelector('#resume-data-folder').scrollIntoView({block:'center'})`);
       assert.equal(await page.evaluate(`(()=>{const b=document.querySelector('#resume-data-folder'),r=b.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&b.contains(document.elementFromPoint(r.left+r.width/2,r.top+r.height/2));})()`),true);
-      await page.evaluate('document.querySelector("#dialog").scrollTop=0');await writeFile(join(root,`test-results/pages-only-android-folder-resume-${width}.png`),await page.screenshot());report.layouts.push({width,height,reachable:true});
+      await page.evaluate('scrollTo(0,0)');await writeFile(join(root,`test-results/pages-only-android-folder-resume-${width}.png`),await page.screenshot());report.layouts.push({width,height,reachable:true});
     }
     await page.send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
     await page.evaluate(`localStorage.setItem(${JSON.stringify(denyKey)},'1')`);await page.click('#resume-data-folder');await page.waitFor('!document.querySelector("#resume-data-folder").disabled&&document.querySelector("#folder-connection-status").textContent.includes("쓰기를 허용")');
@@ -206,6 +206,12 @@ test('real Chrome: Pages-only Android saved folder resumes across launches witho
     for(let i=0;i<3;i++){
       await page.navigate(url);await page.waitFor('document.documentElement.dataset.storageSetup==="ready"&&'+saved);
       assert.equal(await page.evaluate('!!document.querySelector("[data-folder-welcome],[data-folder-resume]")'),false);assert.equal(await page.evaluate('window.phonePickerCalls+window.folderResumeRequests'),0);assert.deepEqual(await state(),before);assert.deepEqual(await page.evaluate('window.startupIssues'),[]);report.reopens++;
+    }
+    report.permissionResetReopens=0;
+    for(let i=0;i<3;i++){
+      await page.evaluate(`localStorage.setItem(${JSON.stringify(grantKey)},'prompt')`);await page.navigate(url);await page.waitFor('!document.querySelector("#folder-reconnect").hidden&&document.querySelector("#resume-data-folder")');
+      assert.equal(await page.evaluate('document.querySelector("#dialog").open'),false);assert.equal(await page.evaluate('document.querySelector("#folder-reconnect details").open'),false);assert.equal(await page.evaluate('window.phonePickerCalls+window.folderResumeRequests'),0);assert.deepEqual(await state(),before);
+      await page.click('#resume-data-folder');await page.waitFor('document.documentElement.dataset.storageSetup==="ready"&&'+saved);assert.equal(await page.evaluate('window.phonePickerCalls'),0);assert.equal(await page.evaluate('window.folderResumeRequests'),1);assert.deepEqual(await page.evaluate('window.folderResumeActivations'),[true]);assert.equal(await page.evaluate('document.querySelector("#folder-reconnect").children.length'),0);assert.deepEqual(await state(),before);report.permissionResetReopens++;
     }
     report.noRepeatedSetup=true;report.originalNotesBookmarksAndHistoryPreserved=true;assert.deepEqual(chrome.errors,[]);report.status='pass';
   }catch(error){report.status='failed';report.error=error.stack;if(chrome){report.browserErrors=chrome.errors;report.state=await chrome.page.evaluate('({status:document.querySelector("#status-left")?.textContent,dialog:document.querySelector("#dialog")?.textContent,issues:window.startupIssues})').catch(()=>null);await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/pages-only-android-folder-resume-failure.png'),await chrome.page.screenshot());}throw error;

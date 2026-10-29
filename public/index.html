@@ -72,6 +72,7 @@
     <input type="file" id="file-input" accept=".html,.htm,.mhtml,.mht,text/html,multipart/related,application/x-mimearchive" multiple hidden>
     <input type="file" id="settings-file-input" accept=".json,application/json" hidden>
   </div>
+  <main id="folder-reconnect" class="folder-setup-paused folder-reconnect" hidden aria-labelledby="folder-reconnect-title"></main>
   <main id="folder-setup-paused" class="folder-setup-paused" hidden aria-labelledby="folder-setup-paused-title"><section><img src="./icons/icon.svg" alt="" width="40" height="40"><h1 id="folder-setup-paused-title" tabindex="-1">저장 폴더 연결을 취소했습니다.</h1><p class="dialog-description">준비되면 아래 버튼으로 다시 연결하세요.<br>문서 작업은 저장 폴더 연결을 마친 뒤 시작할 수 있습니다.</p><button id="folder-setup-resume" class="primary-button" type="button">저장 폴더 연결</button></section></main>
   <noscript>HTMLMemo를 사용하려면 JavaScript를 켜주세요.</noscript>
   <dialog id="app-update-dialog" class="app-update-dialog" aria-labelledby="app-update-title" aria-describedby="app-update-status"><div class="dialog-heading"><h2 id="app-update-title">이 앱의 새 버전이 있습니다. 설치하시겠습니까?</h2><button id="app-update-close" class="icon-button" type="button" aria-label="업데이트 취소">×</button></div><p id="app-update-version" class="dialog-description small"></p><p id="app-update-status" class="dialog-description" role="status" aria-live="polite"></p><div class="dialog-actions"><button id="app-update-cancel" class="secondary-button" type="button">취소</button><button id="app-update-install" class="primary-button" type="button">설치</button></div></dialog>
