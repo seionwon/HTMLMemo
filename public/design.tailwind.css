@@ -479,8 +479,8 @@ dialog:has(.help-browser) #dialog-content{height:100%;min-height:0}
 .document-info{grid-template-columns:65px minmax(0,1fr)}
 .device-sync fieldset{min-width:0}
 #sync-qr{max-width:min(170px,100%)}
-/* Leave room for both the drawer rows and the default floating bar in landscape. */
-@media(max-width:720px) and (max-height:420px){
+/* Keep the end of long lists and the default floating bar usable together. */
+@media(max-width:720px){
  .sidebar{bottom:82px}
  #app.reader-focus .sidebar{bottom:36px}
 }
