@@ -53,7 +53,11 @@ test('real Chrome: Pages-only searchable help keeps navigation, mobile layouts a
   for(const [width,height] of [[390,844],[320,568],[844,390]]){
    await page.send('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:true});
    await page.evaluate(`(()=>{const picker=document.querySelector('#help-topic-select');picker.value='storage-differences';picker.dispatchEvent(new Event('change',{bubbles:true}));})()`);
-   if(width<=640)assert.equal(await page.evaluate('getComputedStyle(document.querySelector("#help-nav")).display'),'none');
+   if(width<=640){
+    assert.equal(await page.evaluate('getComputedStyle(document.querySelector("#help-nav")).display'),'none');
+    // A long selected title must leave the dropdown arrow visible on narrow screens.
+    assert.equal(await page.evaluate(`(()=>{const picker=document.querySelector('#help-topic-select'),label=picker.querySelector('selectedcontent');if(!CSS.supports('appearance','base-select')||!window.HTMLSelectedContentElement)return true;if(!label)return false;const r=picker.getBoundingClientRect(),l=label.getBoundingClientRect(),s=getComputedStyle(label),p=getComputedStyle(picker);return label.textContent===picker.selectedOptions[0].textContent&&l.width>0&&l.right<=r.right-parseFloat(p.paddingRight)+1&&s.overflowX==='hidden'&&s.textOverflow==='ellipsis';})()`),true);
+   }
    assert.equal(await fits(page),true);assert.equal(await page.evaluate('document.querySelector(".help-content table tbody").rows.length'),5);
    await writeFile(root+`/test-results/pages-only-help-light-${width}.png`,await page.screenshot());
    await page.evaluate("document.documentElement.dataset.theme='dark'");await writeFile(root+`/test-results/pages-only-help-dark-${width}.png`,await page.screenshot());await page.evaluate("document.documentElement.dataset.theme='light'");

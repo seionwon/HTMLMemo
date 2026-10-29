@@ -43,6 +43,31 @@ function toast(message, error = false) { const el=$('#toast'); el.textContent=me
 function showError(error) { if (error?.name !== 'AbortError') toast(error?.message || String(error),true); }
 function setButton(selector, name, label = '') { $(selector).innerHTML=icon(name)+(label ? `<span>${label}</span>`:''); }
 function setIconButton(selector, name, label, size = 18) { const button=$(selector);button.innerHTML=icon(name,size);button.title=label;button.setAttribute('aria-label',label); }
+function setupSelectLabels() {
+  // Use DOM insertion only where customizable selects are supported. Older HTML
+  // parsers treat a button inside select as its end tag and lose the options.
+  if(!window.CSS?.supports?.('appearance','base-select')||!window.HTMLSelectedContentElement)return;
+  const enhance=select=>{
+    if(select.multiple||select.querySelector(':scope > button > selectedcontent'))return;
+    const value=select.value,button=document.createElement('button');button.type='button';
+    button.append(document.createElement('selectedcontent'));select.prepend(button);select.value=value;
+  };
+  const collect=(node,selects)=>{
+    if(node.nodeType!==1)return;
+    if(node.matches('select'))selects.add(node);
+    for(const select of node.querySelectorAll('select'))selects.add(select);
+  };
+  const initial=new Set();collect(document.body,initial);initial.forEach(enhance);
+  // Inspect only newly inserted app UI, never the contents of document iframes.
+  new MutationObserver(records=>{
+    const selects=new Set();
+    for(const record of records){
+      if(record.target.nodeType===1&&record.target.matches('select'))selects.add(record.target);
+      for(const node of record.addedNodes)collect(node,selects);
+    }
+    for(const select of selects)if(select.isConnected)enhance(select);
+  }).observe(document.body,{childList:true,subtree:true});
+}
 function modal(html, bind = () => {}) {
   closePopover(); $('#dialog-content').innerHTML=html; const dialog=$('#dialog'); dialog.returnValue='';dialog.oncancel=null;dialog.removeAttribute('aria-describedby');
   dialog.onclose=null;const heading=$('h2',dialog);if(heading){heading.id='dialog-title';dialog.setAttribute('aria-labelledby',heading.id);}else dialog.removeAttribute('aria-labelledby');
@@ -1623,7 +1648,7 @@ async function initialize() {
   document.documentElement.dataset.storageSetup='checking';updateAppInteraction();$('#status-left').textContent='새 버전을 확인하는 중…';
   try{preferences=loadPreferences(localStorage);}catch(error){toast('설정 일부를 읽지 못했습니다. 연결한 데이터 폴더로 복원할 수 있습니다.',true);}
   dataFolder=new DataFolder({storage:localStorage,report:state=>{if(state.handle)folder=state.handle;renderFolderState();},onRestored:async result=>{preferences=loadPreferences(localStorage);applyTheme(preferences.theme);$('#library-sort').value=preferences.librarySort+':'+preferences.librarySortDirection;for(const tab of tabs)if(tab.reader)Object.assign(tab.reader,preferences.annotation);applyToolbarPosition();await refreshLibrary();if(result.recovered)toast('이전의 온전한 폴더 저장본에서 복원했습니다. 최신 변경 일부가 빠졌을 수 있습니다.',true);}});
-  applyTheme(preferences.theme);bindUI();fitHeader();$('#library-sort').value=preferences.librarySort+':'+preferences.librarySortDirection;network();
+  applyTheme(preferences.theme);bindUI();setupSelectLabels();fitHeader();$('#library-sort').value=preferences.librarySort+':'+preferences.librarySortDirection;network();
   // The old app must be able to update before requesting access to its folder.
   // Data already committed to this device survives the version change.
   updateController=new UpdateController({navigator,location,onOffer:offerAppUpdate,onState:appUpdateState,beforeUpdate:async()=>{if(folderSetupBusy)throw Error('진행 중인 폴더 연결을 마친 뒤 다시 시도해주세요.');await flushInternalDocuments();await dataFolder.flush();},reload:()=>location.reload()});

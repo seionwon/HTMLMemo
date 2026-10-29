@@ -555,8 +555,11 @@ body[data-codememo-design] select:not([multiple]){
 }
 body[data-codememo-design] select:enabled:hover{border-color:var(--green)}
 @supports(appearance:base-select){
- body[data-codememo-design] select:not([multiple]),body[data-codememo-design] select:not([multiple])::picker(select){appearance:base-select}
+ body[data-codememo-design] select:has(>button>selectedcontent),body[data-codememo-design] select:has(>button>selectedcontent)::picker(select){appearance:base-select}
  body[data-codememo-design] select::picker-icon{display:none}
+ /* Explicit selectedcontent lets the label shrink without painting over the chevron. */
+ body[data-codememo-design] select>button{display:contents}
+ body[data-codememo-design] select selectedcontent{display:block;min-width:0;max-width:100%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
  body[data-codememo-design] select::picker(select){
   padding:4px;margin-block:4px;border:1px solid var(--color-control-border);border-radius:8px;
   background:var(--surface);color:var(--text);box-shadow:var(--shadow);font:inherit;
