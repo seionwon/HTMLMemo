@@ -1,60 +1,7 @@
 // Ported from MemoSuite MemoReadAloud.tsx (UI) and readAloudRuntime.ts (browser engine).
 // See docs/tts-source.md for provenance and the iframe/lifecycle adapters.
 import {currentSection,textIndex,resolveTextAnchor,rangeFromOffsets} from './document.js';
-const PLAYER_CSS = String.raw`
-.mstts-player {
-  position: fixed; z-index: 9000;
-  display: inline-flex; align-items: center; gap: 1px;
-  background: var(--surface, #fff); border: 1px solid var(--border, #e2e8f0); border-radius: 999px;
-  height: 20px; padding: 0 3px; box-shadow: 0 2px 8px rgba(0,0,0,.14); font-size: 10px; font-weight: 600;
-  color: var(--text-secondary, #667085); font-variant-numeric: tabular-nums;
-  touch-action: none; user-select: none;
-}
-.mstts-player .mstts-btn {
-  border: none; background: transparent; cursor: pointer; font-size: 12px; line-height: 16px; padding: 0 3px;
-  color: var(--text, #344054); border-radius: 3px; flex: 0 0 auto;
-  &:hover { color: #7b61ff; background: var(--hover, rgba(130,130,130,.12)); }
-  &:focus-visible { outline: 2px solid var(--green, #334155); outline-offset: 1px; }
-}
-.mstts-grip {
-  cursor: grab; padding: 0 1px; color: var(--text-secondary, #98a2b3);
-  font-size: 10px; line-height: 18px;
-}
-.mstts-count {margin-left: 1px; white-space: nowrap; font-size: 10px; line-height: 18px;}
-.mstts-count:empty {display: none;}
-.mstts-panel {
-  position: fixed; z-index:9001;
-  width: 240px; max-width:calc(100vw - 16px); overflow:auto; overscroll-behavior:contain;
-  background: var(--surface, #fff); border: 1px solid var(--border, #e2e8f0);
-  border-radius: 12px; box-shadow: 0 8px 28px rgba(0,0,0,.2); padding: 10px 12px;
-  display: flex; flex-direction: column; gap: 8px; font-weight: 500; cursor: default;
-  touch-action: auto; user-select: auto;
-}
-.mstts-row {
-  display: flex; align-items: center; gap: 8px;
-  > span { flex-shrink: 0; font-size: 12px; color: var(--text-secondary, #667085); }
-  > div { min-width: 0; flex: 1; }
-}
-.mstts-hint {font-size: 11px; line-height: 1.4; color: var(--text-secondary, #98a2b3);}
 
-.mstts-player {--border:var(--line);--text-secondary:var(--muted);font-family:inherit;box-sizing:border-box;line-height:normal;}
-.mstts-player .mstts-btn {font-family:inherit;min-width:18px;min-height:0;height:18px;width:auto;display:inline-flex;align-items:center;justify-content:center;box-shadow:none;}
-.mstts-panel {box-sizing:border-box;--border:var(--line);--text-secondary:var(--muted);font-family:inherit;font-size:10px;line-height:normal;color:var(--text,#344054);}
-.mstts-panel>* {flex-shrink:0;}
-.mstts-row select {min-width:0;flex:1;padding:5px 10px;font-size:.8rem;font-family:inherit;border:1px solid var(--border,#e2e8f0);border-radius:8px;background:var(--bg,#fff);color:var(--text,#344054);}
-@media print {.mstts-player,.mstts-panel{display:none!important}}
-
-.mstts-select {min-width:0;flex:1;}
-.mstts-select-trigger {display:inline-flex;align-items:center;justify-content:space-between;gap:8px;padding:5px 10px;font-size:.8rem;font-family:inherit;border-radius:8px;border:1px solid var(--border,#e2e8f0);background:var(--bg,#fff);color:var(--text,#344054);cursor:pointer;max-width:100%;}
-.mstts-select-trigger:hover,.mstts-select-trigger[aria-expanded=true] {border-color:#7b61ff;}
-.mstts-select-trigger svg {flex:0 0 auto;color:var(--text-secondary,#667085);transition:transform .2s;}
-.mstts-select-trigger[aria-expanded=true] svg {transform:rotate(180deg);}
-.mstts-select-label {min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.mstts-select-menu {position:fixed;box-sizing:border-box;overflow-y:auto;padding:6px;background:var(--surface,#fff);border:1px solid var(--border,#e2e8f0);border-radius:8px;box-shadow:0 8px 28px rgba(0,0,0,.2);z-index:2000000001;}
-.mstts-select-item {display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;padding:9px 10px;border:0;border-radius:4px;font-size:.85rem;text-align:left;font-family:inherit;background:transparent;color:var(--text,#344054);font-weight:400;cursor:pointer;overflow-wrap:anywhere;}
-.mstts-select-item[aria-selected=true] {background:#7b61ff15;color:#7b61ff;font-weight:600;}
-.mstts-select-item:hover {background:var(--bg,#f8fafc);}
-`;
 // The imported HTML can itself contain an application shell. Read its prose pane,
 // never its navigation, including navigation nested inside <main>.
 const READING_CHROME = 'nav, aside, [role="navigation"], [role="complementary"], [role="menu"], [role="menubar"], [role="toolbar"], #htmlmemo-annotation-layer, .toc, #toc, .sidebar, #sidebar, .book-toc, #book-toc, .book-sidebar, #book-sidebar, .table-of-contents, #table-of-contents, [data-toc], [data-sidebar]';
@@ -82,7 +29,6 @@ export function createReadAloud(reader) {
   const events = new W.AbortController();
   const listen = (target, type, fn, capture=false) => target.addEventListener(type, fn, {capture, signal:events.signal});
   const mount = U.getElementById('app') || U.body;
-  if (!U.getElementById('htmlmemo-tts-ui-style')) { const style=U.createElement('style');style.id='htmlmemo-tts-ui-style';style.textContent=PLAYER_CSS;U.head.append(style); }
   let highlightSheet;
   try {
     highlightSheet = new R.CSSStyleSheet();
