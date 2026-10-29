@@ -467,7 +467,7 @@ dialog:has(.help-browser) #dialog-content{height:100%;min-height:0}
 /* Small phones keep the compact controls; only their containers adapt. */
 .floating-toolbar{overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none}
 .floating-toolbar::-webkit-scrollbar{display:none}
-.tool-popover{max-width:calc(100vw - 20px);overscroll-behavior:contain}
+.tool-popover{max-width:calc(100vw - 20px);overscroll-behavior:contain;z-index:42}
 .palette-bar{flex-wrap:wrap}
 .palette-actions{max-width:100%}
 #palette-preset{min-width:0}
@@ -479,6 +479,8 @@ dialog:has(.help-browser) #dialog-content{height:100%;min-height:0}
 .document-info{grid-template-columns:65px minmax(0,1fr)}
 .device-sync fieldset{min-width:0}
 #sync-qr{max-width:min(170px,100%)}
+/* On phones this is an overlay drawer; its last rows must beat the floating bar. */
+@media(max-width:720px){.sidebar{z-index:41}}
 @media(max-width:360px){
  dialog{padding:15px;max-width:calc(100vw - 20px)}
  .dialog-heading{gap:8px;margin-bottom:12px}

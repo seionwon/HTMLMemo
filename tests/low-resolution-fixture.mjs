@@ -19,7 +19,7 @@ export async function auditLowResolution(w=window,onProgress=()=>{}) {
       const r=node.getBoundingClientRect(),x=r.left+r.width/2,y=r.top+r.height/2;
       const label=node.id||node.getAttribute('aria-label')||node.textContent.trim().slice(0,24);
       if(r.left<-.5||r.right>w.innerWidth+.5)issue(name,'control too wide: '+label);
-      if(scroll&&(!node.contains(d.elementFromPoint(x,y))))issue(name,'control unreachable: '+label);
+      if(scroll&&(!node.contains(d.elementFromPoint(x,y)))){const hit=d.elementFromPoint(x,y);issue(name,'control unreachable: '+label+'; covered by '+(hit?.id||hit?.className||hit?.tagName)+' at '+[x,y].map(Math.round));}
       count++;
     }
     root.scrollTop=0;await frames();report.screens.push({name,controls:count});
