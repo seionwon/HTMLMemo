@@ -65,6 +65,15 @@ export function readAloudRoot(doc) {
   }
   return doc.body;
 }
+/** Resolve a TTS boundary without scanning all later text nodes per sentence. */
+export function readAloudPosition(parts,offset,isEnd=false) {
+  let lo=0,hi=parts.length;
+  while(lo<hi){const mid=(lo+hi)>>>1;if(isEnd?parts[mid].start<offset:parts[mid].start<=offset)lo=mid+1;else hi=mid;}
+  if(!parts.length)return null;
+  if(!lo)return {node:parts[0].node,offset:parts[0].offset,part:0};
+  const part=lo-1,pt=parts[part];
+  return {node:pt.node,offset:pt.offset+Math.max(0,Math.min(offset-pt.start,pt.length)),part};
+}
 export function createReadAloud(reader) {
   const U = reader.host.ownerDocument, W = U.defaultView, D = reader.doc, R = D.defaultView;
   const CSS = R.CSS, NodeFilter = R.NodeFilter, SpeechSynthesisUtterance = W.SpeechSynthesisUtterance;
@@ -423,15 +432,7 @@ export function createReadAloud(reader) {
   // isEnd: a range END that falls exactly on a node boundary must stay in the node it closes —
   // resolving it to the START of the next node made ranges reach across the gap (into whatever
   // follows a skipped code block), which is what produced the giant highlight + scroll jump.
-  function posAt(parts, offset, isEnd) {
-    for (var i = parts.length - 1; i >= 0; i--) {
-      var pt = parts[i];
-      if (isEnd ? offset > pt.start : offset >= pt.start) {
-        return { node: pt.node, offset: pt.offset + Math.max(0, Math.min(offset - pt.start, pt.length)), part:i };
-      }
-    }
-    return parts.length ? { node: parts[0].node, offset: parts[0].offset, part:0 } : null;
-  }
+  function posAt(parts, offset, isEnd) { return readAloudPosition(parts,offset,isEnd); }
   function splitSentences(text, allowShort = false) {
     var seg = [], re = /[^.!?…。\n]+[.!?…。]*\s*/g, m;
     while ((m = re.exec(text))) {
@@ -732,11 +733,12 @@ export function createReadAloud(reader) {
     // Applies from the NEXT sentence — each sentence is its own utterance (same as in-app).
   }
   function firstVisibleSentence(sents, index) {
+    var bounds=viewBounds(),threshold=bounds.top+Math.min(80,bounds.height*.12),frame=reader.frame.getBoundingClientRect(),boxes=new WeakMap();
     for (var i = 0; i < sents.length; i++) {
       var p = posAt(index.parts, sents[i].start);
       var el = p && p.node.parentElement;
-      var r = el && visibleRect(el.getBoundingClientRect());
-      if (r && r.bottom > viewBounds().top + Math.min(80,viewBounds().height*.12)) return i;
+      if(el&&!boxes.has(el))boxes.set(el,frame.top+el.getBoundingClientRect().bottom*reader.zoom);
+      if(el&&boxes.get(el)>threshold)return i;
     }
     return 0;
   }
@@ -779,7 +781,7 @@ export function createReadAloud(reader) {
   function openSelection(anchor) {
     if (!anchor?.quote?.trim() || reader.disposed || reader.host.hidden) return false;
     try {
-      var proseRoot=readAloudRoot(D),section=currentSection(D),index=textIndex(D),resolved=resolveTextAnchor(index,anchor);
+      var proseRoot=readAloudRoot(D),section=currentSection(D),index=reader.searchCache?.().get()||textIndex(D),resolved=resolveTextAnchor(index,anchor);
       var range=resolved && rangeFromOffsets(D,resolved.start,resolved.end,index);
       var root=range && proseRoot.contains(range.startContainer) && proseRoot.contains(range.endContainer) ? proseRoot : D.body;
       if ((anchor.section||'')!==section || !range || !root.contains(range.startContainer) || !root.contains(range.endContainer)) throw new Error('Missing selection');

@@ -330,11 +330,20 @@ export function sentenceOffsets(text,offset,language) {
   while(end>start&&/\s/u.test(text[end-1]))end--;
   return end>start?{start,end}:null;
 }
-export function selectionAnchor(doc, range) {
-  const index = textIndex(doc); let start; let end;
+// Lookups belong to this exact text snapshot. Splitting a node updates them in
+// wrapOffsets; source edits produce a new index through SearchIndexCache.
+const selectionOffsets=new WeakMap();
+export function selectionAnchor(doc, range, index = textIndex(doc)) {
+  let start; let end;
+  if(range.startContainer?.nodeType===3&&range.endContainer?.nodeType===3){
+    let offsets=selectionOffsets.get(index);
+    if(!offsets){offsets=new WeakMap(index.nodes.map(item=>[item.node,item]));selectionOffsets.set(index,offsets);}
+    const first=offsets.get(range.startContainer),last=offsets.get(range.endContainer);
+    if(first&&last){start=first.start+range.startOffset;end=last.start+range.endOffset;}
+  }
   // Compare boundary points instead of Range.toString: CSS-hidden and excluded
   // nodes must use the same indexing policy as later annotation restoration.
-  for (const n of index.nodes) {
+  if(start===undefined)for (const n of index.nodes) {
     if (!range.intersectsNode(n.node)) continue;
     const from = range.startContainer === n.node ? range.startOffset : 0;
     const to = range.endContainer === n.node ? range.endOffset : n.node.length;
@@ -393,6 +402,7 @@ export function wrapOffsets(doc, start, end, attributes, style = '', index = tex
     parts.push({node:selected,start:item.start+from,end:item.start+to});
     if(suffix)parts.push({node:suffix,start:item.start+to,end:item.end});
     index.nodes.splice(i,1,...parts);
+    const offsets=selectionOffsets.get(index);if(offsets)for(const part of parts)offsets.set(part.node,part);
   }
   return marks;
 }

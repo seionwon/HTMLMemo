@@ -1840,12 +1840,12 @@ export class Reader {
   }
   captureTextSelection() {
     if(this.textMarkGesture)return this.selection;
-    const selection=this.doc.getSelection(),anchor=selection?.rangeCount&&!selection.isCollapsed?selectionAnchor(this.doc,selection.getRangeAt(0)):null;
+    const selection=this.doc.getSelection(),anchor=selection?.rangeCount&&!selection.isCollapsed?selectionAnchor(this.doc,selection.getRangeAt(0),this.searchCache().get()):null;
     this.selection=anchor?this.sectionAnchor(anchor):null;return this.selection;
   }
   restoreTextSelection(anchor) {
     if(!anchor?.quote?.trim()||this.disposed||this.host?.hidden||(anchor.section||'')!==currentSection(this.doc))return false;
-    const index=textIndex(this.doc),resolved=resolveTextAnchor(index,anchor),selection=this.doc.getSelection();
+    const index=this.searchCache().get(),resolved=resolveTextAnchor(index,anchor),selection=this.doc.getSelection();
     const range=resolved&&rangeFromOffsets(this.doc,resolved.start,resolved.end,index);
     if(!selection||!range)return false;
     selection.removeAllRanges();selection.addRange(range);this.selection=this.sectionAnchor({...anchor,...resolved});return true;
@@ -1870,7 +1870,7 @@ export class Reader {
   addText(type, anchor, text) {
     if (!anchor?.quote?.trim()) return false;
     if (type === 'note') {
-      const index=textIndex(this.doc),resolved=resolveTextAnchor(index,anchor);if(!resolved||!text?.trim())return false;
+      const index=this.searchCache().get(),resolved=resolveTextAnchor(index,anchor);if(!resolved||!text?.trim())return false;
       const range = rangeFromOffsets(this.doc, resolved.start, resolved.end,index); if (!range) return false;
       const rect = range.getBoundingClientRect(), element = range.startContainer.parentElement;
       const position = this.elementAnchor(element, true), origin = this.layerOrigin();
@@ -2182,7 +2182,7 @@ export class Reader {
     const state=this.textMarkGesture;if(!state||state.pointerId!==event.pointerId)return false;
     if(event.pointerType!=='touch')this.moveTextMarkGesture(event);
     const valid=!this.disposed&&!this.host?.hidden&&!this.preparing&&this.textMarkGesture===state&&state.moved&&state.range&&this.tool===state.type&&currentSection(this.doc)===state.section&&state.range.startContainer.isConnected&&state.range.endContainer.isConnected;
-    const anchor=valid?selectionAnchor(this.doc,state.range):null;
+    const anchor=valid?selectionAnchor(this.doc,state.range,this.searchCache().get()):null;
     this.cancelTextMarkGesture();event.preventDefault();event.stopPropagation();
     if(anchor)this.addText(state.type,anchor);
     return true;
@@ -2258,7 +2258,7 @@ export class Reader {
       setTimeout(() => {
         if(this.disposed||this.tool!==tool||currentSection(this.doc)!==section)return;
         const selection = this.doc.getSelection();
-        if (selection?.rangeCount && !selection.isCollapsed) this.addText(tool, selectionAnchor(this.doc, selection.getRangeAt(0)));
+        if (selection?.rangeCount && !selection.isCollapsed) this.addText(tool, selectionAnchor(this.doc, selection.getRangeAt(0),this.searchCache().get()));
       }, 0);
     }
   }

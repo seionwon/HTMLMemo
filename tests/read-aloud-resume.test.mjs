@@ -43,6 +43,12 @@ test('paused Play repeats the current sentence when the reading position has not
   const count=a.spoken.length;a.spoken.at(-1).onend();a.spoken.at(-1).onerror();assert.equal(a.spoken.length,count);
   a.play();assert.equal(a.spoken.at(-1).text,'두 번째 문장입니다.');assert.ok(a.button('일시정지'));
 });
+test('starting below a long paragraph measures each offscreen paragraph once and remeasures after moving',()=>{
+  const a=fixture({html:'<html><head></head><body><main><p>'+Array.from({length:1000},(_,i)=>`문장 ${i}입니다. `).join('')+'</p><p>지금 보이는 문장입니다.</p></main></body></html>'}),paragraphs=a.doc.querySelectorAll('p');
+  let measured=0,top=-600;paragraphs[0].getBoundingClientRect=()=>{measured++;return {top,bottom:top+50,height:50};};paragraphs[1].getBoundingClientRect=()=>({top:100,bottom:150,height:50});
+  a.play();assert.equal(a.spoken.at(-1).text,'지금 보이는 문장입니다.');assert.equal(measured,1);
+  a.pause();top=100;a.reader.scrollTop=20;a.play();assert.equal(a.spoken.at(-1).text,'문장 0입니다.');assert.equal(measured,2);a.player.dispose();
+});
 test('mixed prose and SVG sentences keep prose highlights outside diagrams and export no temporary paint',()=>{
   const a=fixture({paint:true,html:'<html><head><title>Diagram</title></head><body><main><p>Prose before.</p><div><span id="lead">Mixed </span><svg viewBox="0 0 100 20"><text id="label">diagram</text></svg><span id="tail"> sentence.</span></div><p>Prose after.</p></main></body></html>'}),original=a.doc.querySelector('svg').outerHTML;
   a.play();assert.equal(a.paints.get('mstts').ranges.length,1);a.clickButton('다음 문장');assert.equal(a.spoken.at(-1).text,'Mixed diagram sentence.');

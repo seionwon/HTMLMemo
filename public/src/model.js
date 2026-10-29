@@ -61,9 +61,28 @@ export function cleanSourceStorage(value) {
   }
   return result;
 }
+// History owns its snapshots; current/undo/redo always return detached copies.
+// Reuse only equal plain annotation data, including nested coordinates. Compare
+// values (not caller identities), because callers may edit a returned snapshot.
+function sameHistoryValue(a,b,left=new WeakMap(),right=new WeakMap(),depth=0) {
+  if(Object.is(a,b))return true;
+  if(!a||!b||typeof a!=='object'||typeof b!=='object'||depth>64)return false;
+  const array=Array.isArray(a);
+  if(array!==Array.isArray(b)||array&&a.length!==b.length)return false;
+  if(!array&&(Object.getPrototypeOf(a)!==Object.prototype||Object.getPrototypeOf(b)!==Object.prototype))return false;
+  if(left.has(a)||right.has(b))return left.get(a)===b&&right.get(b)===a;
+  left.set(a,b);right.set(b,a);
+  const keys=Object.keys(a),other=Object.keys(b);
+  return keys.length===other.length&&keys.every((key,i)=>key===other[i]&&sameHistoryValue(a[key],b[key],left,right,depth+1));
+}
+function historySnapshot(value,previous) {
+  if(!Array.isArray(value)||!Array.isArray(previous)||!value.every(item=>item&&typeof item.id==='string'))return structuredClone(value);
+  const byId=new Map(previous.filter(item=>item&&typeof item.id==='string').map(item=>[item.id,item]));
+  return value.map(item=>{const old=byId.get(item.id);return old&&sameHistoryValue(item,old)?old:structuredClone(item);});
+}
 export class History {
   constructor(initial = []) { this.entries = [structuredClone(initial)]; this.index = 0; }
-  commit(value) { this.entries.splice(this.index + 1); this.entries.push(structuredClone(value)); if (this.entries.length > 101) this.entries.shift(); this.index = this.entries.length - 1; return this.current; }
+  commit(value) { const snapshot=historySnapshot(value,this.entries[this.index]);this.entries.splice(this.index + 1); this.entries.push(snapshot); if (this.entries.length > 101) this.entries.shift(); this.index = this.entries.length - 1; return this.current; }
   get current() { return structuredClone(this.entries[this.index]); }
   get canUndo() { return this.index > 0; }
   get canRedo() { return this.index < this.entries.length - 1; }

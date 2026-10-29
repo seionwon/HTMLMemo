@@ -9,6 +9,18 @@ import {prepareAssets,root} from '../scripts/assets.mjs';
 import {createServer} from '../scripts/server.mjs';
 import {launchChrome,clickLibraryImport} from './chrome.mjs';
 import {runtimeBatchProbe} from './runtime-batch-fixture.mjs';
+import {fullPerformanceProbe} from './full-performance-fixture.mjs';
+
+test('real Chrome: Pages-only long-document selection and compact undo history preserve notes, search and exports',{timeout:120000},async()=>{
+  await prepareAssets();const server=createServer();let browser;
+  try{
+    await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));browser=await launchChrome();
+    await browser.page.navigate(process.env.HTMLMEMO_SIDEBAR_TEST_URL||`http://127.0.0.1:${server.address().port}/`);
+    const result=await browser.page.evaluate('('+fullPerformanceProbe.toString()+')(new URL("./src/",location.href).href)');
+    assert.ok(result.selection.walks<=1);assert.equal(result.selection.probes,0);assert.equal(result.exportAnnotations,23);assert.equal(result.undoRedo,true);assert.deepEqual(browser.errors,[]);
+    await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/pages-only-full-performance.json'),JSON.stringify(result,null,2)+'\n');
+  }finally{await browser?.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}
+});
 
 test('real Chrome: Pages-only runtime batches preserve source controls and notes across thousands of updates',{timeout:90000},async()=>{
   await prepareAssets();const server=createServer();let browser;
