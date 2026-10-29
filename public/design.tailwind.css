@@ -555,7 +555,8 @@ body[data-codememo-design] select:not([multiple]){
 }
 body[data-codememo-design] select:enabled:hover{border-color:var(--green)}
 @supports(appearance:base-select){
- body[data-codememo-design] select:has(>button>selectedcontent),body[data-codememo-design] select:has(>button>selectedcontent)::picker(select){appearance:base-select}
+ /* Match the fallback specificity so the later forced-colors rule can still win. */
+ body[data-codememo-design] select:not([multiple]):where(:has(>button>selectedcontent)),body[data-codememo-design] select:not([multiple]):where(:has(>button>selectedcontent))::picker(select){appearance:base-select}
  body[data-codememo-design] select::picker-icon{display:none}
  /* Explicit selectedcontent lets the label shrink without painting over the chevron. */
  body[data-codememo-design] select>button{display:contents}
