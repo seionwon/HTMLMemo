@@ -56,7 +56,14 @@ test('real Chrome: Pages-only searchable help keeps navigation, mobile layouts a
    if(width<=640){
     assert.equal(await page.evaluate('getComputedStyle(document.querySelector("#help-nav")).display'),'none');
     // A long selected title must leave the dropdown arrow visible on narrow screens.
-    assert.equal(await page.evaluate(`(()=>{const picker=document.querySelector('#help-topic-select'),label=picker.querySelector('selectedcontent');if(!CSS.supports('appearance','base-select')||!window.HTMLSelectedContentElement)return true;if(!label)return false;const r=picker.getBoundingClientRect(),l=label.getBoundingClientRect(),s=getComputedStyle(label),p=getComputedStyle(picker);return label.textContent===picker.selectedOptions[0].textContent&&l.width>0&&l.right<=r.right-parseFloat(p.paddingRight)+1&&s.overflowX==='hidden'&&s.textOverflow==='ellipsis';})()`),true);
+    const selectedLabel=await page.evaluate(`(()=>{const picker=document.querySelector('#help-topic-select'),label=picker.querySelector('selectedcontent');if(!CSS.supports('appearance','base-select')||!window.HTMLSelectedContentElement)return {supported:false};if(!label)return {supported:true,label:null};const r=picker.getBoundingClientRect(),l=label.getBoundingClientRect(),s=getComputedStyle(label),p=getComputedStyle(picker);return {supported:true,label:label.textContent,selected:picker.selectedOptions[0].textContent,selectBox:r.toJSON(),labelBox:l.toJSON(),paddingRight:parseFloat(p.paddingRight),overflowX:s.overflowX,textOverflow:s.textOverflow};})()`);
+    await writeFile(root+`/test-results/pages-only-help-selected-${width}.json`,JSON.stringify(selectedLabel,null,2)+'\n');
+    await writeFile(root+`/test-results/pages-only-help-selected-${width}.png`,await page.screenshot());
+    if(selectedLabel.supported){
+     assert.equal(selectedLabel.label,selectedLabel.selected,JSON.stringify(selectedLabel));
+     assert.ok(selectedLabel.labelBox.width>0&&selectedLabel.labelBox.right<=selectedLabel.selectBox.right-selectedLabel.paddingRight+1,JSON.stringify(selectedLabel));
+     assert.equal(selectedLabel.overflowX,'hidden');assert.equal(selectedLabel.textOverflow,'ellipsis');
+    }
    }
    assert.equal(await fits(page),true);assert.equal(await page.evaluate('document.querySelector(".help-content table tbody").rows.length'),5);
    await writeFile(root+`/test-results/pages-only-help-light-${width}.png`,await page.screenshot());
