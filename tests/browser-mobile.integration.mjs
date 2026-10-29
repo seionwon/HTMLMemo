@@ -7,6 +7,7 @@ import {tmpdir} from 'node:os';
 import {root,prepareAssets} from '../scripts/assets.mjs';
 import {createServer} from '../scripts/server.mjs';
 import {launchChrome} from './chrome.mjs';
+import {auditLowResolution} from './low-resolution-fixture.mjs';
 
 const phoneAPIs=`
   window.startupIssues=[];
@@ -129,7 +130,7 @@ test('real Chrome: Pages-only Android first-run folder welcome is error-free and
     assert.equal(await page.evaluate('window.phonePickerCalls'),0,'opening the app does not prompt for a folder');
     assert.equal(await page.evaluate('document.querySelector("#toast.error:not([hidden])")'),null,'no raw startup error after offline preparation');
     await mkdir(join(root,'test-results'),{recursive:true});
-    for(const [width,height] of [[320,740],[390,844],[430,932],[844,390]]){
+    for(const [width,height] of [[240,480],[280,560],[320,240],[320,740],[390,844],[430,932],[844,390]]){
       await page.send('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:true});await dialogFits(page);report.layouts.push({width,height,welcome:true});
       const button=await page.evaluate(`(()=>{const b=document.querySelector('#select-storage-folder');b.scrollIntoView({block:'center'});const r=b.getBoundingClientRect();return {inside:r.left>=0&&r.right<=innerWidth,reachable:b.contains(document.elementFromPoint(r.left+r.width/2,r.top+r.height/2))};})()`);assert.deepEqual(button,{inside:true,reachable:true});
       await page.evaluate('document.querySelector("#dialog").scrollTop=0');await writeFile(join(root,`test-results/pages-only-android-first-run-${width}.png`),await page.screenshot());
@@ -267,4 +268,55 @@ test('real Chrome: Pages-only touch and pen text marking highlights and underlin
   assert.deepEqual(chrome.errors,[]);assert.deepEqual(desktop.errors,[]);report.status='pass';
  }catch(error){report.status='failed';report.error=error.stack;if(chrome){report.state=await chrome.page.evaluate(`(async()=>{const f=document.querySelector('.document-host:not([hidden]) iframe.document-frame'),d=f?.contentDocument,r=await(await import('./src/storage.js')).getDocument(window.phoneTextDocumentId);return {annotations:r?.metadata.annotations.map(a=>({type:a.type,quote:a.textAnchor?.quote})),rootFlags:d?.documentElement.outerHTML.slice(0,240),userSelect:d?.defaultView.getComputedStyle(d.body).userSelect,status:document.querySelector('#status-left')?.textContent,toast:document.querySelector('#toast')?.textContent,frame:f?.getBoundingClientRect().toJSON(),outer:document.querySelector('.document-host:not([hidden]) .reader-viewport')?.scrollTop,inner:d?.scrollingElement?.scrollTop,selected:d?.getSelection()?.toString(),types:d?.defaultView.phoneInputTypes};})()`).catch(()=>null);await writeFile(join(root,'test-results/pages-only-touch-text-failure.png'),await chrome.page.screenshot());}if(desktop){report.desktopState=await desktop.page.evaluate(`(async()=>{const f=document.querySelector('.document-host:not([hidden]) iframe.document-frame'),d=f?.contentDocument,r=await(await import('./src/storage.js')).getDocument(window.desktopTextDocumentId);return {annotations:r?.metadata.annotations.map(a=>({type:a.type,quote:a.textAnchor?.quote})),rootFlags:d?.documentElement.outerHTML.slice(0,240),userSelect:d?.defaultView.getComputedStyle(d.body).userSelect,selected:d?.getSelection()?.toString(),types:d?.defaultView.desktopMouseTypes,frame:f?.getBoundingClientRect().toJSON()};})()`).catch(()=>null);await writeFile(join(root,'test-results/pages-only-touch-text-desktop-failure.png'),await desktop.page.screenshot());}throw error;}
  finally{await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/pages-only-touch-text.json'),JSON.stringify(report,null,2)+'\n');await chrome?.close();await desktop?.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}
+});
+
+test('real Chrome: Pages-only low-resolution screens keep controls reachable and the toolbar scrolls by touch',{timeout:240000},async()=>{
+  await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-small-screen-'));await cp(join(root,'public'),folder,{recursive:true});const server=createServer(folder);let chrome;
+  const report={hardwarePhoneTested:false,method:'Real isolated Chrome with Android user agent, viewport resizing and CDP touch input',layouts:[]};
+  try{
+    await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));chrome=await launchChrome();const {page}=chrome;
+    await page.send('Emulation.setUserAgentOverride',{userAgent:androidUA,platform:'Android'});
+    await page.send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:2});
+    await page.send('Emulation.setDeviceMetricsOverride',{width:320,height:480,deviceScaleFactor:1,mobile:true});
+    await page.navigate(process.env.HTMLMEMO_SIDEBAR_TEST_URL||`http://127.0.0.1:${server.address().port}/`);await page.waitFor(ready);
+    await mkdir(join(root,'test-results'),{recursive:true});
+    for(const [width,height] of [[240,480],[280,560],[320,480],[360,640],[568,280],[320,240]]){
+      await page.send('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:true});
+      await page.evaluate(`window.smallScreenResult=null;window.smallScreenError=null;(${auditLowResolution.toString()})(window).then(r=>window.smallScreenResult=r).catch(e=>window.smallScreenError=e.stack);void 0`);
+      await page.waitFor("window.smallScreenResult||window.smallScreenError",60000);
+      assert.equal(await page.evaluate("window.smallScreenError"),null);report.layouts.push(await page.evaluate("window.smallScreenResult"));
+      await writeFile(join(root,`test-results/pages-only-low-resolution-${width}-${height}.png`),await page.screenshot());
+    }
+    const failures=report.layouts.flatMap(layout=>layout.failures.map(f=>({...f,width:layout.width,height:layout.height})));
+    // Collect all layouts before failing, so a small-screen regression is diagnosable in one run.
+    assert.deepEqual(failures,[]);
+    await page.send('Emulation.setDeviceMetricsOverride',{width:240,height:480,deviceScaleFactor:1,mobile:true});await page.click('.tab.document');
+    await page.evaluate('document.querySelector("#toolbar").scrollLeft=0');
+    const bounds=await page.evaluate('document.querySelector("#toolbar").getBoundingClientRect().toJSON()');
+    const send=(type,points=[])=>page.send('Input.dispatchTouchEvent',{type,touchPoints:points.map(p=>({id:1,radiusX:2,radiusY:2,force:1,...p}))});
+    const pan=async(x,y,dx,dy)=>{await send('touchStart',[{x,y}]);for(let i=1;i<=8;i++)await send('touchMove',[{x:x+dx*i/8,y:y+dy*i/8}]);await send('touchEnd');};
+    await pan(bounds.right-24,bounds.top+bounds.height/2,-Math.min(180,bounds.width-48),0);
+    await page.waitFor('document.querySelector("#toolbar").scrollLeft>0');
+    assert.equal(await page.evaluate(`(()=>{const b=document.querySelector('#toolbar'),r=b.getBoundingClientRect(),last=b.querySelector('[data-action=more]').getBoundingClientRect();return last.right<=r.right+1&&last.left>=r.left&&!document.querySelector('#tool-popover:not([hidden])')&&b.querySelector('[data-action=select]').classList.contains('active');})()`),true,'finger pan reveals the rightmost tool without activating a tool');
+    await page.click('#toolbar [data-action=more]');await page.waitFor('!!document.querySelector("#tool-popover:not([hidden]) [data-more=info]")');await page.click('[data-popover-close]');
+    await page.evaluate(`document.querySelector('#toolbar').scrollLeft=0;document.querySelector('#toolbar [data-action=more]').focus()`);
+    assert.equal(await page.evaluate(`(()=>{const b=document.querySelector('#toolbar'),r=b.getBoundingClientRect(),last=document.activeElement.getBoundingClientRect();return b.scrollLeft>0&&last.left>=r.left&&last.right<=r.right+1;})()`),true,'keyboard focus also reveals a clipped tool');
+    report.toolbarTouchAndKeyboard=true;
+    await page.click('#toolbar [data-action=palette]');
+    await page.evaluate(`document.querySelector('#color-hex').focus()`);
+    await page.send('Emulation.setDeviceMetricsOverride',{width:320,height:240,deviceScaleFactor:1,mobile:true});
+    await page.waitFor(`(()=>{const p=document.querySelector('#tool-popover'),r=p.getBoundingClientRect();return !p.hidden&&r.left>=0&&r.top>=0&&r.right<=innerWidth&&r.bottom<=innerHeight;})()`);
+    assert.equal(await page.evaluate('document.activeElement.id'),'color-hex');
+    report.openPaletteSurvivesViewportChange=true;await page.click('[data-popover-close]');
+    await page.click('.document-host:not([hidden]) > [data-htmlmemo-reading-controls] [data-action=speak]');
+    await page.evaluate(`const b=document.querySelector('.mstts-player');b.style.left=(innerWidth-b.offsetWidth-4)+'px';b.style.top='110px';b.style.bottom='auto';`);
+    await page.click('[data-tts-gear]');
+    const panel=await page.evaluate(`(()=>{const p=document.querySelector('.mstts-panel');return {rect:p.getBoundingClientRect().toJSON(),scrollHeight:p.scrollHeight,height:p.clientHeight};})()`);
+    assert.ok(panel.scrollHeight>panel.height,'short-screen settings must scroll vertically');
+    await pan(panel.rect.left+10,panel.rect.bottom-12,0,-45);await page.waitFor('document.querySelector(".mstts-panel").scrollTop>0');report.ttsSettingsTouchScroll=true;
+    await writeFile(join(root,'test-results/pages-only-low-resolution-tts.png'),await page.screenshot());
+    await page.click('[data-tts-gear]');await page.click('.mstts-player > button:last-of-type');
+    assert.equal(await page.evaluate('document.querySelector(".mstts-panel")'),null);assert.deepEqual(chrome.errors,[]);report.status='pass';
+  }catch(error){report.status='failed';report.error=error.stack;if(chrome){report.errors=chrome.errors;report.state=await chrome.page.evaluate('({dialog:document.querySelector("#dialog")?.textContent,popover:document.querySelector("#tool-popover")?.textContent})').catch(()=>null);await writeFile(join(root,'test-results/pages-only-low-resolution-failure.png'),await chrome.page.screenshot());}throw error;}
+  finally{await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/pages-only-low-resolution.json'),JSON.stringify(report,null,2));await chrome?.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
 });

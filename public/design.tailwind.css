@@ -392,6 +392,7 @@ html[data-app-sidebar-resizing] iframe{pointer-events:none!important}
  #library .library-help span{display:none}
 }
 @media(max-width:360px){
+ .swatches.preset-swatches{grid-template-columns:repeat(auto-fit,minmax(22px,1fr))}
  #library .hero-actions{gap:4px}
  #library .hero-actions .secondary-button{padding-inline:4px}
 }
@@ -462,3 +463,51 @@ dialog:has(.help-browser) #dialog-content{height:100%;min-height:0}
 .help-result strong{color:var(--help-accent)}
 .help-browser mark{background:color-mix(in srgb,var(--help-ochre) 24%,var(--surface))}
 @media(max-width:640px){dialog:has(.help-browser){width:calc(100vw - 16px);max-width:calc(100vw - 16px);height:calc(100dvh - 16px);max-height:calc(100dvh - 16px);border-radius:10px}.help-header{padding:11px 13px;gap:8px}.help-header h2{font-size:16px}.help-header .text-button{font-size:11px}.help-search-area{padding:9px 13px 6px}.help-search-field{padding:6px 9px}.help-mobile-picker{display:flex;gap:9px;align-items:center;flex:none;padding:8px 13px;border-bottom:1px solid var(--line);font-size:10px;color:var(--muted)}.help-mobile-picker select{flex:1;width:0;min-width:0;padding:7px 8px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px}.help-layout{display:block}#help-nav{display:none}.help-content{height:100%;padding:17px 16px 22px}.help-content h3{font-size:20px;letter-spacing:-.5px}.help-content h4{font-size:14px}.help-lead{font-size:13px}.help-footer{padding:6px 13px;font-size:9px}.help-content th,.help-content td{padding:8px}.help-result{padding-inline:0}}
+
+/* Small phones keep the compact controls; only their containers adapt. */
+.floating-toolbar{overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none}
+.floating-toolbar::-webkit-scrollbar{display:none}
+.tool-popover{max-width:calc(100vw - 20px);overscroll-behavior:contain}
+.palette-bar{flex-wrap:wrap}
+.palette-actions{max-width:100%}
+#palette-preset{min-width:0}
+.color-picker-hue{min-width:0}
+.dialog-heading h2{min-width:0;overflow-wrap:anywhere}
+.dialog-heading>.icon-button,.popover-heading>.icon-button{flex-shrink:0}
+.setting-row>div{min-width:0;overflow-wrap:anywhere}
+.setting-row select{max-width:100%}
+.document-info{grid-template-columns:65px minmax(0,1fr)}
+.device-sync fieldset{min-width:0}
+#sync-qr{max-width:min(170px,100%)}
+@media(max-width:360px){
+ dialog{padding:15px;max-width:calc(100vw - 20px)}
+ .dialog-heading{gap:8px;margin-bottom:12px}
+ .setting-row{gap:10px;flex-wrap:wrap}
+ .settings-app-actions,.settings-file-actions{gap:6px}
+ .dialog-actions>button,.document-actions>.menu-button{max-width:100%;white-space:normal}
+ .device-sync .dialog-heading{top:-14px}
+ .sync-settings-actions{grid-template-columns:minmax(0,1fr)}
+ .library-folder-bar{flex-wrap:wrap}
+ #library-breadcrumbs{flex-basis:calc(100% - 34px)}
+ .library-folder-bar>.secondary-button{margin-top:2px}
+}
+@media(max-width:300px){
+ .about-brand{gap:10px}
+ .about-brand img{width:40px;height:40px}
+ .about-brand h3{font-size:20px}
+ .document-grid{grid-template-columns:minmax(0,1fr)}
+ .more-grid{grid-template-columns:minmax(0,1fr)}
+ .help-header .text-button{gap:2px}
+ .help-header{gap:5px;padding-inline:8px}
+ .help-header h2{font-size:14px}
+}
+@media(max-height:420px){
+ .help-header{padding-block:5px}
+ .help-search-area{padding-block:4px}
+ .help-search-field{padding-block:2px}
+ .help-search-area>label{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%)}
+ #help-search-status{min-height:0;margin-top:2px;font-size:10px}
+ .help-mobile-picker{padding-block:4px}
+ .help-mobile-picker select{padding-block:4px}
+ .help-footer{display:none}
+}

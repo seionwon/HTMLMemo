@@ -23,8 +23,9 @@ const PLAYER_CSS = String.raw`
 .mstts-count {margin-left: 1px; white-space: nowrap; font-size: 10px; line-height: 18px;}
 .mstts-count:empty {display: none;}
 .mstts-panel {
-  position: absolute; left: 0; bottom:calc(100% + 8px);
-  width: 240px; background: var(--surface, #fff); border: 1px solid var(--border, #e2e8f0);
+  position: fixed; z-index:9001;
+  width: 240px; max-width:calc(100vw - 16px); overflow:auto; overscroll-behavior:contain;
+  background: var(--surface, #fff); border: 1px solid var(--border, #e2e8f0);
   border-radius: 12px; box-shadow: 0 8px 28px rgba(0,0,0,.2); padding: 10px 12px;
   display: flex; flex-direction: column; gap: 8px; font-weight: 500; cursor: default;
   touch-action: auto; user-select: auto;
@@ -38,9 +39,10 @@ const PLAYER_CSS = String.raw`
 
 .mstts-player {--border:var(--line);--text-secondary:var(--muted);font-family:inherit;box-sizing:border-box;line-height:normal;}
 .mstts-player .mstts-btn {font-family:inherit;min-width:18px;min-height:0;height:18px;width:auto;display:inline-flex;align-items:center;justify-content:center;box-shadow:none;}
-.mstts-panel {box-sizing:border-box;}
+.mstts-panel {box-sizing:border-box;--border:var(--line);--text-secondary:var(--muted);font-family:inherit;font-size:10px;line-height:normal;color:var(--text,#344054);}
+.mstts-panel>* {flex-shrink:0;}
 .mstts-row select {min-width:0;flex:1;padding:5px 10px;font-size:.8rem;font-family:inherit;border:1px solid var(--border,#e2e8f0);border-radius:8px;background:var(--bg,#fff);color:var(--text,#344054);}
-@media print {.mstts-player{display:none!important}}
+@media print {.mstts-player,.mstts-panel{display:none!important}}
 
 .mstts-select {min-width:0;flex:1;}
 .mstts-select-trigger {display:inline-flex;align-items:center;justify-content:space-between;gap:8px;padding:5px 10px;font-size:.8rem;font-family:inherit;border-radius:8px;border:1px solid var(--border,#e2e8f0);background:var(--bg,#fff);color:var(--text,#344054);cursor:pointer;max-width:100%;}
@@ -49,7 +51,7 @@ const PLAYER_CSS = String.raw`
 .mstts-select-trigger[aria-expanded=true] svg {transform:rotate(180deg);}
 .mstts-select-label {min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .mstts-select-menu {position:fixed;box-sizing:border-box;overflow-y:auto;padding:6px;background:var(--surface,#fff);border:1px solid var(--border,#e2e8f0);border-radius:8px;box-shadow:0 8px 28px rgba(0,0,0,.2);z-index:2000000001;}
-.mstts-select-item {display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;padding:9px 10px;border:0;border-radius:4px;font-size:.85rem;text-align:left;font-family:inherit;background:transparent;color:var(--text,#344054);font-weight:400;cursor:pointer;}
+.mstts-select-item {display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;padding:9px 10px;border:0;border-radius:4px;font-size:.85rem;text-align:left;font-family:inherit;background:transparent;color:var(--text,#344054);font-weight:400;cursor:pointer;overflow-wrap:anywhere;}
 .mstts-select-item[aria-selected=true] {background:#7b61ff15;color:#7b61ff;font-weight:600;}
 .mstts-select-item:hover {background:var(--bg,#f8fafc);}
 `;
@@ -597,10 +599,12 @@ export function createReadAloud(reader) {
   }
   function placePanel() {
     if (!panel || !bar) return;
-    var r = bar.getBoundingClientRect();
-    var below = r.top < 240;
-    panel.style.top = below ? 'calc(100% + 8px)' : 'auto';
-    panel.style.bottom = below ? 'auto' : 'calc(100% + 8px)';
+    for(const trigger of panel.querySelectorAll('.mstts-select-trigger[aria-expanded=true]'))trigger.click();
+    const r=bar.getBoundingClientRect(),above=Math.max(0,r.top-16),below=Math.max(0,W.innerHeight-r.bottom-16);
+    const useBelow=above<panel.scrollHeight+2&&below>above;
+    panel.style.maxHeight=(useBelow?below:above)+'px';
+    panel.style.left=Math.max(8,Math.min(r.left,W.innerWidth-panel.offsetWidth-8))+'px';
+    panel.style.top=(useBelow?r.bottom+8:Math.max(8,r.top-panel.offsetHeight-8))+'px';
   }
   // DOM adapter for MemoSuite Select.tsx (size="sm"). Same trigger, chevron and option layout.
   function mountSelect(select, label) {
@@ -624,8 +628,9 @@ export function createReadAloud(reader) {
       wrap.append(menu);button.setAttribute('aria-expanded','true');
       const r=button.getBoundingClientRect(),width=Math.min(W.innerWidth-16,Math.max(180,r.width));
       menu.style.left=Math.max(8,Math.min(r.left,W.innerWidth-width-8))+'px';menu.style.width=width+'px';
-      const below=W.innerHeight-r.bottom-8,above=r.top-8;menu.style.maxHeight=Math.max(80,Math.min(320,Math.max(below,above)))+'px';
-      if(below>=Math.min(menu.scrollHeight,240)){menu.style.top=r.bottom+4+'px';}else menu.style.bottom=W.innerHeight-r.top+4+'px';
+      const below=Math.max(0,W.innerHeight-r.bottom-12),above=Math.max(0,r.top-12),useBelow=below>=Math.min(menu.scrollHeight,240)||below>above;
+      menu.style.maxHeight=Math.min(320,useBelow?below:above)+'px';
+      if(useBelow){menu.style.top=r.bottom+4+'px';}else menu.style.bottom=W.innerHeight-r.top+4+'px';
       (menu.querySelector('[aria-selected=true]')||menu.firstChild)?.focus();
     }
     caption.textContent=select.selectedOptions[0]?.textContent||select.options[0]?.textContent||'';
@@ -684,9 +689,11 @@ export function createReadAloud(reader) {
   function togglePanel() {
     if (panel) { panel.remove(); panel = null; return; }
     panel = U.createElement('div');
-    panel.className = 'mstts-panel';panel.setAttribute('data-tts-panel','');
+    panel.className = 'mstts-panel';panel.setAttribute('data-tts-panel','');panel.setAttribute('data-memo-readaloud','');
     panel.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
-    bar.appendChild(panel);
+    // A sibling avoids inheriting the draggable bar's touch-action:none.
+    // Settings can scroll normally with a finger in a short viewport.
+    mount.appendChild(panel);
     fillPanel();
   }
   function closePanel() { if (panel) { panel.remove(); panel = null; } }
