@@ -120,6 +120,68 @@ test('real Chrome: cold startup waits for a streamed document before binding UI'
   }finally{clearTimeout(releaseTimer);pending?.end();await chrome?.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
 });
 
+test('real Chrome: Pages-only empty library waits for folder permission and restoration on startup',{timeout:90000},async()=>{
+  await prepareAssets();const server=createServer();let chrome;
+  const report={checks:[],hardwarePhoneTested:false,method:'Isolated Chrome with a real OPFS folder and IndexedDB; permission and folder-read delays are controlled'};
+  const folderName='Empty hint startup fixture',ready='document.documentElement.dataset.storageSetup==="ready"',saved='document.querySelector("#data-folder-status").textContent==="폴더 저장 완료"';
+  try{
+    await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));chrome=await launchChrome({firstRun:true});const {page}=chrome;await phone(page);
+    await page.send('Emulation.setDeviceMetricsOverride',{width:320,height:480,deviceScaleFactor:1,mobile:true});
+    await page.send('Page.addScriptToEvaluateOnNewDocument',{source:`(()=>{
+      const folderName=${JSON.stringify(folderName)},proto=FileSystemDirectoryHandle.prototype,query=proto.queryPermission,request=proto.requestPermission,get=proto.getFileHandle;
+      window.libraryHintViolations=[];window.holdLibraryManifest=sessionStorage.getItem('fixture-hold-library-manifest')==='1';
+      new MutationObserver(()=>{
+        const hint=document.querySelector('#empty-library');
+        if(!hint||hint.hidden||hint.querySelector('h3')?.textContent!=='첫 HTML 문서를 보관해보세요.')return;
+        if(document.documentElement.dataset.storageSetup!=='ready'||sessionStorage.getItem('fixture-expect-library-document')==='1')
+          if(libraryHintViolations.length<10)libraryHintViolations.push({state:document.documentElement.dataset.storageSetup,documents:document.querySelectorAll('.document-card').length});
+      }).observe(document,{subtree:true,childList:true,attributes:true,attributeFilter:['hidden','data-storage-setup']});
+      Object.defineProperty(proto,'queryPermission',{configurable:true,value:async function(options){
+        if(this.name!==folderName)return query.call(this,options);
+        if(window.holdLibraryPermission){window.holdLibraryPermission=false;await new Promise(resolve=>window.releaseLibraryPermission=resolve);}
+        return sessionStorage.getItem('fixture-deny-library-permission')==='1'?'prompt':'granted';
+      }});
+      Object.defineProperty(proto,'requestPermission',{configurable:true,value:async function(options){return this.name===folderName?(sessionStorage.getItem('fixture-deny-library-permission')==='1'?'denied':'granted'):request.call(this,options);}});
+      proto.getFileHandle=async function(name,options){
+        if(this.name===folderName&&name==='HTMLMemo-library.json'&&window.holdLibraryManifest){window.holdLibraryManifest=false;await new Promise(resolve=>window.releaseLibraryManifest=resolve);}
+        return get.call(this,name,options);
+      };
+      window.showDirectoryPicker=async()=> (await navigator.storage.getDirectory()).getDirectoryHandle(folderName,{create:true});
+    })()`});
+    const url=process.env.HTMLMEMO_SIDEBAR_TEST_URL||`http://127.0.0.1:${server.address().port}/`;
+    const hidden=async label=>{assert.equal(await page.evaluate('document.querySelector("#empty-library").hidden'),true,label);assert.deepEqual(await page.evaluate('window.libraryHintViolations'),[],label);report.checks.push(label);};
+    report.phase='first run and cancellation';await page.navigate(url);await page.waitFor('!!document.querySelector("#create-storage-folder")');await hidden('First run does not show an empty-library claim');
+    await page.click('#cancel-folder-setup');await pausedSetup(page);await hidden('Canceling folder setup keeps the hint hidden');await page.click('#folder-setup-resume');
+    report.phase='delayed permission and initial folder read';await page.evaluate('window.holdLibraryPermission=true;window.holdLibraryManifest=true');await page.click('#select-storage-folder');
+    await page.waitFor('typeof window.releaseLibraryPermission==="function"');await hidden('Waiting for permission keeps the hint hidden');await page.evaluate('window.releaseLibraryPermission()');
+    await page.waitFor('typeof window.releaseLibraryManifest==="function"');await hidden('Permission alone does not reveal the hint before folder initialization');await page.evaluate('window.releaseLibraryManifest()');
+    await page.waitFor(ready+'&&'+saved+'&&!document.querySelector("#empty-library").hidden');assert.equal(await page.evaluate('document.querySelector("#empty-library").checkVisibility()'),true);assert.deepEqual(await page.evaluate('window.libraryHintViolations'),[]);report.checks.push('A confirmed empty folder shows the first-document hint');
+    await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/pages-only-library-startup-empty.png'),await page.screenshot());
+    report.phase='reopening with denied permission';await page.evaluate("sessionStorage.setItem('fixture-deny-library-permission','1')");await page.navigate(url);await page.waitFor('!!document.querySelector("#resume-data-folder")');await hidden('Reopening without permission keeps the hint hidden');
+    await page.click('#resume-data-folder');await page.waitFor('!document.querySelector("#resume-data-folder").disabled&&document.querySelector("#folder-connection-status").textContent.includes("허용")');await hidden('Denied permission does not imply an empty folder');
+    await page.evaluate("sessionStorage.removeItem('fixture-deny-library-permission')");await page.click('#resume-data-folder');await page.waitFor(ready+'&&'+saved+'&&!document.querySelector("#empty-library").hidden');
+    report.phase='create a portable document';await page.evaluate(`(async()=>{
+      const {parseHTML}=await import('./src/document.js'),{putDocumentRevision}=await import('./src/storage.js'),p=parseHTML('<html><head><title>폴더에서 복원할 문서</title></head><body><p>Keep this original document.</p></body></html>');
+      await putDocumentRevision({id:'startup-restored-book',title:p.metadata.title,name:'saved-book.html',created:1000,modified:2000,html:p.html,metadata:p.metadata});
+    })()`);
+    await page.waitFor(`(async()=>{if(!(${saved}))return false;const folder=await(await navigator.storage.getDirectory()).getDirectoryHandle(${JSON.stringify(folderName)});return JSON.parse(await(await(await folder.getFileHandle('HTMLMemo-library.json')).getFile()).text()).documents.length===1;})()`);
+    // Remove only this isolated fixture's browser cache, preserving its real folder.
+    // Raw IDB writes intentionally avoid emitting an autosave deletion to that folder.
+    await page.evaluate(`(async()=>{
+      const folder=await(await import('./src/storage.js')).getSetting('folder'),db=await new Promise((resolve,reject)=>{const r=indexedDB.open('HTMLMemo-v1');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});
+      await new Promise((resolve,reject)=>{const tx=db.transaction([...db.objectStoreNames],'readwrite');for(const name of db.objectStoreNames)tx.objectStore(name).clear();tx.objectStore('settings').put(folder,'folder');tx.oncomplete=resolve;tx.onabort=()=>reject(tx.error);});db.close();
+      sessionStorage.setItem('fixture-expect-library-document','1');sessionStorage.setItem('fixture-hold-library-manifest','1');
+    })()`);
+    report.phase='restore a populated folder with an empty browser cache';await page.navigate(url);await page.waitFor('typeof window.releaseLibraryManifest==="function"');await hidden('An empty browser cache stays hidden while the populated folder is read');assert.equal(await page.evaluate('document.querySelectorAll(".document-card").length'),0);
+    await writeFile(join(root,'test-results/pages-only-library-startup-reading.png'),await page.screenshot());await page.evaluate("sessionStorage.removeItem('fixture-hold-library-manifest');window.releaseLibraryManifest()");
+    await page.waitFor(ready+'&&'+saved+'&&!!document.querySelector("[data-open=startup-restored-book]")');await hidden('Restoration shows the saved document without an empty-hint flash');
+    assert.match(await page.evaluate('(async()=>(await(await import("./src/storage.js")).getDocument("startup-restored-book")).html)()'),/Keep this original document/);
+    await writeFile(join(root,'test-results/pages-only-library-startup-restored.png'),await page.screenshot());await page.navigate(url);await page.waitFor(ready+'&&'+saved);await hidden('An ordinary reopen of a populated library never shows the hint');
+    assert.deepEqual(chrome.errors,[]);report.status='pass';
+  }catch(error){report.status='failed';report.error=error.stack;if(chrome){report.state=await chrome.page.evaluate('({setup:document.documentElement.dataset.storageSetup,hint:document.querySelector("#empty-library")?.outerHTML,status:document.querySelector("#folder-connection-status")?.textContent,violations:window.libraryHintViolations})').catch(()=>null);await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/pages-only-library-startup-failure.png'),await chrome.page.screenshot());}throw error;}
+  finally{await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/pages-only-library-startup.json'),JSON.stringify(report,null,2)+'\n');await chrome?.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}
+});
+
 test('real Chrome: Pages-only Android first-run folder welcome is error-free and fits phone screens',{timeout:90000},async()=>{
   await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-android-welcome-'));await cp(join(root,'public'),folder,{recursive:true});const server=createServer(folder);let chrome;
   const report={simulation:'Android user agent and touch viewports in dedicated desktop Chrome; an explicit folder picker stub and a null optional launchQueue',layouts:[]};

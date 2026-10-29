@@ -76,7 +76,7 @@ async function fileApp({address='file:///Users/beginner/HTMLMemo.html',navigator
   Object.defineProperty(doc,'activeElement',{value:doc.body,writable:true,configurable:true});doc.defaultView.HTMLElement.prototype.focus=function(){this.ownerDocument.activeElement=this;};
   const dialog=doc.querySelector('#dialog');dialog.showModal=()=>dialog.open=true;dialog.close=()=>dialog.open=false;
   const stores=new Map([['documents',new Map(documents.map(record=>[record.id,record]))],['settings',new Map(settings)]]);
-  const database={objectStoreNames:{contains:name=>stores.has(name)},createObjectStore:name=>{if(!stores.has(name))stores.set(name,new Map());return {createIndex(){}};},transaction:names=>{const tx={};tx.objectStore=name=>{const store=stores.get(name||names);return {getAll:()=>({result:[...store.values()]}),get:key=>({result:store.get(key)}),put:(value,key)=>{store.set(key??value.id,value);return {result:key??value.id};},delete:key=>{store.delete(key);return {};}};};queueMicrotask(()=>tx.oncomplete?.());return tx;}};
+  const database={objectStoreNames:{contains:name=>stores.has(name)},createObjectStore:name=>{if(!stores.has(name))stores.set(name,new Map());return {createIndex(){}};},transaction:names=>{const tx={};tx.objectStore=name=>{const store=stores.get(name||names);return {getAll:()=>({result:[...store.values()]}),index:field=>({getAll:key=>({result:[...store.values()].filter(value=>value[field]===key)})}),get:key=>({result:store.get(key)}),put:(value,key)=>{store.set(key??value.id,value);return {result:key??value.id};},delete:key=>{store.delete(key);return {};}};};queueMicrotask(()=>tx.oncomplete?.());return tx;}};
   let databaseOpens=0;const indexedDB={open:()=>{databaseOpens++;const request={result:database};queueMicrotask(()=>{request.onupgradeneeded?.();request.onsuccess?.();});return request;}};
   class LocalURL extends URL{static createObjectURL(blob){blobs.push(blob);return 'blob:local-test';}static revokeObjectURL(){}}
   const events=new Map();const window={addEventListener(name,fn){if(!events.has(name))events.set(name,[]);events.get(name).push(fn);},postMessage(){},dispatchEvent(){}};
@@ -169,14 +169,25 @@ test('settings can be saved and reloaded through file input when native pickers 
 
 test('library switches between persistent card and one-line list views',async()=>{const app=await fileApp(),grid=app.doc.querySelector('#document-grid'),card=app.doc.querySelector('#library-card-view'),list=app.doc.querySelector('#library-list-view');assert.equal(grid.dataset.view,'card');assert.equal(card.getAttribute('aria-pressed'),'true');list.onclick();assert.equal(grid.dataset.view,'list');assert.equal(list.getAttribute('aria-pressed'),'true');assert.equal(card.getAttribute('aria-pressed'),'false');assert.equal(JSON.parse(app.local.get(PREFERENCES_KEY)).libraryView,'list');card.onclick();assert.equal(grid.dataset.view,'card');assert.equal(JSON.parse(app.local.get(PREFERENCES_KEY)).libraryView,'card');});
 
-test('empty library asks for the first HTML document in initial HTML and after rendering without changing search messages',async()=>{
+test('empty library stays hidden until a folder is connected and still preserves search messages',async()=>{
   const heading='첫 HTML 문서를 보관해보세요.';
-  const initial=new DOMParser().parseFromString(assets.app['index.html'].text,'text/html');assert.equal(initial.querySelector('#empty-library h3').textContent,heading);
-  const empty=await fileApp();assert.equal(empty.doc.querySelector('#empty-library h3').textContent,heading);
-  empty.doc.querySelector('#library-list-view').onclick();assert.equal(empty.doc.querySelector('#empty-library h3').textContent,heading);
-  const app=await fileApp({documents:[{id:'kept',title:'Kept document',name:'kept.html',source:'',created:1234,modified:5678,metadata:{annotations:[]}}]}),filter=app.doc.querySelector('#library-filter');
+  const initial=new DOMParser().parseFromString(assets.app['index.html'].text,'text/html');assert.equal(initial.querySelector('#empty-library h3').textContent,heading);assert.equal(initial.querySelector('#empty-library').hidden,true);
+  const empty=await fileApp({firstRun:true,directoryPicker:async()=>memoryFolder()}),hint=empty.doc.querySelector('#empty-library');assert.equal(hint.hidden,true);
+  empty.doc.querySelector('#library-list-view').onclick();assert.equal(hint.hidden,true);
+  empty.doc.querySelector('#select-storage-folder').onclick();await settleUntil(()=>empty.doc.documentElement.dataset.storageSetup==='ready');assert.equal(hint.hidden,false);assert.equal(hint.querySelector('h3').textContent,heading);
+  const selected=memoryFolder(),app=await fileApp({firstRun:true,directoryPicker:async()=>selected,documents:[{id:'kept',title:'Kept document',name:'kept.html',source:'',html:'<html><body>Kept document</body></html>',created:1234,modified:5678,metadata:{version:1,view:{},viewport:{},annotations:[],bookmarks:[]}}]}),filter=app.doc.querySelector('#library-filter');
+  app.doc.querySelector('#select-storage-folder').onclick();await settleUntil(()=>app.doc.documentElement.dataset.storageSetup==='ready');
   filter.value='no match';filter.oninput();assert.equal(app.doc.querySelector('#empty-library h3').textContent,'검색 결과가 없습니다.');assert.equal(app.doc.querySelector('#empty-library').hidden,false);
   filter.value='';filter.oninput();assert.equal(app.doc.querySelector('#empty-library').hidden,true);assert.equal(app.doc.querySelectorAll('.document-card').length,1);
+});
+
+test('reopening hides the empty hint through delayed permission and folder initialization',async()=>{
+  let allow,finish;const selected=memoryFolder('Delayed storage',{onWrite:name=>name==='HTMLMemo-library.json'?new Promise(resolve=>finish=resolve):undefined});
+  selected.queryPermission=()=>new Promise(resolve=>allow=value=>{selected.queryPermission=async()=>value;resolve(value);});
+  const app=await fileApp({firstRun:true,settings:[['folder',selected]]}),doc=app.doc,hint=doc.querySelector('#empty-library');
+  assert.equal(typeof allow,'function');assert.equal(doc.documentElement.dataset.storageSetup,'checking');assert.equal(hint.hidden,true);
+  allow('granted');await settleUntil(()=>typeof finish==='function');assert.equal(hint.hidden,true);assert.equal(doc.documentElement.dataset.storageSetup,'checking');
+  finish();await settleUntil(()=>doc.documentElement.dataset.storageSetup==='ready');assert.equal(hint.hidden,false);
 });
 
 test('compact cards and lists share exactly one title and source without touching stored notes',async()=>{
@@ -408,6 +419,7 @@ test('first-run picker cancellation or denied access retains the guide and retry
     fail=error;doc.querySelector('#select-storage-folder').onclick();await settleUntil(()=>!doc.querySelector('#select-storage-folder').disabled);
     assert.equal(doc.querySelector('#dialog').open,true);assert.ok(doc.querySelector('[data-folder-welcome]'));assert.equal(app.settings.get('folder'),undefined);assert.equal(app.local.has('htmlmemo-data-folder-welcome-v1'),false);assert.equal(doc.querySelector('#create-storage-folder').disabled,false);
     assert.match(doc.querySelector('#folder-connection-status').textContent,error==='AbortError'?/취소.*다시 선택/:/쓰기를 허용/);
+    assert.equal(doc.querySelector('#empty-library').hidden,true);
   }
   fail='';doc.querySelector('#select-storage-folder').onclick();assert.equal(doc.querySelector('#create-storage-folder').disabled,true);
   assert.equal(doc.querySelector('#dialog').oncancel,null);

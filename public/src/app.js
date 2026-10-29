@@ -199,7 +199,9 @@ function renderLibrary() {
   $('#library-trash-info').hidden=!libraryTrash;
   const grid=$('#document-grid');grid.dataset.view=preferences.libraryView;
   $$('[data-library-view]').forEach(button=>{const active=button.dataset.libraryView===preferences.libraryView;button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active));});
-  $('#document-count').textContent=libraryTrash?trashRecords.length:records.length; $('#empty-library').hidden=shown.length+shownFolders.length>0;
+  // A temporary empty cache does not mean the connected folder is empty.
+  // Keep the hint hidden until permission, restoration and the library read finish.
+  $('#document-count').textContent=libraryTrash?trashRecords.length:records.length; $('#empty-library').hidden=document.documentElement.dataset.storageSetup!=='ready'||shown.length+shownFolders.length>0;
   $('#empty-library h3').textContent=filter?'검색 결과가 없습니다.':libraryTrash?'휴지통이 비어 있습니다.':libraryFolderId?'이 폴더는 비어 있습니다.':records.length||libraryFolders.length?'이 위치에는 문서가 없습니다.':'첫 HTML 문서를 보관해보세요.';
   $('#empty-library p').innerHTML=filter?'다른 제목·파일명·폴더 이름으로 찾아보세요.':libraryTrash?'내 서재에서 삭제한 문서는 이곳에서 복원할 수 있습니다.':libraryFolderId||records.length||libraryFolders.length?'HTML 파일을 가져오거나 문서 메뉴의 「폴더로 이동」을 사용하세요.':'웹에서 저장하거나, 가지고 있는 HTML 파일을 열면<br>이곳에서 계속 읽고 메모할 수 있어요.';
   $('#open-example').hidden=libraryTrash||!!records.length||!!filter;
@@ -565,6 +567,7 @@ async function connectDataFolder(selected,onConnected,{resume=false}={}) {
 function completeFolderSetup() {
   $('#folder-reconnect').hidden=true;$('#folder-reconnect').replaceChildren();$('#folder-setup-paused').hidden=true;$('#app').hidden=false;
   folderSetupPending=false;lastSetupAttempt=null;document.documentElement.dataset.storageSetup='ready';for(const resolve of folderSetupWaiters.splice(0))resolve(true);
+  renderLibrary();
 }
 function pauseFolderSetup() {
   if(!folderSetupPending)return;
@@ -1634,7 +1637,7 @@ async function initialize() {
   folder=await getSetting('folder');settingsFileHandle=await getSetting('settings-file');settingsFolderHint=await getSetting('settings-folder-hint')||'';await refreshLibrary();activate('library');
   onStorageChange(()=>{if(activeId==='library'){clearTimeout(libraryReloadTimer);libraryReloadTimer=setTimeout(()=>{if(activeId==='library')refreshLibrary().catch(showError);},30);}});
   if(folder){try{await dataFolder.connect(folder,{resume:true});await refreshLibrary();}catch(error){renderFolderState();if(!['NotAllowedError','SecurityError'].includes(error?.name))showError(error);}}
-  if(needsFolderWelcome())folderWelcomeDialog();else document.documentElement.dataset.storageSetup='ready';
+  if(needsFolderWelcome())folderWelcomeDialog();else completeFolderSetup();
   startupPending=false;updateAppInteraction();
   if(!$('#folder-reconnect').hidden)$('#resume-data-folder',$('#folder-reconnect')).focus();
   if(typeof window.launchQueue?.setConsumer==='function')window.launchQueue.setConsumer(safely(async params=>{if(folderSetupPending&&(document.documentElement.dataset.storageSetup==='paused'||!await new Promise(resolve=>folderSetupWaiters.push(resolve))))return;const parentId=libraryFolderId;for(const handle of params.files||[])await openLocalFile(handle,parentId);}));

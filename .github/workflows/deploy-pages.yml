@@ -32,8 +32,8 @@ jobs:
       - run: npm test
       - run: npm run check
       - run: mkdir -p test-results
-      - name: Verify small phone layouts and touch scrolling first
-        run: node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/browser-results.xml --test-name-pattern='Pages-only low-resolution' tests/browser-mobile.integration.mjs
+      - name: Verify folder startup, small phone layouts and touch scrolling first
+        run: node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/browser-results.xml --test-name-pattern='Pages-only empty library|Pages-only low-resolution' tests/browser-mobile.integration.mjs
       - name: Verify popover, help and update regressions
         run: node --test --test-concurrency=1 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/browser-results.xml --test-name-pattern='palette controls|Pages-only circles and ellipses|toolbar mode groups|Pages-only URL use|Pages-only searchable help|PWA startup updates' tests/browser.integration.mjs tests/browser-help.integration.mjs tests/browser-updates.integration.mjs
       - name: Verify source navigation, library trash and folder startup before the full Chrome suite
