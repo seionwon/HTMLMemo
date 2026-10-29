@@ -64,7 +64,8 @@ export async function launchChrome({firstRun=false}={}){
         await page.waitFor('document.querySelector("#data-folder-status")?.textContent!=="폴더 저장 중…"');
       await navigate(url);
       if(!await page.evaluate('!!document.querySelector("#data-folder-status")'))return;
-      await page.waitFor("['ready','required','unsupported'].includes(document.documentElement.dataset.storageSetup)");
+      await page.waitFor("['ready','required','unsupported'].includes(document.documentElement.dataset.storageSetup)||document.querySelector('#app-update-dialog')?.open");
+      if(await page.evaluate('!!document.querySelector("#app-update-dialog")?.open'))return;
       if(await page.evaluate("document.documentElement.dataset.storageSetup==='required'")){
         await page.evaluate(`window.__fixturePicker=window.showDirectoryPicker;window.showDirectoryPicker=async()=> (await navigator.storage.getDirectory()).getDirectoryHandle('HTMLMemo browser fixture',{create:true});document.querySelector('#select-storage-folder').click();`);
         await page.waitFor("document.documentElement.dataset.storageSetup==='ready'&&!document.querySelector('#dialog').open");

@@ -9,6 +9,7 @@ function workerReady(worker,timeout=30000){
   });
 }
 const failure=(message,code)=>Object.assign(Error(message),{code});
+function checkRequest(task,timeout){return new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(failure('새 버전 확인 시간이 초과되었습니다. 현재 버전으로 계속합니다.','UPDATE_CHECK_TIMEOUT')),timeout);Promise.resolve(task).then(value=>{clearTimeout(timer);resolve(value);},error=>{clearTimeout(timer);reject(error);});});}
 function request(worker,message,Channel,timeout=15000){
   if(!worker||worker.state==='redundant')return Promise.reject(failure('준비된 업데이트가 바뀌었습니다. 앱을 다시 실행해주세요.','UPDATE_WORKER_CHANGED'));
   return new Promise((resolve,reject)=>{
@@ -30,8 +31,8 @@ function controlledBy(service,worker,timeout=15000){
 }
 // One check per full launch. No focus, online, visibility or periodic update checks.
 export class UpdateController {
-  constructor({navigator,location,onOffer=async()=>false,beforeUpdate=async()=>{},onState=()=>{},reload=()=>location.reload(),Channel=globalThis.MessageChannel,requestTimeout=15000}){
-    Object.assign(this,{navigator,location,onOffer,beforeUpdate,onState,reload,Channel,requestTimeout});this.started=false;this.cancelled=false;
+  constructor({navigator,location,onOffer=async()=>false,beforeUpdate=async()=>{},onState=()=>{},reload=()=>location.reload(),Channel=globalThis.MessageChannel,requestTimeout=15000,checkTimeout=15000}){
+    Object.assign(this,{navigator,location,onOffer,beforeUpdate,onState,reload,Channel,requestTimeout,checkTimeout});this.started=false;this.cancelled=false;
   }
   state(value,error=null){this.onState(value,error);}
   cancel(){this.cancelled=true;}
@@ -40,9 +41,9 @@ export class UpdateController {
     if(!installableLocation(this.location)||!service?.register){this.state('unavailable');return;}
     this.state('checking');
     try{
-      const existing=await service.getRegistration?.('./'),registration=existing||await service.register('./sw.js',{updateViaCache:'none'});
+      const existing=await checkRequest(service.getRegistration?.('./'),this.checkTimeout),registration=existing||await checkRequest(service.register('./sw.js',{updateViaCache:'none'}),this.checkTimeout);
       if(!registration){this.state('current');return;}
-      if(existing)try{await registration.update();}catch{/* Offline: a previously prepared release can still be offered. */}
+      if(existing)try{await checkRequest(registration.update(),this.checkTimeout);}catch{/* Offline: a previously prepared release can still be offered. */}
       const installed=await workerReady(registration.installing),worker=registration.waiting||installed||registration.active;
       if(!worker){this.state('current');return;}
       this.registration=registration;const info=await request(worker,{type:'HTMLMEMO_UPDATE_INFO'},this.Channel,this.requestTimeout);

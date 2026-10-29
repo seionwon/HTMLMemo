@@ -68,7 +68,7 @@ test('a real build removes retired distribution artifacts and writes the Pages w
 
 // Executes the real standalone bundle with a DOM model and local IndexedDB
 // contract. It verifies event handlers, not Chrome rendering or OS file dialogs.
-async function fileApp({address='file:///Users/beginner/HTMLMemo.html',navigator={},documents=[],localEntries=[],settings=[],firstRun=false,launchQueue,directoryPicker=async()=>{throw new DOMException('Cancelled','AbortError');}}={}){
+async function fileApp({address='file:///Users/beginner/HTMLMemo.html',navigator={},documents=[],localEntries=[],settings=[],firstRun=false,waitingForUpdate=false,launchQueue,directoryPicker=async()=>{throw new DOMException('Cancelled','AbortError');}}={}){
   // Model-only feature tests invoke individual handlers without native dialog modality.
   // Dedicated first-run tests and real browser tests exercise the required setup surface.
   const html=standaloneHTML(assets),doc=new DOMParser().parseFromString(html,'text/html'),blobs=[],local=new Map([...(firstRun?[]:[['htmlmemo-data-folder-welcome-v1','1']]),...localEntries]);
@@ -83,7 +83,7 @@ async function fileApp({address='file:///Users/beginner/HTMLMemo.html',navigator
   if(directoryPicker)window.showDirectoryPicker=directoryPicker;
   if(launchQueue!==undefined)window.launchQueue=launchQueue;
   const context=vm.createContext({document:doc,window,indexedDB,localStorage:{get length(){return local.size;},key:index=>[...local.keys()][index]??null,getItem:key=>local.get(key)??null,setItem:(key,value)=>local.set(key,value)},location:new URL(address),navigator:{onLine:false,storage:{},locks:{request:async(name,action)=>action()},...navigator},URL:LocalURL,Blob,File,crypto,TextEncoder,TextDecoder,Uint8Array,DataView,atob,btoa,structuredClone,Event,DOMException,innerWidth:1200,innerHeight:850,matchMedia:()=>({matches:false}),setInterval(){},setTimeout(fn,ms){if(ms===800)queueMicrotask(fn);return 1;},clearTimeout(){},requestAnimationFrame:fn=>fn(),fetch:()=>{throw new Error('An embedded app must not fetch a server');}});
-  const script=[...doc.querySelectorAll('script')].find(el=>el.type!=='application/json');new vm.Script(script.textContent).runInContext(context);await new Promise(resolve=>setImmediate(resolve));if(!firstRun&&doc.querySelector('[data-folder-welcome]'))dialog.open=false;assert.match(doc.querySelector('#status-left').textContent,typeof directoryPicker==='function'&&typeof context.navigator.locks?.request==='function'?/개의 문서/:/Chrome/);return {doc,context,blobs,local,get databaseOpens(){return databaseOpens;},settings:stores.get('settings'),emit:(name,event)=>events.get(name)?.forEach(fn=>fn(event))};
+  const script=[...doc.querySelectorAll('script')].find(el=>el.type!=='application/json');new vm.Script(script.textContent).runInContext(context);await new Promise(resolve=>setImmediate(resolve));if(!firstRun&&doc.querySelector('[data-folder-welcome]'))dialog.open=false;if(waitingForUpdate)assert.equal(doc.querySelector('#status-left').textContent,'새 버전을 확인하는 중…');else assert.match(doc.querySelector('#status-left').textContent,typeof directoryPicker==='function'&&typeof context.navigator.locks?.request==='function'?/개의 문서/:/Chrome/);return {doc,context,blobs,local,get databaseOpens(){return databaseOpens;},settings:stores.get('settings'),emit:(name,event)=>events.get(name)?.forEach(fn=>fn(event))};
 }
 function openExecution(app){app.doc.querySelector('#settings-button').onclick();app.doc.querySelector('#settings-execution').onclick();}
 test('execution shares only the canonical URL, with no app package or installation download',async()=>{
@@ -501,9 +501,10 @@ test('remembered phone storage asks only for renewed permission and reopens with
   assert.equal(await(await original.getFile()).text(),'Original data stays here.');
 });
 
-test('first-run guidance does not wait for network-dependent offline registration',async()=>{
-  const app=await fileApp({firstRun:true,address:PUBLIC_APP_URL,directoryPicker:async()=>memoryFolder(),navigator:{serviceWorker:{register:()=>new Promise(()=>{})}}});
-  assert.equal(app.doc.querySelector('#dialog').open,true);assert.ok(app.doc.querySelector('[data-folder-welcome]'));
+test('first-run guidance waits for the version check and follows it without touching the folder first',async()=>{
+  let finish,pickers=0;const app=await fileApp({firstRun:true,waitingForUpdate:true,address:PUBLIC_APP_URL,directoryPicker:async()=>{pickers++;return memoryFolder();},navigator:{serviceWorker:{register:()=>new Promise(resolve=>finish=resolve)}}});
+  assert.equal(!!app.doc.querySelector('#dialog').open,false);assert.equal(app.doc.querySelector('[data-folder-welcome]'),null);assert.equal(app.doc.querySelector('#app').inert,true);assert.equal(app.databaseOpens,0);assert.equal(pickers,0);
+  finish(undefined);await settleUntil(()=>app.doc.documentElement.dataset.storageSetup==='required');assert.equal(app.doc.querySelector('#dialog').open,true);assert.ok(app.doc.querySelector('[data-folder-welcome]'));assert.equal(app.doc.querySelector('#app').inert,false);assert.equal(pickers,0);
 });
 
 test('folder setup guides users to a subfolder and saves a handle only after an explicit picker action',async()=>{

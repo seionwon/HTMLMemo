@@ -27,7 +27,7 @@ let dataFolder, browserStorageProtection;
 const FOLDER_WELCOME_KEY='htmlmemo-data-folder-welcome-v1';
 let folderSetupPending=false,folderSetupBusy=false,lastSetupAttempt=null;const folderSetupWaiters=[];
 let sharingApp=false, installController;
-let updateController,showPendingUpdate;
+let updateController,showPendingUpdate,startupPending=true;
 let readerFocused=false, nativeReaderFullscreen=false, focusBusy=false;
 let tabLayout='';
 let localImportQueue=Promise.resolve();
@@ -73,10 +73,11 @@ function offerAppUpdate(info){
     showPendingUpdate=show;other.addEventListener('close',show);show();
   });
 }
+function updateAppInteraction(){const committing=['applying','reloading'].includes(document.documentElement.dataset.appUpdate);$('#app').inert=startupPending||committing;$('#folder-setup-paused').inert=startupPending||committing;}
 function appUpdateState(state,error){
   document.documentElement.dataset.appUpdate=state;
   const dialog=$('#app-update-dialog'),busy=['saving','applying','reloading'].includes(state),committing=['applying','reloading'].includes(state);
-  $('#app').inert=committing;$('#folder-setup-paused').inert=committing;
+  updateAppInteraction();
   $('#app-update-install').disabled=busy;$('#app-update-cancel').disabled=committing;$('#app-update-close').disabled=committing;
   $('#app-update-install').textContent=busy?'설치 중…':'설치';
   if(!dialog.open)return;
@@ -652,7 +653,7 @@ function duplicateImportDialog(local, matches) {
   }));
 }
 function openLocalFile(input,parentId=libraryFolderId) {
-  if(['saving','applying','reloading'].includes(document.documentElement.dataset.appUpdate))return Promise.resolve(null);
+  if(startupPending||['saving','applying','reloading'].includes(document.documentElement.dataset.appUpdate))return Promise.resolve(null);
   if(folderSetupPending&&document.documentElement.dataset.storageSetup==='paused')return Promise.resolve(null);
   if(folderSetupPending&&$('#dialog').open&&$('[data-folder-welcome]'))return new Promise(resolve=>folderSetupWaiters.push(resolve)).then(connected=>connected?openLocalFile(input,parentId):null);
   // File picker, input, drop and launch events share one queue. Concurrent
@@ -1489,7 +1490,7 @@ function documentMenu(record) {
   const location=document.createElement('p');location.className='dialog-description small';location.textContent='위치: '+libraryPathLabel(record.folderId||'');actions.before(location);
 }
 function handleKey(event) {
-  if($('#app-update-dialog').open)return;
+  if(startupPending||$('#app-update-dialog').open)return;
   if(folderSetupPending&&($('#dialog').open&&$('[data-folder-welcome]')||document.documentElement.dataset.storageSetup==='paused'))return;
   const isField=/^(INPUT|TEXTAREA|SELECT)$/.test(event.target?.tagName)||event.target?.isContentEditable;
   if(event.key==='Escape'&&reader()?.cancelAnnotationDrag?.()){event.preventDefault();return;}
@@ -1599,15 +1600,25 @@ async function initialize() {
   // finish parsing before any handler or status text is assigned to its shell.
   if(document.readyState==='loading')await new Promise(resolve=>document.addEventListener('DOMContentLoaded',resolve,{once:true}));
   if(!supportsDataFolder(window,navigator)){chromeRequiredDialog();return;}
-  document.documentElement.dataset.storageSetup='checking';
+  document.documentElement.dataset.storageSetup='checking';updateAppInteraction();$('#status-left').textContent='새 버전을 확인하는 중…';
   try{preferences=loadPreferences(localStorage);}catch(error){toast('설정 일부를 읽지 못했습니다. 연결한 데이터 폴더로 복원할 수 있습니다.',true);}
   dataFolder=new DataFolder({storage:localStorage,report:state=>{if(state.handle)folder=state.handle;renderFolderState();},onRestored:async result=>{preferences=loadPreferences(localStorage);applyTheme(preferences.theme);$('#library-sort').value=preferences.librarySort+':'+preferences.librarySortDirection;for(const tab of tabs)if(tab.reader)Object.assign(tab.reader,preferences.annotation);applyToolbarPosition();await refreshLibrary();if(result.recovered)toast('이전의 온전한 폴더 저장본에서 복원했습니다. 최신 변경 일부가 빠졌을 수 있습니다.',true);}});
-  applyTheme(preferences.theme);bindUI();fitHeader();$('#library-sort').value=preferences.librarySort+':'+preferences.librarySortDirection;network();folder=await getSetting('folder');settingsFileHandle=await getSetting('settings-file');settingsFolderHint=await getSetting('settings-folder-hint')||'';await refreshLibrary();activate('library');
+  applyTheme(preferences.theme);bindUI();fitHeader();$('#library-sort').value=preferences.librarySort+':'+preferences.librarySortDirection;network();
+  // The old app must be able to update before requesting access to its folder.
+  // Data already committed to this device survives the version change.
+  updateController=new UpdateController({navigator,location,onOffer:offerAppUpdate,onState:appUpdateState,beforeUpdate:async()=>{if(folderSetupBusy)throw Error('진행 중인 폴더 연결을 마친 뒤 다시 시도해주세요.');await flushInternalDocuments();await dataFolder.flush();},reload:()=>location.reload()});
+  await updateController.start();
+  if(document.documentElement.dataset.appUpdate==='reloading')return;
+  // An installation failure leaves retry/cancel available in the update dialog.
+  // Folder setup follows only after the user closes that dialog.
+  if($('#app-update-dialog').open)await new Promise(resolve=>$('#app-update-dialog').addEventListener('close',resolve,{once:true}));
+  if(document.documentElement.dataset.appUpdate==='reloading')return;
+  $('#status-left').textContent='서재 준비 중…';
+  folder=await getSetting('folder');settingsFileHandle=await getSetting('settings-file');settingsFolderHint=await getSetting('settings-folder-hint')||'';await refreshLibrary();activate('library');
   onStorageChange(()=>{if(activeId==='library'){clearTimeout(libraryReloadTimer);libraryReloadTimer=setTimeout(()=>{if(activeId==='library')refreshLibrary().catch(showError);},30);}});
   if(folder){try{await dataFolder.connect(folder,{resume:true});await refreshLibrary();}catch(error){renderFolderState();if(!['NotAllowedError','SecurityError'].includes(error?.name))showError(error);}}
   if(needsFolderWelcome())folderWelcomeDialog();else document.documentElement.dataset.storageSetup='ready';
+  startupPending=false;updateAppInteraction();
   if(typeof window.launchQueue?.setConsumer==='function')window.launchQueue.setConsumer(safely(async params=>{if(folderSetupPending&&(document.documentElement.dataset.storageSetup==='paused'||!await new Promise(resolve=>folderSetupWaiters.push(resolve))))return;const parentId=libraryFolderId;for(const handle of params.files||[])await openLocalFile(handle,parentId);}));
-  updateController=new UpdateController({navigator,location,onOffer:offerAppUpdate,onState:appUpdateState,beforeUpdate:async()=>{if(folderSetupBusy)throw Error('진행 중인 폴더 연결을 마친 뒤 다시 시도해주세요.');await flushInternalDocuments();await dataFolder.flush();},reload:()=>location.reload()});
-  await updateController.start();
 }
-initialize().catch(error=>{$('#status-left').textContent='서재를 준비하지 못했습니다.';showError(error);});
+initialize().catch(error=>{startupPending=false;updateAppInteraction();$('#status-left').textContent='서재를 준비하지 못했습니다.';showError(error);});

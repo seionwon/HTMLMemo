@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {MessageChannel} from 'node:worker_threads';
 import {UpdateController} from '../public/src/updates.js';
 
-function fixture({available=true,accept=true,offline=false,beforeUpdate=async()=>{},failure=null,navigationReady=false,activate=true,dropApplyReply=false,requestTimeout=15000}={}){
+function fixture({available=true,accept=true,offline=false,beforeUpdate=async()=>{},failure=null,navigationReady=false,activate=true,dropApplyReply=false,requestTimeout=15000,checkTimeout=15000}={}){
   const states=[],calls=[],service=new EventTarget();let reloads=0,offers=0,selected=false;
   class Worker extends EventTarget{
     constructor(){super();this.state='activated';}
@@ -17,7 +17,7 @@ function fixture({available=true,accept=true,offline=false,beforeUpdate=async()=
   const old=new Worker(),worker=new Worker();service.controller=old;
   const registration={active:worker,installing:null,waiting:null,update:async()=>{calls.push('update');if(offline)throw Error('offline');}};
   service.getRegistration=async()=>registration;service.register=async()=>{calls.push('register');return registration;};
-  const controller=new UpdateController({navigator:{serviceWorker:service},location:new URL('https://app.test/HTMLMemo/'),Channel:MessageChannel,requestTimeout,onOffer:async info=>{offers++;assert.equal(info.version,'1.0.1');return accept;},beforeUpdate:async()=>{calls.push('save');await beforeUpdate();},onState:(state,error)=>states.push({state,error}),reload:()=>{calls.push('reload');reloads++;}});
+  const controller=new UpdateController({navigator:{serviceWorker:service},location:new URL('https://app.test/HTMLMemo/'),Channel:MessageChannel,requestTimeout,checkTimeout,onOffer:async info=>{offers++;assert.equal(info.version,'1.0.1');return accept;},beforeUpdate:async()=>{calls.push('save');await beforeUpdate();},onState:(state,error)=>states.push({state,error}),reload:()=>{calls.push('reload');reloads++;}});
   return {controller,service,registration,worker,calls,states,get reloads(){return reloads;},get offers(){return offers;}};
 }
 test('startup checks once; cancel never activates or reloads and another launch offers the update again',async()=>{
@@ -71,4 +71,15 @@ test('a replaced worker for the same build is refreshed while a different build 
 });
 test('an installed offered worker remains the target before registration.waiting catches up',async()=>{
  const f=fixture();f.controller.onOffer=async()=>{f.worker.state='installed';f.registration.active=f.service.controller;f.service.controller.postMessage=(message,ports)=>ports[0].postMessage({ok:true,build:'old-build'});return true;};await f.controller.start();assert.equal(f.reloads,1);assert.equal(f.service.controller,f.worker);
+});
+
+test('stalled startup lookups and registration end, while a stalled online refresh still uses a prepared update',async()=>{
+ for(const phase of ['lookup','register']){
+  const f=fixture({checkTimeout:10});let release;
+  if(phase==='lookup')f.service.getRegistration=()=>new Promise(resolve=>release=resolve);
+  else{f.service.getRegistration=async()=>undefined;f.service.register=()=>new Promise(resolve=>release=resolve);}
+  await f.controller.start();assert.equal(f.states.at(-1).state,'error');assert.equal(f.states.at(-1).error.code,'UPDATE_CHECK_TIMEOUT');assert.equal(f.offers,0);assert.equal(f.reloads,0);
+  release(f.registration);await new Promise(resolve=>setImmediate(resolve));assert.equal(f.offers,0);assert.equal(f.reloads,0);
+ }
+ const prepared=fixture({checkTimeout:10,accept:false});prepared.registration.update=()=>new Promise(()=>{});await prepared.controller.start();assert.equal(prepared.offers,1);assert.equal(prepared.states.at(-1).state,'deferred');assert.equal(prepared.reloads,0);
 });

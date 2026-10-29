@@ -23,7 +23,7 @@ function app(rows=[structuredClone(record)],{cacheError=false}={}){
     putDocumentSourceIdentity:async(id,sourceIdentity)=>{if(cacheError)throw Error('storage full');const row=rows.find(row=>row.id===id);row.sourceIdentity=sourceIdentity;cached.push(id);return row;},toast:message=>notices.push(message),
     openRecord:async item=>{opened.push(item);return item;},createDocument:async(...args)=>{created.push(args);return {id:'new'};},renderLibrary:()=>restored++,updateChrome:()=>restored++,setTimeout:fn=>fn(),
   });
-  vm.runInContext('var localImportQueue=Promise.resolve(),activeId="library",libraryFolderId="",folderSetupPending=false,folderSetupWaiters=[];'+code,context);
+  vm.runInContext('var localImportQueue=Promise.resolve(),activeId="library",libraryFolderId="",folderSetupPending=false,folderSetupWaiters=[],startupPending=false;'+code,context);
   return {context,doc,dialog,created,opened,reads,rows,cached,notices,get restored(){return restored;}};
 }
 test('a proven legacy match caches only its source identity and keeps the three-way choice',async()=>{
@@ -76,4 +76,10 @@ test('a failed import restores status and does not poison subsequent imports',as
 test('queued imports keep the folder selected when each import began, not a later navigation',async()=>{
   const a=app([]);a.context.libraryFolderId='first';const first=a.context.openLocalFile({...local});a.context.libraryFolderId='second';const second=a.context.openLocalFile({...local});a.context.libraryFolderId='later';await Promise.all([first,second]);
   assert.deepEqual(a.created.map(args=>args[3].libraryFolderId),['first','second']);assert.equal(local.libraryFolderId,undefined);
+});
+
+test('startup update decisions block imports without reading or changing the selected file',async()=>{
+ const a=app([]),before=structuredClone(local);a.context.startupPending=true;
+ assert.equal(await a.context.openLocalFile(local),null);assert.equal(a.reads.length,0);assert.equal(a.created.length,0);assert.equal(a.opened.length,0);assert.deepEqual(local,before);
+ a.context.startupPending=false;await a.context.openLocalFile(local);assert.equal(a.created.length,1);
 });
