@@ -307,3 +307,37 @@ test('device sync annotation choices merge, replace or skip both devices once in
  }catch(error){report.status='failed';report.error=error.stack;report.state=[];for(const device of [a,b])if(device){report.state.push(await device.page.evaluate('({status:document.querySelector("#sync-status")?.textContent,state:document.querySelector("#sync-status")?.dataset.state,choice:document.querySelector("#sync-conflict")?.textContent})').catch(()=>null));}if(b)await writeFile(root+'/test-results/device-sync-annotation-choices-failure.png',await b.page.screenshot().catch(()=>Buffer.alloc(0)));throw error;}
  finally{await writeFile(root+'/test-results/device-sync-annotation-choices.json',JSON.stringify(report,null,2)+'\n');await a?.close();await b?.close();for(const clients of fixture.topics.values())for(const response of clients)response.end();fixture.server.closeAllConnections();await new Promise(resolve=>fixture.server.close(resolve));}
 });
+
+test('device sync connection recovery rebuilds failed pre-transfer peers once and preserves originals',{timeout:120000},async()=>{
+ await prepareAssets();await mkdir(root+'/test-results',{recursive:true});const fixture=await streamFixtureServer();let a,b;const report={cases:[],hardwarePhonesTested:false,status:'failed'};
+ try{
+  a=await launchChrome();b=await launchChrome();
+  for(const [index,device] of [a,b].entries()){
+   await device.page.send('Page.addScriptToEvaluateOnNewDocument',{source:streamFixtureSource});await device.page.navigate(fixture.origin);
+   await device.page.evaluate(`(async()=>{const {DeviceSyncService}=await import('./src/sync-device-service.js'),send=DeviceSyncService.prototype.sendSignal;window.__recoverySignals=[];DeviceSyncService.prototype.sendSignal=function(message){window.__recoverySignals.push({kind:message.kind,attempt:message.attempt??0});if(window.__dropInitial&&['offer','candidates'].includes(message.kind)&&(message.attempt??0)===0)return Promise.resolve();return send.call(this,message);};const s=await import('./src/storage.js'),{parseHTML}=await import('./src/document.js'),p=parseHTML('<!doctype html><html><head><title>Recovery ${index}</title></head><body><p>Original recovery document ${index}</p></body></html>');p.metadata.annotations=[{id:'kept-note-${index}',type:'note',text:'Kept recovery note ${index}',color:'#edcf67',width:3,opacity:1,points:[{x:20,y:30}],created:1}];p.metadata.bookmarks=[{id:'kept-bookmark-${index}',title:'Kept bookmark',top:20,left:0}];await s.putDocumentRevision({id:'recovery-${index}',name:'recovery-${index}.html',title:p.metadata.title,html:p.html,metadata:p.metadata,created:1000,modified:2000});})()`);
+   await device.page.waitFor('document.querySelector("#data-folder-status").textContent==="폴더 저장 완료"');
+  }
+  const inspect=device=>device.page.evaluate(`(async()=>{const s=await import('./src/storage.js');return Promise.all((await s.listDocuments()).sort((a,b)=>a.id.localeCompare(b.id)).map(async d=>{const r=await s.getDocument(d.id);return {id:r.id,html:r.html,annotations:r.metadata.annotations,bookmarks:r.metadata.bookmarks};}));})()`);
+  for(const failedSide of ['phone','host']){
+   const before=await Promise.all([a,b].map(inspect)),starts=[];
+   for(const device of [a,b]){
+    starts.push(await device.page.evaluate('window.__pcs.length'));await device.page.evaluate('window.__dropInitial=true;window.__recoverySignals=[];window.__wireBytes=0;window.__sourceWireBytes=0');await clickSettingsAction(device.page,'#settings-sync');
+    await device.page.evaluate(`window.__recoveryStatuses=[];new MutationObserver(()=>window.__recoveryStatuses.push(document.querySelector('#sync-status').textContent)).observe(document.querySelector('#sync-status'),{childList:true,subtree:true,characterData:true});`);
+   }
+   const code=await a.page.evaluate('document.querySelector("#sync-room").value');await a.page.click('#sync-start');await a.page.waitFor('document.querySelector("#sync-status").dataset.state==="ready"');await b.page.click('#sync-join-tab');await b.page.evaluate('document.querySelector("#sync-target").value='+JSON.stringify(code));await b.page.click('#sync-connect');
+   for(const [index,device] of [a,b].entries())await device.page.waitFor('window.__pcs.length==='+String(starts[index]+1));
+   assert.deepEqual(await Promise.all([a,b].map(inspect)),before);for(const device of [a,b])assert.equal(await device.page.evaluate('window.__wireBytes'),0);
+   const failed=failedSide==='phone'?b:a,failedStart=starts[failedSide==='phone'?1:0];await failed.page.evaluate(`(()=>{const pc=window.__pcs[${failedStart}];Object.defineProperty(pc,'connectionState',{configurable:true,get:()=> 'failed'});pc.dispatchEvent(new Event('connectionstatechange'));})()`);
+   for(const device of [a,b])await device.page.waitFor('document.querySelector("#sync-status").dataset.state==="completed"',30000);
+   const actual=await Promise.all([a,b].map(inspect));assert.deepEqual(actual[0],actual[1]);assert.equal(actual[0].length,2);for(const doc of actual[0]){assert.ok(doc.html.includes('Original recovery document'));assert.equal(doc.annotations.length,1);assert.equal(doc.bookmarks.length,1);}
+   const peers=[];
+   for(const [index,device] of [a,b].entries()){
+    const state=await device.page.evaluate(`({count:window.__pcs.length-${starts[index]},oldClosed:window.__pcs[${starts[index]}].signalingState==='closed',retries:window.__recoveryStatuses.filter(s=>s.includes('연결 경로를 다시 확인')).length,signals:window.__recoverySignals})`);assert.equal(state.count,2);assert.equal(state.oldClosed,true);assert.ok(state.retries>0);assert.ok(state.signals.some(s=>s.attempt===1));peers.push({freshPeers:state.count,oldClosed:state.oldClosed,retryShown:state.retries>0});
+   }
+   report.cases.push({failedSide,preTransferBytes:0,peers,documents:2,annotationsAndBookmarksPreserved:true,completedBoth:true});
+   await writeFile(root+`/test-results/device-sync-recovery-${failedSide}.png`,await b.page.screenshot());for(const device of [a,b]){await device.page.click('#dialog [data-dialog-close]');await device.page.waitFor('!document.querySelector("#dialog").open&&window.__relaySockets===0');}
+  }
+  assert.deepEqual([...a.errors,...b.errors],[]);report.status='pass';
+ }catch(error){report.error=error.stack;report.state=[];for(const device of [a,b])if(device)report.state.push(await device.page.evaluate('({status:document.querySelector("#sync-status")?.textContent,state:document.querySelector("#sync-status")?.dataset.state,signals:window.__recoverySignals,pcs:window.__pcs?.map(pc=>({state:pc.connectionState,signaling:pc.signalingState}))})').catch(()=>null));throw error;}
+ finally{await writeFile(root+'/test-results/device-sync-connection-recovery.json',JSON.stringify(report,null,2)+'\n');await a?.close();await b?.close();for(const clients of fixture.topics.values())for(const response of clients)response.end();fixture.server.closeAllConnections();await new Promise(resolve=>fixture.server.close(resolve));}
+});

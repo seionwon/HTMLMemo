@@ -39,7 +39,7 @@ export class DeviceSyncService extends SyncService{
     if(typeof RTCPeerConnection!=='function')throw Error('이 브라우저는 기기 간 파일 전송을 지원하지 않습니다. 최신 Chrome으로 두 기기를 다시 열어주세요.');
     this.peer=new DirectSyncConnection({signal:message=>this.sendSignal(message),onOpen:()=>{
       this.clearWaiting();this.setStatus('connected','상대 기기의 응답을 확인했습니다. 파일 전송 연결이 준비됐습니다.');if(this.isHost)void this.syncDirectData();
-    },onMessage:data=>this.stream.receive(data),onError:error=>void this.fail(error)});
+    },onMessage:data=>this.stream.receive(data),onRetry:()=>this.setStatus('negotiating','기기 간 연결 경로를 다시 확인하는 중… (1/1)'),onError:error=>void this.fail(error)});
     this.stream=new SyncStream({send:data=>this.peer.send(data),onManifest:manifest=>this.options.adapter.prepareSettings?.(manifest),findFiles:typeof this.options.adapter.findReusableStreamFiles==='function'?manifest=>this.options.adapter.findReusableStreamFiles(manifest):null,onProgress:progress=>this.options.onProgress?.(progress),onBundle:async(bundle,{partial})=>{
       this.setStatus('merging','받은 파일을 검증하고 문서·주석을 저장하는 중…');this.updateSyncInfoMeta(bundle.manifest,!this.isHost&&!!this.remotePartial);
       const exclude=await this.options.adapter.mergeStreamBundle(bundle,this.options.onConflict);this.mergedExcludeIds=Array.isArray(exclude)?exclude:[];this.hasReceivedData=true;this.receivedPartial=partial;return {replyRequired:!!this.options.adapter.annotationReplyIds?.().length};
@@ -87,7 +87,7 @@ export class DeviceSyncService extends SyncService{
       if(!this.hasSentInitialSync)return;this.setStatus('completed','전송이 완료되었습니다. 이 화면은 닫아도 됩니다.');this.options.onDataReceived();return;
     }
     if(message.kind==='error'){const text='상대 기기에서 동기화를 '+(message.cancelled===true?'취소했습니다. ':'중단했습니다. ')+String(message.message||'연결을 확인해주세요.').slice(0,1500);await this.fail(message.cancelled===true?new DOMException(text,'AbortError'):Error(text),false);return;}
-    if(['offer','answer','candidates'].includes(message.kind)){this.makePeer();await this.peer.receive(message);}
+    if(['offer','answer','candidates','retry'].includes(message.kind)){this.makePeer();await this.peer.receive(message);}
   }
   async handleRelayMessage(message){
     if(this.isDestroyed||this.finished)return;
