@@ -729,5 +729,7 @@ var qrcodegen_default = qrcodegen;
 
 
 export function drawSyncQR(canvas,text) {
- const qr=qrcodegen.QrCode.encodeText(text,qrcodegen.QrCode.Ecc.MEDIUM),quiet=4,scale=5,size=(qr.size+quiet*2)*scale;canvas.width=canvas.height=size;const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,size,size);ctx.fillStyle='#111';for(let y=0;y<qr.size;y++)for(let x=0;x<qr.size;x++)if(qr.getModule(x,y))ctx.fillRect((x+quiet)*scale,(y+quiet)*scale,scale,scale);
+ // Version 2 adds an alignment pattern. Some valid version-1 room codes
+ // confuse the bundled scanner's detector even in a pristine PNG.
+ const qr=qrcodegen.QrCode.encodeSegments(qrcodegen.QrSegment.makeSegments(text),qrcodegen.QrCode.Ecc.MEDIUM,2),quiet=4,scale=5,size=(qr.size+quiet*2)*scale;canvas.width=canvas.height=size;const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,size,size);ctx.fillStyle='#111';for(let y=0;y<qr.size;y++)for(let x=0;x<qr.size;x++)if(qr.getModule(x,y))ctx.fillRect((x+quiet)*scale,(y+quiet)*scale,scale,scale);
 }
