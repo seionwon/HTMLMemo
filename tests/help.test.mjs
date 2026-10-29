@@ -21,6 +21,12 @@ test('help search accepts Korean spacing, Unicode-compatible and case-insensitiv
  assert.ok(searchHelp('기기\n간\t동기화').some(row=>row.topic.id==='device-sync'));
  assert.doesNotThrow(()=>searchHelp('('.repeat(10000)));
 });
+test('repeated help queries reuse normalized bodies while retaining complete search results',()=>{
+ const expected=searchHelp('동기화'),normalize=String.prototype.normalize;let bodyNormalizations=0;
+ String.prototype.normalize=function(...args){if(this.length>200)bodyNormalizations++;return normalize.apply(this,args);};
+ try{for(let i=0;i<25;i++)assert.deepEqual(searchHelp('동기화'),expected);}finally{String.prototype.normalize=normalize;}
+ assert.equal(bodyNormalizations,0);assert.ok(expected.some(row=>row.topic.id==='device-sync'));
+});
 test('search highlighting treats regex characters literally and escapes HTML before marking',()=>{
  const html=highlightHelp('<script>alert(1)</script> [x] .* $1','[x] .* $1');
  const doc=new DOMParser().parseFromString('<html><body>'+html+'</body></html>','text/html');
@@ -41,6 +47,12 @@ test('help search results open an article, retain the query and return to the sa
  assert.ok(f.doc.querySelector('.help-results'));f.doc.querySelector('.help-results [data-help-open="device-sync"]').onclick();
  assert.match(f.doc.querySelector('#help-article-title').textContent,/동기화/);assert.equal(f.doc.querySelector('#help-search').value,'원본 생략');assert.ok(f.doc.querySelectorAll('.help-article mark').length);
  f.doc.querySelector('#help-results-back').onclick();assert.ok(f.doc.querySelector('.help-results'));assert.equal(f.doc.activeElement.id,'help-search');
+});
+test('one help render compiles highlighting once and safely reuses it across all result text',()=>{
+ const f=fixture(),OriginalRegExp=globalThis.RegExp;let compiled=0;
+ globalThis.RegExp=class extends OriginalRegExp{constructor(pattern,flags){super(pattern,flags);if(pattern==='동기화'&&flags==='giu')compiled++;}};
+ try{f.query('동기화');}finally{globalThis.RegExp=OriginalRegExp;}
+ assert.equal(compiled,1);assert.ok(f.doc.querySelectorAll('.help-results mark').length>2);assert.equal(f.doc.querySelector('.help-results script'),null);
 });
 test('empty and hostile searches show a recoverable empty state without creating executable content',()=>{
  const f=fixture();f.query('<img src=x onerror=alert(1)>');assert.equal(f.doc.querySelector('.help-results img'),null);assert.match(f.doc.querySelector('#help-results-title').textContent,/없습니다/);

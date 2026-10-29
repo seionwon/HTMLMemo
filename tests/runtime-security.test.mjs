@@ -3,10 +3,25 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {documentFor,installDOM} from './dom.mjs';
 import {savedMainFrame,parseHTML,sanitizeRuntimeHTML,LOCAL_CSP,SCRIPT_CSP} from '../public/src/document.js';
-import {IsolatedRuntime,needsIsolatedRuntime,privateRuntimeSource} from '../public/src/isolated-runtime.js';
+import {IsolatedRuntime,needsIsolatedRuntime,privateRuntimeSource,runtimeMutationRoots} from '../public/src/isolated-runtime.js';
 import {cleanSourceStorage} from '../public/src/model.js';
 import {Reader} from '../public/src/reader.js';
 installDOM();
+test('runtime batches preserve independent changes and suppress descendants only under content replacements',()=>{
+  const doc=documentFor('<html><body><article><p><b>Text</b></p><aside>Other</aside></article><footer>End</footer><template><i>Inert</i></template><script>inert</script></body></html>');
+  const [article,p,b,aside,footer]=['article','p','b','aside','footer'].map(s=>doc.querySelector(s)),detached=doc.createElement('div');
+  const entries=[[b,'attributes'],[p,'content'],[article,'attributes'],[aside,'content'],[footer,'attributes'],[detached,'content'],[doc.querySelector('script'),'content'],[doc.querySelector('template'),'content']];
+  assert.deepEqual(runtimeMutationRoots(entries),[[p,'content'],[article,'attributes'],[aside,'content'],[footer,'attributes']]);
+  assert.deepEqual(runtimeMutationRoots(entries.map(([node,kind])=>[node,node===article?'content':kind])),[[article,'content'],[footer,'attributes']]);
+  // A later batch must inspect the new tree, without reusing stale coverage.
+  footer.append(p);assert.deepEqual(runtimeMutationRoots([[b,'attributes'],[article,'content']]),[[b,'attributes'],[article,'content']]);
+});
+test('thousands of sibling runtime changes do not compare every pair or repeatedly walk shared ancestors',()=>{
+  const doc=documentFor('<html><body><article></article></body></html>'),article=doc.querySelector('article');let reads=0,contains=0;
+  const entries=Array.from({length:2000},()=>{const node=doc.createElement('p');article.append(node);node.contains=()=>{contains++;return false;};Object.defineProperty(node,'parentElement',{get(){reads++;return article;}});return [node,'content'];});
+  assert.deepEqual(runtimeMutationRoots(entries),entries);assert.equal(contains,0);assert.ok(reads<=entries.length*3,`Ancestor reads: ${reads}`);
+  assert.deepEqual(runtimeMutationRoots([...entries,[article,'content']]),[[article,'content']]);
+});
 const frame=content=>`<iframe id="mainFrame" srcdoc="${content.replaceAll('&','&amp;').replaceAll('"','&quot;')}"></iframe>`;
 const page=body=>'<html><head></head><body>'+body+'</body></html>';
 test('only an otherwise empty saved frame shell is adopted, never a normal page with embedded media',()=>{

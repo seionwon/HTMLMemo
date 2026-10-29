@@ -92,7 +92,7 @@ function replaceSyncSettings(storage,value){
 // Bulk originals travel on the authenticated WebRTC channel, never in relay JSON.
 export function validateStreamManifest(data){
   if(data?.format!==DEVICE_SYNC_FORMAT||data.version!==2||!Array.isArray(data.documents)||data.documents.length>10000||!Array.isArray(data.files)||data.files.length>20000)throw Error('지원하지 않는 기기 간 전송 목록입니다.');
-  validateFolders(data.folders);if(data.settings!==null)validateSettings(data.settings);
+  const folderIds=new Set(validateFolders(data.folders).map(folder=>folder.id));if(data.settings!==null)validateSettings(data.settings);
   if(data.settingsChoice!==undefined&&(data.settingsChoice!==1||data.settings===null))throw Error('앱 설정 선택 정보가 올바르지 않습니다.');
   const files=new Map();let total=0;
   for(const file of data.files){
@@ -102,7 +102,7 @@ export function validateStreamManifest(data){
   const ids=new Set(),used=new Set();
   for(const value of data.documents){
     if(!idOK(value?.record?.id)||ids.has(value.record.id)||!['html','file'].includes(value.sourceType))throw Error('받은 문서 목록이 손상되었습니다.');ids.add(value.record.id);validateState(value,value.record.id);validateChoiceEnvelope(value);
-    if(value.record.folderId&&!data.folders.some(f=>f.id===value.record.folderId))throw Error('받은 문서의 상대 폴더가 없습니다.');
+    if(value.record.folderId&&!folderIds.has(value.record.folderId))throw Error('받은 문서의 상대 폴더가 없습니다.');
     for(const ref of [value.body,value.original])if(ref!==null){if(!files.has(ref))throw Error('문서가 참조하는 원본 파일이 없습니다.');used.add(ref);}
   }
   if(used.size!==files.size)throw Error('전송 목록에 사용하지 않는 파일이 있습니다.');return files;
@@ -145,7 +145,7 @@ export class DeviceSyncAdapter {
   }
   prepareSettings(data){if(!this.settingsPlans.has(data))this.settingsPlans.set(data,this.planSettings(data));return this.settingsPlans.get(data);}
   check(){if(!this.isActive())throw new DOMException('동기화를 닫았습니다.','AbortError');}
-  async analyzeSyncData(initial){const ids=await this.getSyncTargetIds(initial),docs=(await this.ops.listDocuments({includeTrashed:false})).filter(syncEligible),targets=ids?docs.filter(d=>ids.includes(d.id)):docs;return {type:ids?'single':'full',count:targets.length,label:ids?targets[0]?.title:'서재 전체'};}
+  async analyzeSyncData(initial){const ids=await this.getSyncTargetIds(initial),wanted=ids?new Set(ids):null,docs=(await this.ops.listDocuments({includeTrashed:false})).filter(syncEligible),targets=wanted?docs.filter(d=>wanted.has(d.id)):docs;return {type:ids?'single':'full',count:targets.length,label:ids?targets[0]?.title:'서재 전체'};}
   async getSyncTargetIds(initial){return initial?(Array.isArray(initial)?initial:[initial]):undefined;}
   async getBackupData(ids,exclude=[]){
     this.check();this.sentChoices.clear();const library=await this.ops.readLibrary(),documents=[],wanted=ids?new Set(ids):null,excluded=new Set(exclude);let packedBytes=0;
@@ -220,11 +220,11 @@ export class DeviceSyncAdapter {
   async mergeBackupData(data,resolver){
     this.check();
     if(data?.format!==DEVICE_SYNC_FORMAT||data.version!==1||!Array.isArray(data.documents)||data.documents.length>10000||new Blob([JSON.stringify(data)]).size>DEVICE_SYNC_LIMIT)throw Error('지원하지 않거나 너무 큰 HTMLMemo 동기화 데이터입니다.');
-    const remoteFolders=validateFolders(data.folders),settings=data.settings===null?null:validateSettings(data.settings),seen=new Set(),incoming=[];
+    const remoteFolders=validateFolders(data.folders),folderIds=new Set(remoteFolders.map(folder=>folder.id)),settings=data.settings===null?null:validateSettings(data.settings),seen=new Set(),incoming=[];
     for(const value of data.documents){
       if(!idOK(value?.record?.id)||seen.has(value.record.id)||!['html','file'].includes(value.sourceType))throw Error('받은 문서 목록이 손상되었습니다.');seen.add(value.record.id);
       const state=validateState(value,value.record.id);validateChoiceEnvelope(value);
-      if(state.record.folderId&&!remoteFolders.some(f=>f.id===state.record.folderId))throw Error('받은 문서의 상대 폴더가 없습니다.');
+      if(state.record.folderId&&!folderIds.has(state.record.folderId))throw Error('받은 문서의 상대 폴더가 없습니다.');
       if(!syncEligible(state.record))continue;
       const body=value.body?await unpack(value.body):null,original=value.original?await unpack(value.original):null;
       incoming.push({...state,choiceToken:value.choiceToken,annotationDecision:value.annotationDecision,body,original,sourceType:value.sourceType,fingerprint:await fingerprint(state.record)});
@@ -237,13 +237,25 @@ export class DeviceSyncAdapter {
     this.onStage('마지막 동기화 이후의 주석 변경을 비교하는 중…');
     const local=await this.ops.readLibrary(),tree=mergeLibraryFolders(local.folders,remoteFolders,()=>crypto.randomUUID()),entries=[],mirrored=[],conflicts=[],plans=[],replies=new Map(),consumedTokens=new Set(),assigned=new Set();
     const available=local.documents.filter(syncEligible),protectedIds=new Set(local.documents.filter(record=>!syncEligible(record)).map(record=>record.id)),reserved=new Set(incoming.flatMap(value=>[value.record.id,...(value.annotationDecision?[value.annotationDecision.target]:[])]));
+    // Index this merge's immutable header snapshot once. Actual content and
+    // the current record are still read and verified before any replacement.
+    const byId=new Map(),bySource=new Map(),mirrors=new Map(),histories=new Map();
+    const sourceKey=identity=>sameLocalFile(identity,identity)?identity.digest+':'+identity.size:null;
+    for(const header of available){
+      byId.set(header.id,header);
+      if(header.syncSourceId){if(!mirrors.has(header.syncSourceId))mirrors.set(header.syncSourceId,[]);mirrors.get(header.syncSourceId).push(header);}
+      const key=sourceKey(header.sourceIdentity);
+      if(key&&!reserved.has(header.id)){if(!bySource.has(key))bySource.set(key,{items:[],next:0});bySource.get(key).items.push(header);}
+    }
+    const sourceMatch=record=>{const group=bySource.get(sourceKey(record.sourceIdentity));if(!group)return;while(group.next<group.items.length&&assigned.has(group.items[group.next].id))group.next++;return group.items[group.next];};
+    const revisionsFor=id=>{if(!histories.has(id))histories.set(id,this.ops.listRevisions(id));return histories.get(id);};
     for(const value of incoming){
       const record=value.record,stamp=value.fingerprint;
       if(!syncEligible(record)||protectedIds.has(record.id))continue;
       const decision=value.annotationDecision,proof=decision?this.sentChoices.get(decision.token):null;
       if(decision&&(!this.isHost()||!proof||proof.id!==decision.target||consumedTokens.has(decision.token)))throw Error('요청하지 않은 주석 선택 결과입니다. 기존 내용은 유지했습니다. 다시 연결해주세요.');
-      if(!decision&&available.some(d=>d.syncSourceId===record.id&&d.syncFingerprint===stamp&&sameMarks(d,record)&&(d.folderId||'')===(tree.mapping.get(record.folderId||'')||''))){continue;}
-      const match=decision?available.find(d=>d.id===decision.target):available.find(d=>d.id===record.id)||available.find(d=>!reserved.has(d.id)&&!assigned.has(d.id)&&sameLocalFile(d.sourceIdentity,record.sourceIdentity));
+      if(!decision&&mirrors.get(record.id)?.some(d=>d.syncFingerprint===stamp&&sameMarks(d,record)&&(d.folderId||'')===(tree.mapping.get(record.folderId||'')||''))){continue;}
+      const match=decision?byId.get(decision.target):byId.get(record.id)||sourceMatch(record);
       const previous=match?await this.ops.getDocument(match.id):null;
       if(previous&&!syncEligible(previous))continue;
       if(previous&&assigned.has(previous.id))throw Error('같은 문서에 여러 선택 결과가 도착했습니다. 기존 내용은 유지했습니다. 다시 연결해주세요.');
@@ -278,7 +290,7 @@ export class DeviceSyncAdapter {
         const record={...portableRecord(previous),modified:Date.now(),metadata:{...previous.metadata,...marks},syncSourceId:value.record.id,syncFingerprint:value.fingerprint};
         validateState({record,revisions:[]},record.id);
         if(!sameMarks(previous,record)){
-          const history=await this.ops.listRevisions(previous.id),key=revision=>{const {id,documentId,...state}=revision;return stableJSON(state);},known=new Set(history.map(key));
+          const history=await revisionsFor(previous.id),key=revision=>{const {id,documentId,...state}=revision;return stableJSON(state);},known=new Set(history.map(key));
           const revisions=value.revisions.filter(revision=>!known.has(key(revision))),created=Date.now();
           revisions.push({created,kind:'sync-before',...structuredClone(markState(previous))},{created,kind:resolution==='merge'?'sync-merge':'sync-choice',...structuredClone(marks)});
           entries.push({record,content:null,revisions,expected:syncRecordSnapshot(previous),previousHistoryVersion:previous.historyVersion||0});
@@ -295,10 +307,10 @@ export class DeviceSyncAdapter {
         // Explicit conflict replacement keeps a full copy. One-sided updates
         // retain the existing source record and append only unseen revisions.
         if(!automatic){const backup={...portableRecord(previous),id:crypto.randomUUID(),title:previous.title+' (동기화 전 보관본)'};
-        entries.push({record:backup,content:contentOf(previous),revisions:await this.ops.listRevisions(previous.id),expected:null});}
+        entries.push({record:backup,content:contentOf(previous),revisions:await revisionsFor(previous.id),expected:null});}
         record.id=previous.id;
       }else if(previous){record.id=crypto.randomUUID();record.title+=' (상대 기기)';}
-      let revisions=value.revisions;if(previous&&resolution==='remote'){const key=revision=>{const {id,documentId,...state}=revision;return JSON.stringify(state);};const known=new Set((await this.ops.listRevisions(previous.id)).map(key));revisions=revisions.filter(revision=>!known.has(key(revision)));}
+      let revisions=value.revisions;if(previous&&resolution==='remote'){const key=revision=>{const {id,documentId,...state}=revision;return JSON.stringify(state);};const known=new Set((await revisionsFor(previous.id)).map(key));revisions=revisions.filter(revision=>!known.has(key(revision)));}
       entries.push({record,content:previous&&resolution==='both'&&content===null?contentOf(previous):content,revisions,expected:previous&&resolution==='remote'?syncRecordSnapshot(previous):null,previousHistoryVersion:previous?.historyVersion||0});mirrored.push(record.id);
     }
     this.check();if(settingsPlan.expected&&!sameSyncSettings(syncSettingsSnapshot(this.storage),settingsPlan.expected))throw Error('선택 중 이 기기의 앱 설정이 바뀌었습니다. 다시 연결해주세요.');

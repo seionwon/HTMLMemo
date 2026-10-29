@@ -8,6 +8,18 @@ import {tmpdir} from 'node:os';
 import {prepareAssets,root} from '../scripts/assets.mjs';
 import {createServer} from '../scripts/server.mjs';
 import {launchChrome,clickLibraryImport} from './chrome.mjs';
+import {runtimeBatchProbe} from './runtime-batch-fixture.mjs';
+
+test('real Chrome: Pages-only runtime batches preserve source controls and notes across thousands of updates',{timeout:90000},async()=>{
+  await prepareAssets();const server=createServer();let browser;
+  try{
+    await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));browser=await launchChrome();
+    await browser.page.navigate(process.env.HTMLMEMO_SIDEBAR_TEST_URL||`http://127.0.0.1:${server.address().port}/`);
+    const result=await browser.page.evaluate('('+runtimeBatchProbe.toString()+')(new URL("./src/",location.href).href)');
+    assert.equal(result.pairChecks,0);assert.equal(result.annotationsPreserved,true);assert.deepEqual(result.sandboxes,{display:'allow-same-origin',runner:'allow-scripts'});assert.deepEqual(browser.errors,[]);
+    await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/pages-only-runtime-batches.json'),JSON.stringify(result,null,2)+'\n');
+  }finally{await browser?.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}
+});
 
 test('real Chrome: Pages-only security isolation denies app data, folder handles and network access while preserving source controls',{timeout:120000},async()=>{
   await prepareAssets();const directory=await mkdtemp(join(tmpdir(),'htmlmemo-security-'));await cp(join(root,'public'),directory,{recursive:true});const server=createServer(directory);let browser,requests=0;

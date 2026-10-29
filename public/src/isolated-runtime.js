@@ -12,6 +12,22 @@ export function needsIsolatedRuntime(doc) {
 }
 const locator=node=>{const path=[];for(let n=node;n?.parentElement;n=n.parentElement)path.unshift([...n.parentElement.children].indexOf(n));return {tag:node?.localName,id:node?.id,anchor:node?.getAttribute?.('data-htmlmemo-anchor'),path};};
 const locate=(doc,key)=>{let node=key.id?doc.getElementById(key.id):null;if(!node&&/^(?:body|(?:n|js)\d+)$/.test(key.anchor))node=doc.querySelector('[data-htmlmemo-anchor="'+key.anchor+'"]');if(!node){node=doc.documentElement;for(const index of key.path)node=node?.children[index];}return node?.localName===key.tag?node:null;};
+// A parent's content patch already contains its descendants. Share ancestor
+// checks within this batch instead of comparing every changed node pair.
+export function runtimeMutationRoots(entries) {
+  const content=new Set(entries.filter(([,kind])=>kind==='content').map(([node])=>node)),covered=new WeakMap();
+  return entries.filter(([node])=>{
+    if(!node.isConnected||node.closest('script,template'))return false;
+    let parent=node.parentElement,inside=false;const path=[];
+    while(parent){
+      if(content.has(parent)){inside=true;break;}
+      if(covered.has(parent)){inside=covered.get(parent);break;}
+      path.push(parent);parent=parent.parentElement;
+    }
+    for(const ancestor of path)covered.set(ancestor,inside);
+    return !inside;
+  });
+}
 export function privateRuntimeSource(doc,source) {
   if(!doc.querySelector('#htmlmemo-annotation-layer,[data-htmlmemo-mark],[data-htmlmemo-search]')&&![...doc.querySelectorAll('#htmlmemo-data')].some(node=>node.parentElement!==doc.head))return source;
   // Stream ordinary originals; unusual metadata locations and already drawn
@@ -27,7 +43,7 @@ export function privateRuntimeSource(doc,source) {
 
 // This function is serialized into the opaque child before ANY source script.
 // No app settings, annotations, tokens, storage handles or executable RPC enter it.
-function bootstrap(channel,preferences) {
+function bootstrap(channel,preferences,mutationRoots) {
   const ID='data-htmlmemo-runtime-id',MAX=64*1024*1024,send=parent.postMessage.bind(parent),ids=new WeakMap(),nodes=new Map();
   window.name='htmlmemo-runtime-'+channel;
   // Hidden execution frames do not receive rendering opportunities. Source
@@ -79,7 +95,7 @@ function bootstrap(channel,preferences) {
     timer=0;
     if(!started){if(!document.body)return;const snapshot=html(document.documentElement);if(snapshot.length>MAX){emit({type:'error',message:'문서의 실행 결과가 안전한 표시 한도(64MB)를 넘었습니다.'});return;}emit({type:'initial',html:snapshot,assets:[...document.querySelectorAll('script[id^="book-asset-"]')].map(node=>node.id)});started=true;lastSection=document.getElementById('reader-content')?.dataset.section||'';dirty.clear();return;}
     const entries=[...dirty];dirty.clear();
-    const roots=entries.filter(([node])=>node.isConnected&&!inert(node)&&!entries.some(([other,kind])=>kind==='content'&&other!==node&&other.contains(node)));
+    const roots=mutationRoots(entries);
     const patches=[];let length=0;
     for(const [node,kind] of roots){const value=kind==='attributes'?{id:key(node),kind,tag:node.localName,attributes:[...node.attributes].map(a=>[a.name,a.value])}:{id:key(node),kind,html:html(node)};length+=value.html?.length||JSON.stringify(value.attributes).length;if(length>MAX){emit({type:'error',message:'문서 변경의 크기가 안전한 표시 한도(64MB)를 넘었습니다.'});return;}patches.push(value);}
     for(const node of [...controlNodes].slice(0,256)){
@@ -157,7 +173,7 @@ export class IsolatedRuntime {
     const original=privateRuntimeSource(this.doc,this.source);
     const source=await serializeBookSource(original,{version:1,annotations:[],bookmarks:[],view:{},execution:{allowScripts:false}});
     if(this.disposed)return;
-    const script='('+bootstrap.toString()+')('+JSON.stringify(this.channel)+','+JSON.stringify(this.storage).replaceAll('<','\\u003c')+');';
+    const script='('+bootstrap.toString()+')('+JSON.stringify(this.channel)+','+JSON.stringify(this.storage).replaceAll('<','\\u003c')+','+runtimeMutationRoots.toString()+');';
     const policy=SCRIPT_CSP.replace("frame-src 'self'","frame-src 'none'");
     // A sandboxed Blob URL cannot reliably change its fragment in Chrome.
     // Stream immutable source bytes INSIDE an opaque srcdoc instead; no full

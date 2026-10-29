@@ -21,6 +21,26 @@ function fixture(rows=[],folders=[],root='My root'){
  };
  return {docs,history,storage,calls,operations,get folders(){return current;},adapter:options=>new DeviceSyncAdapter({operations,storage,...options})};
 }
+test('large unchanged sync matches document headers with linear lookup work and no replacement writes',async()=>{
+ const rows=await Promise.all(Array.from({length:600},(_,i)=>record('book-'+i))),sender=fixture(rows),receiver=fixture(structuredClone(rows)),bundle=await sender.adapter({includeSettings:false}).getStreamBundle();
+ const read=receiver.operations.readLibrary;let lookups=0;
+ receiver.operations.readLibrary=async()=>{const value=await read();return {...value,documents:value.documents.map(row=>new Proxy(row,{get(target,key){if(['id','syncSourceId','sourceIdentity'].includes(key))lookups++;return target[key];}}))};};
+ const mirrored=await receiver.adapter({includeSettings:false}).mergeStreamBundle(bundle,()=>assert.fail('Unchanged documents must not ask'));
+ assert.equal(mirrored.length,rows.length);assert.equal(receiver.calls.at(-1).length,0);assert.equal(receiver.docs.size,rows.length);assert.ok(lookups<rows.length*12,`Header reads: ${lookups}`);
+});
+test('source matching consumes aliases in order and reserves exact incoming IDs',async()=>{
+ const note=text=>({id:'note-'+text,type:'note',text,color:'#edcf67',width:3,opacity:1,points:[{x:10,y:20}]}),html='<p>Shared source</p>';
+ const receiver=fixture(await Promise.all(['reserved','a','b'].map(id=>record(id,{html,annotations:[note(id)]})))),sender=fixture(await Promise.all(['x','y','reserved'].map(id=>record(id,{html,annotations:[note('new-'+id)]}))));
+ const packet=await sender.adapter({includeSettings:false}).getStreamBundle();
+ await receiver.adapter({includeSettings:false,isHost:()=>false}).mergeStreamBundle(packet,items=>items.map(()=>'remote'));
+ assert.equal(receiver.docs.size,3);for(const [local,remote]of [['a','x'],['b','y'],['reserved','reserved']])assert.equal(receiver.docs.get(local).metadata.annotations[0].text,'new-'+remote);
+});
+test('explicit remote replacement reads prior history once and preserves both safety copy and unseen revisions',async()=>{
+ const sender=fixture([await record('book',{html:'<p>Remote source</p>'})]),receiver=fixture([await record('book',{html:'<p>Local source</p>'})]);let reads=0;
+ receiver.history.set('book',[{created:2000,kind:'edit',annotations:[],bookmarks:[]}]);const list=receiver.operations.listRevisions;receiver.operations.listRevisions=async id=>{reads++;return list(id);};
+ await receiver.adapter({includeSettings:false}).mergeStreamBundle(await sender.adapter({includeSettings:false}).getStreamBundle(),()=>['remote']);
+ assert.equal(reads,1);assert.equal(receiver.docs.size,2);const copy=[...receiver.docs.values()].find(row=>row.id!=='book');assert.equal(copy.html,'<p>Local source</p>');assert.equal(receiver.history.get(copy.id).length,1);assert.equal(receiver.history.get('book').length,2);
+});
 test('settings compare effective defaults and JSON key order without asking or changing them',async()=>{
  const a=fixture(),b=fixture([],[],'Other root');storePreferences(normalizePreferences(),a.storage);a.storage.setItem(PREFERENCES_KEY,JSON.stringify(Object.fromEntries(Object.entries(JSON.parse(a.storage.getItem(PREFERENCES_KEY))).reverse())));a.storage.setItem('msuite_tts_rate','1.0');
  const before=[...b.storage.values],packet=await a.adapter().getStreamBundle();let prompts=0;
