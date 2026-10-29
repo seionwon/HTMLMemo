@@ -40,7 +40,7 @@ export async function auditLowResolution(w=window,onProgress=()=>{}) {
   const pane=$('#help-content');if(pane.clientHeight<60)issue('help','reading pane too short: '+pane.clientHeight);
   pane.scrollTop=pane.scrollHeight;await frames();const nav=$('.help-page-nav');if(nav&&nav.getBoundingClientRect().bottom>pane.getBoundingClientRect().bottom+1)issue('help','last page controls clipped');
   await close();await settings();await click('#settings-execution');await inspect('execution','#execution');await click('#library-tab');
-  if(!$('.tab.document')){await click('#open-example');}else await click('.tab.document');
+  if(!$('.tab.document')){await click('#open-example');}else await click('.tab.document .tab-select');
   await wait(()=>$('.document-host:not([hidden]) iframe.document-frame')?.style.visibility==='visible');
   await inspect('reading-header','.addressbar',{scroll:false});
   await click('#toolbar [data-action=palette]');await inspect('palette','#tool-popover');await popClose();

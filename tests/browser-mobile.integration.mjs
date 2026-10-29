@@ -290,7 +290,7 @@ test('real Chrome: Pages-only low-resolution screens keep controls reachable and
     const failures=report.layouts.flatMap(layout=>layout.failures.map(f=>({...f,width:layout.width,height:layout.height})));
     // Collect all layouts before failing, so a small-screen regression is diagnosable in one run.
     assert.deepEqual(failures,[]);
-    await page.send('Emulation.setDeviceMetricsOverride',{width:240,height:480,deviceScaleFactor:1,mobile:true});await page.click('.tab.document');
+    await page.send('Emulation.setDeviceMetricsOverride',{width:240,height:480,deviceScaleFactor:1,mobile:true});await page.click('.tab.document .tab-select');
     await page.evaluate('document.querySelector("#toolbar").scrollLeft=0');
     const bounds=await page.evaluate('document.querySelector("#toolbar").getBoundingClientRect().toJSON()');
     const send=(type,points=[])=>page.send('Input.dispatchTouchEvent',{type,touchPoints:points.map(p=>({id:1,radiusX:2,radiusY:2,force:1,...p}))});
