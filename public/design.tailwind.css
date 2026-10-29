@@ -534,6 +534,7 @@ dialog:has(.help-browser) #dialog-content{height:100%;min-height:0}
 :where(input,select,textarea):disabled{cursor:not-allowed;opacity:.5}
 :where(input,textarea)[readonly]{color:var(--muted);background-color:var(--surface-muted)}
 input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--color-control-accent);outline-offset:2px}
+[role=slider]:focus-visible{outline:2px solid var(--color-control-accent);outline-offset:2px}
 :is(.paste-title,.paste-text,.note-form textarea,.custom-palette-creator input,.color-input-field input,.annotation-hex-input,.folder-destination):focus-visible{outline:0;border-color:var(--color-control-accent);box-shadow:var(--shadow-control-focus)}
 :is(.library-search,.help-search-field,#address-form):focus-within{border-color:var(--color-control-accent);box-shadow:var(--shadow-control-focus)}
 :is(.library-search,.help-search-field,#address-form) input:focus-visible{outline:0}
@@ -541,12 +542,12 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px soli
 
 /* The select remains a native, keyboard-accessible control, including its picker. */
 body[data-codememo-design] select:not([multiple]){
- appearance:none;min-width:0;max-width:100%;cursor:pointer;
+ appearance:none;min-width:0;max-width:100%;cursor:pointer;white-space:nowrap;text-overflow:ellipsis;
  padding-inline-end:27px;border-color:var(--color-control-border);border-radius:var(--radius-control);
  background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);
  background-position:calc(100% - 13px) 50%,calc(100% - 9px) 50%;background-size:4px 4px;background-repeat:no-repeat;
 }
-#library .library-controls select{padding-inline-end:27px}
+#library .library-controls select,#palette-preset{padding-inline-end:27px}
 body[data-codememo-design] select:enabled:hover{border-color:var(--green)}
 @supports(appearance:base-select){
  body[data-codememo-design] select:not([multiple]),body[data-codememo-design] select:not([multiple])::picker(select){appearance:base-select}
