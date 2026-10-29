@@ -146,7 +146,11 @@ export class Reader {
     });
   }
   baseEditorStyle() {
-    return 'html[data-htmlmemo-picking] [data-htmlmemo-mark],html[data-htmlmemo-picking] [data-htmlmemo-mark] *{cursor:pointer!important}html[data-htmlmemo-picking] [data-htmlmemo-hit]{pointer-events:stroke!important;cursor:pointer!important}html[data-htmlmemo-picking="select"] #htmlmemo-annotation-layer,html[data-htmlmemo-picking="select"] [data-htmlmemo-id],html[data-htmlmemo-picking="select"] [data-htmlmemo-hit]{touch-action:none!important}[data-htmlmemo-preview],[data-htmlmemo-preview] *{pointer-events:none!important}[data-htmlmemo-drag-source]{opacity:.25!important;pointer-events:none!important}html[data-htmlmemo-moving],html[data-htmlmemo-moving][data-htmlmemo-picking] *{cursor:grabbing!important;user-select:none!important;-webkit-user-select:none!important}' + this.layoutEditorStyle();
+    return 'html[data-htmlmemo-picking] [data-htmlmemo-mark],html[data-htmlmemo-picking] [data-htmlmemo-mark] *{cursor:pointer!important}html[data-htmlmemo-picking] [data-htmlmemo-hit]{pointer-events:stroke!important;cursor:pointer!important}html[data-htmlmemo-picking="select"] #htmlmemo-annotation-layer,html[data-htmlmemo-picking="select"] [data-htmlmemo-id],html[data-htmlmemo-picking="select"] [data-htmlmemo-hit]{touch-action:none!important}[data-htmlmemo-preview],[data-htmlmemo-preview] *{pointer-events:none!important}[data-htmlmemo-drag-source]{opacity:.25!important;pointer-events:none!important}html[data-htmlmemo-moving],html[data-htmlmemo-moving][data-htmlmemo-picking] *{cursor:grabbing!important;user-select:none!important;-webkit-user-select:none!important}' + this.layoutEditorStyle() + this.textMarkingStyle();
+  }
+  textMarkingStyle() {
+    // Touch and pen mark text directly; mouse keeps native text selection.
+    return 'html[data-htmlmemo-text-marking] body{touch-action:none!important}';
   }
   layoutEditorStyle() {
     // Keep the source book's responsive #reader-menu visibility; forcing flex
@@ -376,6 +380,7 @@ export class Reader {
       editorStyle.textContent = this.baseEditorStyle();
       (this.doc.head || this.doc.documentElement).append(editorStyle);
     }
+    this.doc.documentElement.toggleAttribute('data-htmlmemo-text-marking',TEXT_TOOLS.includes(this.tool));
     this.setupDocumentTocResize();
     if (this.bound) {
       if (!deferDynamicObserver) this.startDynamicObserver();
@@ -393,14 +398,14 @@ export class Reader {
     this.doc.addEventListener('dragstart', event => { if(this.annotationDrag||this.tocDrag||this.isTocResizeTarget(event))event.preventDefault(); }, true);
     this.doc.addEventListener('pointermove', event => { if(this.tocDrag)return; if(this.moveMiddleScroll(event))return;this.pointerMove(event); }, true);
     this.doc.addEventListener('pointerup', event => { if(this.tocDrag)return; if(this.endMiddleScroll(event))return;this.pointerUp(event); }, true);
-    this.doc.addEventListener('pointercancel', () => { this.cancelAnnotationDrag();this.stopMiddleScroll();this.cancelDrawingGesture();this.touchErase=null; });
+    this.doc.addEventListener('pointercancel', () => { this.cancelTextMarkGesture();this.cancelAnnotationDrag();this.stopMiddleScroll();this.cancelDrawingGesture();this.touchErase=null; });
     // Touch starts with implicit capture on the mark. Moving capture to the
     // document root also releases that mark; only losing our own capture cancels.
-    this.doc.addEventListener('lostpointercapture', event => {if(event.target===this.doc.documentElement&&this.annotationDrag?.pointerId===event.pointerId)this.cancelAnnotationDrag();});
-    this.doc.defaultView?.addEventListener?.('blur',()=>this.cancelAnnotationDrag());
+    this.doc.addEventListener('lostpointercapture', event => {if(event.target===this.doc.documentElement){if(this.annotationDrag?.pointerId===event.pointerId)this.cancelAnnotationDrag();if(this.textMarkGesture?.pointerId===event.pointerId)this.cancelTextMarkGesture();}});
+    this.doc.defaultView?.addEventListener?.('blur',()=>{this.cancelTextMarkGesture();this.cancelAnnotationDrag();});
     this.doc.addEventListener('auxclick', event => {if(event.button===1&&!event.target.closest?.('a,button,input,textarea,select,[contenteditable]'))event.preventDefault();}, true);
     this.doc.addEventListener('selectionchange', () => this.captureTextSelection());
-    this.doc.addEventListener('keydown', event => {if(event.key==='Escape'&&this.annotationDrag){this.cancelAnnotationDrag();event.preventDefault();event.stopPropagation();return;}if(this.handleTocKeydown(event))return; if(event.key==='Escape'&&this.middleScroll){this.stopMiddleScroll();event.preventDefault();return;}this.callbacks.onKey?.(event);}, true);
+    this.doc.addEventListener('keydown', event => {if(event.key==='Escape'&&this.textMarkGesture){this.cancelTextMarkGesture();event.preventDefault();event.stopPropagation();return;}if(event.key==='Escape'&&this.annotationDrag){this.cancelAnnotationDrag();event.preventDefault();event.stopPropagation();return;}if(this.handleTocKeydown(event))return; if(event.key==='Escape'&&this.middleScroll){this.stopMiddleScroll();event.preventDefault();return;}this.callbacks.onKey?.(event);}, true);
     this.doc.addEventListener('dblclick', event => {if(this.handleTocDblClick(event))return; this.focusDocument(event);}, true);
     this.viewport.addEventListener('dblclick', event => this.focusDocument(event));
     this.viewport.addEventListener('scroll',()=>this.updateReadingControls(),{passive:true});
@@ -1426,15 +1431,15 @@ export class Reader {
     return touches.map(t=>({id:t.identifier,x:t.clientX+(bounds?.left||0)/scale,y:t.clientY+(bounds?.top||0)/scale}));
   }
   startTouchScroll(event) {
-    if(event.touches.length<2&&!this.touchScroll)return;
+    if(event.touches.length<2&&!this.touchScroll){if(this.textMarkGesture&&event.cancelable)event.preventDefault();return;}
     this.touchErase=null;
     if(!this.touchScroll){
       // touch-action is fixed when a gesture begins. Cancelling a pen stroke
       // cannot restore native panning halfway through that gesture.
       const target=event.touches[0]?.target||event.target;
-      const manual=!this.nativeScroll||DRAW_TOOLS.includes(this.tool)||['note','text'].includes(this.tool)||!!this.annotationDrag||[event.target,...event.touches].some(t=>(t.target||t).closest?.('#'+LAYER_ID+',[data-htmlmemo-id],[data-htmlmemo-hit]'));
+      const manual=!this.nativeScroll||TEXT_TOOLS.includes(this.tool)||DRAW_TOOLS.includes(this.tool)||['note','text'].includes(this.tool)||!!this.annotationDrag||[event.target,...event.touches].some(t=>(t.target||t).closest?.('#'+LAYER_ID+',[data-htmlmemo-id],[data-htmlmemo-hit]'));
       this.touchScroll={target,manual};
-      this.cancelAnnotationDrag();this.cancelDrawingGesture();this.stopMiddleScroll();
+      this.cancelTextMarkGesture();this.cancelAnnotationDrag();this.cancelDrawingGesture();this.stopMiddleScroll();
       this.callbacks.onSelectionDismiss?.();
     }
     const touches=[...event.touches].slice(0,2);
@@ -1825,14 +1830,16 @@ export class Reader {
     return true;
   }
   setTool(tool) {
-    this.cancelAnnotationDrag();
+    this.cancelTextMarkGesture();this.cancelAnnotationDrag();
     this.cancelDrawingGesture();this.touchErase=null;
     this.tool = tool; this.doc.documentElement.toggleAttribute('data-htmlmemo-drawing', DRAW_TOOLS.includes(tool) || ['note','text'].includes(tool));
+    this.doc.documentElement.toggleAttribute('data-htmlmemo-text-marking',TEXT_TOOLS.includes(tool));
     this.syncAnnotationPicking();
     if (TEXT_TOOLS.includes(tool) && this.selection) this.addText(tool, this.selection);
     this.callbacks.onView?.();
   }
   captureTextSelection() {
+    if(this.textMarkGesture)return this.selection;
     const selection=this.doc.getSelection(),anchor=selection?.rangeCount&&!selection.isCollapsed?selectionAnchor(this.doc,selection.getRangeAt(0)):null;
     this.selection=anchor?this.sectionAnchor(anchor):null;return this.selection;
   }
@@ -2129,6 +2136,57 @@ export class Reader {
     if(drag.moved){event.preventDefault();event.stopPropagation();if(next)this.commit(this.metadata.annotations.map(a=>a.id===next.id?next:a));}
     return true;
   }
+  textMarkPoint(event,strict=false) {
+    const hit=this.textAtClick(event);if(hit?.node)return this.isInteractiveControl(hit.node)||hit.node.parentElement?.closest('[contenteditable]')?null:hit;
+    if(strict)return null;
+    // A moving finger may reach the whitespace at a line end. Keep the nearest
+    // text caret, while refusing controls and text outside this document.
+    let node,offset;
+    try{const caret=this.doc.caretPositionFromPoint?.(event.clientX,event.clientY),range=caret?null:this.doc.caretRangeFromPoint?.(event.clientX,event.clientY);node=caret?.offsetNode||range?.startContainer;offset=caret?.offset??range?.startOffset;}catch{return null;}
+    if(node?.nodeType!==3||!Number.isInteger(offset)||!node.isConnected||!node.textContent.trim()||!this.doc.body.contains(node)||this.isInteractiveControl(node)||node.parentElement?.closest('script,style,noscript,svg,textarea,template,[data-htmlmemo-ui],[contenteditable]'))return null;
+    return {node,offset:clamp(offset,0,node.textContent.length-1)};
+  }
+  startTextMarkGesture(event) {
+    if(!TEXT_TOOLS.includes(this.tool)||!['touch','pen'].includes(event.pointerType)||this.disposed||this.host?.hidden||this.preparing)return false;
+    if(this.textMarkGesture){this.cancelTextMarkGesture();return true;}
+    if(event.isPrimary===false)return false;
+    const start=this.textMarkPoint(event,true);if(!start)return false;
+    const target=this.doc.documentElement;
+    this.textMarkGesture={pointerId:event.pointerId,type:this.tool,start,target,x:event.clientX,y:event.clientY,section:currentSection(this.doc),moved:false,range:null};
+    this.selection=null;this.doc.getSelection()?.removeAllRanges();
+    event.preventDefault();event.stopPropagation();
+    try{target.setPointerCapture?.(event.pointerId);}catch{/* Document listeners still receive an available pointer. */}
+    this.callbacks.onAnnotationInput?.();return true;
+  }
+  moveTextMarkGesture(event) {
+    const state=this.textMarkGesture;if(!state||state.pointerId!==event.pointerId)return false;
+    event.preventDefault();event.stopPropagation();
+    if(this.disposed||this.host?.hidden||this.preparing||this.tool!==state.type||currentSection(this.doc)!==state.section||!state.start.node.isConnected){this.cancelTextMarkGesture();return true;}
+    if(!state.moved&&Math.hypot(event.clientX-state.x,event.clientY-state.y)<4)return true;
+    const hit=this.textMarkPoint(event);if(!hit)return true;
+    const forward=hit.node===state.start.node?hit.offset>=state.start.offset:!!(state.start.node.compareDocumentPosition(hit.node)&4);
+    const first=forward?state.start:hit,last=forward?hit:state.start,range=this.doc.createRange(),selection=this.doc.getSelection();
+    range.setStart(first.node,first.offset);range.setEnd(last.node,last.offset+1);
+    if(!selection)return true;
+    state.moved=true;state.range=range;selection.removeAllRanges();selection.addRange(range);
+    this.callbacks.onAnnotationInput?.();return true;
+  }
+  cancelTextMarkGesture() {
+    const state=this.textMarkGesture;if(!state)return false;
+    this.textMarkGesture=null;this.selection=null;this.doc.getSelection()?.removeAllRanges();
+    this.suppressAnnotationClick=performance.now()+500;
+    try{state.target?.releasePointerCapture?.(state.pointerId);}catch{/* Capture may already have been released. */}
+    return true;
+  }
+  finishTextMarkGesture(event) {
+    const state=this.textMarkGesture;if(!state||state.pointerId!==event.pointerId)return false;
+    if(event.pointerType!=='touch')this.moveTextMarkGesture(event);
+    const valid=!this.disposed&&!this.host?.hidden&&!this.preparing&&this.textMarkGesture===state&&state.moved&&state.range&&this.tool===state.type&&currentSection(this.doc)===state.section&&state.range.startContainer.isConnected&&state.range.endContainer.isConnected;
+    const anchor=valid?selectionAnchor(this.doc,state.range):null;
+    this.cancelTextMarkGesture();event.preventDefault();event.stopPropagation();
+    if(anchor)this.addText(state.type,anchor);
+    return true;
+  }
   pointerDown(event) {
     if (event.button !== 0) return;
     if(this.touchScroll&&event.pointerType==='touch')return;
@@ -2139,6 +2197,7 @@ export class Reader {
       const id = this.annotationIdAt(event.target); if (id) { event.preventDefault(); if(event.pointerType==='touch')this.touchErase={pointerId:event.pointerId,id};else this.remove(id); } return;
     }
     if (this.isInteractiveControl(event.target)) return;
+    if(this.startTextMarkGesture(event))return;
     if (DRAW_TOOLS.includes(this.tool) || ['note','text'].includes(this.tool)) {
       if (this.gesture) { this.cancelDrawingGesture(); return; }
       event.preventDefault(); event.stopPropagation();
@@ -2152,6 +2211,7 @@ export class Reader {
   }
   pointerMove(event) {
     if(this.touchScroll&&event.pointerType==='touch')return;
+    if(this.moveTextMarkGesture(event))return;
     if(this.moveAnnotationDrag(event))return;
     if (!this.gesture || this.gesture.pointerId !== event.pointerId) return;
     this.callbacks.onAnnotationInput?.();
@@ -2165,6 +2225,7 @@ export class Reader {
   async pointerUp(event) {
     if(this.touchScroll&&event.pointerType==='touch')return;
     if(this.touchErase?.pointerId===event.pointerId){const {id}=this.touchErase;this.touchErase=null;if(this.tool==='eraser')this.remove(id);return;}
+    if(this.finishTextMarkGesture(event))return;
     if(this.finishAnnotationDrag(event))return;
     if (this.gesture && this.gesture.pointerId === event.pointerId) {
       event.preventDefault(); const g = this.gesture; this.gesture = null; this.preview?.remove(); this.preview = null;
@@ -2192,13 +2253,17 @@ export class Reader {
       this.captureTextSelection();
       if (this.selection) this.callbacks.onTextSelection?.(this.selection);
     }, 0);
-    if (TEXT_TOOLS.includes(this.tool)) setTimeout(() => {
-      const selection = this.doc.getSelection();
-      if (selection?.rangeCount && !selection.isCollapsed) this.addText(this.tool, selectionAnchor(this.doc, selection.getRangeAt(0)));
-    }, 0);
+    if (TEXT_TOOLS.includes(this.tool)&&!['touch','pen'].includes(event.pointerType)) {
+      const tool=this.tool,section=currentSection(this.doc);
+      setTimeout(() => {
+        if(this.disposed||this.tool!==tool||currentSection(this.doc)!==section)return;
+        const selection = this.doc.getSelection();
+        if (selection?.rangeCount && !selection.isCollapsed) this.addText(tool, selectionAnchor(this.doc, selection.getRangeAt(0)));
+      }, 0);
+    }
   }
   render() {
-    this.cancelAnnotationDrag();
+    this.cancelTextMarkGesture();this.cancelAnnotationDrag();
     this.dynamicObserver?.disconnect();
     this.searchIndexCache?.invalidate();this.searchMarks=[];this.bookSearchMarks=[];
     cleanAnnotations(this.doc); this.selectedId = null;
@@ -2765,7 +2830,7 @@ export class Reader {
   }
   stopSpeech() { this.readAloud?.close(); this.host?.ownerDocument?.defaultView?.speechSynthesis?.cancel(); }
   dispose() {
-    this.cancelAnnotationDrag();
+    this.cancelTextMarkGesture();this.cancelAnnotationDrag();
     this.cancelDrawingGesture();this.touchScroll=null;this.touchErase=null;
     this.searchGeneration=(this.searchGeneration||0)+1;this.searchIndexCache?.dispose();
     this.cancelBookSearchJump?.();this.documentBookSearchObserver?.disconnect();if(this.documentBookSearchResults)this.clearDocumentBookSearchHighlight();

@@ -276,7 +276,7 @@ export function serializeHTML(doc, metadata) {
   clone.querySelector('#' + DATA_ID)?.remove();
   for (const mark of [...clone.querySelectorAll('[data-htmlmemo-search]')].reverse()) mark.replaceWith(...mark.childNodes);
   clone.querySelectorAll('[data-htmlmemo-preview], [data-htmlmemo-selected], [data-htmlmemo-hit]').forEach(element => element.remove());
-  clone.removeAttribute('data-htmlmemo-picking');clone.removeAttribute('data-htmlmemo-moving');clone.querySelectorAll('[data-htmlmemo-drag-source]').forEach(node=>node.removeAttribute('data-htmlmemo-drag-source'));clone.querySelector('#'+LAYER_ID)?.style.removeProperty('--htmlmemo-hit-padding');
+  clone.removeAttribute('data-htmlmemo-picking');clone.removeAttribute('data-htmlmemo-moving');clone.removeAttribute('data-htmlmemo-text-marking');clone.querySelectorAll('[data-htmlmemo-drag-source]').forEach(node=>node.removeAttribute('data-htmlmemo-drag-source'));clone.querySelector('#'+LAYER_ID)?.style.removeProperty('--htmlmemo-hit-padding');
   // Reader-only sidebar controls and their grid/flex overrides must never
   // alter the source document's own TOC after it is saved and reopened.
   clearReaderSidebarArtifacts(clone);
