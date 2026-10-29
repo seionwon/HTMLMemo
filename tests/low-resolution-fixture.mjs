@@ -8,6 +8,7 @@ export async function auditLowResolution(w=window,onProgress=()=>{}) {
   const click=async s=>{onProgress("click "+s);const n=$(s);if(!n)throw new Error('Missing fixture control '+s);n.scrollIntoView({block:'center',inline:'nearest'});await frames();n.click();await frames();};
   async function inspect(name,selector,{scroll=true}={}) {
     onProgress(name);const root=$(selector);if(!root)throw new Error('Missing screen '+selector);
+    await wait(()=>root.checkVisibility()&&root.getBoundingClientRect().height>0);
     const rect=root.getBoundingClientRect();
     if(rect.left<-.5||rect.right>w.innerWidth+.5||rect.top<-.5||rect.bottom>w.innerHeight+.5)issue(name,`outside viewport: ${[rect.x,rect.y,rect.width,rect.height].map(Math.round)}`);
     if(root.scrollWidth>root.clientWidth+1)issue(name,`horizontal overflow: ${root.scrollWidth}/${root.clientWidth}`);
@@ -57,7 +58,7 @@ export async function auditLowResolution(w=window,onProgress=()=>{}) {
     }
     report.screens.push({name:'toolbar-with-sidebar',controls});await click('#close-sidebar');
   }
-  for(const mode of ['info','history']){await click('#toolbar [data-action=more]');await click('[data-more='+mode+']');await inspect('document-'+mode,'#dialog');await close();}
+  for(const mode of ['info','history']){await click('#toolbar [data-action=more]');await click('[data-more='+mode+']');await wait(()=>$('#dialog').open&&$(mode==='history'?'.revision-browser':'.document-info'));await inspect('document-'+mode,'#dialog');await close();}
   const tts='.document-host:not([hidden]) > [data-htmlmemo-reading-controls] [data-action=speak]';
   await click(tts);await wait(()=>$('.mstts-player'));const bar=$('.mstts-player');
   // Equivalent to dragging the compact bar to the right edge; no speech starts.
