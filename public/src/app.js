@@ -1500,8 +1500,17 @@ async function migrateEdition(tab) {
     dialog.addEventListener('close',done);
   });
 }
-async function finishTrashChange(message) {
+async function finishTrashChange(message, restoredId) {
   await refreshLibrary();
+  if(restoredId){
+    const restored=records.find(record=>record.id===restoredId);
+    if(!restored)throw Error('복원한 문서가 다른 창에서 변경되었습니다. 서재를 다시 확인해주세요.');
+    const destination=libraryFolderById.has(restored.folderId)?restored.folderId:'';
+    navigateLibraryFolder(destination);
+    const button=$$('[data-open]',$('#document-grid')).find(item=>item.dataset.open===restoredId);
+    button?.focus({preventScroll:true});button?.scrollIntoView({block:'nearest',inline:'nearest'});
+    message='복원했습니다. 위치: '+libraryPathLabel(destination);
+  }
   try{await dataFolder?.flush();}catch(error){showError(error);return;}
   toast(message);
 }
@@ -1519,7 +1528,7 @@ function trashDocumentMenu(record) {
   modal(`<div class="dialog-heading"><h2>${esc(record.title)}</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><p class="dialog-description small">${esc(record.name)}<br>복원 위치: ${esc(libraryPathLabel(record.folderId||''))}<br>삭제일: ${esc(formatDate(record.trashedAt,true))}</p><p class="dialog-description">본문·주석·북마크·저장 이력을 함께 복원합니다.</p><div class="document-actions"><button id="trash-restore" class="menu-button">${icon('undo')} 복원</button><button id="trash-delete" class="menu-button danger">${icon('trash')} 영구 삭제</button></div>`,dialog=>{
     $('#trash-restore').onclick=safely(async()=>{
       if(trashBusy)return;trashBusy=true;
-      try{const restored=await restoreDocument(record.id);dialog.close();await finishTrashChange('복원했습니다. 위치: '+libraryPathLabel(restored.folderId||''));}finally{trashBusy=false;}
+      try{const restored=await restoreDocument(record.id);dialog.close();await finishTrashChange('',restored.id);}finally{trashBusy=false;}
     });
     $('#trash-delete').onclick=safely(async()=>{
       if(trashBusy)return;
