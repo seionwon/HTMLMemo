@@ -24,9 +24,14 @@ test('plain text keeps line breaks, paragraphs and literal HTML without a format
 test('a supplied title is preserved and generated heading IDs remain unique and usable',()=>{
   const doc=page('# 같은 제목\n\n## 같은 제목\n\n## 같은 제목-1\n\n[이동](#같은-제목-1)',{title:'직접 정한 제목'});
   assert.equal(doc.title,'직접 정한 제목');assert.equal(doc.querySelector('article>h1').textContent,'직접 정한 제목');
-  const ids=[...doc.querySelectorAll('[id]')].map(n=>n.id);assert.equal(new Set(ids).size,ids.length);assert.deepEqual(ids,['같은-제목','같은-제목-1','같은-제목-1-1']);assert.equal(decodeURIComponent(doc.querySelector('a').getAttribute('href')),'#같은-제목-1');
-  const separate=page('# 같은 제목');assert.equal(separate.querySelector('h1').id,'같은-제목');
+  const ids=[...doc.querySelectorAll('[id]')].map(n=>n.id);assert.equal(new Set(ids).size,ids.length);assert.deepEqual(ids,['md-같은-제목','md-같은-제목-1','md-같은-제목-1-1']);assert.equal(decodeURIComponent(doc.querySelector('a').getAttribute('href')),'#md-같은-제목-1');
+  const separate=page('# 같은 제목');assert.equal(separate.querySelector('h1').id,'md-같은-제목');
   const long=page('# '+('긴 제목'.repeat(100)));assert.equal(long.title.length,300);assert.equal(long.querySelectorAll('h1').length,1);
+});
+test('technical heading names never collide with annotation metadata or book runtime elements',()=>{
+  const text='# htmlmemo-data\n\n본문을 보존합니다.\n\n## reader-tree\n\n## reader-content\n\n## htmlmemo-annotation-layer\n\n[이동](#reader-content)';
+  const snapshot=pastedPage({text}),parsed=parseHTML(snapshot.html),doc=documentFor(parsed.html);
+  assert.deepEqual(parsed.metadata.warnings,[]);assert.equal(parsed.metadata.annotations.length,0);assert.equal(doc.querySelector('#htmlmemo-data'),null);assert.equal(doc.querySelector('#reader-tree'),null);assert.equal(doc.querySelector('#reader-content'),null);assert.equal(doc.querySelector('#md-htmlmemo-data').textContent,'htmlmemo-data');assert.equal(doc.querySelector('#md-reader-content').textContent,'reader-content');assert.equal(doc.querySelector('a').getAttribute('href'),'#md-reader-content');assert.ok(doc.body.textContent.includes('본문을 보존합니다.'));
 });
 test('relative links use the actual source, and unsupported or credential URLs cannot become links',()=>{
   const text='[다음](../next?q=1) [메일](mailto:reader@example.com) [전화](tel:+821012345678) [보류](custom:open) [비밀](https://user:password@example.com/)';
@@ -47,4 +52,8 @@ test('maximum-size and deeply nested markdown are bounded without fetching resou
   assert.ok(out.html.includes('unclosed'));assert.ok(performance.now()-start<5000);
   const nested=page('> '.repeat(2000)+'깊은 인용');assert.ok(nested.body.textContent.includes('깊은 인용'));assert.ok(nested.querySelectorAll('blockquote').length<=32);
   assert.throws(()=>pastedPage({text:'# '+('x'.repeat(PASTE_LIMIT))}),/200,000/);
+});
+test('many repeated headings keep unique IDs without rescanning every previous heading',()=>{
+  const start=performance.now(),out=renderMarkdown(('# A\n').repeat(20000));assert.ok(performance.now()-start<5000);
+  const ids=[...out.html.matchAll(/id="([^"]+)"/g)].map(match=>match[1]);assert.equal(ids.length,20000);assert.equal(new Set(ids).size,20000);assert.equal(ids[0],'md-a');assert.equal(ids.at(-1),'md-a-19999');
 });

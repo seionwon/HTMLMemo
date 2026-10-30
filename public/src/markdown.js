@@ -11,7 +11,8 @@ function markdownURL(value,source) {
 // One offline parser; each document gets its own heading IDs and link state.
 const parser=markdownit({html:false,breaks:true,linkify:false,typographer:false,maxNesting:32});
 parser.renderer.rules.link_open=(tokens,index,options,env,self)=>{
-  const token=tokens[index],href=markdownURL(token.attrGet('href')||'',env.source);
+  const token=tokens[index];let href=markdownURL(token.attrGet('href')||'',env.source);
+  if(href?.startsWith('#'))try{const id=env.headings.get(decodeURIComponent(href.slice(1)));if(id)href='#'+encodeURIComponent(id);}catch{/* A malformed fragment remains inert navigation text. */}
   env.links.push(!!href);if(!href)return '<span>';
   token.attrSet('href',href);token.attrSet('rel','noopener noreferrer');
   return self.renderToken(tokens,index,options);
@@ -28,7 +29,7 @@ parser.renderer.rules.image=(tokens,index,options,env,self)=>{
 };
 
 export function renderMarkdown(text,source='') {
-  const env={source,links:[]},tokens=parser.parse(text,env),ids=new Set();let heading='';
+  const env={source,links:[],headings:new Map()},tokens=parser.parse(text,env),ids=new Set(),nextSuffix=new Map();let heading='';
   // The parser stops block parsing at its nesting limit. Preserve all input
   // rather than silently omitting the remainder of an unusually deep block.
   if(tokens.some(token=>token.level>=31))return {html:'<p>'+escapeHTML(text).replace(/\r\n?/g,'\n').replace(/\n/g,'<br>\n')+'</p>',heading:''};
@@ -36,7 +37,8 @@ export function renderMarkdown(text,source='') {
     const label=parser.renderer.renderInlineAsText(tokens[i+1]?.children||[],parser.options,env).trim();
     if(!heading)heading=label;
     const base=Array.from(label.toLowerCase().replace(/[^\p{L}\p{N}\p{M}_\s-]/gu,'').trim().replace(/\s+/g,'-')).slice(0,100).join('')||'section';
-    let id=base,n=0;while(ids.has(id))id=base+'-'+(++n);ids.add(id);tokens[i].attrSet('id',id);
+    let n=nextSuffix.get(base)||0,alias=n?base+'-'+n:base;while(ids.has(alias))alias=base+'-'+(++n);ids.add(alias);nextSuffix.set(base,n+1);
+    const id='md-'+alias;env.headings.set(alias,id);tokens[i].attrSet('id',id);
   }
   for(let i=2;i<tokens.length;i++)if(tokens[i].type==='inline'&&tokens[i-1].type==='paragraph_open'&&tokens[i-2].type==='list_item_open'){
     const first=tokens[i].children?.[0];
