@@ -420,6 +420,15 @@ test('new book bookmarks save their chapter and survive export/import without lo
   assert.deepEqual(parseHTML(serializeHTML(doc,r.metadata),{},{allowScripts:true}).metadata.bookmarks,r.metadata.bookmarks);
 });
 
+test('migrated bookmark jumps use the new paragraph geometry after reflow and retain portable text anchors',async()=>{
+  const {r,doc}=ordinaryBookmarks(),paragraph=doc.querySelectorAll('main p')[1];
+  paragraph.getBoundingClientRect=()=>({top:330,height:100,width:500});r.viewport.scrollTop=900;r.addBookmark('개정판에서 이어 읽기');
+  const mark=r.metadata.bookmarks.at(-1);assert.equal(mark.anchorTarget.quote,'다음 절 내용');assert.equal(mark.anchorOffset,.2);
+  mark.editionPosition='text';delete mark.heading;mark.top=0;paragraph.getBoundingClientRect=()=>({top:900,height:200,width:280});
+  const before=structuredClone(r.metadata);assert.equal(await r.jumpBookmark(mark.id),true);assert.equal(r.scrollTop,2080);assert.equal(r.scrollLeft,0);
+  assert.deepEqual(r.metadata,before);assert.deepEqual(parseHTML(serializeHTML(doc,r.metadata)).metadata.bookmarks,r.metadata.bookmarks);
+});
+
 function partialBook(){
   const manifest={format:'memosuite-book-html-v1',volumes:[{label:'입문',sections:[
     {key:'v0:opening',id:'opening',title:'1부 시작',category:'1부 · 준비'},

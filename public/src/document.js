@@ -374,6 +374,34 @@ export function describeDrawingTarget(doc, element) {
   return {tag:element.localName,id:element.id || '',rootId:root.id || '',path:node === root ? path : [],
     quote:drawingTargetQuote(doc, element),section:element.closest('#reader-content')?.dataset.section || ''};
 }
+const BOOKMARK_BLOCKS = 'h1,h2,h3,h4,h5,h6,p,pre,blockquote,li,td,th,figcaption';
+export function bookmarkAnchorTarget(mark) {
+  const target=mark?.anchorTarget;
+  return target && BOOKMARK_BLOCKS.split(',').includes(target.tag) &&
+    typeof target.quote==='string' && target.quote.length>0 && target.quote.length<=160 &&
+    typeof target.id==='string' && typeof target.rootId==='string' &&
+    (target.section==null||typeof target.section==='string') &&
+    Array.isArray(target.path) && target.path.length<=64 && target.path.every(n=>Number.isInteger(n)&&n>=0) ? target : null;
+}
+// Save the text beside a bookmark without scrolling the reader or loading other chapters.
+// Batch geometry once when older coordinate-only bookmarks are prepared for a new edition.
+export function captureBookmarkAnchors(doc, marks, origin) {
+  const section=currentSection(doc),root=doc.getElementById('reader-content')||doc.body;
+  const needs=mark=>!bookmarkAnchorTarget(mark)&&(mark.section||'')===section;
+  if(!marks.some(needs))return structuredClone(marks);
+  const blocks=[...root.querySelectorAll(BOOKMARK_BLOCKS)].filter(node=>!node.closest('nav,header,footer,[data-htmlmemo-ui]')&&!node.querySelector(BOOKMARK_BLOCKS))
+    .map(node=>({node,rect:node.getBoundingClientRect?.()})).filter(({rect})=>rect?.height>0&&rect?.width>0&&Number.isFinite(rect.top))
+    .map(({node,rect})=>({node,top:rect.top-origin.top,height:rect.height})).sort((a,b)=>a.top-b.top||b.height-a.height);
+  return marks.map(mark=>{
+    const next=structuredClone(mark);if(!needs(mark)||!blocks.length)return next;
+    let lo=0,hi=blocks.length;
+    while(lo<hi){const mid=(lo+hi)>>>1;if(blocks[mid].top<=mark.top)lo=mid+1;else hi=mid;}
+    const before=blocks[lo-1],block=before&&before.top+before.height>mark.top?before:blocks[lo]||before;
+    const target=describeDrawingTarget(doc,block.node);if(!target.quote)return next;
+    next.anchorTarget=target;next.anchorOffset=Math.max(0,Math.min(1,(mark.top-block.top)/block.height));
+    return next;
+  });
+}
 export function resolveTextAnchor(index, anchor) {
   if (index.text.slice(anchor.start, anchor.end) === anchor.quote) return {start: anchor.start, end: anchor.end};
   let found = index.text.indexOf(anchor.quote);

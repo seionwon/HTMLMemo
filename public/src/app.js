@@ -1183,7 +1183,7 @@ function toolAction(action,button=null) {
     $('#zoom-out').onclick=()=>r.setZoom(r.zoom/1.2);$('#zoom-in').onclick=()=>r.setZoom(r.zoom*1.2);$('#zoom-value').onchange=e=>r.setZoom(Number(e.target.value)/100);$('#zoom-fit').onclick=()=>{r.setZoom(1,true);closePopover();};$('#zoom-reset').onclick=()=>{r.setZoom(1);closePopover();};
   },button||r.zoomControl);return;}
   if(action==='more') {
-    const items=[['circle','circle','원'],['ellipse','ellipse','타원'],['arrow','arrow','화살표'],['strike','strike','취소선'],['history','history','주석 저장 이력'],['migrate','file-transfer','새 판으로 주석 옮기기'],['info','info','문서 정보']];
+    const items=[['circle','circle','원'],['ellipse','ellipse','타원'],['arrow','arrow','화살표'],['strike','strike','취소선'],['history','history','주석 저장 이력'],['migrate','file-transfer','새 판으로 주석/북마크 옮기기'],['info','info','문서 정보']];
     // Books already expose their three sidebar views. Plain HTML needs only a
     // way to reopen its closed panel, not a second copy of every sidebar tab.
     if(!r.documentSidebarUI?.isConnected && $('#sidebar').hidden)items.unshift(['sidebar','list','사이드바 열기']);
@@ -1457,40 +1457,45 @@ function pickHTMLFile() {
   return inputFile();
   function inputFile(){return new Promise(resolve=>{const input=document.createElement('input');input.type='file';input.accept=$('#file-input').getAttribute('accept');input.onchange=()=>resolve(input.files[0]||null);input.oncancel=()=>resolve(null);input.click();});}
 }
-// 「새 판으로 주석 옮기기」: the book was edited and exported again. Find every annotation of this
-// document in the new file and open the new file with them. This document stays as it is.
+// 「새 판으로 주석/북마크 옮기기」: the book was edited and exported again. Find every annotation of this
+// document, including its bookmarks, in the new file. This document stays as it is.
 async function migrateEdition(tab) {
   if(!tab?.reader)return;
   await tab.reader.ready;await tab.queue.flush();
-  const annotations=tab.reader.metadata.annotations;
-  if(!annotations.length){toast('옮길 주석이 없습니다.');return;}
+  const annotations=structuredClone(tab.reader.metadata.annotations),bookmarks=tab.reader.bookmarksForEdition();
+  if(!annotations.length&&!bookmarks.length){toast('옮길 주석과 북마크가 없습니다.');return;}
   let input;
   try{input=await pickHTMLFile();}catch(error){if(error?.name==='AbortError')return;throw error;}
   if(!input)return;
   const local=await readLocalHTML(input,{native:true,allowScripts:true});
-  modal(`<div class="dialog-heading"><h2>새 판으로 주석 옮기기</h2></div><p class="dialog-description" id="migrate-status" role="status">새 판을 여는 중…</p>`);
+  modal(`<div class="dialog-heading"><h2>새 판으로 주석/북마크 옮기기</h2></div><p class="dialog-description" id="migrate-status" role="status">새 판을 여는 중…</p>`);
   const status=()=>$('#migrate-status');
   let result,probe;
   try{
     probe=await openEditionProbe(local.snapshot);
-    result=await migrateAnnotations({annotations,oldDoc:tab.reader.doc,probe,onProgress:(done,total,phase)=>{if(status())status().textContent=`${phase==='search'?'다른 장에서 찾는 중':'새 판에서 자리를 찾는 중'}… ${done}/${total}장`;}});
+    result=await migrateAnnotations({annotations,bookmarks,oldDoc:tab.reader.doc,probe,onProgress:(done,total,phase)=>{if(status())status().textContent=`${phase==='search'?'다른 장에서 찾는 중':'새 판에서 자리를 찾는 중'}… ${done}/${total}장`;}});
   }catch(error){$('#dialog').close();throw error;}
   finally{probe?.dispose();}
-  const {report}=result,lost=[...report.deleted,...report.unplaceable,...report.unchecked];
-  const where=a=>{const key=a.textAnchor?.section||a.anchorTarget?.section;return key?result.oldSections.get(key)?.title||'':'';};
+  const {report,bookmarkReport}=result,lost=[...report.deleted,...report.unplaceable,...report.unchecked],lostBookmarks=[...bookmarkReport.deleted,...bookmarkReport.unplaceable,...bookmarkReport.unchecked];
+  const where=a=>{const key=a.section||a.textAnchor?.section||a.anchorTarget?.section;return key?result.oldSections.get(key)?.title||'':'';};
   const row=a=>`<li><strong>${esc(ANNOTATION_LABELS[a.type]||'주석')}</strong> ${esc((a.text||a.textAnchor?.quote||a.anchorTarget?.quote||'').slice(0,80))}${where(a)?` <span class="migrate-where">— ${esc(where(a))}</span>`:''}</li>`;
-  modal(`<form method="dialog"><div class="dialog-heading"><h2>새 판으로 주석 옮기기</h2><button type="button" class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div>
+  modal(`<form method="dialog"><div class="dialog-heading"><h2>새 판으로 주석/북마크 옮기기</h2><button type="button" class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div>
     <p class="dialog-description">주석 ${annotations.length}개 가운데 <strong>${result.annotations.length}개</strong>를 새 판에서 찾았습니다.</p>
     <ul class="migrate-summary"><li>그대로 있는 자리: ${report.same}개</li><li>문장이 고쳐졌거나 옮겨진 자리: ${report.changed}개</li><li>새 판에서 지워진 내용: ${report.deleted.length}개 — 옮기지 않습니다</li>${report.unplaceable.length?`<li>위치 정보가 없는 예전 메모: ${report.unplaceable.length}개 — 옮기지 않습니다</li>`:''}${report.unchecked.length?`<li>새 판의 장을 열지 못해 확인하지 못한 주석: ${report.unchecked.length}개 — 옮기지 않습니다 (${esc(report.failedSections.slice(0,3).join(' '))})</li>`:''}</ul>
     ${lost.length?`<details class="migrate-lost"><summary>옮기지 않는 주석 ${lost.length}개 보기</summary><ul>${lost.slice(0,200).map(row).join('')}</ul></details>`:''}
-    <p class="dialog-description small">새 판은 새 문서로 열리고, 지금 문서와 그 주석은 서재에 그대로 남습니다.</p>
-    <div class="dialog-actions"><button class="secondary-button" value="cancel">취소</button><button class="primary-button" value="confirm"${result.annotations.length?'':' disabled'}>새 판 열기</button></div></form>`,dialog=>{
+    <p class="dialog-description" data-migrate-bookmarks>북마크 ${bookmarks.length}개 가운데 <strong>${result.bookmarks.length}개</strong>를 새 판으로 옮길 수 있습니다.</p>
+    <ul class="migrate-summary"><li>본문 위치를 찾은 북마크: ${bookmarkReport.same+bookmarkReport.changed}개</li><li>정확한 위치 대신 해당 장 시작으로 옮기는 북마크: ${bookmarkReport.approximate}개</li><li>위치를 확인하지 못해 옮기지 않는 북마크: ${lostBookmarks.length}개</li>${bookmarkReport.unchecked.length?`<li>장을 열지 못해 확인하지 못한 북마크: ${bookmarkReport.unchecked.length}개</li>`:''}</ul>
+    ${lostBookmarks.length?`<details class="migrate-lost"><summary>옮기지 않는 북마크 ${lostBookmarks.length}개 보기</summary><ul>${lostBookmarks.slice(0,200).map(mark=>`<li>${esc(mark.title)}${where(mark)?` <span class="migrate-where">— ${esc(where(mark))}</span>`:''}</li>`).join('')}</ul></details>`:''}
+    <p class="dialog-description small">새 판은 새 문서로 열리고, 지금 문서와 그 주석·북마크는 서재에 그대로 남습니다. 새 판에 이미 들어 있는 주석·북마크도 유지합니다.</p>
+    <div class="dialog-actions"><button class="secondary-button" value="cancel">취소</button><button class="primary-button" value="confirm"${result.annotations.length||result.bookmarks.length?'':' disabled'}>새 판 열기</button></div></form>`,dialog=>{
     const done=safely(async()=>{dialog.removeEventListener('close',done);if(dialog.returnValue!=='confirm')return;
       const next=await createDocument(local.snapshot,local.handle,local.name,local);await next.reader.ready;
       const ids=new Set(next.reader.metadata.annotations.map(a=>a.id));
-      next.reader.commit([...next.reader.metadata.annotations,...result.annotations.map(a=>ids.has(a.id)?{...a,id:uid()}:a)]);
+      const unique=(items,seen)=>items.map(item=>{const next=structuredClone(item);while(seen.has(next.id))next.id=uid();seen.add(next.id);return next;});
+      next.reader.metadata.bookmarks.push(...unique(result.bookmarks,new Set(next.reader.metadata.bookmarks.map(mark=>mark.id))));
+      next.reader.commit([...next.reader.metadata.annotations,...unique(result.annotations,ids)]);
       await next.queue.flush();
-      toast(`새 판에 주석 ${result.annotations.length}개를 옮겼습니다.${lost.length?` 지워진 내용의 주석 ${lost.length}개는 옮기지 않았습니다.`:''}`);
+      toast(`새 판에 주석 ${result.annotations.length}개 · 북마크 ${result.bookmarks.length}개를 옮겼습니다.${lost.length||lostBookmarks.length?` 위치를 확인하지 못한 주석 ${lost.length}개 · 북마크 ${lostBookmarks.length}개는 옮기지 않았습니다.`:''}`);
     });
     dialog.addEventListener('close',done);
   });
@@ -1532,7 +1537,7 @@ async function emptyLibraryTrash() {
   try{await deleteTrashedDocuments(ids);await finishTrashChange('휴지통을 비웠습니다.');}finally{trashBusy=false;}
 }
 function documentMenu(record) {
-  modal(`<div class="dialog-heading"><h2>${esc(record.title)}</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><div class="document-actions"><button class="menu-button" id="menu-open">${icon('file')} 열기</button><button class="menu-button" id="menu-export">${icon('download')} HTML 내보내기</button><button class="menu-button" id="menu-history">${icon('undo')} 주석 저장 이력</button><button class="menu-button" id="menu-migrate">${icon('file')} 새 판으로 주석 옮기기</button><button class="menu-button danger" id="menu-remove">${icon('trash')} 휴지통으로 이동</button></div><p class="dialog-description small">HTML 내보내기는 본문·현재 주석·북마크를 HTML 파일 하나로 저장합니다.</p>${annotationExportGuide()}`,()=>{
+  modal(`<div class="dialog-heading"><h2>${esc(record.title)}</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><div class="document-actions"><button class="menu-button" id="menu-open">${icon('file')} 열기</button><button class="menu-button" id="menu-export">${icon('download')} HTML 내보내기</button><button class="menu-button" id="menu-history">${icon('undo')} 주석 저장 이력</button><button class="menu-button" id="menu-migrate">${icon('file')} 새 판으로 주석/북마크 옮기기</button><button class="menu-button danger" id="menu-remove">${icon('trash')} 휴지통으로 이동</button></div><p class="dialog-description small">HTML 내보내기는 본문·현재 주석·북마크를 HTML 파일 하나로 저장합니다.</p>${annotationExportGuide()}`,()=>{
     $('#menu-open').onclick=safely(async()=>{$('#dialog').close();await openRecord(record);});$('#menu-export').onclick=safely(async()=>{$('#dialog').close();const tab=await openRecord(record);await exportDocument(tab);});
     $('#menu-history').onclick=safely(async()=>{$('#dialog').close();await annotationHistory(await openRecord(record));});
     $('#menu-migrate').onclick=safely(async()=>{$('#dialog').close();await migrateEdition(await openRecord(record));});

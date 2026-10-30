@@ -2740,7 +2740,7 @@ test('real Chrome: folder setup explains subfolders and preserves connections th
 });
 
 // Two editions of a packed book (memosuite-book-html-v1) with a minimal runtime: one section per hash.
-function editionHTML(title, sections, annotations = null) {
+function editionHTML(title, sections, annotations = null, bookmarks = []) {
   const crcTable = Array.from({length:256},(_,i)=>{for(let b=0;b<8;b++)i=i&1?0xedb88320^(i>>>1):i>>>1;return i>>>0;});
   const crc = bytes => {let c=0xffffffff;for(const b of bytes)c=crcTable[(c^b)&255]^(c>>>8);return (c^0xffffffff)>>>0;};
   const data = Buffer.from(JSON.stringify(sections.map(s => s.markdown))), packed = deflateRawSync(data), name = Buffer.from('sections.json');
@@ -2751,7 +2751,7 @@ function editionHTML(title, sections, annotations = null) {
   const payload = Buffer.concat([local,name,packed,central,name,end]).toString('base64');
   const manifest = {format:'memosuite-book-html-v1',title,volumes:[{book:'guide',label:title,sections:sections.map(({key,id,title:t},index)=>({key,id,title:t,volume:0,index}))}]};
   const bodies = Object.fromEntries(sections.map(s => [s.key, s.html]));
-  const metadata = annotations && {version:FORMAT_VERSION,title,viewport:{width:1100,height:800},view:{zoom:1,autoFit:false,scrollTop:0,scrollLeft:0},annotations};
+  const metadata = annotations && {version:FORMAT_VERSION,title,viewport:{width:1100,height:800},view:{zoom:1,autoFit:false,scrollTop:0,scrollLeft:0},annotations,bookmarks};
   const runtime = 'const m=JSON.parse(document.getElementById("book-manifest").textContent),bodies=JSON.parse(document.getElementById("test-bodies").textContent),keys=m.volumes.flatMap(v=>v.sections.map(s=>s.key)),content=document.getElementById("reader-content");'
     + 'function show(){const wanted=decodeURIComponent(location.hash.slice(1)),key=keys.includes(wanted)?wanted:keys[0];content.innerHTML=bodies[key];content.dataset.section=key;document.documentElement.dataset.readerReady="true";}addEventListener("hashchange",show);show();';
   return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>${title}</title>${metadata ? `<script id="htmlmemo-data" type="application/json">${JSON.stringify(metadata)}</script>` : ''}<style>p{margin:16px 0;line-height:1.7}</style></head><body>`
@@ -2760,58 +2760,87 @@ function editionHTML(title, sections, annotations = null) {
     + `<script id="test-bodies" type="application/json">${JSON.stringify(bodies)}</script><script>${runtime}</script></body></html>`;
 }
 
-test('real Chrome: annotations move to a new edition of a book, and annotations on deleted text are dropped',{timeout:90000},async()=>{
+test('real Chrome: Pages-only annotations and bookmarks move to a new edition without changing the old book',{timeout:120000},async()=>{
   await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-edition-'));await cp(join(root,'public'),folder,{recursive:true});
   const server=createServer(folder);let chrome;
   const install='에이전트를 설치하고 터미널에서 처음 실행해 봅니다.',removed='이 문단은 다음 판에서 통째로 지워집니다.',result='명령을 실행한 뒤에는 결과를 꼭 확인합니다.';
   const oldEdition=editionHTML('편집되는 책',[
     {key:'v0:setup',id:'setup',title:'설치',markdown:`# 설치\n${install}\n\n${removed}`,html:`<h1>설치</h1><p>${install}</p><p>${removed}</p>`},
-    {key:'v0:run',id:'run',title:'실행',markdown:`# 실행\n${result}`,html:`<h1>실행</h1><p>${result}</p>`}],[
+    {key:'v0:run',id:'run',title:'실행',markdown:`# 실행\n${result}`,html:`<h1>실행</h1><p>${result}</p>`},
+    {key:'v0:appendix',id:'appendix',title:'부록',markdown:'# 부록\n보충 설명입니다.',html:'<h1>부록</h1><p>보충 설명입니다.</p>'}],[
     {id:'install-mark',type:'highlight',color:'#edcf67',width:3,opacity:.35,created:Date.now(),textAnchor:{start:0,end:install.length,quote:install,prefix:'',suffix:'',section:'v0:setup'}},
     {id:'removed-mark',type:'underline',color:'#334155',width:3,opacity:1,created:Date.now(),textAnchor:{start:0,end:removed.length,quote:removed,prefix:'',suffix:'',section:'v0:setup'}},
     {id:'install-pen',type:'pen',color:'#d94f4f',width:3,opacity:1,created:Date.now(),anchor:'body',anchorTarget:{tag:'p',id:'',rootId:'reader-content',path:[1],quote:install,section:'v0:setup'},points:[{x:.05,y:.2},{x:.6,y:.8}]},
-    {id:'result-mark',type:'highlight',color:'#9fd3a8',width:3,opacity:.35,created:Date.now(),textAnchor:{start:0,end:result.length,quote:result,prefix:'',suffix:'',section:'v0:run'}}]);
+    {id:'result-mark',type:'highlight',color:'#9fd3a8',width:3,opacity:.35,created:Date.now(),textAnchor:{start:0,end:result.length,quote:result,prefix:'',suffix:'',section:'v0:run'}}],[
+    {id:'result-bookmark',title:'결과 문단 북마크',top:120,left:0,section:'v0:run',anchorTarget:{tag:'p',id:'',rootId:'reader-content',path:[1],quote:result,section:'v0:run'},anchorOffset:0},
+    {id:'chapter-bookmark',title:'부록에서 이어 읽기',top:700,left:0,section:'v0:appendix'},
+    {id:'lost-bookmark',title:'지워진 장 북마크',top:100,left:0,section:'v0:lost'}]);
   // New edition: a new first section, the install sentence reworded, the doomed paragraph removed,
   // and the run section replaced by a 「check」 section that carries the result sentence.
   const install2='에이전트를 먼저 설치하고 터미널에서 처음 실행해 봅니다.';
   const newEdition=editionHTML('편집되는 책',[
     {key:'v0:intro',id:'intro',title:'들어가며',markdown:'# 들어가며\n새로 쓴 장입니다.',html:'<h1>들어가며</h1><p>새로 쓴 장입니다.</p>'},
     {key:'v0:setup',id:'setup',title:'설치',markdown:`# 설치\n${install2}`,html:`<h1>설치</h1><p>${install2}</p>`},
-    {key:'v0:check',id:'check',title:'확인',markdown:`# 확인\n${result}`,html:`<h1>확인</h1><p>${result}</p>`}]);
+    {key:'v0:check',id:'check',title:'확인',markdown:`# 확인\n${result}`,html:`<h1>확인</h1><div style="height:600px">추가된 설명</div><p id="moved-bookmark">${result}</p><div style="height:1200px"></div>`},
+    {key:'v0:appendix',id:'appendix',title:'부록',markdown:'# 부록\n보충 설명입니다.',html:'<h1>부록</h1><p>보충 설명입니다.</p>'}],[],[{id:'result-bookmark',title:'새 판의 원래 북마크',top:0,left:0,section:'v0:intro'}]);
   try{
     await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});
     chrome=await launchChrome();const page=chrome.page;
     await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
-    await page.navigate('http://127.0.0.1:'+server.address().port+'/');await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
+    const url=process.env.HTMLMEMO_SIDEBAR_TEST_URL||'http://127.0.0.1:'+server.address().port+'/';
+    await page.navigate(url);await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
     await page.evaluate(`(async()=>{const root=await navigator.storage.getDirectory();for(const [name,html] of Object.entries(${JSON.stringify({'edition-1.html':oldEdition,'edition-2.html':newEdition})})){const handle=await root.getFileHandle(name,{create:true});const writer=await handle.createWritable();await writer.write(html);await writer.close();}
       window.pick=name=>{window.showOpenFilePicker=async()=>[await root.getFileHandle(name)];};})()`);
     const frame='document.querySelector(".document-host:not([hidden]) iframe")';
     await page.evaluate('window.pick("edition-1.html")');await clickLibraryImport(page);
     await page.waitFor(`${frame}?.contentDocument?.querySelectorAll('[data-htmlmemo-mark]').length >= 2 && !document.querySelector('#toolbar').hidden && document.querySelector("#status-left").textContent.includes("자동 저장됨")`,20000);
+    const original=await page.evaluate(`(async()=>{const s=await import('./src/storage.js'),r=await s.getDocument((await s.listDocuments())[0].id);return {id:r.id,metadata:r.metadata,html:r.html};})()`);
     await page.evaluate('window.pick("edition-2.html")');
     await page.click('[data-action=more]');{const reach=await page.evaluate('(()=>{const b=document.querySelector("[data-more=migrate]");b.scrollIntoView({block:"center"});const r=b.getBoundingClientRect(),hit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);return {ok:b.contains(hit),rect:[r.x,r.y,r.width,r.height].map(Math.round),view:[innerWidth,innerHeight],hit:hit&&(hit.id||hit.className||hit.localName),popover:(()=>{const p=document.querySelector("#tool-popover").getBoundingClientRect();return [p.x,p.y,p.width,p.height].map(Math.round);})()};})()');assert.ok(reach.ok,'the menu item is reachable: '+JSON.stringify(reach));}await page.click('[data-more=migrate]');
     try{await page.waitFor('!!document.querySelector("#dialog[open] .migrate-summary")',30000);}
     catch(error){throw new Error(error.message+' — '+JSON.stringify(await page.evaluate('({toast:document.querySelector("#toast").textContent,dialog:document.querySelector("#dialog").open&&document.querySelector("#dialog").innerText,popover:!document.querySelector("#tool-popover").hidden})'))+' '+chrome.errors.join(' | '));}
     const summary=await page.evaluate('document.querySelector("#dialog").innerText');
     assert.match(summary,/주석 4개 가운데 3개/);assert.match(summary,/그대로 있는 자리: 1개/);assert.match(summary,/고쳐졌거나 옮겨진 자리: 2개/);assert.match(summary,/지워진 내용: 1개/);
+    assert.match(summary,/새 판으로 주석\/북마크 옮기기/);assert.match(summary,/북마크 3개 가운데 2개/);assert.match(summary,/본문 위치를 찾은 북마크: 1개/);assert.match(summary,/해당 장 시작으로 옮기는 북마크: 1개/);assert.match(summary,/옮기지 않는 북마크: 1개/);
     await page.evaluate('document.querySelector("#dialog details").open=true');
     assert.match(await page.evaluate('document.querySelector("#dialog details").innerText'),/밑줄 이 문단은 다음 판에서 통째로 지워집니다\. — 설치/);
-    await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/migrate-report.png'),await page.screenshot());
+    await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/pages-only-migrate-report-1280.png'),await page.screenshot());
+    await page.send('Emulation.setDeviceMetricsOverride',{width:320,height:640,deviceScaleFactor:1,mobile:true});
+    assert.equal(await page.evaluate('(()=>{const d=document.querySelector("#dialog"),r=d.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth+1&&d.scrollWidth<=d.clientWidth+1;})()'),true);
+    await writeFile(join(root,'test-results/pages-only-migrate-report-320.png'),await page.screenshot());
+    await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
     await page.click('#dialog button[value=confirm]');
     await page.waitFor(`document.querySelectorAll(".tab.document").length===2 && ${frame}?.contentDocument?.querySelector('#reader-content')?.dataset.section==='v0:intro' && document.querySelector("#status-left").textContent.includes("자동 저장됨")`,30000);
-    const records=await page.evaluate(`(async()=>{const {listDocuments,getDocument}=await import('./src/storage.js');const list=await listDocuments();return Promise.all(list.map(async r=>({id:r.id,annotations:(await getDocument(r.id)).metadata.annotations})));})()`);
+    const records=await page.evaluate(`(async()=>{const {listDocuments,getDocument}=await import('./src/storage.js');const list=await listDocuments();return Promise.all(list.map(async r=>({id:r.id,...(await getDocument(r.id)).metadata})));})()`);
     assert.equal(records.length,2,'the old edition stays in the library');
     const moved=records.find(r=>r.annotations.some(a=>a.textAnchor?.section==='v0:check')).annotations;
     assert.deepEqual(moved.map(a=>a.id).sort(),['install-mark','install-pen','result-mark']);
     assert.equal(moved.find(a=>a.id==='install-mark').textAnchor.quote,install2);
     assert.equal(records.find(r=>r!==records.find(x=>x.annotations===moved)).annotations.length,4,'the old document keeps every annotation');
+    const next=records.find(r=>r.id!==original.id),movedMark=next.bookmarks.find(m=>m.title==='결과 문단 북마크');
+    assert.equal(next.bookmarks.length,3);assert.equal(new Set(next.bookmarks.map(m=>m.id)).size,3);assert.notEqual(movedMark.id,'result-bookmark');assert.equal(movedMark.section,'v0:check');assert.equal(next.bookmarks.find(m=>m.id==='chapter-bookmark').editionPosition,'section');
+    assert.deepEqual(records.find(r=>r.id===original.id).bookmarks,original.metadata.bookmarks);
+    assert.equal(await page.evaluate(`(async()=>{return (await(await import('./src/storage.js')).getDocument(${JSON.stringify(original.id)})).html;})()`),original.html);
     // The new edition shows each annotation in its own section.
     await page.evaluate(`${frame}.contentWindow.location.hash='#'+encodeURIComponent('v0:setup')`);
     await page.waitFor(`${frame}.contentDocument.querySelector('[data-htmlmemo-mark]')?.textContent===${JSON.stringify(install2)} && !!${frame}.contentDocument.querySelector('#htmlmemo-annotation-layer [data-htmlmemo-id="install-pen"]')`,15000);
     await page.evaluate(`${frame}.contentWindow.location.hash='#'+encodeURIComponent('v0:check')`);
     await page.waitFor(`${frame}.contentDocument.querySelector('[data-htmlmemo-mark]')?.textContent===${JSON.stringify(result)} && !${frame}.contentDocument.querySelector('#htmlmemo-annotation-layer [data-htmlmemo-id="install-pen"]')`,15000);
-    await writeFile(join(root,'test-results/migrate-new-edition.png'),await page.screenshot());
+    const doc=`${frame}.contentDocument`,clickNative=async selector=>{
+      const p=await page.evaluate(`(()=>{const f=${frame},n=f.contentDocument.querySelector(${JSON.stringify(selector)});n.scrollIntoView({block:'center'});const r=n.getBoundingClientRect(),b=f.getBoundingClientRect(),s=b.width/f.offsetWidth;return {x:b.left+(r.left+r.width/2)*s,y:b.top+(r.top+r.height/2)*s};})()`);
+      await page.send('Input.dispatchMouseEvent',{type:'mousePressed',...p,button:'left',clickCount:1});await page.send('Input.dispatchMouseEvent',{type:'mouseReleased',...p,button:'left',clickCount:1});
+    };
+    await clickNative('[data-sidebar-view=bookmarks]');await revealBookmark(page,doc,'chapter-bookmark',clickNative);await clickNative('[data-bookmark=chapter-bookmark]');await page.waitFor(`${doc}.getElementById('reader-content').dataset.section==='v0:appendix'&&document.querySelector('#toast').textContent.includes('해당 장 시작')`);
+    await revealBookmark(page,doc,movedMark.id,clickNative);await clickNative(`[data-bookmark="${movedMark.id}"]`);await page.waitFor(`${doc}.getElementById('reader-content').dataset.section==='v0:check'&&Math.abs(${doc}.getElementById('moved-bookmark').getBoundingClientRect().top)<5`);
+    await writeFile(join(root,'test-results/pages-only-migrate-new-edition.png'),await page.screenshot());
+    // Portable anchors and bookmarks survive closing and opening the new document.
+    await page.waitFor('!document.querySelector(".tab-dirty:not([hidden])")');await page.navigate(url);await page.waitFor(`document.querySelector('[data-open="${next.id}"]')`);await page.click(`[data-open="${next.id}"]`);await page.waitFor(`${frame}?.style.visibility==='visible'`);
+    await clickNative('[data-sidebar-view=bookmarks]');await revealBookmark(page,doc,movedMark.id,clickNative);await clickNative(`[data-bookmark="${movedMark.id}"]`);await page.waitFor(`${doc}.getElementById('reader-content').dataset.section==='v0:check'&&Math.abs(${doc}.getElementById('moved-bookmark').getBoundingClientRect().top)<5`);
+    await writeFile(join(root,'test-results/pages-only-edition-bookmarks.json'),JSON.stringify({oldPreserved:true,annotations:moved.length,bookmarksTransferred:2,embeddedBookmarkPreserved:true,collidingIDsSeparated:true,exactJump:true,chapterFallback:true,reopened:true,mobileWidth:320,errors:chrome.errors},null,2));
     assert.deepEqual(chrome.errors,[]);
+  }catch(error){
+    if(chrome){await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/pages-only-edition-failure.png'),await chrome.page.screenshot());await writeFile(join(root,'test-results/pages-only-edition-failure.json'),JSON.stringify({message:error.message,errors:chrome.errors,state:await chrome.page.evaluate(`(()=>{const d=document.querySelector('.document-host:not([hidden]) iframe')?.contentDocument;return {dialog:document.querySelector('#dialog')?.innerText,toast:document.querySelector('#toast')?.textContent,section:d?.getElementById('reader-content')?.dataset.section,bookmark:d?.getElementById('moved-bookmark')?.getBoundingClientRect().toJSON(),sidebar:!!d?.querySelector('[data-sidebar-view=bookmarks]'),scroll:d?.defaultView.scrollY};})()`)},null,2));}
+    throw error;
   }finally{if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
 });
 

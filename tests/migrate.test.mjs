@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {deflateRawSync} from 'node:zlib';
 import {documentFor,installDOM} from './dom.mjs';
 import {crc32} from '../public/src/zip.js';
-import {textIndex,describeDrawingTarget,resolveTextAnchor} from '../public/src/document.js';
+import {textIndex,describeDrawingTarget,resolveTextAnchor,captureBookmarkAnchors} from '../public/src/document.js';
 import {locateQuote,locateElement,unzipEntry,migrateAnnotations,similarity} from '../public/src/migrate.js';
 installDOM();
 
@@ -108,4 +108,54 @@ test('ordinary pages move in one pass over the whole page',async()=>{
   const next=documentFor('<html><body><p>새 머리말</p><h1>글</h1><p>바뀌지 않는 문장입니다.</p><p>그림을 그린 문단입니다.</p></body></html>');
   const {annotations:moved,report}=await migrateAnnotations({annotations,oldDoc:old,probe:{doc:next,show:async()=>{}}});
   assert.equal(report.same,2);assert.equal(moved[1].anchorTarget.quote,'그림을 그린 문단입니다.');assert.equal(moved[1].anchor,'body');
+});
+
+test('bookmarks move with annotations across editions, distinguish chapter fallbacks and keep independent IDs',async()=>{
+  const sentence='실행 뒤에 결과를 확인하고 완료한 작업을 기록합니다.';
+  const old=book([{book:'guide',sections:[section(0,'a','첫 장'),section(0,'b','나중 장'),section(0,'removed','삭제 장')]}],{
+    'v0:a':{markdown:sentence,html:`<p>${sentence}</p>`},'v0:b':{markdown:'유지한 장',html:'<p>유지한 장입니다.</p>'},'v0:removed':{markdown:'삭제',html:'<p>삭제된 장</p>'}});
+  await old.show('v0:a');const target=describeDrawingTarget(old.doc,old.doc.querySelector('p'));
+  const marks=[{id:'shared',title:'이동한 문단',top:800,left:20,section:'v0:a',anchorTarget:target,anchorOffset:.25},
+    {id:'chapter',title:'나중에 읽을 장',top:400,left:10,section:'v0:b'},
+    {id:'gone',title:'지워진 장',top:0,left:0,section:'v0:removed'},
+    {id:'unknown',title:'장 정보 없음',top:100,left:0}];
+  const annotation={id:'shared',type:'highlight',textAnchor:{...anchorIn(textIndex(old.doc).text,sentence),section:'v0:a'}};
+  const before=structuredClone({marks,annotation});
+  const next=book([{book:'guide',sections:[section(1,'a','첫 장'),section(1,'b','나중 장'),section(1,'c','새 자리')]}],{
+    'v1:a':{markdown:'본문을 바꿨습니다.',html:'<p>본문을 바꿨습니다.</p>'},'v1:b':{markdown:'유지한 장',html:'<p>유지한 장입니다.</p>'},'v1:c':{markdown:sentence,html:`<p>${sentence}</p>`}});
+  const moved=await migrateAnnotations({annotations:[annotation],bookmarks:marks,oldDoc:old.doc,probe:{doc:next.doc,show:key=>next.showTracked(key)}});
+  assert.equal(moved.annotations[0].textAnchor.section,'v1:c');assert.deepEqual(moved.bookmarks.map(m=>[m.id,m.section,m.editionPosition]),[['shared','v1:c','text'],['chapter','v1:b','section']]);
+  assert.equal(moved.bookmarks[0].anchorTarget.quote,sentence);assert.equal(moved.bookmarks[0].anchorOffset,.25);assert.equal(moved.bookmarks[0].title,'이동한 문단');assert.equal(moved.bookmarks[1].top,0);
+  assert.equal(moved.bookmarkReport.same,1);assert.equal(moved.bookmarkReport.approximate,1);assert.deepEqual(moved.bookmarkReport.deleted.map(m=>m.id),['gone']);assert.deepEqual(moved.bookmarkReport.unplaceable.map(m=>m.id),['unknown']);
+  assert.deepEqual({marks,annotation},before);assert.ok(next.shown.every(key=>['v1:a','v1:b','v1:c'].includes(key)));
+});
+
+test('coordinate-only page bookmarks acquire text anchors and follow edited paragraphs instead of old pixels',async()=>{
+  const old=documentFor('<html><body><nav><p>메뉴</p></nav><h1>책</h1><p id="place">북마크로 기억해 둘 중요한 문단입니다.</p></body></html>');
+  old.querySelector('h1').getBoundingClientRect=()=>({top:0,height:30,width:300});old.getElementById('place').getBoundingClientRect=()=>({top:80,height:100,width:300});
+  const marks=[{id:'one',title:'내가 정한 이름',top:205,left:12}],before=structuredClone(marks);
+  const anchored=captureBookmarkAnchors(old,marks,{top:-100});assert.equal(anchored[0].anchorTarget.quote,'북마크로 기억해 둘 중요한 문단입니다.');assert.equal(anchored[0].anchorOffset,.25);assert.deepEqual(marks,before);
+  const next=documentFor('<html><body><h1>추가된 머리말</h1><p>완전히 새로운 문단입니다.</p><p id="place">북마크로 기억해 둘 아주 중요한 문단입니다.</p></body></html>');
+  const result=await migrateAnnotations({bookmarks:anchored,oldDoc:old,probe:{doc:next,show:async()=>{}}});
+  assert.equal(result.annotations.length,0);assert.equal(result.bookmarks.length,1);assert.equal(result.bookmarks[0].anchorTarget.quote,'북마크로 기억해 둘 아주 중요한 문단입니다.');assert.equal(result.bookmarkReport.changed,1);assert.equal(result.bookmarks[0].title,'내가 정한 이름');assert.equal(result.bookmarks[0].section,undefined);
+  // A reused ID with unrelated text must not invent a successful position.
+  next.getElementById('place').textContent='맛있는 요리와 재료 선택';
+  const deleted=await migrateAnnotations({bookmarks:anchored,oldDoc:old,probe:{doc:next,show:async()=>{}}});assert.equal(deleted.bookmarks.length,0);assert.equal(deleted.bookmarkReport.deleted.length,1);
+});
+
+test('bookmark migration reports unreadable chapters without claiming deletion and rejects unsafe target selectors',async()=>{
+  const old=book([{book:'guide',sections:[section(0,'a','첫 장')]}],{'v0:a':{markdown:'본문',html:'<p>본문</p>'}});
+  const next=book([{book:'guide',sections:[section(1,'a','첫 장')]}],{'v1:a':{markdown:'본문',html:'<p>본문</p>'}});let attempts=0;
+  const marks=[{id:'fail',title:'열지 못한 장',top:0,left:0,section:'v0:a'},{id:'unsafe',title:'잘못된 위치',top:0,left:0,anchorTarget:{tag:'[',quote:'본문',id:'',rootId:'',path:[]}}];
+  const result=await migrateAnnotations({bookmarks:marks,oldDoc:old.doc,probe:{doc:next.doc,show:async()=>{attempts++;throw Error('본문 준비 실패');}}});
+  assert.equal(attempts,1);assert.equal(result.bookmarks.length,0);assert.deepEqual(result.bookmarkReport.unchecked.map(m=>m.id),['fail']);assert.equal(result.bookmarkReport.deleted.length,0);assert.deepEqual(result.bookmarkReport.unplaceable.map(m=>m.id),['unsafe']);
+  await old.show('v0:a');old.doc.querySelector('p').getBoundingClientRect=()=>({top:0,height:50,width:300});
+  const unknown={id:'unknown',title:'장 정보 없음',top:5,left:0};assert.deepEqual(captureBookmarkAnchors(old.doc,[unknown],{top:0}),[unknown],'unknown chapters must not inherit the currently open chapter');
+});
+
+test('coordinate-only chapter bookmarks do not decompress unrelated book bodies',async()=>{
+  const next=book([{book:'guide',sections:[section(0,'a','첫 장')]}],{'v0:a':{markdown:'본문',html:'<p>본문</p>'}});
+  Object.defineProperty(next.doc.getElementById('book-volume-0'),'textContent',{get(){throw Error('Unneeded payload read');}});
+  const result=await migrateAnnotations({bookmarks:[{id:'one',title:'시작',top:20,left:0,section:'v0:a'}],probe:next});
+  assert.equal(result.bookmarks.length,1);assert.equal(result.bookmarkReport.approximate,1);
 });

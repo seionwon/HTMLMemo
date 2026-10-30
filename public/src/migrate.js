@@ -1,9 +1,9 @@
-// 「새 판으로 주석 옮기기」 — find each annotation of an old edition in a new edition of the
+// 「새 판으로 주석/북마크 옮기기」 — find each annotation and bookmark in a new edition of the
 // same document. A book keeps being edited: sentences are reworded, sections move, some are
 // removed. An annotation follows its text (or the paragraph it was drawn on) to wherever that text
 // now is, survives small rewording, and is dropped only when its text is gone from the new edition.
 import { TEXT_TOOLS } from './model.js';
-import { textIndex, rangeFromOffsets, describeDrawingTarget, drawingTargetQuote, LOCAL_CSP } from './document.js';
+import { textIndex, rangeFromOffsets, describeDrawingTarget, drawingTargetQuote, bookmarkAnchorTarget, LOCAL_CSP } from './document.js';
 import { IsolatedRuntime,needsIsolatedRuntime } from './isolated-runtime.js';
 
 const CONTEXT = 40;
@@ -208,7 +208,7 @@ export async function openEditionProbe(snapshot, {timeout = 60000} = {}) {
 }
 
 // ── The move itself. `probe` is the opened new edition: {doc, show(sectionKey)}.
-export async function migrateAnnotations({annotations, oldDoc = null, probe, onProgress = () => {}}) {
+export async function migrateAnnotations({annotations = [], bookmarks = [], oldDoc = null, probe, onProgress = () => {}}) {
   const oldBook = bookManifest(oldDoc), newBook = bookManifest(probe.doc);
   const oldSections = new Map((oldBook?.volumes || []).flatMap(v => v.sections.map(s => [s.key, {...s, book: v.book}])));
   const newSections = (newBook?.volumes || []).flatMap(v => v.sections.map(s => ({...s, book: v.book})));
@@ -217,10 +217,13 @@ export async function migrateAnnotations({annotations, oldDoc = null, probe, onP
     if (!key) return '';
     const old = oldSections.get(key);
     if (!old) return newKeys.has(key) ? key : '';
-    return (newSections.find(s => s.book === old.book && s.id === old.id) || newSections.find(s => s.id === old.id))?.key || '';
+    const sameBook=newSections.find(s => s.book === old.book && s.id === old.id);
+    const sameId=newSections.filter(s => s.id === old.id);
+    return (sameBook || (sameId.length===1 ? sameId[0] : null))?.key || '';
   };
-  const placed = new Map(), failedSections = new Map(), work = annotations.map(annotation => ({annotation, tried: new Set(),
-    text: annotation.textAnchor || null, target: annotation.anchorTarget || null}));
+  const placed = new Map(), failedSections = new Map(), work = [
+    ...annotations.map(annotation => ({annotation, tried: new Set(),text: annotation.textAnchor || null, target: annotation.anchorTarget || null})),
+    ...bookmarks.map(annotation => ({annotation,bookmark:true,tried:new Set(),text:null,target:bookmarkAnchorTarget(annotation)}))];
   let index = null, range = [0, 0], current = null;
   const view = async key => {
     if (current === key && index) return;
@@ -231,8 +234,24 @@ export async function migrateAnnotations({annotations, oldDoc = null, probe, onP
     range = inside.length ? [inside[0].start, inside.at(-1).end] : [0, 0];
     return root;
   };
-  const place = (item, key) => {
+  const place = (item, key, approximate=false) => {
     const {annotation} = item, doc = probe.doc, root = (key && doc.getElementById('reader-content')) || doc.body;
+    if(item.bookmark){
+      let hit=item.target&&!approximate?locateElement(doc,root,item.target):null;
+      // Reused element IDs alone cannot prove that a bookmark's text survived.
+      if(hit?.similarity<ELEMENT_MATCH)hit=null;
+      if(!hit&&!approximate&&item.target){
+        const quoteHit=locateQuote(index.text,{quote:item.target.quote},range[0],range[1]);
+        const element=quoteHit&&blockOf(doc,rangeFromOffsets(doc,quoteHit.start,quoteHit.end,index)?.startContainer);
+        if(element&&element!==doc.body)hit={element,similarity:quoteHit.similarity};
+      }
+      if(!hit&&!approximate)return false;
+      const next=structuredClone(annotation);delete next.heading;delete next.anchorTarget;delete next.anchorOffset;
+      if(key)next.section=key;else delete next.section;
+      next.top=0;next.left=0;next.editionPosition=approximate?'section':'text';
+      if(hit){next.anchorTarget=describeDrawingTarget(doc,hit.element);next.anchorOffset=Number.isFinite(annotation.anchorOffset)?Math.max(0,Math.min(1,annotation.anchorOffset)):0;}
+      placed.set(item,{annotation:next,status:approximate?'approximate':hit.similarity===1?'same':'changed',section:key});return true;
+    }
     const textHit = item.text ? locateQuote(index.text, item.text, range[0], range[1]) : null;
     let element = null, elementScore = 1;
     if (!TEXT_TOOLS.includes(annotation.type)) {
@@ -247,10 +266,10 @@ export async function migrateAnnotations({annotations, oldDoc = null, probe, onP
     else delete next.textAnchor;
     if (element) { next.anchor = 'body'; next.anchorTarget = describeDrawingTarget(doc, element); }
     const same = (!item.text || textHit?.similarity === 1) && elementScore === 1;
-    placed.set(annotation.id, {annotation: next, status: same ? 'same' : 'changed', section: key});
+    placed.set(item, {annotation: next, status: same ? 'same' : 'changed', section: key});
     return true;
   };
-  const movable = work.filter(item => item.text || item.target);
+  const movable = work.filter(item => item.text || item.target || item.bookmark&&mapKey(item.annotation.section));
   if (!newBook) {
     onProgress(0, 1); await view(null);
     for (const item of movable) place(item, null);
@@ -260,10 +279,11 @@ export async function migrateAnnotations({annotations, oldDoc = null, probe, onP
     // the sections whose text contains it — for moved sections and for annotations made before
     // HTMLMemo recorded sections.
     const order = new Map(newSections.map((s, i) => [s.key, i]));
-    const run = async (plan, label) => {
+    const run = async (plan, label, approximate=false) => {
       const keys = [...plan.keys()].sort((a, b) => order.get(a) - order.get(b));
       for (const [i, key] of keys.entries()) {
         onProgress(i, keys.length, label);
+        if(failedSections.has(key)){for(const item of plan.get(key))item.unchecked=true;continue;}
         try { await view(key); } catch (error) {
           // One section that will not render must not stop the move. Its annotations are reported
           // as unchecked instead of deleted.
@@ -271,16 +291,16 @@ export async function migrateAnnotations({annotations, oldDoc = null, probe, onP
           for (const item of plan.get(key)) item.unchecked = true;
           continue;
         }
-        for (const item of plan.get(key)) if (!placed.has(item.annotation.id)) { item.tried.add(key); place(item, key); }
+        for (const item of plan.get(key)) if (!placed.has(item)) { item.tried.add(key); place(item, key,approximate); }
       }
     };
     const first = new Map();
     for (const item of movable) {
-      const key = mapKey(item.text?.section || item.target?.section || '');
+      const key = mapKey(item.bookmark?item.annotation.section:item.text?.section || item.target?.section || '');
       if (key) first.set(key, [...(first.get(key) || []), item]);
     }
     await run(first, 'section');
-    const rest = movable.filter(item => !placed.has(item.annotation.id));
+    const rest = movable.filter(item => !placed.has(item)&&(item.text?.quote||item.target?.quote));
     if (rest.length) {
       const bodies = [];
       for (const [volume, entry] of newBook.volumes.entries()) {
@@ -298,15 +318,23 @@ export async function migrateAnnotations({annotations, oldDoc = null, probe, onP
       }
       await run(second, 'search');
     }
+    // Coordinate-only bookmarks, or bookmarks whose paragraph disappeared, still identify
+    // a chapter. Keep that useful location, explicitly marked as approximate, never old pixels.
+    const fallback=new Map();
+    for(const item of work.filter(item=>item.bookmark&&!placed.has(item))){
+      const key=mapKey(item.annotation.section);if(key)fallback.set(key,[...(fallback.get(key)||[]),item]);
+    }
+    await run(fallback,'section',true);
   }
-  const report = {same: 0, changed: 0, deleted: [], unplaceable: [], unchecked: [], failedSections: [...failedSections.values()]};
-  const moved = [];
+  const emptyReport=()=>({same:0,changed:0,deleted:[],unplaceable:[],unchecked:[],failedSections:[...failedSections.values()]});
+  const report=emptyReport(),bookmarkReport={...emptyReport(),approximate:0};
+  const moved = [],movedBookmarks=[];
   for (const item of work) {
-    const result = placed.get(item.annotation.id);
-    if (result) { moved.push(result.annotation); report[result.status]++; }
-    else if (item.unchecked) report.unchecked.push(item.annotation);
-    else if (item.text || item.target) report.deleted.push(item.annotation);
-    else report.unplaceable.push(item.annotation);
+    const result=placed.get(item),counts=item.bookmark?bookmarkReport:report;
+    if (result) { (item.bookmark?movedBookmarks:moved).push(result.annotation); counts[result.status]++; }
+    else if (item.unchecked) counts.unchecked.push(item.annotation);
+    else if (item.text || item.target || item.bookmark&&item.annotation.section) counts.deleted.push(item.annotation);
+    else counts.unplaceable.push(item.annotation);
   }
-  return {annotations: moved, report, oldSections};
+  return {annotations:moved,bookmarks:movedBookmarks,report,bookmarkReport,oldSections};
 }

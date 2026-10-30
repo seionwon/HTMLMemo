@@ -3,7 +3,7 @@ import { SearchIndexCache } from './search-index.js';
 import { IsolatedRuntime,needsIsolatedRuntime } from './isolated-runtime.js';
 import { clamp, uid, icon } from './utils.js';
 import { History, TEXT_TOOLS, DRAW_TOOLS, FILL_TOOLS } from './model.js';
-import { LAYER_ID, LOCAL_CSP, parseHTML, savedMainFrame, prepareLoadedHTML, cleanAnnotations, textIndex, selectionAnchor, resolveTextAnchor, wrapOffsets, rangeFromOffsets, sentenceOffsets, serializeHTML, inspectBookDocument, drawingTargetQuote, describeDrawingTarget, currentSection } from './document.js';
+import { LAYER_ID, LOCAL_CSP, parseHTML, savedMainFrame, prepareLoadedHTML, cleanAnnotations, textIndex, selectionAnchor, resolveTextAnchor, wrapOffsets, rangeFromOffsets, sentenceOffsets, serializeHTML, inspectBookDocument, drawingTargetQuote, describeDrawingTarget, currentSection, bookmarkAnchorTarget, captureBookmarkAnchors } from './document.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const TOC_WIDTH_KEY = 'htmlmemo-doc-toc-width-v1', TOC_EXPANDED_WIDTH_KEY = 'htmlmemo-doc-toc-expanded-width-v1', TOC_MIN = 8, TOC_STRIP_SNAP = 48, TOC_MAX = 640, TOC_DEFAULT = 260;
@@ -1874,7 +1874,7 @@ export class Reader {
       const range = rangeFromOffsets(this.doc, resolved.start, resolved.end,index); if (!range) return false;
       const rect = range.getBoundingClientRect(), element = range.startContainer.parentElement;
       const position = this.elementAnchor(element, true), origin = this.layerOrigin();
-      // The quote and paragraph let 「새 판으로 주석 옮기기」 find this note in a later edition.
+      // The quote and paragraph let 「새 판으로 주석/북마크 옮기기」 find this note in a later edition.
       this.commit([...this.metadata.annotations, this.annotation(type, {anchor:position.key, anchorTarget:position.target, textAnchor:this.sectionAnchor(anchor), points:[{x:(rect.left - origin.left - position.x)/position.width,y:(rect.top - origin.top - position.y)/position.height}], text:text.trim()})]);
     } else this.commit([...this.metadata.annotations, this.annotation(type, {textAnchor:this.sectionAnchor(anchor)})]);
     if(type==='note')this.restoreTextSelection(anchor);
@@ -2532,7 +2532,9 @@ export class Reader {
         if(!result.ready)throw new Error('북마크가 있는 장을 불러오지 못했습니다. 원본 책 목차에서 다시 열어 주세요. 북마크는 보관됩니다.');
         if(result.noticeShown)this.callbacks.onNotice?.('북마크 위치로 이동했습니다.');
       }
-      this.scrollTop=mark.top*this.zoom;this.scrollLeft=mark.left*this.zoom;this.callbacks.onView?.();
+      const position=this.bookmarkPosition(mark);
+      this.scrollTop=position.top*this.zoom;this.scrollLeft=position.left*this.zoom;this.callbacks.onView?.();
+      if(mark.editionPosition==='section')this.callbacks.onNotice?.('새 판의 해당 장 시작으로 이동했습니다. 이전 북마크의 정확한 본문 위치는 확인하지 못했습니다.');
       if(!section&&this.annotationBookPaths().size)this.callbacks.onNotice?.('이전 북마크에 장 정보가 없어 현재 장의 저장된 화면 위치로 이동했습니다.');
       return true;
     }catch(error){if(!this.disposed&&generation===this.annotationJumpGeneration)this.callbacks.onError?.(error);return false;}
@@ -2728,9 +2730,10 @@ export class Reader {
     const savedPaths=new Map(paths.map(path=>[path.at(-1).id,path]));
     for(const mark of marks){
       if(mark.section&&mark.section!==section)continue;
+      const top=this.bookmarkPosition(mark).top;
       let path=savedPaths.get(mark.heading),lo=0,hi=positions.length-1,found=-1;
       if(!path){
-        while(lo<=hi){const mid=(lo+hi)>>1;if(positions[mid].top<=mark.top+1){found=mid;lo=mid+1;}else hi=mid-1;}
+        while(lo<=hi){const mid=(lo+hi)>>1;if(positions[mid].top<=top+1){found=mid;lo=mid+1;}else hi=mid-1;}
         path=found>=0?paths[positions[found].index]:[];
       }
       result.set(mark.id,path);
@@ -2811,10 +2814,19 @@ export class Reader {
   }
   outline() { return [...this.doc.querySelectorAll('h1,h2,h3,h4,h5,h6')].filter(n=>n.textContent.trim()&&!n.closest('[data-htmlmemo-ui]')).map(node=>({node,level:Number(node.localName[1]),title:node.textContent.trim()})); }
   addBookmark(title) {
-    const mark={id:uid(),title,top:this.scrollTop/this.zoom,left:this.scrollLeft/this.zoom},section=currentSection(this.doc);
+    let mark={id:uid(),title,top:this.scrollTop/this.zoom,left:this.scrollLeft/this.zoom};const section=currentSection(this.doc);
     if(section)mark.section=section;
     if(!this.annotationBookPaths().size){const path=this.bookmarkContexts([mark]).get(mark.id);if(path?.length)mark.heading=path.at(-1).id;}
+    [mark]=captureBookmarkAnchors(this.doc,[mark],this.layerOrigin());
     this.metadata.bookmarks.push(mark);this.callbacks.onChange?.();
+  }
+  bookmarksForEdition() { return captureBookmarkAnchors(this.doc,this.metadata.bookmarks,this.layerOrigin()); }
+  bookmarkPosition(mark) {
+    if(mark.editionPosition==='text'&&bookmarkAnchorTarget(mark)){
+      const element=this.resolveDrawingTarget(mark),rect=element?.getBoundingClientRect?.();
+      if(rect?.height>0){const offset=Number.isFinite(mark.anchorOffset)?clamp(mark.anchorOffset,0,1):0;return {top:Math.max(0,rect.top-this.layerOrigin().top+rect.height*offset),left:0};}
+    }
+    return {top:mark.top,left:mark.left};
   }
   readAloudPlayer() {
     if(this.disposed||this.host.hidden)return null;
