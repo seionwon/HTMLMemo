@@ -373,6 +373,7 @@ html[data-app-sidebar-resizing] iframe{pointer-events:none!important}
 .document-grid[data-view=list] .list-title:only-child{max-width:100%}
 .document-grid[data-view=list] .list-filename{flex:1 1 0}
 .document-grid[data-view=list] .list-date,.document-grid[data-view=list] .list-size{text-align:right}
+.document-grid[data-view=list] .card-time{display:none}
 .document-grid[data-view=list] .list-mark-counts{flex-wrap:nowrap;justify-content:flex-end}
 .document-grid[data-view=list] .list-annotations,.document-grid[data-view=list] .list-bookmarks,.document-grid[data-view=list] .list-progress{justify-content:flex-end;margin:0}
 .document-grid[data-view=list] .card-menu{top:50%;right:4px;transform:translateY(-50%)}
