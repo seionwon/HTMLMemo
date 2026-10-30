@@ -346,7 +346,7 @@ html[data-app-sidebar-resizing] iframe{pointer-events:none!important}
 .document-grid .document-card{border-radius:var(--radius-library)}
 .document-grid .document-card:hover{transform:none}
 .document-grid .card-open:focus-visible,.document-grid .card-menu:focus-visible{outline-offset:-2px}
-.document-grid .card-details{height:var(--spacing-library-card);padding:8px 12px}
+.document-grid .card-details{min-height:var(--spacing-library-card);height:auto;padding:8px 12px}
 .document-grid .list-file-icon{display:none}
 .document-grid .library-title{min-width:0;margin-bottom:4px}
 .document-grid .list-title{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;white-space:normal;overflow:hidden;overflow-wrap:anywhere;text-overflow:ellipsis;max-height:none;height:30px;margin:0 20px 0 0;padding:0;font:600 12px/15px var(--app-font);letter-spacing:0}
@@ -355,8 +355,9 @@ html[data-app-sidebar-resizing] iframe{pointer-events:none!important}
 .document-grid .card-source span{padding:0}
 .document-grid .list-host{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .document-grid .list-date{flex-shrink:0;white-space:nowrap;font-size:10px}
-.document-grid .card-meta{display:flex;align-items:center;gap:8px;font-size:10px;line-height:16px;color:var(--muted)}
-.document-grid .list-annotations,.document-grid .list-progress{display:flex;align-items:center;gap:4px;white-space:nowrap}
+.document-grid .card-meta{display:flex;flex-wrap:wrap;align-items:center;gap:0 8px;font-size:10px;line-height:16px;color:var(--muted)}
+.document-grid .list-mark-counts{display:flex;flex-wrap:wrap;align-items:center;gap:0 8px;max-width:100%}
+.document-grid .list-annotations,.document-grid .list-bookmarks,.document-grid .list-progress{display:flex;align-items:center;gap:4px;white-space:nowrap}
 .document-grid .list-progress{margin-left:auto;color:var(--green)}
 .document-grid .card-menu{top:4px;right:4px;width:24px;height:24px;border-radius:4px}
 .document-grid[data-view=list]{display:flex;flex-direction:column;gap:0;border:1px solid var(--line);border-radius:var(--radius-library);padding:0;margin-bottom:16px;overflow:hidden;background:var(--surface)}
@@ -364,7 +365,7 @@ html[data-app-sidebar-resizing] iframe{pointer-events:none!important}
 .document-grid[data-view=list] .document-card{border:0;border-bottom:1px solid var(--line);border-radius:0;box-shadow:none}
 .document-grid[data-view=list] .document-card:last-child{border-bottom:0}
 .document-grid[data-view=list] .document-card:hover{background:var(--surface-muted)}
-.document-grid[data-view=list] .card-details{display:grid;grid-template-columns:16px minmax(100px,1fr) minmax(80px,150px) 66px 48px 56px 84px;align-items:center;gap:8px;width:100%;height:var(--spacing-library-row);padding:0 36px 0 10px;color:var(--muted);font-size:10px;white-space:nowrap}
+.document-grid[data-view=list] .card-details{display:grid;min-height:0;grid-template-columns:16px minmax(100px,1fr) minmax(80px,150px) 66px minmax(70px,max-content) 56px 84px;align-items:center;gap:8px;width:100%;height:var(--spacing-library-row);padding:0 36px 0 10px;color:var(--muted);font-size:10px;white-space:nowrap}
 .document-grid[data-view=list] .card-source,.document-grid[data-view=list] .card-meta{display:contents}
 .document-grid[data-view=list] .list-file-icon{display:flex;color:var(--green)}
 .document-grid[data-view=list] .library-title{display:flex;align-items:baseline;gap:6px;overflow:hidden;margin:0}
@@ -372,11 +373,12 @@ html[data-app-sidebar-resizing] iframe{pointer-events:none!important}
 .document-grid[data-view=list] .list-title:only-child{max-width:100%}
 .document-grid[data-view=list] .list-filename{flex:1 1 0}
 .document-grid[data-view=list] .list-date,.document-grid[data-view=list] .list-size{text-align:right}
-.document-grid[data-view=list] .list-annotations,.document-grid[data-view=list] .list-progress{justify-content:flex-end;margin:0}
+.document-grid[data-view=list] .list-mark-counts{flex-wrap:nowrap;justify-content:flex-end}
+.document-grid[data-view=list] .list-annotations,.document-grid[data-view=list] .list-bookmarks,.document-grid[data-view=list] .list-progress{justify-content:flex-end;margin:0}
 .document-grid[data-view=list] .card-menu{top:50%;right:4px;transform:translateY(-50%)}
 @media(max-width:900px){
  .library-controls{flex-wrap:wrap;justify-content:flex-end}
- .document-grid[data-view=list] .card-details{grid-template-columns:16px minmax(100px,1fr) 66px 48px 84px}
+ .document-grid[data-view=list] .card-details{grid-template-columns:16px minmax(100px,1fr) 66px minmax(70px,max-content) 84px}
  .document-grid[data-view=list] .list-host,.document-grid[data-view=list] .list-size{display:none}
 }
 @media(max-width:600px){
@@ -390,7 +392,7 @@ html[data-app-sidebar-resizing] iframe{pointer-events:none!important}
  .document-grid .list-progress svg{width:13px;height:13px}
  .library-view-button span{display:none}
  .library-view-button{width:27px;padding:0}
- .document-grid[data-view=list] .card-details{grid-template-columns:16px minmax(0,1fr) 60px 36px;gap:6px;height:32px;padding:0 34px 0 8px}
+ .document-grid[data-view=list] .card-details{grid-template-columns:16px minmax(0,1fr) 60px minmax(60px,max-content);gap:6px;height:32px;padding:0 34px 0 8px}
  .document-grid[data-view=list] .list-progress{display:none}
 }
 
@@ -504,6 +506,11 @@ dialog:has(.help-browser) #dialog-content{height:100%;min-height:0}
  #library-breadcrumbs{flex-basis:calc(100% - 34px)}
  .library-folder-bar>.secondary-button{margin-top:2px}
 }
+@media(max-width:360px){
+ .document-grid[data-view=list] .list-date{display:none}
+ .document-grid[data-view=list] .card-details{grid-template-columns:16px minmax(0,1fr) minmax(60px,max-content)}
+}
+
 @media(max-width:300px){
  .about-brand{gap:10px}
  .about-brand img{width:40px;height:40px}
