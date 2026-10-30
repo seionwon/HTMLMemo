@@ -44,7 +44,8 @@ test('fetched-page script handling and complete-book protection are delegated to
 });
 test('pasted text becomes escaped, paragraph-preserving HTML with an optional validated source',()=>{
   const snapshot=pastedPage({title:'<제목>',text:'<script>alert(1)</script>\n다음 줄\n\n두 번째 문단',url:'https://source.example/a?q=1&b=2'});
-  assert.match(snapshot.html,/&lt;script&gt;/);assert.doesNotMatch(snapshot.html,/<script>/);assert.match(snapshot.html,/다음 줄<\/p><p>두 번째 문단/);assert.match(snapshot.html,/<br>/);assert.match(snapshot.html,/&lt;제목&gt;/);assert.equal(snapshot.url,'https://source.example/a?q=1&b=2');assert.match(snapshot.html,/q=1&amp;b=2/);
+  const doc=new DOMParser().parseFromString(snapshot.html,'text/html'),paragraphs=doc.querySelectorAll('article>p');
+  assert.equal(doc.querySelector('script'),null);assert.match(paragraphs[0].textContent,/<script>alert\(1\)<\/script>\n다음 줄/);assert.equal(paragraphs[0].querySelectorAll('br').length,1);assert.equal(paragraphs[1].textContent,'두 번째 문단');assert.equal(doc.querySelector('h1').textContent,'<제목>');assert.equal(snapshot.url,'https://source.example/a?q=1&b=2');assert.match(snapshot.html,/q=1&amp;b=2/);
 });
 test('empty/oversized pasted text and unsafe source addresses are rejected without silently truncating content',()=>{
   assert.throws(()=>pastedPage({text:' \n '}),/붙여넣어/);assert.throws(()=>pastedPage({text:'x'.repeat(PASTE_LIMIT+1)}),/200,000/);assert.throws(()=>pastedPage({text:'text',url:'javascript:alert(1)'}),/http 또는 https/);

@@ -32,6 +32,7 @@ test('the PWA is published at the app root with every offline resource and no in
   const manifest=JSON.parse(text(files,'manifest.webmanifest'));assert.equal(manifest.start_url,'./');assert.equal(manifest.scope,'./');
   const shell=JSON.parse(text(files,'sw.js').match(/const SHELL = (\[[^;]+\]);/)[1].replaceAll("'",'"'));
   for(const path of shell)assert.ok(files.has(path==='./'?'index.html':path.slice(2)),path);
+  for(const path of APP_FILES.filter(name=>name!=='sw.js'))assert.ok(shell.includes('./'+path),'offline resource: '+path);
   const copy=JSON.parse(text(files,'distribution.json'));assert.equal(copy.app['sw.js'].text,text(files,'sw.js'));
 });
 test('PWA cache versions cover app changes while retired extension input is ignored',()=>{
