@@ -945,7 +945,10 @@ export class Reader {
     if(!Number.isFinite(value)||this.disposed||this.preparing||this.topbarNode?.isConnected)return false;
     const scale=Math.round(clamp(value,.6,2.4)*10000)/10000;if(scale===this.readingFontScale())return false;
     this.cancelAnnotationDrag();this.metadata.view.fontScale=scale;this.applyReadingFont();
-    this.measure();this.renderDrawingLayer();this.readAloud?.refreshPaint?.();this.rememberPosition();this.updateReadingControls();this.callbacks.onView?.();return true;
+    this.measure();this.renderDrawingLayer();this.readAloud?.refreshPaint?.();
+    // Font scale was already applied to view above; unchanged scroll offsets
+    // must still notify the document writer about that setting change.
+    if(!this.rememberPosition())this.callbacks.onPosition?.();this.updateReadingControls();this.callbacks.onView?.();return true;
   }
   ensureDocumentTocResize() {
     if (this.disposed || !this.doc?.body) return null;

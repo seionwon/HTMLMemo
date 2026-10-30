@@ -855,6 +855,7 @@ test('real Chrome: Pages-only pasted reading controls default to outline and ret
     const id=await page.evaluate(`(async()=>{const rows=await(await import('./src/storage.js')).listDocuments();return rows.find(r=>r.title==='붙여넣기 읽기 도구').id;})()`),before=await font();
     await page.click(control('font-larger'));await page.click(control('font-larger'));await page.waitFor(ready+'&&'+saved);const enlarged=await font();assert.ok(parseFloat(enlarged)>parseFloat(before));
     assert.equal(await page.evaluate(`${doc}.querySelector('[data-htmlmemo-mark]').textContent`),'주석을 보존할 첫 문장입니다.');
+    await page.waitFor(`(async()=>{const r=await(await import('./src/storage.js')).getDocument(${JSON.stringify(id)});return r.metadata.view.fontScale===1.21;})()`);
     const savedRecord=await page.evaluate(`(async()=>{const r=await(await import('./src/storage.js')).getDocument(${JSON.stringify(id)});return {scale:r.metadata.view.fontScale,notes:r.metadata.annotations.length,sourceHasReaderStyle:r.html.includes('htmlmemo-reading-font-style')};})()`);assert.deepEqual(savedRecord,{scale:1.21,notes:1,sourceHasReaderStyle:false});report.font={before,enlarged,...savedRecord};
     await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/pages-only-pasted-reading-1280.png'),await page.screenshot());
     stage='small-screen';await page.click('#close-sidebar');await page.send('Emulation.setDeviceMetricsOverride',{width:320,height:844,deviceScaleFactor:1,mobile:true});

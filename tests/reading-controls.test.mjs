@@ -67,10 +67,14 @@ test('scrolling a long plain outline uses logarithmic geometry reads and no repe
 });
 test('font changes preserve document text and annotations and save a bounded setting without exporting reader styles',()=>{
   const {r,doc}=fixture();r.metadata.annotations=[{id:'kept-note',type:'note',text:'기록',color:'#334155',width:3,opacity:1,points:[{x:10,y:20}]}];
-  Object.assign(r,{viewport:{scrollTop:0,scrollLeft:0},cancelAnnotationDrag(){},measure(){},renderDrawingLayer(){}});
+  const writes=[];r.callbacks.onPosition=()=>writes.push(structuredClone(r.metadata.view));
+  Object.assign(r,{autoFit:false,viewport:{scrollTop:0,scrollLeft:0},cancelAnnotationDrag(){},measure(){},renderDrawingLayer(){}});
+  r.metadata.view={scrollTop:0,scrollLeft:0,zoom:r.zoom,autoFit:false};
   const before=textIndex(doc).text,notes=structuredClone(r.metadata.annotations),sourceBody=doc.body.getAttribute('style');r.setupReadingControls();
   r.plainReadingButtons.larger.onclick();assert.equal(r.metadata.view.fontScale,1.1);assert.match(doc.querySelector('#htmlmemo-reading-font-style').textContent,/19\.800px/);
+  assert.equal(writes.length,1);assert.equal(writes[0].fontScale,1.1,'a font-only change at the same scroll and zoom must reach the writer');
   r.setupReadingControls();assert.match(doc.querySelector('#htmlmemo-reading-font-style').textContent,/19\.800px/);assert.equal(doc.body.getAttribute('style'),sourceBody);
+  r.plainReadingButtons.larger.onclick();assert.equal(writes.length,2);assert.equal(writes[1].fontScale,1.21);
   assert.equal(textIndex(doc).text,before);assert.deepEqual(r.metadata.annotations,notes);assert.equal(r.setReadingFontScale(NaN),false);
   r.setReadingFontScale(100);assert.equal(r.metadata.view.fontScale,2.4);assert.equal(r.plainReadingButtons.larger.disabled,true);
   r.setReadingFontScale(-100);assert.equal(r.metadata.view.fontScale,.6);assert.equal(r.plainReadingButtons.smaller.disabled,true);
