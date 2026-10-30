@@ -2841,6 +2841,55 @@ test('real Chrome: Pages-only annotations and bookmarks move to a new edition wi
   }finally{if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
 });
 
+test('real Chrome: Pages-only precise bookmarks retain the saved text point across editions and reflow',{timeout:120000},async()=>{
+  await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-precise-bookmark-'));await cp(join(root,'public'),folder,{recursive:true});
+  const server=createServer(folder);let chrome;
+  const long=Array.from({length:90},(_,i)=>`${i+1}번째 기록을 살펴보며 정확한 본문 위치를 확인합니다. 각 문장은 서로 다른 번호를 가집니다.`).join(' '),repeat='같은 문장이 반복되어도 읽던 곳을 기억합니다. 중요한 부분은 따로 확인합니다.';
+  const body=(tag,id,text,font=20)=>`<${tag} id="${id}" style="max-width:640px;font:${font}px/1.8 system-ui">${text}</${tag}><div style="height:1000px"></div>`;
+  const repeated=`<h1>반복 문장의 장</h1><h2>첫 번째 항목</h2>${body('p','repeat-one',repeat)}<h2>두 번째 항목</h2>${body('p','repeat-two',repeat)}<p>두 번째 항목의 마무리</p>`;
+  const oldEdition=editionHTML('정확한 북마크 예전 판',[
+    {key:'v0:old',id:'old',title:'긴 본문',markdown:long,html:'<h1>긴 본문</h1>'+body('p','long',long)},
+    {key:'v0:repeat',id:'repeat',title:'반복 문장',markdown:repeat+' '+repeat,html:repeated},
+    {key:'v0:end',id:'end',title:'끝',markdown:'마지막 장',html:'<h1>마지막 장</h1>'}],[]);
+  const newEdition=editionHTML('정확한 북마크 새 판',[
+    {key:'v0:intro',id:'intro',title:'새 머리말',markdown:'새로 쓴 머리말',html:'<h1>새로 쓴 머리말</h1>'},
+    {key:'v0:moved',id:'moved',title:'옮겨진 본문',markdown:long,html:'<h1>옮겨진 본문</h1><p>앞에 추가한 문단입니다.</p>'+body('div','long',long.replaceAll(' 기록','  기록\n').replace('45번째','<strong>45번째</strong>'),26)},
+    {key:'v0:repeat',id:'repeat',title:'반복 문장',markdown:repeat+' '+repeat,html:'<p>새 설명입니다.</p>'+repeated}],[]);
+  try{
+    await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));chrome=await launchChrome();const page=chrome.page,url=process.env.HTMLMEMO_SIDEBAR_TEST_URL||`http://127.0.0.1:${server.address().port}/`;
+    await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});await page.navigate(url);await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
+    await page.evaluate(`(async()=>{const root=await navigator.storage.getDirectory();for(const [name,html] of Object.entries(${JSON.stringify({'precise-old.html':oldEdition,'precise-new.html':newEdition})})){const f=await root.getFileHandle(name,{create:true}),w=await f.createWritable();await w.write(html);await w.close();}window.pick=name=>{window.showOpenFilePicker=async()=>[await root.getFileHandle(name)];};})()`);
+    const frame='document.querySelector(".document-host:not([hidden]) iframe")',doc=frame+'.contentDocument';
+    await page.evaluate('window.pick("precise-old.html")');await clickLibraryImport(page);await page.waitFor(`${frame}?.style.visibility==='visible'&&${doc}.getElementById('long')`);
+    const originalID=await page.evaluate(`(async()=>(await(await import('./src/storage.js')).listDocuments())[0].id)()`),record=id=>page.evaluate(`(async()=>{const r=await(await import('./src/storage.js')).getDocument(${JSON.stringify(id)});return {id:r.id,html:r.html,metadata:r.metadata};})()`);
+    await page.click('#sidebar [data-sidebar-view=bookmarks]');
+    const save=async(selector,word,title)=>{
+      await page.evaluate(`(()=>{const d=${doc},n=d.querySelector(${JSON.stringify(selector)}).firstChild,r=d.createRange(),at=n.textContent.indexOf(${JSON.stringify(word)});r.setStart(n,at);r.setEnd(n,at+1);d.defaultView.scrollTo(0,d.defaultView.scrollY+r.getBoundingClientRect().top);})()`);
+      await page.evaluate('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');await page.click('#add-bookmark');await page.waitFor('document.querySelector("#note-text")');await page.evaluate(`document.querySelector('#note-text').value=${JSON.stringify(title)}`);await page.click('#dialog button[value=save]');await page.waitFor('!document.querySelector(".tab-dirty:not([hidden])")&&document.querySelector("#status-left").textContent.includes("자동 저장됨")');
+    };
+    await save('#long','45번째','긴 문단 중간');
+    await page.evaluate(`${frame}.contentWindow.location.hash='#'+encodeURIComponent('v0:repeat')`);await page.waitFor(`${doc}.getElementById('repeat-two')?.hasAttribute('data-htmlmemo-anchor')`);await save('#repeat-two','같은','두 번째 반복 문장');
+    const original=await record(originalID);assert.equal(original.metadata.bookmarks.length,2);assert.ok(original.metadata.bookmarks.every(m=>m.locationVersion===2&&m.textAnchor.quote&&m.textPoint>=0));assert.ok(original.metadata.bookmarks[0].textAnchor.start>1000);
+    await page.evaluate(`${frame}.contentWindow.location.hash='#'+encodeURIComponent('v0:end')`);await page.waitFor(`${doc}.getElementById('reader-content').dataset.section==='v0:end'`);
+    await page.evaluate('window.pick("precise-new.html")');await page.click('#toolbar [data-action=more]');await page.click('[data-more=migrate]');await page.waitFor('document.querySelector("#dialog[open] .migrate-summary")',30000);
+    const summary=await page.evaluate('document.querySelector("#dialog").innerText');assert.match(summary,/북마크 2개 가운데 2개/);assert.match(summary,/본문 위치를 찾은 북마크: 2개/);assert.match(summary,/해당 장 시작으로 옮기는 북마크: 0개/);
+    await page.click('#dialog button[value=confirm]');await page.waitFor(`document.querySelectorAll('.tab.document').length===2&&${frame}?.style.visibility==='visible'&&document.querySelector('#status-left').textContent.includes('자동 저장됨')`,30000);
+    const nextID=await page.evaluate(`(async()=>(await(await import('./src/storage.js')).listDocuments()).find(d=>d.id!==${JSON.stringify(originalID)}).id)()`),next=await record(nextID),marks=next.metadata.bookmarks;
+    assert.equal(marks.length,2);assert.ok(marks.every(m=>m.locationVersion===2&&m.editionPosition==='text'));assert.equal(marks[0].section,'v0:moved');assert.equal(marks[1].section,'v0:repeat');assert.deepEqual((await record(originalID)).metadata.bookmarks,original.metadata.bookmarks);assert.equal((await record(originalID)).html,original.html);
+    const installPointReader=()=>page.evaluate(`(async()=>{const {textIndex,rangeFromOffsets}=await import('./src/document.js'),{findBookmarkText}=await import('./src/bookmark-location.js');window.bookmarkPoint=mark=>{const d=${doc};if(d?.getElementById('reader-content')?.dataset.section!==mark.section)return null;const index=textIndex(d),hit=findBookmarkText(index.text,mark,0,index.text.length,{sameEdition:true});if(!hit||hit.ambiguous)return null;const r=rangeFromOffsets(d,hit.point,hit.point+1,index),rect=r.getBoundingClientRect();return {top:rect.top,bottom:rect.bottom,parent:r.startContainer.parentElement.closest('[id]')?.id,word:index.text.slice(hit.point,hit.point+24)};};})()`);
+    await installPointReader();await page.click('#sidebar [data-sidebar-view=bookmarks]');
+    const click=selector=>page.click('#sidebar '+selector),jump=async mark=>{await revealBookmark(page,'document',mark.id,click);await click(`[data-bookmark="${mark.id}"]`);await page.waitFor(`(()=>{const p=window.bookmarkPoint(${JSON.stringify(mark)});return p&&p.top<3&&p.bottom>-3;})()`,20000);return page.evaluate(`window.bookmarkPoint(${JSON.stringify(mark)})`);};
+    const repeatedPosition=await jump(marks[1]);assert.equal(repeatedPosition.parent,'repeat-two');
+    await jump(marks[0]);await page.evaluate(`${doc}.getElementById('long').style.maxWidth='300px';${doc}.getElementById('long').style.fontSize='34px';${doc}.defaultView.scrollTo(0,0)`);const reflow=await jump(marks[0]);assert.equal(reflow.parent,'long');assert.doesNotMatch(await page.evaluate('document.querySelector("#toast").textContent'),/확인하지 못/);
+    await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/pages-only-precise-bookmarks-1280.png'),await page.screenshot());
+    await page.waitFor('!document.querySelector(".tab-dirty:not([hidden])")');await page.navigate(url);await page.waitFor(`document.querySelector('[data-open="${nextID}"]')`);await page.click(`[data-open="${nextID}"]`);await page.waitFor(`${frame}?.style.visibility==='visible'`);await installPointReader();await page.click('#sidebar [data-sidebar-view=bookmarks]');const reopened=await jump(marks[0]);
+    await page.evaluate(`window.showSaveFilePicker=async()=> (await navigator.storage.getDirectory()).getFileHandle('precise-export.html',{create:true})`);await page.click('#save-page');await page.waitFor(`(async()=>{try{return(await(await(await navigator.storage.getDirectory()).getFileHandle('precise-export.html')).getFile()).size>0;}catch{return false;}})()`);
+    const exported=await page.evaluate(`(async()=>{const html=await(await(await(await navigator.storage.getDirectory()).getFileHandle('precise-export.html')).getFile()).text();return(await import('./src/document.js')).parseHTML(html).metadata.bookmarks;})()`);assert.deepEqual(exported,marks);
+    await writeFile(join(root,'test-results/pages-only-precise-bookmarks.json'),JSON.stringify({capturedAtCreation:true,offscreenChapters:true,longParagraph:true,changedChapter:true,changedMarkup:true,whitespace:true,duplicateContext:repeatedPosition,reflow,reopened,exportPreserved:true,oldPreserved:true,approximate:0,errors:chrome.errors},null,2));assert.deepEqual(chrome.errors,[]);
+  }catch(error){if(chrome){await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/pages-only-precise-bookmarks-failure.png'),await chrome.page.screenshot());await writeFile(join(root,'test-results/pages-only-precise-bookmarks-failure.json'),JSON.stringify({message:error.message,stack:error.stack,errors:chrome.errors,state:await chrome.page.evaluate(`({dialog:document.querySelector('#dialog')?.innerText,toast:document.querySelector('#toast')?.textContent,section:document.querySelector('.document-host:not([hidden]) iframe')?.contentDocument?.getElementById('reader-content')?.dataset.section})`).catch(()=>null)},null,2));}throw error;}
+  finally{await chrome?.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
+});
+
 test('real Chrome: Pages-only shared sidebar opens on the left, resizes and restores its portable width',{timeout:120000},async()=>{
   await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-sidebar-left-'));await cp(join(root,'public'),folder,{recursive:true});const server=createServer(folder);let chrome;
   try{

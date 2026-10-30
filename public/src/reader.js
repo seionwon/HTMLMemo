@@ -1,9 +1,10 @@
 import { createReadAloud } from './read-aloud.js';
+import {bookmarkTextAnchor,captureBookmarkLocations,findBookmarkText} from './bookmark-location.js';
 import { SearchIndexCache } from './search-index.js';
 import { IsolatedRuntime,needsIsolatedRuntime } from './isolated-runtime.js';
 import { clamp, uid, icon } from './utils.js';
 import { History, TEXT_TOOLS, DRAW_TOOLS, FILL_TOOLS } from './model.js';
-import { LAYER_ID, LOCAL_CSP, parseHTML, savedMainFrame, prepareLoadedHTML, cleanAnnotations, textIndex, selectionAnchor, resolveTextAnchor, wrapOffsets, rangeFromOffsets, sentenceOffsets, serializeHTML, inspectBookDocument, drawingTargetQuote, describeDrawingTarget, currentSection, bookmarkAnchorTarget, captureBookmarkAnchors } from './document.js';
+import { LAYER_ID, LOCAL_CSP, parseHTML, savedMainFrame, prepareLoadedHTML, cleanAnnotations, textIndex, selectionAnchor, resolveTextAnchor, wrapOffsets, rangeFromOffsets, sentenceOffsets, serializeHTML, inspectBookDocument, drawingTargetQuote, describeDrawingTarget, currentSection, bookmarkAnchorTarget } from './document.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const TOC_WIDTH_KEY = 'htmlmemo-doc-toc-width-v1', TOC_EXPANDED_WIDTH_KEY = 'htmlmemo-doc-toc-expanded-width-v1', TOC_MIN = 8, TOC_STRIP_SNAP = 48, TOC_MAX = 640, TOC_DEFAULT = 260;
@@ -2535,6 +2536,7 @@ export class Reader {
       const position=this.bookmarkPosition(mark);
       this.scrollTop=position.top*this.zoom;this.scrollLeft=position.left*this.zoom;this.callbacks.onView?.();
       if(mark.editionPosition==='section')this.callbacks.onNotice?.('새 판의 해당 장 시작으로 이동했습니다. 이전 북마크의 정확한 본문 위치는 확인하지 못했습니다.');
+      else if(mark.editionPosition==='text'||bookmarkTextAnchor(mark))this.callbacks.onNotice?.(position.located?'북마크의 본문 위치로 이동했습니다.':'북마크의 본문 위치를 확인하지 못해 저장된 화면 위치로 이동했습니다.');
       if(!section&&this.annotationBookPaths().size)this.callbacks.onNotice?.('이전 북마크에 장 정보가 없어 현재 장의 저장된 화면 위치로 이동했습니다.');
       return true;
     }catch(error){if(!this.disposed&&generation===this.annotationJumpGeneration)this.callbacks.onError?.(error);return false;}
@@ -2817,14 +2819,22 @@ export class Reader {
     let mark={id:uid(),title,top:this.scrollTop/this.zoom,left:this.scrollLeft/this.zoom};const section=currentSection(this.doc);
     if(section)mark.section=section;
     if(!this.annotationBookPaths().size){const path=this.bookmarkContexts([mark]).get(mark.id);if(path?.length)mark.heading=path.at(-1).id;}
-    [mark]=captureBookmarkAnchors(this.doc,[mark],this.layerOrigin());
+    [mark]=captureBookmarkLocations(this.doc,[mark],this.layerOrigin(),{getIndex:()=>this.searchCache().get()});
     this.metadata.bookmarks.push(mark);this.callbacks.onChange?.();
   }
-  bookmarksForEdition() { return captureBookmarkAnchors(this.doc,this.metadata.bookmarks,this.layerOrigin()); }
+  bookmarksForEdition() { return captureBookmarkLocations(this.doc,this.metadata.bookmarks,this.layerOrigin(),{getIndex:()=>this.searchCache().get()}); }
   bookmarkPosition(mark) {
+    if(bookmarkTextAnchor(mark)&&(mark.section||'')===currentSection(this.doc)){
+      const index=this.searchCache().get(),hit=findBookmarkText(index.text,mark,0,index.text.length,{sameEdition:true});
+      if(hit&&!hit.ambiguous){
+        const end=Math.min(index.text.length,hit.point+(index.text.codePointAt(hit.point)>0xffff?2:1)),rect=rangeFromOffsets(this.doc,hit.point,end,index)?.getBoundingClientRect();
+        if(rect?.height>0){const offset=Number.isFinite(mark.textOffsetY)?clamp(mark.textOffsetY,0,1):0;return {top:Math.max(0,rect.top-this.layerOrigin().top+rect.height*offset),left:mark.left,located:true};}
+      }
+      return {top:mark.top,left:mark.left,located:false};
+    }
     if(mark.editionPosition==='text'&&bookmarkAnchorTarget(mark)){
       const element=this.resolveDrawingTarget(mark),rect=element?.getBoundingClientRect?.();
-      if(rect?.height>0){const offset=Number.isFinite(mark.anchorOffset)?clamp(mark.anchorOffset,0,1):0;return {top:Math.max(0,rect.top-this.layerOrigin().top+rect.height*offset),left:0};}
+      if(rect?.height>0){const offset=Number.isFinite(mark.anchorOffset)?clamp(mark.anchorOffset,0,1):0;return {top:Math.max(0,rect.top-this.layerOrigin().top+rect.height*offset),left:0,located:true};}
     }
     return {top:mark.top,left:mark.left};
   }

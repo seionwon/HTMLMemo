@@ -5,6 +5,7 @@
 import { TEXT_TOOLS } from './model.js';
 import { textIndex, rangeFromOffsets, describeDrawingTarget, drawingTargetQuote, bookmarkAnchorTarget, LOCAL_CSP } from './document.js';
 import { IsolatedRuntime,needsIsolatedRuntime } from './isolated-runtime.js';
+import {bookmarkTextAnchor,bookmarkTextLocation,findBookmarkText} from './bookmark-location.js';
 
 const CONTEXT = 40;
 // Below these, a changed text is treated as a different text rather than an edited one.
@@ -173,6 +174,19 @@ function blockOf(doc, node) {
   while (element && element !== doc.body && INLINE.includes(element.localName)) element = element.parentElement;
   return element || doc.body;
 }
+export function locateBookmarkText(text,mark,from=0,to=text.length) {
+  const exact=findBookmarkText(text,mark,from,to);if(exact)return exact;
+  const anchor=bookmarkTextAnchor(mark);if(!anchor||anchor.quote.length<24)return null;
+  const hit=locateQuote(text,anchor,from,to);if(!hit||hit.similarity<.85)return null;
+  const score=found=>found.similarity+found.context*.1;
+  for(const [start,end] of [[from,hit.start],[hit.end,to]]){
+    if(end-start<anchor.quote.length*.85)continue;
+    const other=locateQuote(text,anchor,start,end);if(other&&score(other)>=score(hit)-.02)return {ambiguous:true};
+  }
+  const focus=anchor.quote.slice(mark.textPoint,mark.textPoint+24),pointHit=locateQuote(text,{quote:focus},hit.start,hit.end);
+  const point=pointHit?.similarity===1?pointHit.start:hit.start+Math.min(hit.end-hit.start-1,Math.round(mark.textPoint*(hit.end-hit.start)/anchor.quote.length));
+  return {...hit,point};
+}
 
 // ── Opening the new edition off-screen, with its own scripts (books render a section per hash).
 export async function openEditionProbe(snapshot, {timeout = 60000} = {}) {
@@ -223,7 +237,7 @@ export async function migrateAnnotations({annotations = [], bookmarks = [], oldD
   };
   const placed = new Map(), failedSections = new Map(), work = [
     ...annotations.map(annotation => ({annotation, tried: new Set(),text: annotation.textAnchor || null, target: annotation.anchorTarget || null})),
-    ...bookmarks.map(annotation => ({annotation,bookmark:true,tried:new Set(),text:null,target:bookmarkAnchorTarget(annotation)}))];
+    ...bookmarks.map(annotation => ({annotation,bookmark:true,tried:new Set(),text:bookmarkTextAnchor(annotation),target:bookmarkAnchorTarget(annotation)}))];
   let index = null, range = [0, 0], current = null;
   const view = async key => {
     if (current === key && index) return;
@@ -237,7 +251,9 @@ export async function migrateAnnotations({annotations = [], bookmarks = [], oldD
   const place = (item, key, approximate=false) => {
     const {annotation} = item, doc = probe.doc, root = (key && doc.getElementById('reader-content')) || doc.body;
     if(item.bookmark){
-      let hit=item.target&&!approximate?locateElement(doc,root,item.target):null;
+      const textHit=item.text&&!approximate?locateBookmarkText(index.text,annotation,range[0],range[1]):null;
+      if(item.text&&!approximate&&(!textHit||textHit.ambiguous))return false;
+      let hit=textHit?{element:blockOf(doc,index.nodes.find(n=>n.start<=textHit.point&&n.end>textHit.point)?.node),similarity:textHit.similarity}:item.target&&!approximate?locateElement(doc,root,item.target):null;
       // Reused element IDs alone cannot prove that a bookmark's text survived.
       if(hit?.similarity<ELEMENT_MATCH)hit=null;
       if(!hit&&!approximate&&item.target){
@@ -246,10 +262,14 @@ export async function migrateAnnotations({annotations = [], bookmarks = [], oldD
         if(element&&element!==doc.body)hit={element,similarity:quoteHit.similarity};
       }
       if(!hit&&!approximate)return false;
-      const next=structuredClone(annotation);delete next.heading;delete next.anchorTarget;delete next.anchorOffset;
+      const next=structuredClone(annotation);delete next.heading;delete next.anchorTarget;delete next.anchorOffset;delete next.textAnchor;delete next.textPoint;delete next.textOffsetY;delete next.locationVersion;
       if(key)next.section=key;else delete next.section;
       next.top=0;next.left=0;next.editionPosition=approximate?'section':'text';
-      if(hit){next.anchorTarget=describeDrawingTarget(doc,hit.element);if(!bookmarkAnchorTarget(next))return false;next.anchorOffset=Number.isFinite(annotation.anchorOffset)?Math.max(0,Math.min(1,annotation.anchorOffset)):0;}
+      if(textHit){
+        const nodes=index.nodes.filter(n=>hit.element.contains(n.node));
+        Object.assign(next,bookmarkTextLocation(index,textHit.point,key||'',annotation.textOffsetY,{from:nodes[0]?.start??range[0],to:nodes.at(-1)?.end??range[1]}));
+      }
+      if(hit){next.anchorTarget=describeDrawingTarget(doc,hit.element);if(!bookmarkAnchorTarget(next)){delete next.anchorTarget;if(!textHit)return false;}next.anchorOffset=Number.isFinite(annotation.anchorOffset)?Math.max(0,Math.min(1,annotation.anchorOffset)):0;}
       placed.set(item,{annotation:next,status:approximate?'approximate':hit.similarity===1?'same':'changed',section:key});return true;
     }
     const textHit = item.text ? locateQuote(index.text, item.text, range[0], range[1]) : null;
