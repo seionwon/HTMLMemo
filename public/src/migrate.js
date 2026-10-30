@@ -242,14 +242,14 @@ export async function migrateAnnotations({annotations = [], bookmarks = [], oldD
       if(hit?.similarity<ELEMENT_MATCH)hit=null;
       if(!hit&&!approximate&&item.target){
         const quoteHit=locateQuote(index.text,{quote:item.target.quote},range[0],range[1]);
-        const element=quoteHit&&blockOf(doc,rangeFromOffsets(doc,quoteHit.start,quoteHit.end,index)?.startContainer);
+        const element=quoteHit&&blockOf(doc,index.nodes.find(n=>n.start<=quoteHit.start&&n.end>quoteHit.start)?.node);
         if(element&&element!==doc.body)hit={element,similarity:quoteHit.similarity};
       }
       if(!hit&&!approximate)return false;
       const next=structuredClone(annotation);delete next.heading;delete next.anchorTarget;delete next.anchorOffset;
       if(key)next.section=key;else delete next.section;
       next.top=0;next.left=0;next.editionPosition=approximate?'section':'text';
-      if(hit){next.anchorTarget=describeDrawingTarget(doc,hit.element);next.anchorOffset=Number.isFinite(annotation.anchorOffset)?Math.max(0,Math.min(1,annotation.anchorOffset)):0;}
+      if(hit){next.anchorTarget=describeDrawingTarget(doc,hit.element);if(!bookmarkAnchorTarget(next))return false;next.anchorOffset=Number.isFinite(annotation.anchorOffset)?Math.max(0,Math.min(1,annotation.anchorOffset)):0;}
       placed.set(item,{annotation:next,status:approximate?'approximate':hit.similarity===1?'same':'changed',section:key});return true;
     }
     const textHit = item.text ? locateQuote(index.text, item.text, range[0], range[1]) : null;

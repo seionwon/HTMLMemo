@@ -374,7 +374,7 @@ export function describeDrawingTarget(doc, element) {
   return {tag:element.localName,id:element.id || '',rootId:root.id || '',path:node === root ? path : [],
     quote:drawingTargetQuote(doc, element),section:element.closest('#reader-content')?.dataset.section || ''};
 }
-const BOOKMARK_BLOCKS = 'h1,h2,h3,h4,h5,h6,p,pre,blockquote,li,td,th,figcaption';
+const BOOKMARK_BLOCKS = 'h1,h2,h3,h4,h5,h6,p,pre,blockquote,li,td,th,figcaption,div,section,article,dt,dd';
 export function bookmarkAnchorTarget(mark) {
   const target=mark?.anchorTarget;
   return target && BOOKMARK_BLOCKS.split(',').includes(target.tag) &&

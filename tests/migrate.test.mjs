@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {deflateRawSync} from 'node:zlib';
 import {documentFor,installDOM} from './dom.mjs';
 import {crc32} from '../public/src/zip.js';
-import {textIndex,describeDrawingTarget,resolveTextAnchor,captureBookmarkAnchors} from '../public/src/document.js';
+import {textIndex,describeDrawingTarget,resolveTextAnchor,captureBookmarkAnchors,bookmarkAnchorTarget} from '../public/src/document.js';
 import {locateQuote,locateElement,unzipEntry,migrateAnnotations,similarity} from '../public/src/migrate.js';
 installDOM();
 
@@ -138,6 +138,8 @@ test('coordinate-only page bookmarks acquire text anchors and follow edited para
   const next=documentFor('<html><body><h1>추가된 머리말</h1><p>완전히 새로운 문단입니다.</p><p id="place">북마크로 기억해 둘 아주 중요한 문단입니다.</p></body></html>');
   const result=await migrateAnnotations({bookmarks:anchored,oldDoc:old,probe:{doc:next,show:async()=>{}}});
   assert.equal(result.annotations.length,0);assert.equal(result.bookmarks.length,1);assert.equal(result.bookmarks[0].anchorTarget.quote,'북마크로 기억해 둘 아주 중요한 문단입니다.');assert.equal(result.bookmarkReport.changed,1);assert.equal(result.bookmarks[0].title,'내가 정한 이름');assert.equal(result.bookmarks[0].section,undefined);
+  next.getElementById('place').outerHTML='<div id="place">북마크로 기억해 둘 중요한 문단입니다.</div>';
+  const restructured=await migrateAnnotations({bookmarks:anchored,oldDoc:old,probe:{doc:next,show:async()=>{}}});assert.equal(restructured.bookmarks.length,1);assert.ok(bookmarkAnchorTarget(restructured.bookmarks[0]),'a restructured paragraph must remain navigable after migration');
   // A reused ID with unrelated text must not invent a successful position.
   next.getElementById('place').textContent='맛있는 요리와 재료 선택';
   const deleted=await migrateAnnotations({bookmarks:anchored,oldDoc:old,probe:{doc:next,show:async()=>{}}});assert.equal(deleted.bookmarks.length,0);assert.equal(deleted.bookmarkReport.deleted.length,1);
