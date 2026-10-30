@@ -2853,7 +2853,7 @@ test('real Chrome: Pages-only precise bookmarks retain the saved text point acro
     {key:'v0:end',id:'end',title:'끝',markdown:'마지막 장',html:'<h1>마지막 장</h1>'}],[]);
   const newEdition=editionHTML('정확한 북마크 새 판',[
     {key:'v0:intro',id:'intro',title:'새 머리말',markdown:'새로 쓴 머리말',html:'<h1>새로 쓴 머리말</h1>'},
-    {key:'v0:moved',id:'moved',title:'옮겨진 본문',markdown:long,html:'<h1>옮겨진 본문</h1><p>앞에 추가한 문단입니다.</p>'+body('div','long',long.replaceAll(' 기록','  기록\n').replace('45번째','<strong>45번째</strong>'),26)},
+    {key:'v0:moved',id:'moved',title:'옮겨진 본문',markdown:long,html:'<h1>옮겨진 본문</h1><p>앞에 추가한 문단입니다.</p>'+body('div','long',long.replaceAll(' 기록','\n  기록').replace('45번째','<strong>45번째</strong>'),26)},
     {key:'v0:repeat',id:'repeat',title:'반복 문장',markdown:repeat+' '+repeat,html:'<p>새 설명입니다.</p>'+repeated}],[]);
   try{
     await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));chrome=await launchChrome();const page=chrome.page,url=process.env.HTMLMEMO_SIDEBAR_TEST_URL||`http://127.0.0.1:${server.address().port}/`;
@@ -2869,7 +2869,7 @@ test('real Chrome: Pages-only precise bookmarks retain the saved text point acro
     };
     await save('#long','45번째','긴 문단 중간');
     await page.evaluate(`${frame}.contentWindow.location.hash='#'+encodeURIComponent('v0:repeat')`);await page.waitFor(`${doc}.getElementById('repeat-two')?.hasAttribute('data-htmlmemo-anchor')`);await save('#repeat-two','같은','두 번째 반복 문장');
-    const original=await record(originalID);assert.equal(original.metadata.bookmarks.length,2);assert.ok(original.metadata.bookmarks.every(m=>m.locationVersion===2&&m.textAnchor.quote&&m.textPoint>=0));assert.ok(original.metadata.bookmarks[0].textAnchor.start>1000);
+    const original=await record(originalID);await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/pages-only-precise-bookmarks-captured.json'),JSON.stringify(original.metadata.bookmarks,null,2));assert.equal(original.metadata.bookmarks.length,2);assert.ok(original.metadata.bookmarks.every(m=>m.locationVersion===2&&m.textAnchor.quote&&m.textPoint>=0));assert.ok(original.metadata.bookmarks[0].textAnchor.start>1000);
     await page.evaluate(`${frame}.contentWindow.location.hash='#'+encodeURIComponent('v0:end')`);await page.waitFor(`${doc}.getElementById('reader-content').dataset.section==='v0:end'`);
     await page.evaluate('window.pick("precise-new.html")');await page.click('#toolbar [data-action=more]');await page.click('[data-more=migrate]');await page.waitFor('document.querySelector("#dialog[open] .migrate-summary")',30000);
     const summary=await page.evaluate('document.querySelector("#dialog").innerText');assert.match(summary,/북마크 2개 가운데 2개/);assert.match(summary,/본문 위치를 찾은 북마크: 2개/);assert.match(summary,/해당 장 시작으로 옮기는 북마크: 0개/);

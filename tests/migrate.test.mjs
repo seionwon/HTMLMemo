@@ -67,11 +67,11 @@ function book(volumes,bodies){
 const section=(volume,id,title)=>({key:`v${volume}:${id}`,id,title,volume});
 
 test('precise bookmarks follow offscreen text into another chapter and preserve the character through changed markup',async()=>{
-  const text=Array.from({length:80},(_,i)=>`${i+1}번째 문장을 읽고 자세한 내용을 확인합니다.`).join(' '),point=text.indexOf('45번째');
+  const text=Array.from({length:80},(_,i)=>`${i+1}번째 기록을 살펴보며 정확한 본문 위치를 확인합니다. 각 문장은 서로 다른 번호를 가집니다.`).join(' '),point=text.indexOf('45번째');
   const old=book([{book:'guide',sections:[section(0,'a','원래 장'),section(0,'b','다른 장')]}],{'v0:a':{markdown:text,html:`<p>${text}</p>`},'v0:b':{markdown:'다른 내용',html:'<p>다른 내용</p>'}});
   await old.show('v0:a');const index=textIndex(old.doc),start=index.text.indexOf(text),mark={id:'precise',title:'읽던 곳',top:1200,left:0,section:'v0:a',...bookmarkTextLocation(index,start+point,'v0:a')},before=structuredClone(mark);
   await old.show('v0:b');
-  const changed=text.replaceAll(' 문장을','\n  문장을'),next=book([{book:'guide',sections:[section(1,'a','원래 장'),section(1,'c','옮긴 장')]}],{'v1:a':{markdown:'완전히 바뀐 내용',html:'<p>완전히 바뀐 내용</p>'},'v1:c':{markdown:changed,html:`<h1>앞에 추가한 제목</h1><div id="moved">${changed}</div>`}});
+  const changed=text.replaceAll(' 기록','\n  기록'),next=book([{book:'guide',sections:[section(1,'a','원래 장'),section(1,'c','옮긴 장')]}],{'v1:a':{markdown:'완전히 바뀐 내용',html:'<p>완전히 바뀐 내용</p>'},'v1:c':{markdown:changed,html:`<h1>앞에 추가한 제목</h1><div id="moved">${changed.replace('45번째','<strong>45번째</strong>')}</div>`}});
   const result=await migrateAnnotations({bookmarks:[mark],oldDoc:old.doc,probe:next});assert.equal(result.bookmarkReport.approximate,0);assert.equal(result.bookmarks.length,1);assert.deepEqual(mark,before);
   const moved=result.bookmarks[0];assert.equal(moved.section,'v1:c');assert.equal(moved.editionPosition,'text');assert.ok(bookmarkTextAnchor(moved));
   await next.show('v1:c');const actual=textIndex(next.doc),hit=findBookmarkText(actual.text,moved,0,actual.text.length,{sameEdition:true});assert.equal(actual.text.slice(hit.point,hit.point+4),'45번째');assert.equal(moved.anchorTarget.id,'moved');
