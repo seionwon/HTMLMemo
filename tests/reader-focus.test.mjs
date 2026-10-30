@@ -105,7 +105,7 @@ test('more tools contain no duplicated toolbar, sidebar, bookmark or export acti
  assert.deepEqual(ids(),['sidebar',...expected]);assert.equal(new Set(ids()).size,ids().length);
  for(const removed of ['search','outline','annotations','undo','redo','bookmark','connect','area','area-underline','text','clear'])assert.equal(a.doc.querySelector(`[data-more=${removed}]`),null);
  assert.equal(a.doc.querySelector('[data-more=rect]'),null);a.doc.querySelector('[data-more=circle]').onclick();assert.deepEqual(selected,['circle']);assert.equal(a.doc.querySelector('#tool-popover').hidden,true);
- a.context.toolAction('more');a.doc.querySelector('[data-more=sidebar]').onclick();assert.deepEqual(a.calls.search,['search']);
+ a.context.toolAction('more');a.doc.querySelector('[data-more=sidebar]').onclick();assert.deepEqual(a.calls.search,['outline']);
  a.doc.querySelector('#sidebar').hidden=false;a.context.toolAction('more');assert.deepEqual(ids(),expected,'an already open panel needs no duplicate entry');
  a.doc.querySelector('#sidebar').hidden=true;a.r.documentSidebarUI=a.doc.createElement('section');a.doc.body.append(a.r.documentSidebarUI);a.context.toolAction('more');assert.deepEqual(ids(),expected,'native books use their own sidebar');
  assert.ok(a.doc.querySelector('#save-page'));assert.ok(a.doc.querySelector('.addressbar #settings-button'));

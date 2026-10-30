@@ -1193,7 +1193,7 @@ function toolAction(action,button=null) {
       $$('[data-more]',$('#tool-popover')).forEach(button=>button.onclick=safely(()=>{const id=button.dataset.more;closePopover();return toolAction(id);}));
     });return;
   }
-  if(action==='sidebar'){closePopover();if(r.documentSidebarUI?.isConnected)r.showDocumentSidebarView('outline');else renderSidebar(r.appSidebarMode||'search');return;}
+  if(action==='sidebar'){closePopover();if(r.documentSidebarUI?.isConnected)r.showDocumentSidebarView('outline');else renderSidebar(r.appSidebarMode||'outline');return;}
   if(['search','outline','annotations','bookmarks'].includes(action)){closePopover();if(r.documentSidebarUI?.isConnected)r.showDocumentSidebarView(action);else renderSidebar(action);return;}
   if(action==='connect')return safely(()=>exportDocument(active()))();
   if(action==='history')return safely(()=>annotationHistory(active()))();
@@ -1261,7 +1261,7 @@ function bindAppSidebarResize(panel) {
 function restoreSidebar() {
   const r=reader();
   if(!r?.doc||r.preparing||r.disposed||readerFocused||r.documentSidebarUI?.isConnected||r.appSidebarClosed)return;
-  renderSidebar(r.appSidebarMode||'search',{focusSearch:false});
+  renderSidebar(r.appSidebarMode||'outline',{focusSearch:false});
 }
 function updateSearchNavigation(r) {
   for(const panel of [$('#sidebar'),r.documentSidebarUI]){
@@ -1344,7 +1344,7 @@ function renderSidebar(mode,{panel=$('#sidebar'),embedded=false,documentReader=r
   }else if(mode==='outline'){
     // Native books keep their original TOC nodes below this editor-owned panel.
     content.innerHTML=embedded?'':outline.length?outline.map((item,index)=>`<button class="outline-item" style="padding-left:${12+(item.level-1)*12}px" data-heading="${index}">${esc(item.title)}</button>`).join(''):'<p class="panel-empty">이 문서에 제목 목차가 없습니다.</p>';
-    $$('[data-heading]',panel).forEach(button=>button.onclick=()=>r.jump(outline[Number(button.dataset.heading)].node));
+    $$('[data-heading]',panel).forEach(button=>button.onclick=()=>{const node=outline[Number(button.dataset.heading)].node;return r.navigateSourceTarget?r.navigateSourceTarget(node):r.jump(node);});
   }else if(mode==='bookmarks'){
     const row=mark=>`<div class="bookmark-row"><button class="outline-item" data-bookmark="${esc(mark.id)}" title="${esc(mark.title)}">${icon('bookmark',14)} ${esc(mark.title)}</button><button class="icon-button" data-delete-bookmark="${esc(mark.id)}" aria-label="북마크 삭제">${icon('close',13)}</button></div>`;
     const tree=r.bookmarkTree?.()||[{id:'document',title:'문서 전체',count:r.metadata.bookmarks.length,bookmarks:r.metadata.bookmarks,children:[]}];

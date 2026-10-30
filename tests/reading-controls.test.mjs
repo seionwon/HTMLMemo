@@ -24,15 +24,68 @@ test('speaker is immediately before A− while zoom and source font handlers sta
   r.zoomControl.onclick();assert.deepEqual(calls,[{action:'zoom',node:r.zoomControl}]);
   r.setupReadingControls();assert.equal(doc.querySelectorAll('[data-htmlmemo-reading-controls]').length,2);
 });
-test('plain documents retain zoom and one TTS entry in an unscaled upper reading row',()=>{
+test('plain documents expose navigation, font size, zoom and one TTS entry in an unscaled upper reading row',()=>{
   const {r,doc,outer,calls}=fixture();r.setupReadingControls();
   assert.equal(r.host.firstElementChild,r.readingControls);assert.equal(r.host.classList.contains('reader-controls-row'),true);
-  assert.deepEqual([...r.readingControls.querySelectorAll('button')].map(node=>node.dataset.action),['speak','zoom']);
+  assert.deepEqual([...r.readingControls.querySelectorAll('button')].map(node=>node.dataset.action),['reading-back','previous-heading','next-heading','speak','font-smaller','font-larger','zoom']);
+  assert.equal(r.plainReadingButtons.previous.hidden,true);assert.equal(r.plainReadingButtons.next.hidden,true);assert.equal(r.plainReadingButtons.back.disabled,true);
+  assert.equal(r.speechControl.nextElementSibling,r.plainReadingButtons.smaller);
   assert.ok(r.speechControl.querySelector('svg'));assert.equal(r.speechControls.isConnected,false);
   assert.equal(r.readingControls.ownerDocument,outer);assert.equal(doc.querySelector('[data-htmlmemo-reading-controls]'),null);
   r.speechControl.onclick();assert.deepEqual(calls,[{action:'speak',node:r.speechControl}]);
   r.zoom=.2;r.updateReadingControls();assert.equal(r.zoomControl.textContent,'20%');
   r.zoom=8;r.updateReadingControls();assert.equal(r.zoomControl.textContent,'800%');
+});
+
+function headingFixture({short=false,count=3}={}){
+  const a=fixture(),{r,doc}=a;let layoutReads=0;
+  doc.querySelector('main').innerHTML=Array.from({length:count},(_,i)=>'<h2>제목 '+i+'</h2><p>그대로 남길 본문 '+i+'</p>').join('');
+  Object.assign(r,{zoom:1,viewport:{scrollTop:0,scrollLeft:0,clientHeight:300,clientWidth:960},linkHistory:[],layerOrigin:()=>({top:0,left:0}),cancelAnnotationDrag(){}});
+  if(short)Object.defineProperty(r.viewport,'scrollTop',{get:()=>0,set(){}});
+  const nodes=[...doc.querySelectorAll('h2')];nodes.forEach((node,index)=>node.getBoundingClientRect=()=>{layoutReads++;return {top:40+index*1000,left:0,width:400,height:30};});
+  r.setupReadingControls();return {...a,nodes,reads:()=>layoutReads};
+}
+test('plain heading navigation stops at both ends and returning restores the prior reading position',async()=>{
+  const {r,nodes}=headingFixture(),{previous,next,back}=r.plainReadingButtons;
+  assert.equal(previous.disabled,true);assert.equal(next.disabled,false);
+  assert.equal(r.moveReadingHeading(-1),false);assert.equal(r.linkHistory.length,0);
+  next.onclick();assert.equal(r.readingHeadingState().current,1);assert.equal(r.scrollTop,1028);assert.equal(previous.disabled,false);assert.equal(back.disabled,false);
+  next.onclick();assert.equal(r.readingHeadingState().current,2);assert.equal(next.disabled,true);assert.equal(r.moveReadingHeading(1),false);assert.equal(r.linkHistory.length,2);
+  await back.onclick();assert.equal(r.readingHeadingState().current,1);assert.equal(r.scrollTop,1028);await back.onclick();assert.equal(r.scrollTop,0);assert.equal(back.disabled,true);
+  r.jump(nodes[2]);r.updateReadingControls();assert.equal(r.readingHeadingState().current,2);assert.equal(next.disabled,true);
+  r.viewport.scrollTop=1100;r.updateReadingControls();assert.equal(r.readingHeadingState().current,1,'manual scrolling replaces the previous explicit heading');
+});
+test('short documents can step through every heading even when all fit on screen',async()=>{
+  const {r}=headingFixture({short:true}),{previous,next,back}=r.plainReadingButtons;
+  next.onclick();assert.equal(r.readingHeadingState().current,1);next.onclick();assert.equal(r.readingHeadingState().current,2);assert.equal(next.disabled,true);
+  await back.onclick();assert.equal(r.readingHeadingState().current,1);previous.onclick();assert.equal(r.readingHeadingState().current,0);assert.equal(previous.disabled,true);assert.equal(r.scrollTop,0);
+});
+test('scrolling a long plain outline uses logarithmic geometry reads and no repeated heading scan',()=>{
+  const {r,reads}=headingFixture({count:8192}),before=reads();r.viewport.scrollTop=6000040;
+  r.outline=()=>{throw Error('the cached outline must not be rebuilt during scroll');};r.updateReadingControls();
+  assert.equal(r.readingHeadingState().current,6000);assert.ok(reads()-before<30);
+});
+test('font changes preserve document text and annotations and save a bounded setting without exporting reader styles',()=>{
+  const {r,doc}=fixture();r.metadata.annotations=[{id:'kept-note',type:'note',text:'기록',color:'#334155',width:3,opacity:1,points:[{x:10,y:20}]}];
+  Object.assign(r,{viewport:{scrollTop:0,scrollLeft:0},cancelAnnotationDrag(){},measure(){},renderDrawingLayer(){}});
+  const before=textIndex(doc).text,notes=structuredClone(r.metadata.annotations),sourceBody=doc.body.getAttribute('style');r.setupReadingControls();
+  r.plainReadingButtons.larger.onclick();assert.equal(r.metadata.view.fontScale,1.1);assert.match(doc.querySelector('#htmlmemo-reading-font-style').textContent,/19\.800px/);
+  r.setupReadingControls();assert.match(doc.querySelector('#htmlmemo-reading-font-style').textContent,/19\.800px/);assert.equal(doc.body.getAttribute('style'),sourceBody);
+  assert.equal(textIndex(doc).text,before);assert.deepEqual(r.metadata.annotations,notes);assert.equal(r.setReadingFontScale(NaN),false);
+  r.setReadingFontScale(100);assert.equal(r.metadata.view.fontScale,2.4);assert.equal(r.plainReadingButtons.larger.disabled,true);
+  r.setReadingFontScale(-100);assert.equal(r.metadata.view.fontScale,.6);assert.equal(r.plainReadingButtons.smaller.disabled,true);
+  const saved=serializeHTML(doc,r.metadata);assert.doesNotMatch(saved,/htmlmemo-reading-font-style|data-htmlmemo-reading-controls/);
+  assert.equal(parseHTML(saved).metadata.view.fontScale,.6);assert.equal(textIndex(documentFor(parseHTML(saved).html)).text,before);
+});
+test('saved font scale applies before controls mount and never overrides a source toolbar',()=>{
+  const {r,doc}=fixture();r.metadata.view.fontScale=1.5;r.applyReadingFont();assert.match(doc.querySelector('#htmlmemo-reading-font-style').textContent,/27\.000px/);
+  r.setupReadingControls();assert.equal(doc.querySelectorAll('#htmlmemo-reading-font-style').length,1);
+  const header=doc.createElement('header');header.className='topbar';header.innerHTML='<button>A−</button>';doc.body.prepend(header);r.setupReadingControls();
+  assert.equal(doc.querySelector('#htmlmemo-reading-font-style'),null);assert.equal(r.plainReadingButtons,null);assert.equal(r.setReadingFontScale(2),false);
+  for(const value of [Infinity,'2',null]){
+    const raw='<html><head><script id="htmlmemo-data" type="application/json">'+JSON.stringify({version:1,annotations:[],view:{fontScale:value}})+'</script></head><body>본문</body></html>';
+    assert.equal(Object.hasOwn(parseHTML(raw).metadata.view,'fontScale'),false);
+  }
 });
 test('book-provided return, previous and next buttons keep their original nodes and click handlers',()=>{
   const {r,doc}=fixture('<header class="topbar"><div class="controls"><button id="back">↰</button><button id="prev">‹</button><button id="next">›</button><button>A−</button><button>A+</button></div></header>'),calls=[];

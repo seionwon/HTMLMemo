@@ -33,7 +33,7 @@ jobs:
       - run: npm run check
       - run: mkdir -p test-results
       - name: Verify Markdown paste, precise bookmarks and compact library first
-        run: node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/browser-results.xml --test-name-pattern='Pages-only Markdown paste|Pages-only precise bookmarks|Pages-only bookmark tree|compact library' tests/browser.integration.mjs
+        run: node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/browser-results.xml --test-name-pattern='Pages-only pasted reading controls|Pages-only Markdown paste|Pages-only precise bookmarks|Pages-only bookmark tree|compact library' tests/browser.integration.mjs
       - name: Verify folder startup, small phone layouts and touch scrolling first
         run: node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/browser-results.xml --test-name-pattern='Pages-only empty library|Pages-only low-resolution' tests/browser-mobile.integration.mjs
       - name: Verify popover, help and update regressions

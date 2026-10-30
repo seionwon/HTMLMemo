@@ -86,6 +86,7 @@ function clearReaderSidebarArtifacts(root) {
   root.querySelector?.('#htmlmemo-toc-resize-style')?.remove();
   root.querySelector?.('#htmlmemo-doc-sidebar-style')?.remove();
   root.querySelector?.('#htmlmemo-reading-controls-style')?.remove();
+  root.querySelector?.('#htmlmemo-reading-font-style')?.remove();
   for(const paint of root.querySelectorAll?.('[data-htmlmemo-tts-paint]')||[])paint.remove();
   for(const controls of root.querySelectorAll?.('[data-htmlmemo-reading-controls]')||[])controls.remove();
   for(const group of root.querySelectorAll?.('[data-htmlmemo-reading-controls-group]')||[]){
@@ -251,6 +252,7 @@ function* prepareHTML(html, defaults, {includeMetadata = false, document: loaded
     warnings: [...new Set([...(Array.isArray(embedded.warnings) ? embedded.warnings : defaults.warnings || []), ...(book && !book.complete ? [BOOK_DATA_MISSING] : [])])].filter(w=>typeof w==='string').slice(0,5000),
   };
   if(view.sourceStorage)metadata.view.sourceStorage=cleanSourceStorage(view.sourceStorage);
+  if(Number.isFinite(view.fontScale))metadata.view.fontScale=Math.min(2.4,Math.max(.6,view.fontScale));
   const nativeScroll = !!allowScripts || !!loadedDocument || html.length >= 4 * 1024 * 1024 || n >= 20000;
   // Native-scrolling local documents retain their own viewport rules. This is
   // required for document-owned sticky navigation and sidebars to keep the

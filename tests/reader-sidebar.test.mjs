@@ -138,6 +138,19 @@ test('TOC-less HTML automatically exposes search, annotations and bookmarks, inc
   a.choose('annotations');assert.match(a.doc.querySelector('.panel-empty').textContent,/아직 주석/);a.choose('bookmarks');assert.match(a.doc.querySelector('.panel-empty').textContent,/저장한 북마크/);assert.ok(a.doc.querySelector('#add-bookmark'));assert.deepEqual(a.r.metadata,before);assert.equal(a.calls.saved,0);
 });
 
+test('documents with headings initially open the outline and retain the explicitly selected view on tab return',()=>{
+  const a=sidebar();a.r.doc={};a.context.restoreSidebar();const panel=a.doc.querySelector('#sidebar');
+  assert.equal(panel.sidebarMode,'outline');assert.equal(a.doc.querySelector('[data-sidebar-view=outline]').getAttribute('aria-pressed'),'true');assert.equal(a.doc.querySelector('#document-search'),null);
+  a.choose('bookmarks');a.context.closeSidebar({remember:false,clearSearch:false});a.context.restoreSidebar();assert.equal(panel.sidebarMode,'bookmarks');
+  const other={...a.r,appSidebarMode:undefined,outline:()=>[{node:'new-heading',level:1,title:'새 문서'}],metadata:{annotations:[],bookmarks:[]}};
+  a.setReader(other);a.context.closeSidebar({remember:false,clearSearch:false});a.context.restoreSidebar();assert.equal(panel.sidebarMode,'outline');
+});
+
+test('outline clicks use the shared document navigation so returning to the previous position works',()=>{
+  const a=sidebar(),calls=[];a.r.navigateSourceTarget=node=>calls.push(node);a.open('outline');a.doc.querySelector('[data-heading]').onclick();
+  assert.deepEqual(calls,['heading-1']);assert.deepEqual(a.calls.headings,[]);
+});
+
 test('automatic sidebar restore never focuses a search field or restarts an existing hit',()=>{
   const a=sidebar();a.r.doc={};a.r.outline=()=>[];a.open('search');let input=a.doc.querySelector('#document-search');input.value='기억';input.oninput();a.flush();
   const searchCalls=[...a.calls.search],results=a.r.searchResults,position=a.r.searchPosition;

@@ -78,6 +78,7 @@ export class Reader {
             this.openingScroll = openingScroll;
           }
           this.bind();
+          this.applyReadingFont();
           this.zoom = clamp(this.autoFit ? this.fitZoom() : (this.metadata.view.zoom || this.fitZoom()), .2, 8); this.applyZoom();
           if (this.doc.fonts?.status === 'loading') await this.doc.fonts.ready;
           if (this.disposed) { resolve(this); return; }
@@ -821,6 +822,8 @@ export class Reader {
     // Imported HTML supplies content and layout, never a second TTS engine.
     const target=topbar?(topbar.querySelector('.controls,.toolbar-actions,.reader-actions')||topbar):this.host;
     const doc=target.ownerDocument;
+    this.readingHeadingNodes=null;
+    if(topbar)this.doc.getElementById('htmlmemo-reading-font-style')?.remove();
     if(!this.readingControls||this.readingControls.ownerDocument!==doc){
       this.readingControls?.remove();this.speechControls?.remove();
       const group=label=>{
@@ -829,16 +832,26 @@ export class Reader {
         node.setAttribute('data-htmlmemo-ui','');node.setAttribute('data-htmlmemo-reading-controls','');
         node.setAttribute('role','toolbar');node.setAttribute('aria-label',label);return node;
       };
-      const button=(action,label,text)=>{
+      const button=(action,label,text,run)=>{
         const node=doc.createElement('button');node.type='button';node.dataset.action=action;node.title=label;node.setAttribute('aria-label',label);node.textContent=text;
         node.onpointerdown=event=>{if(event.pointerType==='mouse')event.preventDefault();};
-        node.onclick=()=>this.callbacks.onReadingAction?.(action,node);return node;
+        node.onclick=()=>run?run():this.callbacks.onReadingAction?.(action,node);return node;
       };
       const controls=group('읽기 도구');
       this.zoomControl=button('zoom','확대 / 축소','');this.zoomControl.setAttribute('aria-haspopup','dialog');
       this.speechControl=button('speak','소리내어 읽기 (TTS 툴바)','');this.speechControl.innerHTML=icon('speaker',14);
       this.speechControls=group('소리내어 읽기');this.speechControls.append(this.speechControl);
       controls.append(this.zoomControl);
+      this.plainReadingButtons=null;
+      if(!topbar){
+        const back=button('reading-back','이동 전 위치로 돌아가기','↰',()=>this.back());
+        const previous=button('previous-heading','이전 제목으로 이동','‹',()=>this.moveReadingHeading(-1));
+        const next=button('next-heading','다음 제목으로 이동','›',()=>this.moveReadingHeading(1));
+        const smaller=button('font-smaller','글자 작게','A−',()=>this.setReadingFontScale(this.readingFontScale()/1.1));
+        const larger=button('font-larger','글자 크게','A+',()=>this.setReadingFontScale(this.readingFontScale()*1.1));
+        this.plainReadingButtons={back,previous,next,smaller,larger};
+        controls.replaceChildren(back,previous,next,this.speechControl,smaller,larger,this.zoomControl);
+      }
       this.readingControls=controls;
     }
     if(topbar){
@@ -855,7 +868,7 @@ export class Reader {
       const before=smaller||[...target.children].find(node=>!node.hasAttribute('data-htmlmemo-reading-controls'))||this.readingControls;
       if(this.speechControls.parentElement!==parent||this.speechControls.nextSibling!==before)parent.insertBefore(this.speechControls,before);
     }else{
-      if(this.speechControl.parentElement!==this.readingControls)this.readingControls.prepend(this.speechControl);
+      this.applyReadingFont();
       if(this.readingControls.parentElement!==this.host)this.host.prepend(this.readingControls);
     }
     const group=topbar&&target!==topbar?target:null;
@@ -871,6 +884,12 @@ export class Reader {
   }
   updateReadingControls() {
     if(this.zoomControl){const text=Math.round(this.zoom*100)+'%';if(this.zoomControl.textContent!==text)this.zoomControl.textContent=text;}
+    if(this.plainReadingButtons){
+      const {back,previous,next,smaller,larger}=this.plainReadingButtons,{nodes,current}=this.readingHeadingState();
+      back.disabled=!this.linkHistory?.length;previous.hidden=next.hidden=nodes.length<2;
+      previous.disabled=current<=0;next.disabled=current>=nodes.length-1;
+      const scale=this.readingFontScale();smaller.disabled=scale<=.6;larger.disabled=scale>=2.4;
+    }
     if(!this.readingControls||this.readingControls.ownerDocument!==this.doc||!this.frame?.getBoundingClientRect||!this.viewport?.getBoundingClientRect)return;
     // Move a source action group together when it fits. Pinning just zoom can
     // put it over the book's previous/next buttons after horizontal panning.
@@ -888,6 +907,45 @@ export class Reader {
     const shift=grouped&&rect.width*scale>view.width-4?0:Math.max(min,Math.min(0,max)),value=shift.toFixed(2)+'px';
     if(controls.style.getPropertyValue('--htmlmemo-controls-shift')!==value)controls.style.setProperty('--htmlmemo-controls-shift',value);
     if(!grouped)this.readingControls.style.transform='translateX(var(--htmlmemo-controls-shift))';
+  }
+  readingHeadingState() {
+    if(!this.readingHeadingNodes){
+      this.readingHeadingNodes=this.outline().filter(item=>!this.isInsideTocOrTopbar(item.node)).map(item=>item.node);
+      this.readingHeadingIndices=new Map(this.readingHeadingNodes.map((node,index)=>[node,index]));
+    }
+    const nodes=this.readingHeadingNodes,cursor=this.readingHeadingCursor;
+    if(!nodes.length)return {nodes,current:-1};
+    // A short last section may not scroll all the way to the top. Keep the
+    // explicitly chosen heading until the reader actually scrolls elsewhere.
+    if(cursor&&Math.abs(cursor.top-this.scrollTop)<2&&this.readingHeadingIndices.has(cursor.node))return {nodes,current:this.readingHeadingIndices.get(cursor.node)};
+    // Search the live geometry rather than measuring every heading on scroll.
+    const top=this.scrollTop/this.zoom+24,origin=this.layerOrigin().top;let lo=0,hi=nodes.length-1,current=0;
+    while(lo<=hi){const mid=(lo+hi)>>1;if(nodes[mid].getBoundingClientRect().top-origin<=top){current=mid;lo=mid+1;}else hi=mid-1;}
+    return {nodes,current};
+  }
+  moveReadingHeading(direction) {
+    const {nodes,current}=this.readingHeadingState(),index=current+direction,target=nodes[index];
+    if(!target||index<0)return false;
+    this.cancelAnnotationJump?.();this.annotationJumpGeneration=(this.annotationJumpGeneration||0)+1;
+    this.linkHistory ||= [];this.linkHistory.push({top:this.scrollTop,left:this.scrollLeft,heading:this.readingHeadingCursor?.node});if(this.linkHistory.length>128)this.linkHistory.shift();
+    this.scrollTop=Math.max(0,(target.getBoundingClientRect().top-this.layerOrigin().top-12)*this.zoom);this.scrollLeft=0;
+    this.readingHeadingCursor={node:target,top:this.scrollTop};
+    this.rememberPosition();this.updateReadingControls();this.callbacks.onView?.();return true;
+  }
+  readingFontScale() { return Number.isFinite(this.metadata.view?.fontScale)?clamp(this.metadata.view.fontScale,.6,2.4):1; }
+  applyReadingFont() {
+    if(!this.doc?.body||this.topbarNode?.isConnected||this.findDocumentTopbar())return;
+    const scale=this.readingFontScale();if(scale===1&&!this.readingFontSize)return;
+    this.readingFontSize ||= Number.parseFloat(this.doc.defaultView?.getComputedStyle?.(this.doc.body)?.fontSize)||18;
+    let style=this.doc.getElementById('htmlmemo-reading-font-style');
+    if(!style){style=this.doc.createElement('style');style.id='htmlmemo-reading-font-style';style.setAttribute('data-htmlmemo-ui','');this.doc.head.append(style);}
+    const css='body{font-size:'+(this.readingFontSize*scale).toFixed(3)+'px!important}';if(style.textContent!==css)style.textContent=css;
+  }
+  setReadingFontScale(value) {
+    if(!Number.isFinite(value)||this.disposed||this.preparing||this.topbarNode?.isConnected)return false;
+    const scale=Math.round(clamp(value,.6,2.4)*10000)/10000;if(scale===this.readingFontScale())return false;
+    this.cancelAnnotationDrag();this.metadata.view.fontScale=scale;this.applyReadingFont();
+    this.measure();this.renderDrawingLayer();this.readAloud?.refreshPaint?.();this.rememberPosition();this.updateReadingControls();this.callbacks.onView?.();return true;
   }
   ensureDocumentTocResize() {
     if (this.disposed || !this.doc?.body) return null;
@@ -1823,7 +1881,7 @@ export class Reader {
   rememberPosition() {
     // Hidden tabs can report zero geometry; never replace the last visible reading position with it.
     if(this.host?.hidden || this.disposed)return false;
-    const view = {scrollTop:this.scrollTop, scrollLeft:this.scrollLeft, zoom:this.zoom, autoFit:this.autoFit, ...(Number.isFinite(this.tocResizedWidth)?{tocWidth:this.tocResizedWidth}:{}),...(this.metadata.view?.sourceStorage?{sourceStorage:this.metadata.view.sourceStorage}:{})};
+    const view = {scrollTop:this.scrollTop, scrollLeft:this.scrollLeft, zoom:this.zoom, autoFit:this.autoFit, ...(Number.isFinite(this.tocResizedWidth)?{tocWidth:this.tocResizedWidth}:{}),...(Number.isFinite(this.metadata.view?.fontScale)?{fontScale:this.readingFontScale()}:{}),...(this.metadata.view?.sourceStorage?{sourceStorage:this.metadata.view.sourceStorage}:{})};
     const previous = this.metadata.view || {};
     if (Object.keys(previous).length === Object.keys(view).length && Object.keys(view).every(key => view[key] === previous[key])) return false;
     this.metadata.view = view;
@@ -2447,9 +2505,10 @@ export class Reader {
     if(upgraded)this.callbacks?.onChange?.();
   }
   html() { return serializeHTML(this.runtime?this.runtime.exportDocument():this.doc, this.metadata); }
-  async back() { const p = this.linkHistory.pop(); if (!p) return false; this.scrollTop=p.top; this.scrollLeft=p.left; this.callbacks.onView?.(); return true; }
+  async back() { const p = this.linkHistory.pop(); if (!p) return false; this.scrollTop=p.top; this.scrollLeft=p.left;this.readingHeadingCursor=p.heading?{node:p.heading,top:this.scrollTop}:null; this.rememberPosition();this.updateReadingControls();this.callbacks.onView?.(); return true; }
   jump(target) {
     const r = target.getBoundingClientRect(), origin = this.layerOrigin(); this.scrollTop = Math.max(0,(r.top-origin.top+r.height/2)*this.zoom-this.viewport.clientHeight/2); this.scrollLeft = Math.max(0,(r.left-origin.left+r.width/2)*this.zoom-this.viewport.clientWidth/2);
+    if(this.plainReadingButtons)this.readingHeadingCursor=/^h[1-6]$/i.test(target.localName)?{node:target,top:this.scrollTop}:null;
   }
   jumpToHash(hash) {
     if(!hash||hash==='#')return false;

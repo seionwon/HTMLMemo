@@ -106,10 +106,14 @@ body[data-codememo-design]{margin:0;font-family:var(--app-font);background:var(-
 .floating-toolbar .toolbar-history{display:flex}
 .reader-controls-row{display:flex;flex-direction:column}
 .reader-controls-row>.reader-viewport{flex:1;min-height:0;height:auto}
-.reader-controls-row>[data-htmlmemo-reading-controls]{display:flex;align-items:center;justify-content:flex-end;gap:3px;height:24px;flex:0 0 24px;padding:0 8px;border-bottom:1px solid var(--line);background:var(--surface);color:var(--text)}
+.reader-controls-row>[data-htmlmemo-reading-controls]{display:flex;align-items:center;gap:3px;height:24px;flex:0 0 24px;min-width:0;overflow-x:auto;scrollbar-width:none;padding:0 4px;border-bottom:1px solid var(--line);background:var(--surface);color:var(--text)}
 .reader-controls-row>[data-htmlmemo-reading-controls] button{font-family:inherit;font-size:12px;font-weight:500;line-height:18px;min-width:40px;height:20px;padding:0 5px;border:1px solid var(--line);border-radius:4px;background:transparent;white-space:nowrap}
 .reader-controls-row>[data-htmlmemo-reading-controls] button:hover{background:var(--surface-muted)}
-.reader-controls-row>[data-htmlmemo-reading-controls] [data-action=speak]{display:inline-flex;align-items:center;justify-content:center;width:24px;min-width:24px;padding:0}
+.reader-controls-row>[data-htmlmemo-reading-controls] button{flex:0 0 auto}
+.reader-controls-row>[data-htmlmemo-reading-controls] button:disabled{opacity:.4;cursor:default}
+.reader-controls-row>[data-htmlmemo-reading-controls] [hidden]{display:none}
+.reader-controls-row>[data-htmlmemo-reading-controls] [data-action=reading-back],.reader-controls-row>[data-htmlmemo-reading-controls] [data-action=previous-heading],.reader-controls-row>[data-htmlmemo-reading-controls] [data-action=next-heading]{width:24px;min-width:24px;padding:0}
+.reader-controls-row>[data-htmlmemo-reading-controls] [data-action=speak]{display:inline-flex;align-items:center;justify-content:center;width:24px;min-width:24px;margin-left:auto;padding:0}
 .reader-controls-row>[data-htmlmemo-reading-controls] [data-action=speak] svg{width:14px;height:14px;pointer-events:none}
 .duplicate-import-target{display:grid;gap:7px;margin-top:16px;color:var(--muted);font-size:12px}
 .duplicate-import-target select{width:100%;min-width:0;padding:8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--text);font:inherit}
