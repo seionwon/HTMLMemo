@@ -94,9 +94,12 @@ export function captureBookmarkLocations(doc,marks,origin,{getIndex}={}) {
     const next=byId.get(mark.id);if(!canMeasure)return next;
     const target=targetElement(doc,next),block=target||doc.getElementById('reader-content')||doc.body;
     const rect=target?.getBoundingClientRect?.(),offset=Number.isFinite(next.anchorOffset)?Math.max(0,Math.min(1,next.anchorOffset)):0;
-    const top=rect?.height>0?rect.top+rect.height*offset:mark.top+origin.top;
+    const top=mark.editionPosition==='text'&&rect?.height>0?rect.top+rect.height*offset:mark.top+origin.top;
     if(!blocks.has(block))blocks.set(block,textIndex(doc,block));
-    const point=pointInBlock(doc,blocks.get(block),top,mark.left+origin.left);if(!point)return next;
+    const point=pointInBlock(doc,blocks.get(block),top,mark.left+origin.left);
+    // A blank page area is a real saved position. Do not replace it with a
+    // distant heading or clamp it to the end of the preceding paragraph.
+    if(!point||point.distance>Math.max(48,point.rect.height*2))return structuredClone(mark);
     if(!index){index=getIndex?.()||textIndex(doc);offsets=new Map(index.nodes.map(n=>[n.node,n.start]));}
     const start=offsets.get(point.node);if(start===undefined)return next;
     const nodes=blocks.get(block).nodes,first=nodes[0]?.node,last=nodes.at(-1)?.node;

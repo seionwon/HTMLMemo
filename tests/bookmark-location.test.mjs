@@ -55,6 +55,14 @@ test('an approximate chapter bookmark never invents precise text from the chapte
   const mark={id:'approximate',title:'위치',top:0,left:0,editionPosition:'section'},before=structuredClone(mark);
   assert.deepEqual(captureBookmarkLocations(doc,[mark],{top:0,left:0}),[before]);assert.equal(bookmarkTextAnchor(mark),null);
 });
+test('a bookmark in a large blank gap keeps its coordinates instead of inventing a distant text position',async()=>{
+  const {doc}=geometry('짧은 문단 뒤에는 긴 여백이 있습니다.'),mark={id:'blank',title:'빈 곳',top:400,left:0},before=structuredClone(mark);
+  const [saved]=captureBookmarkLocations(doc,[mark],{top:0,left:0});assert.deepEqual(saved,before);
+  const reader=Object.create(Reader.prototype);Object.assign(reader,{doc,zoom:1,metadata:{bookmarks:[saved]},viewport:{scrollTop:0,scrollLeft:0},callbacks:{}});
+  assert.equal(await reader.jumpBookmark(mark.id),true);assert.equal(reader.scrollTop,400);
+  // Preparing migration again must not manufacture an anchor from a clamped paragraph end.
+  assert.deepEqual(captureBookmarkLocations(doc,[saved],{top:0,left:0}),[before]);
+});
 test('malformed text anchors are rejected before matching or constructing a search pattern',()=>{
   const mark=bookmarkTextLocation({text:'기억할 본문 위치입니다.'},4);assert.ok(bookmarkTextAnchor(mark));
   for(const patch of [{textPoint:-1},{textPoint:10000},{locationVersion:0},{textAnchor:{...mark.textAnchor,quote:'x'.repeat(200)}},{textAnchor:{...mark.textAnchor,prefix:'x'.repeat(81)}},{textAnchor:{...mark.textAnchor,start:NaN}}]){
