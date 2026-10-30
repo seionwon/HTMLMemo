@@ -555,7 +555,7 @@ dialog:has(.help-browser) #dialog-content{height:100%;min-height:0}
 :where(input,textarea)::placeholder{color:var(--muted);opacity:1}
 :where(input,select,textarea):disabled{cursor:not-allowed;opacity:.5}
 :where(input,textarea)[readonly]{color:var(--muted);background-color:var(--surface-muted)}
-input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--color-control-accent);outline-offset:2px}
+input:focus-visible,textarea:focus-visible,select:where(:not([data-reading-theme])):focus-visible{outline:2px solid var(--color-control-accent);outline-offset:2px}
 [role=slider]:focus-visible{outline:2px solid var(--color-control-accent);outline-offset:2px}
 :is(.paste-title,.paste-text,.note-form textarea,.custom-palette-creator input,.color-input-field input,.annotation-hex-input,.folder-destination):focus-visible{outline:0;border-color:var(--color-control-accent);box-shadow:var(--shadow-control-focus)}
 :is(.library-search,.help-search-field,#address-form):focus-within{border-color:var(--color-control-accent);box-shadow:var(--shadow-control-focus)}
@@ -563,7 +563,7 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px soli
 .search-field input:focus-visible,[data-htmlmemo-doc-sidebar-ui] .search-field input:focus-visible,[data-htmlmemo-doc-sidebar-ui] .sidebar-book-search input:focus-visible{outline:2px solid var(--green)!important;outline-offset:-2px!important}
 
 /* The select remains a native, keyboard-accessible control, including its picker. */
-body[data-codememo-design] select:not([multiple]){
+body[data-codememo-design] select:where(:not([data-reading-theme])):not([multiple]){
  appearance:none;display:inline-block;min-width:0;max-width:100%;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
  padding-inline-end:27px;border-color:var(--color-control-border);border-radius:var(--radius-control);
  background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);
@@ -575,26 +575,26 @@ body[data-codememo-design] select:not([multiple]){
  .help-mobile-picker{padding-block:3px}
  .help-mobile-picker select{min-height:0;height:24px;line-height:16px;padding-block:3px}
 }
-body[data-codememo-design] select:enabled:hover{border-color:var(--green)}
+body[data-codememo-design] select:where(:not([data-reading-theme])):enabled:hover{border-color:var(--green)}
 @supports(appearance:base-select){
  /* Match the fallback specificity so the later forced-colors rule can still win. */
- body[data-codememo-design] select:not([multiple]):where(:has(>button>selectedcontent)),body[data-codememo-design] select:not([multiple]):where(:has(>button>selectedcontent))::picker(select){appearance:base-select}
- body[data-codememo-design] select::picker-icon{display:none}
+ body[data-codememo-design] select:where(:not([data-reading-theme])):not([multiple]):where(:has(>button>selectedcontent)),body[data-codememo-design] select:where(:not([data-reading-theme])):not([multiple]):where(:has(>button>selectedcontent))::picker(select){appearance:base-select}
+ body[data-codememo-design] select:where(:not([data-reading-theme]))::picker-icon{display:none}
  /* Explicit selectedcontent lets the label shrink without painting over the chevron. */
- body[data-codememo-design] select>button{display:contents}
- body[data-codememo-design] select selectedcontent{display:block;min-width:0;max-width:100%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
- body[data-codememo-design] select::picker(select){
+ body[data-codememo-design] select:where(:not([data-reading-theme]))>button{display:contents}
+ body[data-codememo-design] select:where(:not([data-reading-theme])) selectedcontent{display:block;min-width:0;max-width:100%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+ body[data-codememo-design] select:where(:not([data-reading-theme]))::picker(select){
   padding:4px;margin-block:4px;border:1px solid var(--color-control-border);border-radius:8px;
   background:var(--surface);color:var(--text);box-shadow:var(--shadow);font:inherit;
   max-width:calc(100vw - 20px);max-height:min(300px,calc(100dvh - 24px));overflow:auto;overscroll-behavior:contain;
  }
- body[data-codememo-design] select optgroup{font:inherit;font-weight:600;color:var(--muted)}
- body[data-codememo-design] select option{min-width:0;padding:7px 9px;border-radius:4px;font:inherit;font-weight:400;color:var(--text);line-height:1.6;white-space:normal;overflow-wrap:anywhere;cursor:pointer}
- body[data-codememo-design] select option:checked{background:var(--green-light);color:var(--green);font-weight:600}
- body[data-codememo-design] select option:enabled:hover{background:var(--surface-muted)}
- body[data-codememo-design] select option:focus-visible{outline:2px solid var(--green);outline-offset:-2px}
- body[data-codememo-design] select option::checkmark{color:var(--green)}
- body[data-codememo-design] select option:disabled{color:var(--muted);cursor:not-allowed}
+ body[data-codememo-design] select:where(:not([data-reading-theme])) optgroup{font:inherit;font-weight:600;color:var(--muted)}
+ body[data-codememo-design] select:where(:not([data-reading-theme])) option{min-width:0;padding:7px 9px;border-radius:4px;font:inherit;font-weight:400;color:var(--text);line-height:1.6;white-space:normal;overflow-wrap:anywhere;cursor:pointer}
+ body[data-codememo-design] select:where(:not([data-reading-theme])) option:checked{background:var(--green-light);color:var(--green);font-weight:600}
+ body[data-codememo-design] select:where(:not([data-reading-theme])) option:enabled:hover{background:var(--surface-muted)}
+ body[data-codememo-design] select:where(:not([data-reading-theme])) option:focus-visible{outline:2px solid var(--green);outline-offset:-2px}
+ body[data-codememo-design] select:where(:not([data-reading-theme])) option::checkmark{color:var(--green)}
+ body[data-codememo-design] select:where(:not([data-reading-theme])) option:disabled{color:var(--muted);cursor:not-allowed}
 }
 
 input[type=checkbox]{appearance:none;display:inline-grid;place-content:center;vertical-align:middle;flex:none;width:16px;height:16px;margin:0 6px 2px 0;border:1px solid var(--color-control-border);border-radius:4px;background:var(--surface);cursor:pointer}
@@ -639,7 +639,7 @@ summary:focus-visible{outline:2px solid var(--green);outline-offset:3px}
  input[type=checkbox]::before{content:none}
  input[type=range]:not(.color-picker-hue){appearance:auto}
  input[type=range]:not(.color-picker-hue)::-webkit-slider-thumb{appearance:auto}
- body[data-codememo-design] select:not([multiple]){appearance:auto;background-image:none}
+ body[data-codememo-design] select:where(:not([data-reading-theme])):not([multiple]){appearance:auto;background-image:none}
 }
 
 /* Read-aloud UI is compiled with the app instead of injecting a second theme. */
