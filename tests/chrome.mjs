@@ -64,7 +64,13 @@ export async function launchChrome({firstRun=false}={}){
         await page.waitFor('document.querySelector("#data-folder-status")?.textContent!=="폴더 저장 중…"');
       await navigate(url);
       if(!await page.evaluate('!!document.querySelector("#data-folder-status")'))return;
-      await page.waitFor("['ready','required','unsupported'].includes(document.documentElement.dataset.storageSetup)||document.querySelector('#app-update-dialog')?.open");
+      // A cold public PWA may spend 30s preparing its verified offline files.
+      // Keep startup separate from the normal 15s UI-action polling window.
+      try{await page.waitFor("['ready','required','unsupported'].includes(document.documentElement.dataset.storageSetup)||document.querySelector('#app-update-dialog')?.open",45000);}
+      catch(error){
+        const state=await page.evaluate('({ready:document.readyState,update:document.documentElement.dataset.appUpdate,storage:document.documentElement.dataset.storageSetup,status:document.querySelector("#status-left")?.textContent,controlled:!!navigator.serviceWorker?.controller})').catch(e=>({diagnosticError:e.message}));
+        throw Error(error.message+' Startup: '+JSON.stringify(state)+' Errors: '+JSON.stringify(errors.slice(-3)));
+      }
       if(await page.evaluate('!!document.querySelector("#app-update-dialog")?.open'))return;
       if(await page.evaluate("document.documentElement.dataset.storageSetup==='required'")){
         await page.evaluate(`window.__fixturePicker=window.showDirectoryPicker;window.showDirectoryPicker=async()=> (await navigator.storage.getDirectory()).getDirectoryHandle('HTMLMemo browser fixture',{create:true});document.querySelector('#select-storage-folder').click();`);
