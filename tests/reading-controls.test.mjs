@@ -24,17 +24,31 @@ test('speaker is immediately before A− while zoom and source font handlers sta
   r.zoomControl.onclick();assert.deepEqual(calls,[{action:'zoom',node:r.zoomControl}]);
   r.setupReadingControls();assert.equal(doc.querySelectorAll('[data-htmlmemo-reading-controls]').length,2);
 });
-test('plain documents expose navigation, font size, zoom and one TTS entry in an unscaled upper reading row',()=>{
+test('plain documents copy the HTML reader header with its title, navigation, position and theme controls',()=>{
   const {r,doc,outer,calls}=fixture();r.setupReadingControls();
   assert.equal(r.host.firstElementChild,r.readingControls);assert.equal(r.host.classList.contains('reader-controls-row'),true);
-  assert.deepEqual([...r.readingControls.querySelectorAll('button')].map(node=>node.dataset.action),['reading-back','previous-heading','next-heading','speak','font-smaller','font-larger','zoom']);
-  assert.equal(r.plainReadingButtons.previous.hidden,true);assert.equal(r.plainReadingButtons.next.hidden,true);assert.equal(r.plainReadingButtons.back.disabled,true);
+  assert.deepEqual([...r.readingControls.querySelectorAll('button')].map(node=>node.dataset.action),['toggle-sidebar','reading-back','previous-heading','next-heading','speak','font-smaller','font-larger','zoom']);
+  assert.equal(r.readingControls.classList.contains('reader-head'),true);assert.equal(r.plainReadingButtons.back.textContent,'↶');
+  assert.equal(r.plainReadingButtons.previous.disabled,true);assert.equal(r.plainReadingButtons.next.disabled,true);assert.equal(r.plainReadingButtons.back.disabled,true);
+  assert.equal(r.plainReadingButtons.previous.hidden,false);assert.equal(r.plainReadingButtons.next.hidden,false);
+  assert.equal(r.plainReadingButtons.position.textContent,'0 / 0');assert.equal(r.plainReadingButtons.title.textContent,doc.title);
+  assert.deepEqual([...r.plainReadingButtons.theme.querySelectorAll('option')].map(option=>[option.value,option.textContent]),[['system','시스템'],['light','밝게'],['dark','어둡게']]);
   assert.equal(r.speechControl.nextElementSibling,r.plainReadingButtons.smaller);
   assert.ok(r.speechControl.querySelector('svg'));assert.equal(r.speechControls.isConnected,false);
   assert.equal(r.readingControls.ownerDocument,outer);assert.equal(doc.querySelector('[data-htmlmemo-reading-controls]'),null);
   r.speechControl.onclick();assert.deepEqual(calls,[{action:'speak',node:r.speechControl}]);
   r.zoom=.2;r.updateReadingControls();assert.equal(r.zoomControl.textContent,'20%');
   r.zoom=8;r.updateReadingControls();assert.equal(r.zoomControl.textContent,'800%');
+  const sidebar=outer.createElement('aside');sidebar.id='sidebar';sidebar.annotationReader=r;outer.body.append(sidebar);r.updateReadingControls();assert.equal(r.plainReadingButtons.menu.getAttribute('aria-expanded'),'true');
+  sidebar.annotationReader={};r.updateReadingControls();assert.equal(r.plainReadingButtons.menu.getAttribute('aria-expanded'),'false');
+});
+
+test('copied theme controls save a bounded document setting and remove transient palette styles on export',()=>{
+  const {r,doc}=fixture();Object.assign(r,{viewport:{scrollTop:0,scrollLeft:0},cancelAnnotationDrag(){},measure(){},renderDrawingLayer(){}});let writes=0;r.callbacks.onPosition=()=>writes++;
+  r.setupReadingControls();const original=textIndex(doc).text;r.setReadingTheme('dark');assert.equal(writes,1);assert.equal(r.metadata.view.readingTheme,'dark');assert.equal(r.readingControls.dataset.theme,'dark');assert.equal(r.plainReadingButtons.theme.value,'dark');
+  assert.match(doc.querySelector('#htmlmemo-reading-theme-style').textContent,/--htmlmemo-reader-paper:#14161b/);r.rememberPosition();assert.equal(r.metadata.view.readingTheme,'dark');assert.equal(r.setReadingTheme('not-a-theme'),false);
+  const saved=serializeHTML(doc,r.metadata);assert.doesNotMatch(saved,/htmlmemo-reading-theme-style/);assert.equal(parseHTML(saved).metadata.view.readingTheme,'dark');assert.equal(textIndex(doc).text,original);
+  const raw='<html><head><script id="htmlmemo-data" type="application/json">'+JSON.stringify({version:1,annotations:[],view:{readingTheme:'url(bad)'}})+'</script></head><body>본문</body></html>';assert.equal(Object.hasOwn(parseHTML(raw).metadata.view,'readingTheme'),false);
 });
 
 function headingFixture({short=false,count=3}={}){

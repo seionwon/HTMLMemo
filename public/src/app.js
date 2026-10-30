@@ -49,6 +49,7 @@ function setupSelectLabels() {
   // parsers treat a button inside select as its end tag and lose the options.
   if(!window.CSS?.supports?.('appearance','base-select')||!window.HTMLSelectedContentElement)return;
   const enhance=select=>{
+    if(select.hasAttribute('data-reading-theme'))return;
     if(select.multiple||select.querySelector(':scope > button > selectedcontent'))return;
     const value=select.value,button=document.createElement('button');button.type='button';
     button.append(document.createElement('selectedcontent'));select.prepend(button);select.value=value;
@@ -1169,6 +1170,7 @@ function showSelectionMenu(r) {
 function toolAction(action,button=null) {
   const r=reader();if(!r)return;
   if(action==='speak'){closePopover();r.toggleReadAloud();return;}
+  if(action==='toggle-sidebar'){closePopover();if($('#sidebar').hidden)renderSidebar(r.appSidebarMode||'outline');else closeSidebar();return;}
   if(action==='note'){const anchor=r.captureTextSelection?.();if(anchor?.quote?.trim()){closePopover();return safely(()=>r.addSelectionNote(anchor))();}}
   if(['select','pen','highlight','underline','eraser','note','text','rect','rect-filled','circle','ellipse','arrow','area','area-underline','strike'].includes(action)){
     if(['highlight','area','underline','area-underline','note','text','rect','rect-filled'].includes(action)){r.toolChoices||={};r.toolChoices[annotationToolFamily(action)]=action;}
@@ -1214,6 +1216,7 @@ function closeSidebar({remember=true,clearSearch=true}={}) {
   stopAppSidebarResize();
   const panel=$('#sidebar'),wasOpen=!panel.hidden,r=panel.annotationReader;
   clearTimeout(panel.sidebarSearchTimer);panel.sidebarMode='';sidebarMode='';panel.hidden=true;$('#workspace')?.removeAttribute('data-app-sidebar');
+  r?.plainReadingButtons?.menu?.setAttribute('aria-expanded','false');
   if(wasOpen&&r){if(remember)r.appSidebarClosed=true;if(clearSearch&&r.documentSidebarMode!=='search'){r.sidebarSearchQuery='';r.search('');}}
 }
 function appSidebarMaxWidth() {return Math.max(8,Math.min(640,innerWidth-(innerWidth>720?240:40)));}
@@ -1303,6 +1306,7 @@ function renderSidebar(mode,{panel=$('#sidebar'),embedded=false,documentReader=r
   }
   panel.annotationReader=r;
   clearTimeout(panel.sidebarSearchTimer);panel.sidebarMode=mode;if(!embedded){sidebarMode=mode;r.appSidebarMode=mode;r.appSidebarClosed=false;$('#workspace')?.setAttribute('data-app-sidebar','');closePopover();}else styleNativeSidebar(panel);panel.hidden=false;
+  if(!embedded)r.plainReadingButtons?.menu?.setAttribute('aria-expanded','true');
   const id=name=>(embedded?'htmlmemo-native-':'')+name,q=name=>$('#'+id(name),panel);
   const title={search:'검색',outline:'목차',annotations:'주석',bookmarks:'북마크'}[mode];
   if(!$('.sidebar-views',panel)){

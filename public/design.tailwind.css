@@ -106,15 +106,24 @@ body[data-codememo-design]{margin:0;font-family:var(--app-font);background:var(-
 .floating-toolbar .toolbar-history{display:flex}
 .reader-controls-row{display:flex;flex-direction:column}
 .reader-controls-row>.reader-viewport{flex:1;min-height:0;height:auto}
-.reader-controls-row>[data-htmlmemo-reading-controls]{display:flex;align-items:center;gap:3px;height:24px;flex:0 0 24px;min-width:0;overflow-x:auto;scrollbar-width:none;padding:0 4px;border-bottom:1px solid var(--line);background:var(--surface);color:var(--text)}
-.reader-controls-row>[data-htmlmemo-reading-controls] button{font-family:inherit;font-size:12px;font-weight:500;line-height:18px;min-width:40px;height:20px;padding:0 5px;border:1px solid var(--line);border-radius:4px;background:transparent;white-space:nowrap}
-.reader-controls-row>[data-htmlmemo-reading-controls] button:hover{background:var(--surface-muted)}
-.reader-controls-row>[data-htmlmemo-reading-controls] button{flex:0 0 auto}
-.reader-controls-row>[data-htmlmemo-reading-controls] button:disabled{opacity:.4;cursor:default}
-.reader-controls-row>[data-htmlmemo-reading-controls] [hidden]{display:none}
-.reader-controls-row>[data-htmlmemo-reading-controls] [data-action=reading-back],.reader-controls-row>[data-htmlmemo-reading-controls] [data-action=previous-heading],.reader-controls-row>[data-htmlmemo-reading-controls] [data-action=next-heading]{width:24px;min-width:24px;padding:0}
-.reader-controls-row>[data-htmlmemo-reading-controls] [data-action=speak]{display:inline-flex;align-items:center;justify-content:center;width:24px;min-width:24px;margin-left:auto;padding:0}
-.reader-controls-row>[data-htmlmemo-reading-controls] [data-action=speak] svg{width:14px;height:14px;pointer-events:none}
+/* The imported book's reader-head, with the same 24px reader compaction. */
+.reader-controls-row>.htmlmemo-source-toolbar{--reader-paper:#fff;--reader-panel:#f6f8fa;--reader-ink:#1f2328;--reader-muted:#57606a;--reader-line:#e5e7eb;display:flex;align-items:center;gap:4.8px;height:24px;min-height:24px;max-height:24px;flex:0 0 24px;min-width:0;overflow-x:auto;scrollbar-width:none;padding:0 9.6px;border-bottom:1px solid var(--reader-line);background:var(--reader-panel);color:var(--reader-ink);color-scheme:light;font:400 16px/normal 'Apple SD Gothic Neo',-apple-system,BlinkMacSystemFont,'Noto Sans KR','Malgun Gothic',sans-serif;letter-spacing:normal}
+.reader-controls-row>.htmlmemo-source-toolbar[data-theme=dark]{--reader-paper:#14161b;--reader-panel:#1b1e25;--reader-ink:#e8eaf0;--reader-muted:#a5adbc;--reader-line:#383e4a;color-scheme:dark}
+.htmlmemo-source-toolbar .reader-title{flex:1;min-width:80px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px;font-weight:650;line-height:22px}
+.htmlmemo-source-toolbar .reader-position{flex:none;font-size:12.48px;color:var(--reader-muted);white-space:nowrap}
+.reader-controls-row>.htmlmemo-source-toolbar button,.reader-controls-row>.htmlmemo-source-toolbar select{box-sizing:border-box;flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;margin:0;min-width:0;width:auto;height:20px;min-height:20px;max-height:20px;padding:0 9.6px;border:1px solid var(--reader-line);border-radius:4px;background:var(--reader-paper);color:inherit;white-space:nowrap;font:400 12px/18px 'Apple SD Gothic Neo',-apple-system,BlinkMacSystemFont,'Noto Sans KR','Malgun Gothic',sans-serif;letter-spacing:normal;box-shadow:none}
+.reader-controls-row>.htmlmemo-source-toolbar select{appearance:auto;display:block;max-width:96px;padding:0;background-image:none;cursor:default}
+.reader-controls-row>.htmlmemo-source-toolbar button{cursor:pointer}
+.reader-controls-row>.htmlmemo-source-toolbar button:hover:not(:disabled){background:var(--reader-paper)}
+.reader-controls-row>.htmlmemo-source-toolbar button:disabled{opacity:.4;cursor:default}
+.reader-controls-row>.htmlmemo-source-toolbar [hidden]{display:none}
+.reader-controls-row>.htmlmemo-source-toolbar [data-action=speak],.reader-controls-row>.htmlmemo-source-toolbar [data-action=zoom]{margin-inline-start:4px;padding:0 5px;border-color:currentColor;background:transparent;font:500 12px/18px system-ui}
+.reader-controls-row>.htmlmemo-source-toolbar [data-action=zoom]{min-width:40px}
+.reader-controls-row>.htmlmemo-source-toolbar [data-action=speak]{width:24px;min-width:24px;padding:0}
+.reader-controls-row>.htmlmemo-source-toolbar [data-action=speak]:hover,.reader-controls-row>.htmlmemo-source-toolbar [data-action=zoom]:hover{background:#80808020}
+.reader-controls-row>.htmlmemo-source-toolbar [data-action=speak] svg{display:block;width:14px;height:14px;pointer-events:none}
+@media(min-width:761px){.htmlmemo-source-toolbar [data-action=toggle-sidebar]{display:none!important}}
+@media(max-width:760px){.reader-controls-row>.htmlmemo-source-toolbar{gap:3.2px;padding-inline:4.8px}.reader-controls-row>.htmlmemo-source-toolbar button{padding-inline:7.2px}.htmlmemo-source-toolbar .reader-title{min-width:48px}.htmlmemo-source-toolbar .reader-position{display:none}.reader-controls-row>.htmlmemo-source-toolbar [data-action=speak]{padding:0}.reader-controls-row>.htmlmemo-source-toolbar [data-action=zoom]{padding-inline:5px}}
 .duplicate-import-target{display:grid;gap:7px;margin-top:16px;color:var(--muted);font-size:12px}
 .duplicate-import-target select{width:100%;min-width:0;padding:8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--text);font:inherit}
 @media(max-width:480px){.duplicate-import-actions{display:grid;grid-template-columns:1fr}.duplicate-import-actions button{width:100%}}

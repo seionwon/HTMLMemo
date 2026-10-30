@@ -79,6 +79,7 @@ export class Reader {
           }
           this.bind();
           this.applyReadingFont();
+          this.applyReadingTheme();
           this.zoom = clamp(this.autoFit ? this.fitZoom() : (this.metadata.view.zoom || this.fitZoom()), .2, 8); this.applyZoom();
           if (this.doc.fonts?.status === 'loading') await this.doc.fonts.ready;
           if (this.disposed) { resolve(this); return; }
@@ -823,7 +824,7 @@ export class Reader {
     const target=topbar?(topbar.querySelector('.controls,.toolbar-actions,.reader-actions')||topbar):this.host;
     const doc=target.ownerDocument;
     this.readingHeadingNodes=null;
-    if(topbar)this.doc.getElementById('htmlmemo-reading-font-style')?.remove();
+    if(topbar)for(const id of ['htmlmemo-reading-font-style','htmlmemo-reading-theme-style'])this.doc.getElementById(id)?.remove();
     if(!this.readingControls||this.readingControls.ownerDocument!==doc){
       this.readingControls?.remove();this.speechControls?.remove();
       const group=label=>{
@@ -844,13 +845,21 @@ export class Reader {
       controls.append(this.zoomControl);
       this.plainReadingButtons=null;
       if(!topbar){
-        const back=button('reading-back','이동 전 위치로 돌아가기','↰',()=>this.back());
-        const previous=button('previous-heading','이전 제목으로 이동','‹',()=>this.moveReadingHeading(-1));
-        const next=button('next-heading','다음 제목으로 이동','›',()=>this.moveReadingHeading(1));
-        const smaller=button('font-smaller','글자 작게','A−',()=>this.setReadingFontScale(this.readingFontScale()/1.1));
-        const larger=button('font-larger','글자 크게','A+',()=>this.setReadingFontScale(this.readingFontScale()*1.1));
-        this.plainReadingButtons={back,previous,next,smaller,larger};
-        controls.replaceChildren(back,previous,next,this.speechControl,smaller,larger,this.zoomControl);
+        // Copy the book's reader-head structure; source HTML keeps its own bar.
+        controls.classList.add('reader-head','htmlmemo-source-toolbar');
+        const menu=button('toggle-sidebar','목차','☰',()=>{this.callbacks.onReadingAction?.('toggle-sidebar',menu);this.updateReadingControls();});menu.setAttribute('aria-controls','sidebar');
+        const title=doc.createElement('span');title.className='reader-title';title.textContent=this.metadata.title||this.doc.title;title.title=title.textContent;
+        const back=button('reading-back','뒤로','↶',()=>this.back());
+        const previous=button('previous-heading','이전 절','‹',()=>this.moveReadingHeading(-1));
+        const next=button('next-heading','다음 절','›',()=>this.moveReadingHeading(1));
+        const position=doc.createElement('span');position.className='reader-position';position.setAttribute('aria-label','현재 제목 위치');
+        const smaller=button('font-smaller','글씨 작게','A−',()=>this.setReadingFontScale(this.readingFontScale()/1.1));
+        const larger=button('font-larger','글씨 크게','A+',()=>this.setReadingFontScale(this.readingFontScale()*1.1));
+        const theme=doc.createElement('select');theme.setAttribute('aria-label','화면 모드');theme.dataset.readingTheme='';
+        for(const [value,label] of [['system','시스템'],['light','밝게'],['dark','어둡게']]){const option=doc.createElement('option');option.value=value;option.textContent=label;theme.append(option);}
+        theme.onchange=()=>this.setReadingTheme(theme.value);
+        this.plainReadingButtons={menu,title,back,previous,next,position,smaller,larger,theme};
+        controls.replaceChildren(menu,title,back,previous,next,position,this.speechControl,smaller,larger,theme,this.zoomControl);
       }
       this.readingControls=controls;
     }
@@ -869,6 +878,7 @@ export class Reader {
       if(this.speechControls.parentElement!==parent||this.speechControls.nextSibling!==before)parent.insertBefore(this.speechControls,before);
     }else{
       this.applyReadingFont();
+      this.applyReadingTheme();
       if(this.readingControls.parentElement!==this.host)this.host.prepend(this.readingControls);
     }
     const group=topbar&&target!==topbar?target:null;
@@ -885,10 +895,13 @@ export class Reader {
   updateReadingControls() {
     if(this.zoomControl){const text=Math.round(this.zoom*100)+'%';if(this.zoomControl.textContent!==text)this.zoomControl.textContent=text;}
     if(this.plainReadingButtons){
-      const {back,previous,next,smaller,larger}=this.plainReadingButtons,{nodes,current}=this.readingHeadingState();
-      back.disabled=!this.linkHistory?.length;previous.hidden=next.hidden=nodes.length<2;
+      const {menu,back,previous,next,position,smaller,larger,theme}=this.plainReadingButtons,{nodes,current}=this.readingHeadingState();
+      const sidebar=this.host.ownerDocument.getElementById('sidebar');menu.setAttribute('aria-expanded',String(sidebar?.hidden===false&&sidebar.annotationReader===this));
+      back.disabled=!this.linkHistory?.length;const location=(nodes.length?current+1:0)+' / '+nodes.length;if(position.textContent!==location)position.textContent=location;
       previous.disabled=current<=0;next.disabled=current>=nodes.length-1;
       const scale=this.readingFontScale();smaller.disabled=scale<=.6;larger.disabled=scale>=2.4;
+      if(theme.value!==this.readingTheme())for(const option of theme.querySelectorAll('option'))option.selected=option.value===this.readingTheme();
+      this.readingControls.dataset.theme=this.resolvedReadingTheme();
     }
     if(!this.readingControls||this.readingControls.ownerDocument!==this.doc||!this.frame?.getBoundingClientRect||!this.viewport?.getBoundingClientRect)return;
     // Move a source action group together when it fits. Pinning just zoom can
@@ -933,6 +946,27 @@ export class Reader {
     this.rememberPosition();this.updateReadingControls();this.callbacks.onView?.();return true;
   }
   readingFontScale() { return Number.isFinite(this.metadata.view?.fontScale)?clamp(this.metadata.view.fontScale,.6,2.4):1; }
+  readingTheme() { return ['system','light','dark'].includes(this.metadata.view?.readingTheme)?this.metadata.view.readingTheme:'system'; }
+  resolvedReadingTheme() { const value=this.readingTheme();return value==='system'?(this.readingThemeQuery?.matches?'dark':'light'):value; }
+  applyReadingTheme() {
+    if(!this.doc?.body||this.topbarNode?.isConnected||this.findDocumentTopbar())return;
+    if(!this.readingThemeQuery){
+      this.readingThemeQuery=this.host.ownerDocument.defaultView?.matchMedia?.('(prefers-color-scheme: dark)');
+      this.readingThemeChange=()=>{if(this.readingTheme()==='system'){this.applyReadingTheme();this.updateReadingControls();}};
+      this.readingThemeQuery?.addEventListener?.('change',this.readingThemeChange);
+    }
+    const dark=this.resolvedReadingTheme()==='dark';
+    const colors=dark?['#14161b','#1b1e25','#e8eaf0','#a5adbc','#383e4a','#252a34','#626d7d','#48536a']:['#fff','#f6f8fa','#1f2328','#57606a','#e5e7eb','#f2f4f7','#d0d7de','#d8dee4'];
+    let style=this.doc.getElementById('htmlmemo-reading-theme-style');
+    if(!style){style=this.doc.createElement('style');style.id='htmlmemo-reading-theme-style';style.setAttribute('data-htmlmemo-ui','');this.doc.head.append(style);}
+    const names=['paper','panel','ink','muted','line','inline-code','quote-line','table-line'];
+    const css=':root{color-scheme:'+(dark?'dark':'light')+';'+names.map((name,index)=>'--htmlmemo-reader-'+name+':'+colors[index]+';').join('')+'}';
+    if(style.textContent!==css)style.textContent=css;
+  }
+  setReadingTheme(value) {
+    if(!['system','light','dark'].includes(value)||this.disposed||this.preparing||this.topbarNode?.isConnected||value===this.readingTheme())return false;
+    this.metadata.view.readingTheme=value;this.applyReadingTheme();this.callbacks.onPosition?.();this.updateReadingControls();this.callbacks.onView?.();return true;
+  }
   applyReadingFont() {
     if(!this.doc?.body||this.topbarNode?.isConnected||this.findDocumentTopbar())return;
     const scale=this.readingFontScale();if(scale===1&&!this.readingFontSize)return;
@@ -1884,7 +1918,7 @@ export class Reader {
   rememberPosition() {
     // Hidden tabs can report zero geometry; never replace the last visible reading position with it.
     if(this.host?.hidden || this.disposed)return false;
-    const view = {scrollTop:this.scrollTop, scrollLeft:this.scrollLeft, zoom:this.zoom, autoFit:this.autoFit, ...(Number.isFinite(this.tocResizedWidth)?{tocWidth:this.tocResizedWidth}:{}),...(Number.isFinite(this.metadata.view?.fontScale)?{fontScale:this.readingFontScale()}:{}),...(this.metadata.view?.sourceStorage?{sourceStorage:this.metadata.view.sourceStorage}:{})};
+    const view = {scrollTop:this.scrollTop, scrollLeft:this.scrollLeft, zoom:this.zoom, autoFit:this.autoFit, ...(Number.isFinite(this.tocResizedWidth)?{tocWidth:this.tocResizedWidth}:{}),...(Number.isFinite(this.metadata.view?.fontScale)?{fontScale:this.readingFontScale()}:{}),...(this.metadata.view?.readingTheme?{readingTheme:this.readingTheme()}:{}),...(this.metadata.view?.sourceStorage?{sourceStorage:this.metadata.view.sourceStorage}:{})};
     const previous = this.metadata.view || {};
     if (Object.keys(previous).length === Object.keys(view).length && Object.keys(view).every(key => view[key] === previous[key])) return false;
     this.metadata.view = view;
@@ -2914,6 +2948,7 @@ export class Reader {
   }
   stopSpeech() { this.readAloud?.close(); this.host?.ownerDocument?.defaultView?.speechSynthesis?.cancel(); }
   dispose() {
+    this.readingThemeQuery?.removeEventListener?.('change',this.readingThemeChange);
     this.cancelTextMarkGesture();this.cancelAnnotationDrag();
     this.cancelDrawingGesture();this.touchScroll=null;this.touchErase=null;
     this.searchGeneration=(this.searchGeneration||0)+1;this.searchIndexCache?.dispose();
