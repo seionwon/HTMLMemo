@@ -1193,6 +1193,43 @@ test('real Chrome: Pages-only annotation history groups idle input and continuou
   finally{await chrome?.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
 });
 
+test('real Chrome: Pages-only history stays with the selected document across tabs, library entry and restoration',{timeout:90000},async()=>{
+  await prepareAssets();const server=createServer();let chrome;
+  try{
+    await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));chrome=await launchChrome();const page=chrome.page,url=process.env.HTMLMEMO_SIDEBAR_TEST_URL||`http://127.0.0.1:${server.address().port}/`;
+    await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});await page.navigate(url);await page.waitFor('document.querySelector("#status-left").textContent.includes("개의 문서")');
+    await page.evaluate(`(async()=>{
+      const s=await import('./src/storage.js'),{parseHTML}=await import('./src/document.js'),entries=[];
+      for(const [id,title,labels] of [['scope-a','문서 A',['A의 이전 주석','A의 현재 주석']],['scope-b','문서 B',['B만의 주석']],['scope-empty','이력이 없는 문서',[]]]){
+        const parsed=parseHTML('<html lang="ko"><head><title>'+title+'</title></head><body><h1>'+title+'</h1><p>선택한 문서의 주석 이력을 확인합니다.</p></body></html>');
+        const revisions=labels.map((text,i)=>({created:new Date(2025+i,0,1,12).getTime(),kind:'edit',annotations:[{id:id+'-note',type:'note',anchor:'body',points:[{x:20,y:50}],text,color:'#334155',width:2,opacity:1}],bookmarks:[]}));
+        parsed.metadata.annotations=structuredClone(revisions.at(-1)?.annotations||[]);
+        entries.push({record:{id,title,name:'같은원본-'+('long-name-'.repeat(12))+'.html',created:1,modified:2,metadata:parsed.metadata,byteSize:new Blob([parsed.html]).size},content:{html:parsed.html},revisions});
+      }
+      await s.restoreFolderDocuments(entries);
+    })()`);
+    await page.navigate(url);await page.waitFor('!!document.querySelector("[data-open=scope-a]")');
+    const ready=()=>page.waitFor('document.querySelector(".document-host:not([hidden]) iframe")?.style.visibility==="visible"&&!document.querySelector(".tab-dirty:not([hidden])")');
+    const history=async id=>{await page.click('[data-action=more]');await page.click('[data-more=history]');await page.waitFor('document.querySelector("#dialog").open&&document.querySelector("[data-history-document]")?.dataset.historyDocument==='+JSON.stringify(id));};
+    const displayed=()=>page.evaluate(`(async()=>{const d=document.querySelector('#dialog'),s=await import('./src/storage.js'),ids=[...d.querySelectorAll('[data-revision]')].map(b=>Number(b.dataset.revision));return {document:d.querySelector('[data-history-document]').dataset.historyDocument,title:d.querySelector('[data-history-document]').textContent,summary:d.querySelector('#history-summary').textContent,owners:await Promise.all(ids.map(async id=>(await s.getRevision(id)).documentId))};})()`);
+    const saved=()=>page.evaluate(`(async()=>{const s=await import('./src/storage.js'),r=await s.getDocument('scope-b');return {html:r.html,annotations:r.metadata.annotations,bookmarks:r.metadata.bookmarks,history:(await s.listRevisions(r.id)).length};})()`),before=await saved();
+    await page.click('[data-open=scope-a]');await ready();const tabA=await page.evaluate('document.querySelector(".tab.document.active").dataset.tab');await history('scope-a');
+    let state=await displayed();assert.match(state.title,/문서 A/);assert.match(state.summary,/이 문서의 이력 2개/);assert.deepEqual(state.owners,['scope-a']);
+    await mkdir(join(root,'test-results'),{recursive:true});
+    for(const width of [1280,320]){await page.send('Emulation.setDeviceMetricsOverride',{width,height:800,deviceScaleFactor:1,mobile:width<600});assert.equal(await page.evaluate(`(()=>{const d=document.querySelector('#dialog'),r=d.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&d.scrollWidth<=d.clientWidth+1;})()`),true);await writeFile(join(root,'test-results/pages-only-history-scope-'+width+'.png'),await page.screenshot());}
+    await page.click('#dialog [data-dialog-close]');await page.click('#library-tab');await page.click('[data-card-menu=scope-b]');await page.click('#menu-history');await page.waitFor('document.querySelector("#dialog").open&&document.querySelector("[data-history-document]")?.dataset.historyDocument==="scope-b"');
+    state=await displayed();assert.match(state.title,/문서 B/);assert.match(state.summary,/이 문서의 이력 1개/);assert.deepEqual(state.owners,['scope-b']);
+    await page.click('#dialog [data-dialog-close]');await page.click('[data-tab="'+tabA+'"] .tab-select');await ready();await history('scope-a');assert.deepEqual((await displayed()).owners,['scope-a']);
+    await page.click('#history-prev-day');await page.waitFor('document.querySelector("#history-year").value==="2025"&&!document.querySelector(".revision-browser[aria-busy]")');await page.click('[data-revision]');await page.waitFor('!!document.querySelector(".revision-preview")');
+    assert.equal(await page.evaluate('document.querySelector("[data-history-document]").dataset.historyDocument'),'scope-a');assert.match(await page.evaluate('document.querySelector(".revision-preview").textContent'),/A의 이전 주석/);assert.doesNotMatch(await page.evaluate('document.querySelector("#dialog").textContent'),/B만의 주석/);
+    await page.click('#restore-revision');await page.waitFor('!document.querySelector("#dialog").open');await ready();assert.deepEqual(await saved(),before);
+    assert.equal(await page.evaluate(`(async()=>{const r=await(await import('./src/storage.js')).getDocument('scope-a');return r.metadata.annotations[0].text;})()`),'A의 이전 주석');
+    await page.click('#library-tab');await page.click('[data-open=scope-empty]');await ready();await history('scope-empty');state=await displayed();assert.deepEqual(state.owners,[]);assert.match(state.summary,/이 문서의 이력 0개/);assert.match(await page.evaluate('document.querySelector(".revision-list").textContent'),/이 문서에는 아직 저장된 이력이 없습니다/);
+    await writeFile(join(root,'test-results/pages-only-history-scope.json'),JSON.stringify({status:'pass',documents:3,toolbar:true,libraryEntry:true,tabSwitch:true,restoreOnlySelected:true,emptyDocument:true,widths:[1280,320]},null,2)+'\n');assert.deepEqual(chrome.errors,[]);
+  }catch(error){if(chrome){await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/pages-only-history-scope-failure.json'),JSON.stringify({message:error.message,errors:chrome.errors,dialog:await chrome.page.evaluate('document.querySelector("#dialog")?.textContent')},null,2));await writeFile(join(root,'test-results/pages-only-history-scope-failure.png'),await chrome.page.screenshot());}throw error;}
+  finally{await chrome?.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}
+});
+
 test('real Chrome: Pages-only history calendar browses years months and days with indexed paging and legacy migration',{timeout:120000},async()=>{
   await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'htmlmemo-history-calendar-'));await cp(join(root,'public'),folder,{recursive:true});const server=createServer(folder);let chrome;
   try{

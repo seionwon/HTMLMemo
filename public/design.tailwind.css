@@ -301,6 +301,7 @@ html[data-app-sidebar-resizing] iframe{pointer-events:none!important}
 .annotation-hex-input{width:78px;border:1px solid var(--line);background:var(--bg);border-radius:5px;padding:4px 6px;font-size:11px;text-align:center;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 
 /* Annotation history keeps the document itself out of each saved revision. */
+[data-history-document]{overflow-wrap:anywhere}
 .revision-list,.revision-preview{max-height:45vh;overflow:auto;overflow-wrap:anywhere}
 .revision-list .menu-button{width:100%;text-align:left;white-space:normal;border-bottom:1px solid var(--line);padding:12px}
 .revision-list small{color:var(--muted)}
