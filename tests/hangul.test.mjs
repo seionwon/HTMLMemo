@@ -32,6 +32,12 @@ test('rhwp SVG is rebuilt without scripts, event handlers, external resources or
   const html=hangulPage(svg,3,warnings),doc=documentFor('<html><body>'+html+'</body></html>');
   assert.equal(doc.querySelector('script,iframe,[onload],[onclick],[href^="http"],[href^="javascript"]'),null);assert.ok(!html.includes('https://bad.invalid'));assert.match(textIndex(doc).text,/<script>글<\/script>/);assert.ok(warnings.length);assert.match(html,/id="rhwp-3-clip"/);assert.match(html,/url\(#rhwp-3-clip\)/);
 });
+test('wide letter spacing uses original text offsets rather than inventing spaces inside Korean words',()=>{
+  const layout={runs:[{text:'한글 문서',x:0,y:0,charX:[0,20,30,35,55,65],secIdx:0,paraIdx:0}]};
+  const svg='<svg width="200" height="100">'+[['한',0],['글',20],['문',35],['서',55]].map(([text,x])=>'<text x="'+x+'" y="8.5" font-size="10" textLength="10">'+text+'</text>').join('')+'</svg>';
+  const doc=documentFor('<html><body>'+hangulPage(svg,0,[],()=>10,layout)+'</body></html>');
+  assert.match(textIndex(doc).text,/한글 문서/);assert.equal(doc.querySelectorAll('foreignObject').length,1);
+});
 test('HML encoding, root and entity checks run before WASM; mismatched extensions and malformed archives fail',async()=>{
   const utf16=new Uint8Array(Buffer.from('\ufeff'+hmlText.replace('UTF-8','UTF-16'),'utf16le'));validateHML(utf16);assert.match((await renderOffice(utf16,'hml','UTF16')).html,/office-page/);
   for(const source of ['<!DOCTYPE HWPML [<!ENTITY x SYSTEM "https://bad.invalid">]>'+hmlText,'<html>not HML</html>'])assert.throws(()=>validateHML(new TextEncoder().encode(source)),/엔터티|문서 형식/);
