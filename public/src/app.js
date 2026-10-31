@@ -3,6 +3,7 @@ import { parseHTML, SCRIPT_CSP, serializeBookSource } from './document.js';
 import { SaveQueue, AnnotationCheckpoints, ANNOTATION_LABELS } from './model.js';
 import { openEditionProbe, migrateAnnotations } from './migrate.js';
 import { Reader } from './reader.js';
+import { preparePDF, isPDFDocument } from './pdf-document.js';
 import { listDocuments, getDocument, trashDocument, restoreDocument, deleteDocument, deleteTrashedDocuments, getSetting, setSetting, saveDocumentHTML, listRevisionPeriods, listRevisionDay, adjacentRevisionDay, getRevision, putDocumentRevision, checkpointAnnotations, putDocumentView, putDocumentSourceIdentity, writeExternalHTML, updateLibraryFolders, onStorageChange, readLibrary } from './storage.js';
 import {readWebPage,pastedPage,PASTE_LIMIT,isWebSearch,BrowserTabs} from './web.js';
 import { readLocalHTML, droppedHTMLFiles, findLocalDuplicates, identifyLocalFile, htmlExportName } from './local-files.js';
@@ -38,7 +39,7 @@ const reader = () => active()?.reader;
 const savePicker = () => typeof window.showSaveFilePicker === 'function';
 const openPicker = () => typeof window.showOpenFilePicker === 'function';
 const htmlTypes = [{description:'HTML 문서',accept:{'text/html':['.html','.htm']}}];
-const importTypes = [{description:'HTML · MHTML 문서',accept:{'text/html':['.html','.htm'],'multipart/related':['.mhtml','.mht'],'application/x-mimearchive':['.mhtml','.mht']}}];
+const importTypes = [{description:'HTML · MHTML · PDF 문서',accept:{'text/html':['.html','.htm'],'multipart/related':['.mhtml','.mht'],'application/x-mimearchive':['.mhtml','.mht'],'application/pdf':['.pdf']}}];
 const safely = fn => (...args) => { try { Promise.resolve(fn(...args)).catch(showError); } catch(error) { showError(error); } };
 function toast(message, error = false) { const el=$('#toast'); el.textContent=message; el.classList.toggle('error',error); el.hidden=false; clearTimeout(toast.timer); toast.timer=setTimeout(()=>el.hidden=true,error?6500:3500); }
 function showError(error) { if (error?.name !== 'AbortError') toast(error?.message || String(error),true); }
@@ -141,7 +142,7 @@ function confirmDialog(title, description, label = '확인') {
   }));
 }
 function webHelpDialog(tab=webContext(),message=''){
-  modal(`<div class="dialog-heading"><h2>Chrome에서 탐색하고 여기서 메모하기</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div>${message?`<p class="web-notice" role="status">${esc(message)}</p>`:''}<p class="dialog-description">HTMLMemo는 이 URL만 열면 사용할 수 있습니다. 앱 설치는 선택 사항이며 추가 프로그램이나 서버 연결은 필요하지 않습니다.</p><p class="dialog-description small" data-single-file-guide>브라우저에서 웹페이지를 저장할 때는 <strong>Webpage, Single File</strong>(웹페이지, 단일 파일 · .mhtml) 형식을 선택하세요. 이미지·스타일을 하나의 파일에 함께 보관합니다.</p><ol class="setup-steps"><li>주소창에 검색어나 웹 주소를 입력하면 <strong>Chrome의 일반 탭</strong>에서 엽니다. </li><li>필요한 글을 복사한 뒤 <strong>HTMLMemo 탭으로 돌아옵니다.</strong> 읽던 문서와 주석은 그대로입니다.</li><li><strong>텍스트 붙여넣기</strong>에서 글과 실제 원문 주소를 넣거나, Chrome에서 저장한 <strong>HTML 파일을 가져옵니다.</strong></li></ol><p class="dialog-description small">다른 Chrome 탭의 현재 주소·본문·로그인 정보나 클립보드를 자동으로 읽지 않습니다. 사이트가 탭 연결을 격리하거나 팝업을 막으면 직접 링크를 사용하세요. 이미 가진 HTML 파일은 그대로 가져올 수 있습니다.</p><div class="web-actions">${tab?`<a class="secondary-button" href="${esc(tab.url)}" target="_blank" rel="noopener noreferrer">보낸 주소 열기 ${icon('external',14)}</a>`:''}<button id="web-help-import" class="secondary-button">HTML 파일 가져오기</button><button id="web-help-paste" class="primary-button">텍스트 붙여넣기</button></div>`,()=>{
+  modal(`<div class="dialog-heading"><h2>Chrome에서 탐색하고 여기서 메모하기</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div>${message?`<p class="web-notice" role="status">${esc(message)}</p>`:''}<p class="dialog-description">HTMLMemo는 이 URL만 열면 사용할 수 있습니다. 앱 설치는 선택 사항이며 추가 프로그램이나 서버 연결은 필요하지 않습니다.</p><p class="dialog-description small" data-single-file-guide>브라우저에서 웹페이지를 저장할 때는 <strong>Webpage, Single File</strong>(웹페이지, 단일 파일 · .mhtml) 형식을 선택하세요. 이미지·스타일을 하나의 파일에 함께 보관합니다.</p><ol class="setup-steps"><li>주소창에 검색어나 웹 주소를 입력하면 <strong>Chrome의 일반 탭</strong>에서 엽니다. </li><li>필요한 글을 복사한 뒤 <strong>HTMLMemo 탭으로 돌아옵니다.</strong> 읽던 문서와 주석은 그대로입니다.</li><li><strong>텍스트 붙여넣기</strong>에서 글과 실제 원문 주소를 넣거나, Chrome에서 저장한 <strong>HTML 파일을 가져옵니다.</strong></li></ol><p class="dialog-description small">다른 Chrome 탭의 현재 주소·본문·로그인 정보나 클립보드를 자동으로 읽지 않습니다. 사이트가 탭 연결을 격리하거나 팝업을 막으면 직접 링크를 사용하세요. 이미 가진 HTML 파일은 그대로 가져올 수 있습니다.</p><div class="web-actions">${tab?`<a class="secondary-button" href="${esc(tab.url)}" target="_blank" rel="noopener noreferrer">보낸 주소 열기 ${icon('external',14)}</a>`:''}<button id="web-help-import" class="secondary-button">파일 가져오기</button><button id="web-help-paste" class="primary-button">텍스트 붙여넣기</button></div>`,()=>{
     $('#web-help-import').onclick=safely(async()=>{$('#dialog').close();await importFiles();});
     $('#web-help-paste').onclick=()=>pasteTextDialog(tab);
   });
@@ -229,7 +230,7 @@ function renderLibrary() {
   // A temporary empty cache does not mean the connected folder is empty.
   // Keep the hint hidden until permission, restoration and the library read finish.
   $('#document-count').textContent=libraryTrash?trashRecords.length:records.length; $('#empty-library').hidden=document.documentElement.dataset.storageSetup!=='ready'||shown.length+shownFolders.length>0;
-  $('#empty-library h3').textContent=filter?'검색 결과가 없습니다.':libraryTrash?'휴지통이 비어 있습니다.':libraryFolderId?'이 폴더는 비어 있습니다.':records.length||libraryFolders.length?'이 위치에는 문서가 없습니다.':'첫 HTML 문서를 보관해보세요.';
+  $('#empty-library h3').textContent=filter?'검색 결과가 없습니다.':libraryTrash?'휴지통이 비어 있습니다.':libraryFolderId?'이 폴더는 비어 있습니다.':records.length||libraryFolders.length?'이 위치에는 문서가 없습니다.':'첫 문서를 보관해보세요.';
   $('#empty-library p').innerHTML=filter?'다른 제목·파일명·폴더 이름으로 찾아보세요.':libraryTrash?'내 서재에서 삭제한 문서는 이곳에서 복원할 수 있습니다.':libraryFolderId||records.length||libraryFolders.length?'HTML 파일을 가져오거나 문서 메뉴의 「폴더로 이동」을 사용하세요.':'웹에서 저장하거나, 가지고 있는 HTML 파일을 열면<br>이곳에서 계속 읽고 메모할 수 있어요.';
   $('#open-example').hidden=libraryTrash||!!records.length||!!filter;
   $('#empty-icon').innerHTML=icon(libraryTrash?'trash':'file');
@@ -434,7 +435,7 @@ async function openRecord(record, prepared = null, {deferReady = false, sourceId
   const opened=tabs.find(tab=>tab.record?.id===record.id);if(opened){if(opened.closePromise){await opened.closePromise;return openRecord(record,prepared,{deferReady,sourceIdentity});}activate(opened.id);return opened;}
   // The library already holds a prepared, sanitized snapshot. Reopening it
   // should parse it once in the iframe, not clone the entire book in DOMParser first.
-  const parsed=prepared || (record.file ? {file:record.file,metadata:structuredClone(record.metadata),nativeScroll:true,savedMetadata:true} : record.metadata ? (() => {
+  const parsed=prepared || (isPDFDocument(record.metadata)?preparePDF(record.file,{metadata:record.metadata,title:record.title}):record.file ? {file:record.file,metadata:structuredClone(record.metadata),nativeScroll:true,savedMetadata:true} : record.metadata ? (() => {
     const metadata = structuredClone(record.metadata);
     metadata.execution = {...(metadata.execution || {}), allowScripts: metadata.execution?.allowScripts===true};
     const html = typeof record.html === 'string'
@@ -465,6 +466,7 @@ async function openRecord(record, prepared = null, {deferReady = false, sourceId
   tab.checkpoints=new AnnotationCheckpoints(async()=>{await tab.queue.flush();await checkpointAnnotations(tab.record.id);},()=>{if(activeId===tab.id)saveStatus(tab);});
   tabs.push(tab);activate(tab.id);
   tab.reader=new Reader(tab.host,parsed,{
+    sourceKey:record.contentKey||record.sourceIdentity?.digest||record.id,
     onChange:()=>{tab.queue.schedule();tab.checkpoints.schedule();if(activeId===tab.id){renderToolbar();if(['annotations','bookmarks'].includes(sidebarMode))renderSidebar(sidebarMode);else updateSidebarCounts($('#sidebar'),tab.reader);tab.reader?.refreshDocumentSidebar();}},
     onAnnotationInput:()=>tab.checkpoints.activity(),
     onPosition:()=>{tab.queue.schedule({background:true});renderFolderState();},onSourceSettings:()=>{tab.queue.schedule({background:true});void tab.queue.flush().catch(showError);},onView:()=>{if(activeId===tab.id){updateChrome();updateToolbarState();}},
@@ -537,9 +539,9 @@ async function createDocument(snapshot, handle = null, name = null, local = {}) 
   // New, size-unmatched files prepare the reader and fingerprint concurrently.
   // Attach a rejection handler now; openRecord awaits it before baseline save.
   const identity=identifyLocalFile(local);identity.catch(()=>{});
-  const parsed=snapshot.file ? {...parseHTML('<html><head></head><body></body></html>',{title:snapshot.title,execution:{allowScripts:!!snapshot.allowScripts}}),file:snapshot.file,nativeScroll:true,freshAnnotations:!!local.freshAnnotations} : parseHTML(snapshot.html,{title:snapshot.title,source:snapshot.url,viewport:snapshot.viewport,warnings:snapshot.warnings},{includeMetadata:true,allowScripts:snapshot.allowScripts,freshAnnotations:!!local.freshAnnotations});
+  const parsed=snapshot.pdf?preparePDF(snapshot.pdf,{title:snapshot.title,metadata:snapshot.metadata,freshAnnotations:!!local.freshAnnotations}):snapshot.file ? {...parseHTML('<html><head></head><body></body></html>',{title:snapshot.title,execution:{allowScripts:!!snapshot.allowScripts}}),file:snapshot.file,nativeScroll:true,freshAnnotations:!!local.freshAnnotations} : parseHTML(snapshot.html,{title:snapshot.title,source:snapshot.url,viewport:snapshot.viewport,warnings:snapshot.warnings},{includeMetadata:true,allowScripts:snapshot.allowScripts,freshAnnotations:!!local.freshAnnotations});
   const title=parsed.metadata.title; const record={id:uid(),title,name:name||handle?.name||filename(title),source:parsed.metadata.source,created:Date.now(),modified:Date.now(),folderId:local.libraryFolderId??libraryFolderId,fileHandle:handle,originalHandle:local.originalHandle||null,metadata:parsed.metadata};
-  if(snapshot.file)record.file=snapshot.file;else record.html=parsed.html;
+  if(snapshot.pdf)record.file=snapshot.pdf;else if(snapshot.file)record.file=snapshot.file;else record.html=parsed.html;
   if(local.originalFile)record.originalFile=local.originalFile;
   if(local.sourceIdentity)record.sourceIdentity=local.sourceIdentity;
   if(local.diskStamp)record.diskStamp=local.diskStamp;
@@ -554,11 +556,11 @@ async function createDocument(snapshot, handle = null, name = null, local = {}) 
   if(tab.queue.error)return tab;
   if(tab.reader.bookIntegrity?.complete === false)toast(tab.reader.bookIntegrity.message, true);
   else if(parsed.metadata.warnings.length)toast(`페이지를 저장했습니다. ${parsed.metadata.warnings.length}개의 리소스를 보관하지 못했습니다. 문서 정보에서 확인할 수 있어요.`,true);
-  else toast(local.originalHandle||name?'로컬 HTML을 주석 탭에서 열었습니다.':'서재에 저장하고 주석 탭에서 열었습니다.');
+  else toast(local.originalHandle||name?'문서를 주석 탭에서 열었습니다.':'서재에 저장하고 주석 탭에서 열었습니다.');
   return tab;
 }
 function dataFolderGuide() {
-  return `<details class="export-guide" data-folder-guide><summary>전용 폴더 자동 저장과 새 기기로 옮기는 방법</summary><p>처음 실행할 때 Documents(문서)를 선택하면 그 아래에 <strong>입력한 이름의 전용 하위 폴더</strong>를 만듭니다. 예: <code>문서/HTMLMemo</code>. 문서 폴더 전체 선택이 제한되면 선택 창에서 하위 폴더를 만든 뒤 기존 저장 폴더 연결로 선택하세요.</p><p>연결하면 기존 서재와 앞으로 가져오는 모든 HTML·MHTML 문서의 복사본, 주석·북마크·주석 이력·읽기 위치·앱 설정을 자동 보관합니다. 원래 파일을 이동·삭제해도 보관한 문서는 열 수 있습니다. <strong>설정 파일을 따로 저장할 필요가 없습니다.</strong></p><p>폴더 연결 시 브라우저 내부 데이터의 자동 삭제 방지도 함께 요청합니다. 브라우저가 허용하지 않아도 전용 폴더 자동 저장은 계속됩니다.</p><p>평소에는 원본 복사본과 주석을 분리해 저장하며 원본에 새 주석을 합치지 않습니다. <strong>다른 사람에게 주석까지 보내려면 문서를 열고 상단의 HTML 내보내기로 .html 파일을 새로 저장한 뒤 그 파일을 보내세요.</strong> 원본 파일만 보내면 앱에서 추가한 주석은 전달되지 않습니다. 받는 분도 HTMLMemo의 HTML 파일 가져오기로 엽니다.</p><ol><li>새 기기로 옮기기 전에 <strong>폴더 자동 저장 완료</strong> 표시를 확인하고 앱을 닫습니다.</li><li><strong>전용 폴더 전체를 하위 폴더·파일 빠짐없이</strong> 새 기기의 Documents(문서) 폴더로 복사합니다. 일부 HTML만 옮기면 주석·설정이 빠집니다.</li><li>새 기기의 HTMLMemo에서 <strong>설정 → 데이터 폴더 → 폴더 연결</strong>로 옮긴 폴더를 선택하고 쓰기를 허용하면 모두 자동 복원됩니다.</li></ol><p>브라우저가 권한을 회수하거나 폴더를 옮겼다면 다시 연결해야 합니다. 권한·용량·저장 오류는 화면 아래와 설정에 계속 표시하며 변경은 앱에 남겨둡니다. 저장이 끝나기 전에 앱을 강제 종료하지 마세요. 서로 다른 기기의 동시 편집을 실시간 동기화하지는 않습니다.</p></details>`;
+  return `<details class="export-guide" data-folder-guide><summary>전용 폴더 자동 저장과 새 기기로 옮기는 방법</summary><p>처음 실행할 때 Documents(문서)를 선택하면 그 아래에 <strong>입력한 이름의 전용 하위 폴더</strong>를 만듭니다. 예: <code>문서/HTMLMemo</code>. 문서 폴더 전체 선택이 제한되면 선택 창에서 하위 폴더를 만든 뒤 기존 저장 폴더 연결로 선택하세요.</p><p>연결하면 기존 서재와 앞으로 가져오는 모든 HTML·MHTML·PDF 문서의 복사본, 주석·북마크·주석 이력·읽기 위치·앱 설정을 자동 보관합니다. 원래 파일을 이동·삭제해도 보관한 문서는 열 수 있습니다. <strong>설정 파일을 따로 저장할 필요가 없습니다.</strong></p><p>폴더 연결 시 브라우저 내부 데이터의 자동 삭제 방지도 함께 요청합니다. 브라우저가 허용하지 않아도 전용 폴더 자동 저장은 계속됩니다.</p><p>평소에는 원본 복사본과 주석을 분리해 저장하며 원본에 새 주석을 합치지 않습니다. <strong>다른 사람에게 주석까지 보내려면 문서를 열고 상단의 HTML 내보내기로 .html 파일을 새로 저장한 뒤 그 파일을 보내세요.</strong> 원본 파일만 보내면 앱에서 추가한 주석은 전달되지 않습니다. 받는 분도 HTMLMemo의 파일 가져오기로 엽니다.</p><ol><li>새 기기로 옮기기 전에 <strong>폴더 자동 저장 완료</strong> 표시를 확인하고 앱을 닫습니다.</li><li><strong>전용 폴더 전체를 하위 폴더·파일 빠짐없이</strong> 새 기기의 Documents(문서) 폴더로 복사합니다. 일부 HTML만 옮기면 주석·설정이 빠집니다.</li><li>새 기기의 HTMLMemo에서 <strong>설정 → 데이터 폴더 → 폴더 연결</strong>로 옮긴 폴더를 선택하고 쓰기를 허용하면 모두 자동 복원됩니다.</li></ol><p>브라우저가 권한을 회수하거나 폴더를 옮겼다면 다시 연결해야 합니다. 권한·용량·저장 오류는 화면 아래와 설정에 계속 표시하며 변경은 앱에 남겨둡니다. 저장이 끝나기 전에 앱을 강제 종료하지 마세요. 서로 다른 기기의 동시 편집을 실시간 동기화하지는 않습니다.</p></details>`;
 }
 function folderStatusText() {
   if(!folder)return '데이터 폴더 미연결 · 브라우저 데이터 삭제 시 잃을 수 있습니다.';
@@ -692,7 +694,7 @@ function duplicateImportDialog(local, matches) {
     const stamp=new Date(record.modified||record.created||Date.now()).toLocaleString('ko-KR');
     return `<option value="${esc(record.id)}">${index+1}. ${esc(record.title||record.name)} · 주석 ${record.metadata?.annotations?.length||0}개 · ${esc(stamp)}</option>`;
   }).join('');
-  return new Promise(resolve=>modal(`<form method="dialog" data-duplicate-import><div class="dialog-heading"><h2>이미 불러온 HTML 파일입니다</h2></div><p class="dialog-description"><strong>${esc(local.name)}</strong> 파일은 이미 보관함에 있습니다. 새롭게 열어 별도의 주석을 시작할까요?</p><p class="dialog-description small">새롭게 열면 주석과 북마크가 없는 독립 사본을 만듭니다. 기존 문서와 주석, 원본 HTML 파일은 변경하지 않습니다.</p><label class="duplicate-import-target">기존 주석 파일<select id="duplicate-import-target" aria-label="기존 주석 파일">${options}</select></label><div class="dialog-actions duplicate-import-actions"><button class="secondary-button" value="cancel" autofocus>취소</button><button class="secondary-button" value="new">새롭게 열기</button><button class="primary-button" value="existing">기존의 주석 파일로 가기</button></div></form>`,dialog=>{
+  return new Promise(resolve=>modal(`<form method="dialog" data-duplicate-import><div class="dialog-heading"><h2>이미 불러온 문서입니다</h2></div><p class="dialog-description"><strong>${esc(local.name)}</strong> 파일은 이미 보관함에 있습니다. 새롭게 열어 별도의 주석을 시작할까요?</p><p class="dialog-description small">새롭게 열면 주석과 북마크가 없는 독립 사본을 만듭니다. 기존 문서와 주석, 원본 파일은 변경하지 않습니다.</p><label class="duplicate-import-target">기존 주석 파일<select id="duplicate-import-target" aria-label="기존 주석 파일">${options}</select></label><div class="dialog-actions duplicate-import-actions"><button class="secondary-button" value="cancel" autofocus>취소</button><button class="secondary-button" value="new">새롭게 열기</button><button class="primary-button" value="existing">기존의 주석 파일로 가기</button></div></form>`,dialog=>{
     $('[data-duplicate-import]',dialog).addEventListener('keydown',event=>{if(event.key==='Escape')event.stopPropagation();});
     dialog.addEventListener('close',()=>resolve({action:['new','existing'].includes(dialog.returnValue)?dialog.returnValue:'cancel',id:$('#duplicate-import-target').value}),{once:true});
   }));
@@ -708,7 +710,7 @@ function openLocalFile(input,parentId=libraryFolderId) {
 }
 async function importLocalFile(input,parentId) {
   try{
-    $('#status-left').textContent='로컬 HTML을 읽고 중복을 확인하는 중…';
+    $('#status-left').textContent='문서를 읽고 중복을 확인하는 중…';
     const local=await readLocalHTML(input,{native:true,allowScripts:true,identify:false});
     local.libraryFolderId=parentId;
     const matches=await findLocalDuplicates(local,await listDocuments(),getDocument);
@@ -732,7 +734,7 @@ async function importLocalFile(input,parentId) {
       }
       local.freshAnnotations=true;
     }
-    $('#status-left').textContent='HTML 문서를 준비하는 중…';
+    $('#status-left').textContent='문서를 준비하는 중…';
     await new Promise(resolve=>setTimeout(resolve,0));
     return await createDocument(local.snapshot,local.handle,local.name,local);
   }finally{if(activeId==='library')renderLibrary();else updateChrome();}
@@ -773,7 +775,7 @@ async function exportDocument(tab) {
   }
   await tab.reader.ready;tab.reader.rememberPosition();await tab.queue.flush();
   const source = tab.reader.bookIntegrity?.complete ? await getDocument(tab.record.id) : null;
-  const html=source ? await serializeBookSource(source.file || new Blob([source.html], {type:'text/html;charset=utf-8'}), tab.reader.metadata) : tab.reader.html();
+  const html=tab.reader.pdf?await tab.reader.pdf.exportHTML(tab.reader.metadata):source ? await serializeBookSource(source.file || new Blob([source.html], {type:'text/html;charset=utf-8'}), tab.reader.metadata) : tab.reader.html();
   if(handle){const disk=await handle.getFile();await writeExternalHTML({fileHandle:handle,diskStamp:{modified:disk.lastModified,size:disk.size}},html);}
   else download(html,htmlExportName(tab.record.name));
   toast('현재 주석을 포함한 HTML을 내보냈습니다. 저장한 .html 파일을 보내세요.');
@@ -792,7 +794,7 @@ function resumeBrowser(){
 }
 function renderExternalTab(tab){
   const search=isWebSearch(tab.url);
-  tab.host.innerHTML=`<div class="browser-handoff"><div class="handoff-heading">${icon('external',32)}<p class="eyebrow">CHROME · HTMLMEMO</p><h2>${search?'검색은 Chrome에서, 메모는 여기서.':'웹 탐색은 Chrome에서, 주석은 여기서.'}</h2><p data-single-file-guide>외부 사이트는 이 앱을 연 브라우저의 일반 탭에서 엽니다.<br>브라우저의 페이지 저장에서 <strong>Webpage, Single File</strong>(웹페이지, 단일 파일 · .mhtml) 형식을 선택한 다음, HTMLMemo에서 여세요.</p></div><p class="web-notice" data-web-status role="status"></p><div class="web-actions"><button class="primary-button" data-browser-focus>브라우저로 전환 ${icon('external',15)}</button><button class="secondary-button" data-browser-paste>글 붙여넣고 주석 달기</button><button class="secondary-button" data-browser-import>HTML 파일 가져오기</button></div><p class="handoff-return">Chrome 탭에서 필요한 글을 복사한 뒤 HTMLMemo 탭으로 돌아오세요.<br>읽던 문서와 주석은 그대로 유지됩니다. <kbd>Ctrl/⌘ Shift V</kbd>로 붙여넣기 창을 바로 열 수 있습니다.</p><details class="handoff-details"><summary>보낸 주소 · 직접 가져오기</summary><a data-open-external href="${esc(tab.url)}" target="_blank" rel="noopener noreferrer">${esc(tab.url)} ${icon('external',13)}</a><p>이 주소는 HTMLMemo에서 마지막으로 보낸 주소입니다. Chrome에서 이동한 현재 주소는 읽지 않습니다. 검색 결과의 글을 가져올 때는 붙여넣기 창에 실제 원문 주소를 넣으세요.</p><button class="secondary-button" data-capture${search?' disabled':''}>이 주소에서 직접 저장</button><p>검색 페이지는 직접 저장하지 않습니다. 일반 페이지도 사이트가 읽기를 허용할 때만 저장됩니다.</p></details></div>`;
+  tab.host.innerHTML=`<div class="browser-handoff"><div class="handoff-heading">${icon('external',32)}<p class="eyebrow">CHROME · HTMLMEMO</p><h2>${search?'검색은 Chrome에서, 메모는 여기서.':'웹 탐색은 Chrome에서, 주석은 여기서.'}</h2><p data-single-file-guide>외부 사이트는 이 앱을 연 브라우저의 일반 탭에서 엽니다.<br>브라우저의 페이지 저장에서 <strong>Webpage, Single File</strong>(웹페이지, 단일 파일 · .mhtml) 형식을 선택한 다음, HTMLMemo에서 여세요.</p></div><p class="web-notice" data-web-status role="status"></p><div class="web-actions"><button class="primary-button" data-browser-focus>브라우저로 전환 ${icon('external',15)}</button><button class="secondary-button" data-browser-paste>글 붙여넣고 주석 달기</button><button class="secondary-button" data-browser-import>파일 가져오기</button></div><p class="handoff-return">Chrome 탭에서 필요한 글을 복사한 뒤 HTMLMemo 탭으로 돌아오세요.<br>읽던 문서와 주석은 그대로 유지됩니다. <kbd>Ctrl/⌘ Shift V</kbd>로 붙여넣기 창을 바로 열 수 있습니다.</p><details class="handoff-details"><summary>보낸 주소 · 직접 가져오기</summary><a data-open-external href="${esc(tab.url)}" target="_blank" rel="noopener noreferrer">${esc(tab.url)} ${icon('external',13)}</a><p>이 주소는 HTMLMemo에서 마지막으로 보낸 주소입니다. Chrome에서 이동한 현재 주소는 읽지 않습니다. 검색 결과의 글을 가져올 때는 붙여넣기 창에 실제 원문 주소를 넣으세요.</p><button class="secondary-button" data-capture${search?' disabled':''}>이 주소에서 직접 저장</button><p>검색 페이지는 직접 저장하지 않습니다. 일반 페이지도 사이트가 읽기를 허용할 때만 저장됩니다.</p></details></div>`;
   $('[data-browser-focus]',tab.host).onclick=()=>focusBrowserTab(tab);
   $('[data-browser-paste]',tab.host).onclick=()=>pasteTextDialog(tab);
   $('[data-browser-import]',tab.host).onclick=safely(importFiles);
@@ -1298,7 +1300,6 @@ function renderSidebar(mode,{panel=$('#sidebar'),embedded=false,documentReader=r
   const r=documentReader;if(!r)return;
   if(!embedded)stopAppSidebarResize();
   const outline=embedded?[]:r.outline();
-  if(!embedded&&mode==='outline'&&!outline.length)mode='search';
   if(embedded&&$('#sidebar').annotationReader===r)closeSidebar({remember:false,clearSearch:false});
   for(const type of ['annotation','bookmark']){
     r[type+'TreeOpen'] ||= new Map();
@@ -1328,7 +1329,7 @@ function renderSidebar(mode,{panel=$('#sidebar'),embedded=false,documentReader=r
   }
   if(!embedded)bindAppSidebarResize(panel);
   q('sidebar-title').textContent=embedded&&mode==='outline'?'목차':title;panel.setAttribute('aria-labelledby',id('sidebar-title'));
-  $('[data-sidebar-view="outline"]',panel).hidden=!embedded&&!outline.length;
+  $('[data-sidebar-view="outline"]',panel).hidden=false;
   $$('[data-sidebar-view]',panel).forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.sidebarView===mode)));
   updateSidebarCounts(panel,r);
   const content=$('.sidebar-content',panel);content.hidden=false;
@@ -1345,6 +1346,7 @@ function renderSidebar(mode,{panel=$('#sidebar'),embedded=false,documentReader=r
     input.oninput=()=>{r.sidebarSearchQuery=input.value;clear.hidden=!input.value;clearTimeout(panel.sidebarSearchTimer);panel.sidebarSearchTimer=setTimeout(run,120);};input.onkeydown=e=>{if(e.key==='Enter'&&!e.isComposing){e.preventDefault();advance(e.shiftKey?-1:1);}};
     clear.onclick=()=>{clearTimeout(panel.sidebarSearchTimer);input.value='';r.sidebarSearchQuery='';r.search('');q('search-results').replaceChildren();updateSearchNavigation(r);clear.hidden=true;input.focus();};
     q('search-prev').onclick=()=>advance(-1);q('search-next').onclick=()=>advance(1);if(focusSearch)input.focus();if(input.value)run(!focusSearch);
+    if(!embedded)renderWholeSearch(panel,r,content);
   }else if(mode==='outline'){
     // Native books keep their original TOC nodes below this editor-owned panel.
     content.innerHTML=embedded?'':outline.length?outline.map((item,index)=>`<button class="outline-item" style="padding-left:${12+(item.level-1)*12}px" data-heading="${index}">${esc(item.title)}</button>`).join(''):'<p class="panel-empty">이 문서에 제목 목차가 없습니다.</p>';
@@ -1369,6 +1371,18 @@ function renderSidebar(mode,{panel=$('#sidebar'),embedded=false,documentReader=r
     $$('[data-annotation-group]',panel).forEach(group=>group.ontoggle=()=>{if(group.isConnected)r.annotationTreeOpen.set(group.dataset.annotationGroup,!!(group.open||group.hasAttribute('open')));});
     $$('[data-annotation]',panel).forEach(button=>button.onclick=()=>r.jumpAnnotation(button.dataset.annotation));$$('[data-delete-annotation]',panel).forEach(button=>button.onclick=()=>r.remove(button.dataset.deleteAnnotation));
   }
+}
+function renderWholeSearch(panel,r,content){
+  const group=document.createElement('section');group.className='sidebar-book-search';group.setAttribute('aria-label','책 전체 검색');group.innerHTML=`<div class="search-field loaded-search-field"><input id="book-search" aria-label="책 전체 검색어" placeholder="책 전체 검색" autocomplete="off"><button id="book-search-clear" type="button" class="icon-button loaded-search-clear" aria-label="책 전체 검색어 지우기" title="검색어 지우기" hidden>${icon('close',14)}</button></div><div class="search-navigation"><span id="book-search-count" role="status" aria-live="polite">검색어를 입력하세요.</span><button id="book-search-prev" type="button" class="icon-button" aria-label="책 전체 이전 검색 결과" disabled>${icon('back')}</button><button id="book-search-next" type="button" class="icon-button" aria-label="책 전체 다음 검색 결과" disabled>${icon('forward')}</button></div><div id="book-search-results"></div>`;content.prepend(group);
+  const input=$('#book-search',group),clear=$('#book-search-clear',group),count=$('#book-search-count',group),previous=$('#book-search-prev',group),next=$('#book-search-next',group),results=$('#book-search-results',group);
+  r.wholeSearchState||={query:'',results:[],position:-1};input.value=r.wholeSearchDraft??r.wholeSearchState.query;clear.hidden=!input.value;
+  const valid=()=>panel.sidebarMode==='search'&&panel.annotationReader===r&&group.isConnected;
+  const draw=()=>{const state=r.wholeSearchState;count.textContent=state.query.trim()?state.results.length?`${state.position+1} / ${state.results.length}개 결과`:'검색 결과가 없습니다.':'검색어를 입력하세요.';previous.disabled=state.position<=0;next.disabled=state.position>=state.results.length-1;results.innerHTML=state.results.slice(0,150).map((hit,index)=>`<button class="search-result" data-whole-search-index="${index}">${esc(hit.quote)}</button>`).join('');for(const button of $$('[data-whole-search-index]',results))button.onclick=()=>move(Number(button.dataset.wholeSearchIndex));};
+  const move=position=>{const state=r.wholeSearchState;if(position<0||position>=state.results.length)return;state.position=position;void r.jumpWholeSearch(state.results[position]);draw();};
+  const run=async()=>{const query=input.value,version=r.wholeSearchVersion=(r.wholeSearchVersion||0)+1,isCurrent=()=>valid()&&input.value===query&&r.wholeSearchVersion===version;count.textContent='검색 준비 중…';previous.disabled=true;next.disabled=true;results.replaceChildren();const hits=await r.searchWhole(query,isCurrent,progress=>{if(isCurrent())count.textContent=`검색 중… ${progress.scanned}/${progress.total}쪽 · ${progress.matches.length}개`;});if(!hits||!isCurrent())return;r.wholeSearchState={query,results:hits,position:-1};if(hits.length)move(0);else draw();};
+  input.oninput=()=>{r.wholeSearchDraft=input.value;clear.hidden=!input.value;clearTimeout(group.searchTimer);group.searchTimer=setTimeout(()=>{if(valid())void run().catch(showError);},160);};input.onkeydown=event=>{if(event.key==='Enter'&&!event.isComposing){event.preventDefault();if(r.wholeSearchState.query!==input.value)void run().catch(showError);else move(r.wholeSearchState.position+(event.shiftKey?-1:1));}};
+  clear.onclick=()=>{clearTimeout(group.searchTimer);r.wholeSearchVersion=(r.wholeSearchVersion||0)+1;r.pdf?.wholeAbort?.abort();input.value='';r.wholeSearchDraft='';clear.hidden=true;r.wholeSearchState={query:'',results:[],position:-1};for(const node of r.doc.querySelectorAll('[data-htmlmemo-pdf-book-search]'))node.remove();for(const mark of r.wholeSearchMarks||[])if(mark.isConnected)mark.replaceWith(...mark.childNodes);draw();input.focus();};
+  previous.onclick=()=>move(r.wholeSearchState.position-1);next.onclick=()=>move(r.wholeSearchState.position+1);draw();
 }
 function annotationDialog(tab,id) {
   const a=tab.reader.metadata.annotations.find(a=>a.id===id);if(!a)return;
@@ -1455,7 +1469,7 @@ async function annotationHistory(tab, selection = {}, valid = () => true) {
 }
 function documentInfo(tab) {
   const m=tab.reader.metadata;
-  modal(`<div class="dialog-heading"><h2>문서 정보</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><dl class="document-info"><dt>제목</dt><dd>${esc(m.title)}</dd><dt>파일</dt><dd>${esc(tab.record.name)}</dd><dt>원본</dt><dd>${m.source?`<a href="${esc(m.source)}" target="_blank" rel="noopener noreferrer">${esc(m.source)}</a>`:'로컬 HTML 파일'}</dd><dt>저장 위치</dt><dd>앱 보관함 (원본 파일은 변경하지 않음)</dd><dt>주석</dt><dd>${m.annotations.length}개</dd></dl>${m.warnings.length?`<details class="capture-warnings"><summary>보관하지 못한 리소스 ${m.warnings.length}개</summary><ul>${m.warnings.map(w=>`<li>${esc(w)}</li>`).join('')}</ul></details>`:''}<p class="dialog-description small">작업은 이 기기의 서재에 자동 저장됩니다. 다른 사람에게 주석을 보내려면 HTML 내보내기로 저장한 .html 파일을 보내세요.</p>${annotationExportGuide()}`);
+  modal(`<div class="dialog-heading"><h2>문서 정보</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><dl class="document-info"><dt>제목</dt><dd>${esc(m.title)}</dd><dt>파일</dt><dd>${esc(tab.record.name)}</dd><dt>원본</dt><dd>${m.source?`<a href="${esc(m.source)}" target="_blank" rel="noopener noreferrer">${esc(m.source)}</a>`:'로컬 문서 파일'}</dd><dt>저장 위치</dt><dd>앱 보관함 (원본 파일은 변경하지 않음)</dd><dt>주석</dt><dd>${m.annotations.length}개</dd></dl>${m.warnings.length?`<details class="capture-warnings"><summary>보관하지 못한 리소스 ${m.warnings.length}개</summary><ul>${m.warnings.map(w=>`<li>${esc(w)}</li>`).join('')}</ul></details>`:''}<p class="dialog-description small">작업은 이 기기의 서재에 자동 저장됩니다. 다른 사람에게 주석을 보내려면 HTML 내보내기로 저장한 .html 파일을 보내세요.</p>${annotationExportGuide()}`);
 }
 function pickHTMLFile() {
   if(openPicker())return window.showOpenFilePicker({types:importTypes}).then(([handle])=>handle,error=>{if(['SecurityError','NotSupportedError'].includes(error.name))return inputFile();throw error;});
@@ -1477,8 +1491,15 @@ async function migrateEdition(tab) {
   const status=()=>$('#migrate-status');
   let result,probe;
   try{
-    probe=await openEditionProbe(local.snapshot);
-    result=await migrateAnnotations({annotations,bookmarks,oldDoc:tab.reader.doc,probe,onProgress:(done,total,phase)=>{if(status())status().textContent=`${phase==='search'?'다른 장에서 찾는 중':'새 판에서 자리를 찾는 중'}… ${done}/${total}장`;}});
+    const onProgress=(done,total,phase)=>{if(status())status().textContent=`${phase==='search'?'다른 부분에서 찾는 중':'새 판에서 자리를 찾는 중'}… ${done}/${total}`;};
+    if(local.snapshot.pdf){
+      const host=document.createElement('div');host.className='document-host';host.style.cssText='position:fixed;left:-10000px;top:0;width:1100px;height:800px;visibility:hidden';document.body.append(host);
+      const pdfReader=new Reader(host,preparePDF(local.snapshot.pdf,{title:local.snapshot.title,metadata:local.snapshot.metadata}),{});probe={dispose:()=>pdfReader.dispose()};await pdfReader.ready;
+      result=await pdfReader.pdf.migrate({annotations,bookmarks,onProgress});
+    }else{
+      probe=await openEditionProbe(local.snapshot);
+      result=await migrateAnnotations({annotations,bookmarks,oldDoc:tab.reader.doc,probe,onProgress});
+    }
   }catch(error){$('#dialog').close();throw error;}
   finally{probe?.dispose();}
   const {report,bookmarkReport}=result,lost=[...report.deleted,...report.unplaceable,...report.unchecked],lostBookmarks=[...bookmarkReport.deleted,...bookmarkReport.unplaceable,...bookmarkReport.unchecked];

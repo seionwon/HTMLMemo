@@ -1,0 +1,3 @@
+# Preserve PDF fixtures and vendored upstream bytes exactly.
+tests/fixtures/*.pdf binary
+public/vendor/pdfjs/** -whitespace

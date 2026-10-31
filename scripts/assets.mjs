@@ -25,7 +25,7 @@ function createIcon(size){
 }
 export async function packageAssets(){
   const app={};
-  for(const name of APP_FILES){const bytes=await readFile(join(root,'public',name));app[name]=name.endsWith('.png')?{base64:bytes.toString('base64')}:{text:bytes.toString('utf8')};}
+  for(const name of APP_FILES){const bytes=await readFile(join(root,'public',name));app[name]=/\.(?:png|bcmap|pfb|ttf|otf|wasm)$/.test(name)?{base64:bytes.toString('base64')}:{text:bytes.toString('utf8')};}
   return {app};
 }
 export async function prepareAssets(){

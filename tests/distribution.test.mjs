@@ -171,7 +171,7 @@ test('settings can be saved and reloaded through file input when native pickers 
 test('library switches between persistent card and one-line list views',async()=>{const app=await fileApp(),grid=app.doc.querySelector('#document-grid'),card=app.doc.querySelector('#library-card-view'),list=app.doc.querySelector('#library-list-view');assert.equal(grid.dataset.view,'card');assert.equal(card.getAttribute('aria-pressed'),'true');list.onclick();assert.equal(grid.dataset.view,'list');assert.equal(list.getAttribute('aria-pressed'),'true');assert.equal(card.getAttribute('aria-pressed'),'false');assert.equal(JSON.parse(app.local.get(PREFERENCES_KEY)).libraryView,'list');card.onclick();assert.equal(grid.dataset.view,'card');assert.equal(JSON.parse(app.local.get(PREFERENCES_KEY)).libraryView,'card');});
 
 test('empty library stays hidden until a folder is connected and still preserves search messages',async()=>{
-  const heading='첫 HTML 문서를 보관해보세요.';
+  const heading='첫 문서를 보관해보세요.';
   const initial=new DOMParser().parseFromString(assets.app['index.html'].text,'text/html');assert.equal(initial.querySelector('#empty-library h3').textContent,heading);assert.equal(initial.querySelector('#empty-library').hidden,true);
   const empty=await fileApp({firstRun:true,directoryPicker:async()=>memoryFolder()}),hint=empty.doc.querySelector('#empty-library');assert.equal(hint.hidden,true);
   empty.doc.querySelector('#library-list-view').onclick();assert.equal(hint.hidden,true);
@@ -247,7 +247,7 @@ test('library trash keeps ordinary counts separate, shows original filenames and
 });
 test('empty trash offers no example or destructive action and keeps HTML import available',async()=>{
   const {doc}=await fileApp();doc.querySelector('#library-trash').onclick();assert.equal(doc.querySelector('#empty-library h3').textContent,'휴지통이 비어 있습니다.');assert.equal(doc.querySelector('#open-example').hidden,true);assert.equal(doc.querySelector('#library-empty-trash').disabled,true);assert.equal(doc.querySelector('#hero-import').hidden,false);assert.equal(doc.querySelector('#document-count').textContent,'0');
-  doc.querySelector('#library-trash').onclick();assert.equal(doc.querySelector('#library-empty-trash').hidden,true);assert.equal(doc.querySelector('#empty-library h3').textContent,'첫 HTML 문서를 보관해보세요.');
+  doc.querySelector('#library-trash').onclick();assert.equal(doc.querySelector('#library-empty-trash').hidden,true);assert.equal(doc.querySelector('#empty-library h3').textContent,'첫 문서를 보관해보세요.');
 });
 test('the settings icon preserves library, web opening, HTML import, app delivery and offline About without a menu',async()=>{
   const {doc}=await fileApp();
@@ -268,7 +268,7 @@ test('the settings icon preserves library, web opening, HTML import, app deliver
   assert.equal(doc.querySelector('#library-tab').textContent,'');assert.equal(doc.querySelector('#library-tab').title,'내 서재');
   for(const id of ['#library-tab','#settings-button','#save-page'])assert.ok(doc.querySelector(id).closest('header'));
   assert.deepEqual([...doc.querySelectorAll('#library .hero-actions button')].map(button=>button.id),['hero-import','paste-button']);
-  assert.ok(doc.querySelector('#hero-import').closest('#library'));assert.equal(doc.querySelector('#hero-import').textContent,'HTML 파일 가져오기');
+  assert.ok(doc.querySelector('#hero-import').closest('#library'));assert.equal(doc.querySelector('#hero-import').textContent,'파일 가져오기');
   assert.equal(!!doc.querySelector('#choose-folder,#menu-folder'),false);
   assert.equal(doc.querySelector('#library-tab').getAttribute('aria-current'),'page');
   click('#settings-button');
@@ -339,7 +339,7 @@ test('single-file save guidance stays in library and execution help without a pe
 
 test('export sharing help explains one HTML file, recipient import and local-only autosave without changing saved notes',async()=>{
   const record={id:'share-guide',title:'공유 안내',name:'공유.html',created:1,modified:2,metadata:{annotations:[{id:'kept',text:'기존 주석'}],bookmarks:[{id:'kept-mark'}]}},before=structuredClone(record),app=await fileApp({documents:[record]}),doc=app.doc;
-  const check=guide=>{assert.ok(guide);assert.equal(guide.hasAttribute('open'),false);assert.match(guide.querySelector('summary').textContent,/주석을 포함한 HTML 파일/);assert.equal(guide.querySelectorAll('li').length,3);assert.match(guide.textContent,/HTML 파일 하나/);assert.match(guide.textContent,/방금 내보낸 \.html 파일/);assert.match(guide.textContent,/내 서재 → HTML 파일 가져오기/);assert.match(guide.textContent,/다시 내보내세요/);assert.match(guide.textContent,/Ctrl\/⌘ S/);assert.match(guide.textContent,/앱 URL만 보내면 문서·주석은 전달되지 않습니다/);assert.match(guide.textContent,/새롭게 열기는 주석 없는 사본/);assert.equal(guide.querySelector('a').getAttribute('href'),PUBLIC_APP_URL);};
+  const check=guide=>{assert.ok(guide);assert.equal(guide.hasAttribute('open'),false);assert.match(guide.querySelector('summary').textContent,/주석을 포함한 HTML 파일/);assert.equal(guide.querySelectorAll('li').length,3);assert.match(guide.textContent,/HTML 파일 하나/);assert.match(guide.textContent,/방금 내보낸 \.html 파일/);assert.match(guide.textContent,/내 서재 → 파일 가져오기/);assert.match(guide.textContent,/다시 내보내세요/);assert.match(guide.textContent,/Ctrl\/⌘ S/);assert.match(guide.textContent,/앱 URL만 보내면 문서·주석은 전달되지 않습니다/);assert.match(guide.textContent,/새롭게 열기는 주석 없는 사본/);assert.equal(guide.querySelector('a').getAttribute('href'),PUBLIC_APP_URL);};
   openExecution(app);check(doc.querySelector('#execution-export-guide [data-export-guide]'));
   doc.querySelector('#library-tab').onclick();doc.querySelector('[data-card-menu="share-guide"]').click();check(doc.querySelector('#dialog [data-export-guide]'));assert.ok(doc.querySelector('#menu-export'));assert.deepEqual(record,before);
 });

@@ -1,4 +1,4 @@
-import { FORMAT_VERSION, validateAnnotations, cleanSourceStorage } from './model.js';
+import { FORMAT_VERSION, validateAnnotations, cleanSourceStorage,validPDFPosition } from './model.js';
 
 export const LAYER_ID = 'htmlmemo-annotation-layer';
 export const DATA_ID = 'htmlmemo-data';
@@ -255,6 +255,8 @@ function* prepareHTML(html, defaults, {includeMetadata = false, document: loaded
   if(view.sourceStorage)metadata.view.sourceStorage=cleanSourceStorage(view.sourceStorage);
   if(Number.isFinite(view.fontScale))metadata.view.fontScale=Math.min(2.4,Math.max(.6,view.fontScale));
   if(['system','light','dark'].includes(view.readingTheme))metadata.view.readingTheme=view.readingTheme;
+  if(validPDFPosition(view.pdfPosition))metadata.view.pdfPosition={page:view.pdfPosition.page,y:view.pdfPosition.y};
+  if(bookmarks.some(mark=>mark.pdfPosition!=null&&!validPDFPosition(mark.pdfPosition)))throw Error('PDF 북마크 위치가 손상되었습니다.');
   const nativeScroll = !!allowScripts || !!loadedDocument || html.length >= 4 * 1024 * 1024 || n >= 20000;
   // Native-scrolling local documents retain their own viewport rules. This is
   // required for document-owned sticky navigation and sidebars to keep the

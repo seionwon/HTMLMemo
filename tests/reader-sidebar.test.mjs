@@ -130,10 +130,10 @@ test('active outline collapse supports nested custom controlled groups without h
   a.r.toggleTocSubContainer(trigger,part,true);assert.equal(part.hidden,false);assert.equal(trigger.getAttribute('aria-expanded'),'true');assert.equal(chapter.hidden,true);
 });
 
-test('TOC-less HTML automatically exposes search, annotations and bookmarks, including empty totals',()=>{
+test('TOC-less documents keep the common outline tab and expose search, annotations and bookmarks',()=>{
   const a=sidebar();a.r.doc={};a.r.outline=()=>[];a.r.metadata={annotations:[],bookmarks:[]};const before=structuredClone(a.r.metadata);
-  a.context.restoreSidebar();const panel=a.doc.querySelector('#sidebar');assert.equal(panel.hidden,false);assert.equal(panel.sidebarMode,'search');assert.equal(a.doc.querySelector('#workspace').hasAttribute('data-app-sidebar'),true);
-  assert.deepEqual([...panel.querySelectorAll('[data-sidebar-view]')].filter(button=>!button.hidden).map(button=>button.dataset.sidebarView),['search','annotations','bookmarks']);
+  a.context.restoreSidebar();const panel=a.doc.querySelector('#sidebar');assert.equal(panel.hidden,false);assert.equal(panel.sidebarMode,'outline');assert.equal(a.doc.querySelector('#workspace').hasAttribute('data-app-sidebar'),true);
+  assert.deepEqual([...panel.querySelectorAll('[data-sidebar-view]')].filter(button=>!button.hidden).map(button=>button.dataset.sidebarView),['outline','search','annotations','bookmarks']);a.choose('search');
   assert.equal(a.doc.querySelector('#document-search').getAttribute('placeholder'),'불러온 부분에서 찾기');assert.equal(a.doc.querySelector('[data-sidebar-count=annotations]').textContent,'0');assert.equal(a.doc.querySelector('[data-sidebar-count=bookmarks]').textContent,'0');
   a.choose('annotations');assert.match(a.doc.querySelector('.panel-empty').textContent,/아직 주석/);a.choose('bookmarks');assert.match(a.doc.querySelector('.panel-empty').textContent,/저장한 북마크/);assert.ok(a.doc.querySelector('#add-bookmark'));assert.deepEqual(a.r.metadata,before);assert.equal(a.calls.saved,0);
 });
@@ -165,10 +165,10 @@ test('explicit close remains closed on tab return, and manual reopen restores th
   a.context.closeSidebar({remember:false,clearSearch:false});a.context.restoreSidebar();assert.equal(a.doc.querySelector('#sidebar').sidebarMode,'bookmarks');
 });
 
-test('shared sidebar hides or restores only the available outline when switching documents',()=>{
-  const a=sidebar();a.r.doc={};a.r.outline=()=>[];a.open('outline');assert.equal(a.doc.querySelector('#sidebar').sidebarMode,'search');assert.equal(a.doc.querySelector('[data-sidebar-view=outline]').hidden,true);
+test('shared sidebar retains the same outline tab with and without headings on document switches',()=>{
+  const a=sidebar();a.r.doc={};a.r.outline=()=>[];a.open('outline');assert.equal(a.doc.querySelector('#sidebar').sidebarMode,'outline');assert.equal(a.doc.querySelector('[data-sidebar-view=outline]').hidden,false);
   const other={...a.r,outline:()=>[{node:'new-heading',level:1,title:'새 제목'}],metadata:{annotations:[],bookmarks:[]}};a.setReader(other);a.open('outline');assert.equal(a.doc.querySelector('[data-sidebar-view=outline]').hidden,false);assert.equal(a.doc.querySelector('#sidebar-title').textContent,'목차');assert.equal(a.doc.querySelector('[data-sidebar-count=annotations]').textContent,'0');
-  a.setReader(a.r);a.context.restoreSidebar();assert.equal(a.doc.querySelector('[data-sidebar-view=outline]').hidden,true);assert.equal(a.doc.querySelector('[data-sidebar-count=annotations]').textContent,'1');
+  a.setReader(a.r);a.context.restoreSidebar();assert.equal(a.doc.querySelector('[data-sidebar-view=outline]').hidden,false);assert.equal(a.doc.querySelector('[data-sidebar-count=annotations]').textContent,'1');
 });
 
 test('native TOC, preparing/disposed documents and fullscreen never gain a duplicate automatic sidebar',()=>{

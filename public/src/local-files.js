@@ -1,11 +1,12 @@
 import { LOCAL_CSP, SCRIPT_CSP, parseHTML } from './document.js';
 import { readMHTML } from './mhtml.js';
+import { isPDFFile, verifyPDF, PDF_ARCHIVE_MARKER, readPDFArchive } from './pdf-document.js';
 
 const isMHTML = file => /\.(?:mhtml|mht)$/i.test(file.name||'') || /^(?:multipart\/related|application\/x-mimearchive)(?:;|$)/i.test(file.type||'');
-const hasDocumentExtension = file => /\.(?:html?|mhtml|mht)$/i.test(file?.name||'');
-export const isLocalHTMLFile = file => !!file && (hasDocumentExtension(file) || /^(?:text\/html|multipart\/related|application\/x-mimearchive)(?:;|$)/i.test(file.type||''));
+const hasDocumentExtension = file => /\.(?:html?|mhtml|mht|pdf)$/i.test(file?.name||'');
+export const isLocalHTMLFile = file => !!file && (isPDFFile(file)||hasDocumentExtension(file) || /^(?:text\/html|multipart\/related|application\/x-mimearchive)(?:;|$)/i.test(file.type||''));
 export function htmlExportName(name, annotations = false) {
-  return String(name||'문서.html').replace(/\.(?:html?|mhtml|mht)$/i,'')+(annotations?'-주석':'')+'.html';
+  return String(name||'문서.html').replace(/\.(?:html?|mhtml|mht|pdf)$/i,'')+(annotations?'-주석':'')+'.html';
 }
 
 const identities=new WeakMap(),localSources=new WeakMap(),nativeLegacyCopies=new WeakMap();
@@ -89,7 +90,14 @@ export async function findLocalDuplicates(local, records, loadRecord) {
 export async function readLocalHTML(input, {native = false, allowScripts = false, identify = true} = {}) {
   const originalHandle = input?.kind === 'file' && typeof input.getFile === 'function' ? input : null;
   const file = originalHandle ? await originalHandle.getFile() : input;
-  if (!isLocalHTMLFile(file) || typeof file.text !== 'function') throw new Error('HTML, HTM, MHTML 또는 MHT 파일을 선택해주세요.');
+  if (!isLocalHTMLFile(file) || typeof file.text !== 'function') throw new Error('HTML, HTM, MHTML, MHT 또는 PDF 파일을 선택해주세요.');
+  if(isPDFFile(file)){
+    await verifyPDF(file);const local={snapshot:{pdf:file,title:file.name},name:file.name,handle:null,originalHandle,sourceIdentity:identify?await localFileIdentity(file):null,diskStamp:originalHandle?{modified:file.lastModified,size:file.size}:null};localSources.set(local,file);return local;
+  }
+  const probeBytes=isMHTML(file)?null:new Uint8Array(await file.slice(0,native&&file.size>=4*1024*1024?65536:128).arrayBuffer());
+  if(probeBytes&&new TextDecoder().decode(probeBytes.subarray(0,128)).startsWith(PDF_ARCHIVE_MARKER)){
+    const snapshot=await readPDFArchive(file),local={snapshot,name:file.name,handle:null,originalHandle,sourceIdentity:identify?await localFileIdentity(snapshot.pdf):null};localSources.set(local,snapshot.pdf);return local;
+  }
   const sourceIdentity=identify?await localFileIdentity(file):null;
   if(isMHTML(file)){
     const snapshot=await readMHTML(file);
@@ -100,7 +108,7 @@ export async function readLocalHTML(input, {native = false, allowScripts = false
   // the browser streams/parses them without making a giant JS string first.
   let nativeFile = null,legacyNativeFile = null;
   if (native && file.size >= 4 * 1024 * 1024 && typeof file.slice === 'function') {
-    const header = new Uint8Array(await file.slice(0, 65536).arrayBuffer());
+    const header = probeBytes;
     const charset = new TextDecoder().decode(header.subarray(0, 4096)).match(/<meta\b[^>]*charset\s*=\s*["']?([\w-]+)/i)?.[1] || 'utf-8';
     const utf16 = header[0] === 0xff && header[1] === 0xfe || header[0] === 0xfe && header[1] === 0xff;
     if (!utf16 && /^(utf-8|utf8)$/i.test(charset)) {

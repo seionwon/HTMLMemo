@@ -44,6 +44,9 @@
         "application/x-mimearchive": [
           ".mhtml",
           ".mht"
+        ],
+        "application/pdf": [
+          ".pdf"
         ]
       }
     }

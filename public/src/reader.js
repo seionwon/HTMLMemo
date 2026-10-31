@@ -1,4 +1,5 @@
 import { createReadAloud } from './read-aloud.js';
+import { PdfReader } from './pdf-reader.js';
 import {bookmarkTextAnchor,captureBookmarkLocations,findBookmarkText} from './bookmark-location.js';
 import { SearchIndexCache } from './search-index.js';
 import { IsolatedRuntime,needsIsolatedRuntime } from './isolated-runtime.js';
@@ -39,6 +40,11 @@ export class Reader {
         try {
           this.doc = this.frame.contentDocument;
           if (!this.doc?.body) throw new Error('HTML 문서를 표시하지 못했습니다.');
+          if(parsed.pdfSource){
+            this.pdf=new PdfReader(this,parsed.pdfSource);await this.pdf.open();
+            if(this.disposed){resolve(this);return;}
+            this.naturalWidth=this.metadata.viewport.width;this.frame.style.width=this.naturalWidth+'px';
+          }
           if(this.metadata.execution?.allowScripts&&needsIsolatedRuntime(this.doc)){
             this.runtime=new IsolatedRuntime({host:this.host,doc:this.doc,source:parsed.file||new Blob([parsed.html],{type:'text/html;charset=utf-8'}),storage:this.metadata.view.sourceStorage,onStorage:entries=>{this.metadata.view.sourceStorage=entries;(this.callbacks.onSourceSettings||this.callbacks.onPosition)?.();},onNavigate:hash=>{void this.navigateSourceHash(hash);},onScroll:target=>this.navigateSourceTarget(target),onError:error=>this.callbacks.onError?.(error)});
             await this.runtime.start();
@@ -922,6 +928,7 @@ export class Reader {
     if(!grouped)this.readingControls.style.transform='translateX(var(--htmlmemo-controls-shift))';
   }
   readingHeadingState() {
+    if(this.pdf)return this.pdf.headingState();
     if(!this.readingHeadingNodes){
       this.readingHeadingNodes=this.outline().filter(item=>!this.isInsideTocOrTopbar(item.node)).map(item=>item.node);
       this.readingHeadingIndices=new Map(this.readingHeadingNodes.map((node,index)=>[node,index]));
@@ -937,6 +944,7 @@ export class Reader {
     return {nodes,current};
   }
   moveReadingHeading(direction) {
+    if(this.pdf){const {nodes,current}=this.pdf.headingState();const node=nodes[current+direction];if(node)void this.pdf.navigateNode(node).catch(error=>this.callbacks.onError?.(error));return !!node;}
     const {nodes,current}=this.readingHeadingState(),index=current+direction,target=nodes[index];
     if(!target||index<0)return false;
     this.cancelAnnotationJump?.();this.annotationJumpGeneration=(this.annotationJumpGeneration||0)+1;
@@ -968,6 +976,7 @@ export class Reader {
     this.metadata.view.readingTheme=value;this.applyReadingTheme();this.callbacks.onPosition?.();this.updateReadingControls();this.callbacks.onView?.();return true;
   }
   applyReadingFont() {
+    if(this.pdf){this.pdf.applyFont();return;}
     if(!this.doc?.body||this.topbarNode?.isConnected||this.findDocumentTopbar())return;
     const scale=this.readingFontScale();if(scale===1&&!this.readingFontSize)return;
     this.readingFontSize ||= Number.parseFloat(this.doc.defaultView?.getComputedStyle?.(this.doc.body)?.fontSize)||18;
@@ -978,7 +987,7 @@ export class Reader {
   setReadingFontScale(value) {
     if(!Number.isFinite(value)||this.disposed||this.preparing||this.topbarNode?.isConnected)return false;
     const scale=Math.round(clamp(value,.6,2.4)*10000)/10000;if(scale===this.readingFontScale())return false;
-    this.cancelAnnotationDrag();this.metadata.view.fontScale=scale;this.applyReadingFont();
+    this.cancelAnnotationDrag();if(this.pdf)this.autoFit=false;this.metadata.view.fontScale=scale;this.applyReadingFont();
     this.measure();this.renderDrawingLayer();this.readAloud?.refreshPaint?.();
     // Font scale was already applied to view above; unchanged scroll offsets
     // must still notify the document writer about that setting change.
@@ -1764,6 +1773,7 @@ export class Reader {
     this.measure();
   }
   restoreOpeningPosition() {
+    if(this.pdf){const position=this.metadata.view.pdfPosition;if(position)this.pdf.seek(position.page,position.y,false);return;}
     // Saved offsets include the old display zoom. A sidebar or a different
     // window width must not turn them into a different place in the document.
     const view=this.metadata.view,savedZoom=Number(view.zoom)>0?Number(view.zoom):this.zoom;
@@ -1787,6 +1797,7 @@ export class Reader {
     this.syncAnnotationPicking();
     this.updateReadingControls();
     this.readAloud?.refreshPaint?.();
+    this.pdf?.schedule();
   }
   rootScrollTop() { return this.doc?.defaultView?.scrollY || this.doc?.scrollingElement?.scrollTop || this.doc?.documentElement?.scrollTop || 0; }
   rootScrollLeft() { return this.doc?.defaultView?.scrollX || this.doc?.scrollingElement?.scrollLeft || this.doc?.documentElement?.scrollLeft || 0; }
@@ -1880,11 +1891,13 @@ export class Reader {
     return scrollHost;
   }
   get scrollTop() {
+    if(this.pdf)return this.pdf.logicalTop*this.zoom;
     if (!this.nativeScroll) return this.viewport.scrollTop;
     const host = this.findAnnotationScrollHost();
     return ((host ? host.scrollTop : 0) || this.rootScrollTop()) * this.zoom;
   }
   set scrollTop(value) {
+    if(this.pdf){this.pdf.setLogicalTop(value/this.zoom);return;}
     if (this.nativeScroll) {
       const target = value / this.zoom;
       const host = this.findAnnotationScrollHost();
@@ -1919,6 +1932,7 @@ export class Reader {
     // Hidden tabs can report zero geometry; never replace the last visible reading position with it.
     if(this.host?.hidden || this.disposed)return false;
     const view = {scrollTop:this.scrollTop, scrollLeft:this.scrollLeft, zoom:this.zoom, autoFit:this.autoFit, ...(Number.isFinite(this.tocResizedWidth)?{tocWidth:this.tocResizedWidth}:{}),...(Number.isFinite(this.metadata.view?.fontScale)?{fontScale:this.readingFontScale()}:{}),...(this.metadata.view?.readingTheme?{readingTheme:this.readingTheme()}:{}),...(this.metadata.view?.sourceStorage?{sourceStorage:this.metadata.view.sourceStorage}:{})};
+    if(this.pdf){const position=this.pdf.position(),old=this.metadata.view?.pdfPosition;view.pdfPosition=old?.page===position.page&&old?.y===position.y?old:position;}
     const previous = this.metadata.view || {};
     if (Object.keys(previous).length === Object.keys(view).length && Object.keys(view).every(key => view[key] === previous[key])) return false;
     this.metadata.view = view;
@@ -1962,9 +1976,10 @@ export class Reader {
     }catch(error){this.restoreTextSelection(target);throw error;}
     finally{this.selectionNotePending=false;}
   }
-  annotation(type, properties) { const highlight=type==='highlight'||type==='area';return {id:uid(), type, color:highlight?this.highlightColor:this.color, width:this.width, opacity:highlight?this.opacity:1, created:Date.now(), ...(FILL_TOOLS.includes(type)?{fill:this.rectFill===true,...(this.rectFill===true?{fillOpacity:this.opacity}:{})}:{}), ...properties}; }
+  annotation(type, properties) { const highlight=type==='highlight'||type==='area';return {id:uid(), type, color:highlight?this.highlightColor:this.color, width:this.width, opacity:highlight?this.opacity:1, created:Date.now(), ...(this.pdf&&/^n\d+$/.test(properties.anchor||'')?{pdfPage:Number(properties.anchor.slice(1))}:{}), ...(FILL_TOOLS.includes(type)?{fill:this.rectFill===true,...(this.rectFill===true?{fillOpacity:this.opacity}:{})}:{}), ...properties}; }
   addText(type, anchor, text) {
     if (!anchor?.quote?.trim()) return false;
+    if(this.pdf)return this.pdf.addText(type,anchor,text);
     if (type === 'note') {
       const index=this.searchCache().get(),resolved=resolveTextAnchor(index,anchor);if(!resolved||!text?.trim())return false;
       const range = rangeFromOffsets(this.doc, resolved.start, resolved.end,index); if (!range) return false;
@@ -2103,6 +2118,7 @@ export class Reader {
     return hit;
   }
   capturePenTextAnchor(element, points, box, origin, scale = 1, index = this.penTextIndex(element)) {
+    if(this.pdf)return null;
     if (!index || !points.length) return null;
     let left=Infinity,right=-Infinity,top=Infinity,bottom=-Infinity;
     for (const p of points) { left=Math.min(left,p.x);right=Math.max(right,p.x);top=Math.min(top,p.y);bottom=Math.max(bottom,p.y); }
@@ -2146,7 +2162,8 @@ export class Reader {
     if(!source||!this.annotationInSection(source)||this.isInteractiveControl(event.target))return false;
     if(!this.layer?.isConnected)this.renderDrawingLayer();
     const drag={pointerId:event.pointerId,source,annotation:structuredClone(source),section:currentSection(this.doc),start:this.point(event),moved:false,delta:{x:0,y:0}};
-    if(TEXT_TOOLS.includes(source.type)){
+    if(this.pdf&&source.pdfRects){drag.pdf=true;}
+    else if(TEXT_TOOLS.includes(source.type)){
       drag.index=this.searchCache().get();drag.resolved=resolveTextAnchor(drag.index,source.textAnchor);
       if(!drag.resolved)return false;
       drag.contentRoot=this.doc.getElementById('reader-content')||this.doc.body;drag.textNodes=new WeakMap();drag.bounds={start:Infinity,end:0};
@@ -2158,6 +2175,7 @@ export class Reader {
     this.annotationDrag=drag;event.preventDefault();event.stopPropagation();return true;
   }
   movedTextAnnotation(drag,event) {
+    if(drag.pdf)return this.pdf.dragText(drag,event);
     const offset=this.annotationDragTextOffset(drag,event),length=drag.resolved.end-drag.resolved.start;
     if(offset==null||drag.bounds.end-drag.bounds.start<length)return null;
     const start=clamp(offset-drag.grabOffset,drag.bounds.start,drag.bounds.end-length),end=start+length,text=drag.index.text;
@@ -2169,6 +2187,7 @@ export class Reader {
   previewTextAnnotation(drag,next) {
     if(!this.preview){this.preview=svg(this.doc,'g',{'data-htmlmemo-preview':''});this.layer.append(this.preview);}
     this.preview.replaceChildren();if(!next)return;
+    if(drag.pdf){this.pdf.previewText(next,this.preview);return;}
     const origin=this.layerOrigin(),a=drag.annotation,range=rangeFromOffsets(this.doc,next.textAnchor.start,next.textAnchor.end,drag.index);
     for(const rect of range?.getClientRects?.()||[]){
       if(!rect.width||!rect.height)continue;
@@ -2199,6 +2218,7 @@ export class Reader {
     const target=this.annotationDragTarget(event);if(!target)return null;
     const box=this.elementAnchor(target,true),points=drag.geometry.points.map(p=>({x:p.x+drag.delta.x,y:p.y+drag.delta.y}));
     const next={...drag.annotation,anchor:box.key,anchorTarget:box.target};let width=box.width,height=box.height;
+    if(this.pdf)next.pdfPage=Number(box.key.slice(1));
     if(next.type==='pen'){
       const scale=drag.geometry.scale||1,fontSize=box.fontSize/scale;
       if(!Number.isFinite(fontSize)||fontSize<.1||fontSize>1000)return null;
@@ -2226,6 +2246,7 @@ export class Reader {
     let next=null;
     if(drag.moved&&this.metadata.annotations.includes(drag.source)&&drag.section===currentSection(this.doc)){
       if(drag.geometry){if(Math.hypot(drag.delta.x,drag.delta.y)>.001)next=this.movedDrawingAnnotation(drag,event.pointerType==='touch'?drag.lastPoint:event);}
+      else if(drag.pdf)next=drag.next;
       else{const entry=this.searchCache().entry(this.doc.body);this.searchCache().flush(entry);if(!entry.dirty&&entry.index===drag.index)next=drag.next;if(next?.textAnchor.start===drag.resolved.start&&next?.textAnchor.end===drag.resolved.end)next=null;}
     }
     this.cancelAnnotationDrag();
@@ -2365,7 +2386,7 @@ export class Reader {
     cleanAnnotations(this.doc); this.selectedId = null;
     const style = this.doc.createElement('style'); style.id = 'htmlmemo-annotation-style';
     style.textContent = '[data-htmlmemo-mark]{border-radius:2px;box-decoration-break:clone;-webkit-box-decoration-break:clone}'; this.doc.head.append(style);
-    const textAnnotations=this.metadata.annotations.filter(a=>TEXT_TOOLS.includes(a.type));
+    const textAnnotations=this.pdf?[]:this.metadata.annotations.filter(a=>TEXT_TOOLS.includes(a.type));
     const index=textAnnotations.length?textIndex(this.doc):null;
     const section = currentSection(this.doc);
     for (const annotation of textAnnotations) {
@@ -2378,7 +2399,8 @@ export class Reader {
     // of walking the book again on the first search.
     if(index)this.searchCache().seed(this.doc.body,index);
     this.renderDrawingLayer();
-    if (this.searchQuery) this.search(this.searchQuery, false);
+    if(this.pdf)this.pdf.renderTextMarks();
+    if (this.searchQuery&&!this.pdf) this.search(this.searchQuery, false);
     if (this.bookSearchHit) this.stepDocumentBookSearch(0,{move:false});
     this.observeDynamicDocument();
   }
@@ -2544,10 +2566,12 @@ export class Reader {
   html() { return serializeHTML(this.runtime?this.runtime.exportDocument():this.doc, this.metadata); }
   async back() { const p = this.linkHistory.pop(); if (!p) return false; this.scrollTop=p.top; this.scrollLeft=p.left;this.readingHeadingCursor=p.heading?{node:p.heading,top:this.scrollTop}:null; this.rememberPosition();this.updateReadingControls();this.callbacks.onView?.(); return true; }
   jump(target) {
+    if(this.pdf){void this.pdf.navigateNode(target).catch(error=>this.callbacks.onError?.(error));return;}
     const r = target.getBoundingClientRect(), origin = this.layerOrigin(); this.scrollTop = Math.max(0,(r.top-origin.top+r.height/2)*this.zoom-this.viewport.clientHeight/2); this.scrollLeft = Math.max(0,(r.left-origin.left+r.width/2)*this.zoom-this.viewport.clientWidth/2);
     if(this.plainReadingButtons)this.readingHeadingCursor=/^h[1-6]$/i.test(target.localName)?{node:target,top:this.scrollTop}:null;
   }
   jumpToHash(hash) {
+    if(this.pdf&&/^#pdf-page-\d+$/.test(hash)){void this.pdf.go(Number(hash.slice(10)),0,{history:true}).catch(error=>this.callbacks.onError?.(error));return true;}
     if(!hash||hash==='#')return false;
     let id;try{id=decodeURIComponent(hash.slice(1));}catch{id=hash.slice(1);}
     const target=this.doc.getElementById(id)||[...this.doc.querySelectorAll('a[name]')].find(a=>a.name===id);
@@ -2563,6 +2587,7 @@ export class Reader {
     return this.navigateSourceTarget(target);
   }
   navigateSourceTarget(target) {
+    if(this.pdf){return this.pdf.navigateNode(target).catch(error=>{this.callbacks.onError?.(error);return false;});}
     if(this.preparing||this.disposed||target?.ownerDocument!==this.doc||!target.isConnected||!this.doc.body.contains(target)||this.isInsideTocOrTopbar(target)||target.closest('script,style,template,[data-htmlmemo-ui]'))return false;
     this.cancelAnnotationJump?.();this.annotationJumpGeneration=(this.annotationJumpGeneration||0)+1;
     this.linkHistory.push({top:this.scrollTop,left:this.scrollLeft});if(this.linkHistory.length>128)this.linkHistory.shift();
@@ -2587,6 +2612,7 @@ export class Reader {
     }catch(error){if(!this.disposed&&generation===this.annotationJumpGeneration)this.callbacks.onError?.(error);return false;}
   }
   async jumpAnnotation(id) {
+    if(this.pdf){const a=this.metadata.annotations.find(item=>item.id===id);if(!a)return false;try{return await this.pdf.jumpAnnotation(a);}catch(error){this.callbacks.onError?.(error);return false;}}
     this.cancelAnnotationJump?.();
     const generation=this.annotationJumpGeneration=(this.annotationJumpGeneration||0)+1;
     const annotation=this.metadata.annotations.find(a=>a.id===id);if(!annotation)return false;
@@ -2614,6 +2640,7 @@ export class Reader {
     }catch(error){if(!this.disposed&&generation===this.annotationJumpGeneration)this.callbacks.onError?.(error);return false;}
   }
   async jumpBookmark(id) {
+    if(this.pdf){const mark=this.metadata.bookmarks.find(item=>item.id===id),position=mark?.pdfPosition;if(!position)return false;try{return await this.pdf.go(position.page,position.y);}catch(error){this.callbacks.onError?.(error);return false;}}
     this.cancelAnnotationJump?.();
     const generation=this.annotationJumpGeneration=(this.annotationJumpGeneration||0)+1;
     const mark=this.metadata.bookmarks.find(item=>item.id===id);if(!mark)return false;
@@ -2765,12 +2792,14 @@ export class Reader {
     return location;
   }
   annotationInSection(annotation,section=currentSection(this.doc)) {
+    if(this.pdf)return true;
     const location=this.annotationLocation(annotation);
     if(location?.allowedSections)return location.allowedSections.includes(section);
     const saved=location?.section||annotation.textAnchor?.section||annotation.anchorTarget?.section;
     return !saved||saved===section;
   }
   annotationTree(contexts=this.annotationContexts()) {
+    if(this.pdf)return this.pdf.tree('annotations');
     const paths=this.annotationBookPaths();
     const preamble=this.outline().some(item=>!this.isInsideTocOrTopbar(item.node))?'목차 밖 주석':'문서 전체';
     return this.locationTree(this.metadata.annotations,'annotations',annotation=>{
@@ -2785,6 +2814,7 @@ export class Reader {
     });
   }
   bookmarkTree() {
+    if(this.pdf)return this.pdf.tree('bookmarks');
     const paths=this.annotationBookPaths(),contexts=paths.size?new Map():this.bookmarkContexts();
     const preamble=this.outline().some(item=>!this.isInsideTocOrTopbar(item.node))?'목차 밖 북마크':'문서 전체';
     return this.locationTree([...this.metadata.bookmarks].sort((a,b)=>a.top-b.top||a.left-b.left),'bookmarks',mark=>{
@@ -2842,6 +2872,7 @@ export class Reader {
   // and the heading it sits under. Headings are in document order, so the last one at or before the
   // annotation is found by binary search. A drawing on empty space falls back to its drawn position.
   annotationContexts() {
+    if(this.pdf)return this.pdf.contexts();
     const {outline,paths}=this.headingContexts(),headings=outline.map(item=>item.node),result=new Map();
     const headingBefore = node => {
       let lo = 0, hi = headings.length - 1, found = -1;
@@ -2874,18 +2905,33 @@ export class Reader {
     return result;
   }
   searchCache(){return this.searchIndexCache ||= new SearchIndexCache(this.doc);}
+  async searchWhole(query,isCurrent=()=>true,onProgress=()=>{}){
+    if(this.pdf)return this.pdf.searchWhole(query,isCurrent,onProgress);
+    if(!query.trim())return [];
+    await this.searchCache().prepare();if(this.disposed||!isCurrent())return null;
+    return this.searchCache().query(query).results;
+  }
+  jumpWholeSearch(result){
+    if(this.pdf)return this.pdf.jumpWhole(result).catch(error=>this.callbacks.onError?.(error));
+    for(const mark of this.wholeSearchMarks||[])if(mark.isConnected)mark.replaceWith(...mark.childNodes);
+    const index=this.searchCache().get(),range=rangeFromOffsets(this.doc,result.start,result.end,index);if(!range)return false;
+    const rect=range.getBoundingClientRect(),origin=this.layerOrigin();this.scrollTop=Math.max(0,(rect.top-origin.top+rect.height/2)*this.zoom-this.viewport.clientHeight/2);
+    this.wholeSearchMarks=this.searchCache().mutate(index,()=>wrapOffsets(this.doc,result.start,result.end,{'data-htmlmemo-search':'','data-htmlmemo-book-search-hit':''},'background:#f0a85b80;outline:2px solid #df9057;border-radius:2px;color:inherit',index));return true;
+  }
   clearSearchHighlight() {
     this.searchMarks ||= [...this.doc.querySelectorAll('[data-htmlmemo-search]')].filter(mark=>!mark.hasAttribute('data-htmlmemo-book-search-hit'));
     for(const mark of this.searchMarks)if(mark.isConnected)mark.replaceWith(...mark.childNodes);
     this.searchMarks=[];
   }
   async searchAsync(query,move=true,isCurrent=()=>true) {
+    if(this.pdf)return this.pdf.search(query,move,isCurrent);
     const generation=this.searchGeneration=(this.searchGeneration||0)+1;
     if(query.trim())await this.searchCache().prepare();
     if(this.disposed||generation!==this.searchGeneration||!isCurrent())return null;
     return this.search(query,move);
   }
   search(query, move = true) {
+    if(this.pdf){if(!query.trim()){this.pdf.searchAbort?.abort();this.pdf.searchGeneration++;this.pdf.clearSearch();this.searchQuery='';this.searchResults=[];this.searchPosition=-1;this.callbacks?.onSearchChange?.(this);return [];}void this.pdf.search(query,move,()=>true).catch(error=>this.callbacks.onError?.(error));return this.searchResults;}
     this.searchGeneration=(this.searchGeneration||0)+1;
     this.searchQuery = query;
     const cache=this.searchCache();cache.mutate(null,()=>this.clearSearchHighlight(),false);
@@ -2896,6 +2942,7 @@ export class Reader {
     if (move && this.searchResults.length) this.nextSearch(1); else this.callbacks?.onSearchChange?.(this); return this.searchResults;
   }
   nextSearch(direction) {
+    if(this.pdf){void this.pdf.nextSearch(direction).catch(error=>this.callbacks.onError?.(error));return true;}
     if(!this.searchQuery?.trim())return false;
     const cache=this.searchCache(),index=cache.get();
     if(this.searchTextIndex!==index&&this.searchQuery)this.search(this.searchQuery,false);
@@ -2910,15 +2957,16 @@ export class Reader {
     this.searchMarks=cache.mutate(index,()=>wrapOffsets(this.doc,result.start,result.end,{'data-htmlmemo-search':''},'background:#f0a85b80;outline:2px solid #df9057;border-radius:2px;color:inherit',index));
     this.callbacks?.onSearchChange?.(this);return true;
   }
-  outline() { return [...this.doc.querySelectorAll('h1,h2,h3,h4,h5,h6')].filter(n=>n.textContent.trim()&&!n.closest('[data-htmlmemo-ui]')).map(node=>({node,level:Number(node.localName[1]),title:node.textContent.trim()})); }
+  outline() { if(this.pdf)return this.pdf.entries||[];return [...this.doc.querySelectorAll('h1,h2,h3,h4,h5,h6')].filter(n=>n.textContent.trim()&&!n.closest('[data-htmlmemo-ui]')).map(node=>({node,level:Number(node.localName[1]),title:node.textContent.trim()})); }
   addBookmark(title) {
+    if(this.pdf){this.metadata.bookmarks.push({id:uid(),title,top:this.scrollTop/this.zoom,left:this.scrollLeft/this.zoom,...this.pdf.bookmarkLocation()});this.callbacks.onChange?.();return;}
     let mark={id:uid(),title,top:this.scrollTop/this.zoom,left:this.scrollLeft/this.zoom};const section=currentSection(this.doc);
     if(section)mark.section=section;
     if(!this.annotationBookPaths().size){const path=this.bookmarkContexts([mark]).get(mark.id);if(path?.length)mark.heading=path.at(-1).id;}
     [mark]=captureBookmarkLocations(this.doc,[mark],this.layerOrigin(),{getIndex:()=>this.searchCache().get()});
     this.metadata.bookmarks.push(mark);this.callbacks.onChange?.();
   }
-  bookmarksForEdition() { return captureBookmarkLocations(this.doc,this.metadata.bookmarks,this.layerOrigin(),{getIndex:()=>this.searchCache().get()}); }
+  bookmarksForEdition() { if(this.pdf)return structuredClone(this.metadata.bookmarks);return captureBookmarkLocations(this.doc,this.metadata.bookmarks,this.layerOrigin(),{getIndex:()=>this.searchCache().get()}); }
   bookmarkPosition(mark) {
     if(bookmarkTextAnchor(mark)&&(mark.section||'')===currentSection(this.doc)){
       const index=this.searchCache().get(),hit=findBookmarkText(index.text,mark,0,index.text.length,{sameEdition:true});
@@ -2944,10 +2992,12 @@ export class Reader {
     return this.readAloudPlayer()?.openSelection(anchor)||false;
   }
   toggleReadAloud() {
+    if(this.pdf){void this.pdf.prepareSpeech().then(()=>this.readAloudPlayer()?.toggle()).catch(error=>this.callbacks.onError?.(error));return;}
     this.readAloudPlayer()?.toggle();
   }
   stopSpeech() { this.readAloud?.close(); this.host?.ownerDocument?.defaultView?.speechSynthesis?.cancel(); }
   dispose() {
+    this.pdf?.dispose();
     this.readingThemeQuery?.removeEventListener?.('change',this.readingThemeChange);
     this.cancelTextMarkGesture();this.cancelAnnotationDrag();
     this.cancelDrawingGesture();this.touchScroll=null;this.touchErase=null;

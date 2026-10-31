@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "description": "PDFMemo의 비 UI 처리부를 JavaScript로 옮김. 원본 프로젝트는 변경하지 않음.",
+  "modules": [
+    {
+      "source": "PDFMemo/mobile/overrides/pdfTextSearch.ts",
+      "target": "public/src/pdf/text-search.js",
+      "sha256": "6e2cac9de711a0e9a0f4403bb7cef58953c3aadb01f8a4048f6b4af0bfdea904"
+    },
+    {
+      "source": "PDFMemo/mobile/overrides/pdfEmbeddedSearchIndex.ts",
+      "target": "public/src/pdf/embedded-search-index.js",
+      "sha256": "fd1b3f17aa3674dc4a4ab0114d3b992df1387cbab649a042c39c05147263d285"
+    },
+    {
+      "source": "PDFMemo/mobile/overrides/PdfPageRendering.ts",
+      "target": "public/src/pdf/page-rendering.js",
+      "sha256": "c1be82e83bc0e013bbe687c4b2fc526d6e8b2668d3bce918de5af86e14c671ee"
+    },
+    {
+      "source": "PDFMemo/mobile/search-cache.ts",
+      "target": "public/src/pdf/search-cache.js",
+      "sha256": "29062f19e8cc5a266f639a52f0c7f7471270c4bbb747b0a9c7d7f7e06cbecb8b"
+    },
+    {
+      "source": "PDFMemo/mobile/overrides/pdfViewportWindow.ts",
+      "target": "public/src/pdf/viewport-window.js",
+      "sha256": "0d7f9014975174d8d2a3e3dfc662c0affffa5264f5f96fd2e12621175d636327"
+    }
+  ],
+  "adaptations": [
+    "Local range transport reads immutable Blob slices instead of Android HTTP endpoints.",
+    "Raster images use revocable local Blob URLs inside the script-free HTMLMemo reader.",
+    "Search cache uses source SHA-256 identity and an HTMLMemo-specific database.",
+    "React and Android UI are replaced by the existing HTMLMemo Reader and app controls."
+  ]
+}

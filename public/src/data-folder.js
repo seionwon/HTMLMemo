@@ -1,7 +1,7 @@
 import { listDocuments, getDocument, listRevisions, restoreFolderDocuments, getSetting, setSetting, onStorageChange, permission, readLibrary } from './storage.js';
 import { localFileIdentity } from './local-files.js';
 import { PREFERENCES_KEY, normalizePreferences } from './preferences.js';
-import { validateAnnotations } from './model.js';
+import { validateAnnotations,validPDFPosition } from './model.js';
 import {LIBRARY_FOLDERS_KEY,validateFolders,mergeLibraryFolders,documentCopyName} from './library-folders.js';
 import {syncFolderTree,cleanupFolderTree} from './folder-tree.js';
 
@@ -42,7 +42,7 @@ const FORMAT = 'HTMLMemo.library';
 const CHECKPOINT = 'data-folder-checkpoint';
 const object = value => value && typeof value === 'object' && !Array.isArray(value);
 const validId = value => typeof value === 'string' && /^[\w-]{1,80}$/.test(value);
-const refName = /^[a-f0-9]{64}\.(?:json|html|htm|mhtml|mht)$/;
+const refName = /^[a-f0-9]{64}\.(?:json|html|htm|mhtml|mht|pdf)$/;
 const portableKey = key => [PREFERENCES_KEY,'htmlmemo-theme','htmlmemo-doc-toc-width-v1','htmlmemo-doc-toc-expanded-width-v1','msuite_tts_rate'].includes(key) || /^msuite_tts_voice_[\w-]{1,40}$/.test(key) || /^htmlmemo_tts_lang_[\w-]{1,80}$/.test(key);
 const jsonBlob = value => new Blob([JSON.stringify(value)], {type:'application/json'});
 const uid = () => crypto.randomUUID();
@@ -82,6 +82,8 @@ export function validateState(value, id) {
   if(!object(record)||record.id!==id||!validId(id)||typeof record.title!=='string'||record.title.length>1000||typeof record.name!=='string'||record.name.length>1000||!Number.isFinite(record.created)||!Number.isFinite(record.modified)||!object(record.metadata)||record.metadata.version!==1||!object(record.metadata.view)||!object(record.metadata.viewport)||!Array.isArray(value.revisions))throw Error('폴더의 문서 정보가 손상되었습니다.');
   const validateMarks = metadata => {
     validateAnnotations(metadata.annotations);
+    if(metadata.bookmarks?.some(mark=>mark.pdfPosition!=null&&!validPDFPosition(mark.pdfPosition)))throw Error('PDF 북마크 위치가 손상되었습니다.');
+    if(metadata.view?.pdfPosition!=null&&!validPDFPosition(metadata.view.pdfPosition))throw Error('PDF 읽기 위치가 손상되었습니다.');
     if(!Array.isArray(metadata.bookmarks)||metadata.bookmarks.length>10000||metadata.bookmarks.some(b=>typeof b?.id!=='string'||typeof b.title!=='string'||!Number.isFinite(b.top)||!Number.isFinite(b.left)))throw Error('폴더의 북마크가 손상되었습니다.');
   };
   validateMarks(record.metadata);
@@ -259,8 +261,8 @@ export class DataFolder {
         const content=await this.ops.getDocument(record.id);if(!content)continue;
         sourceType=content.file instanceof Blob?'file':'html';
         const body=sourceType==='file'?content.file:new Blob([content.html],{type:'text/html;charset=utf-8'});
-        source=await storeObject(data,body,'html');
-        const extension=(record.name.match(/\.(html?|mhtml|mht)$/i)?.[1]||'html').toLowerCase();
+        source=await storeObject(data,body,record.metadata?.format==='pdf'?'pdf':'html');
+        const extension=(record.name.match(/\.(html?|mhtml|mht|pdf)$/i)?.[1]||'html').toLowerCase();
         original=content.originalFile instanceof Blob?await storeObject(data,content.originalFile,extension):source;
       }
       const annotationStamp=(await localFileIdentity(jsonBlob({annotations:record.metadata.annotations,bookmarks:record.metadata.bookmarks,historyVersion}))).digest;

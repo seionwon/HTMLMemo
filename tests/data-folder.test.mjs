@@ -183,3 +183,10 @@ test('restoring into an existing same-name library folder remaps IDs and physica
   const sender=library(),disk=memoryFolder();sender.settings.set(LIBRARY_FOLDERS_KEY,[{id:'remote',parentId:'',name:'책'}]);sender.records.get('doc').folderId='remote';await manager(t,sender).connect(disk);
   const receiver=library([]);receiver.settings.set(LIBRARY_FOLDERS_KEY,[{id:'local',parentId:'',name:'책'}]);await manager(t,receiver).connect(disk);assert.deepEqual(receiver.settings.get(LIBRARY_FOLDERS_KEY),[{id:'local',parentId:'',name:'책'}]);assert.equal(receiver.records.get('doc').folderId,'local');assert.equal((await manifest(disk)).documents[0].copy.folderId,'local');assert.match(await(await copyFile(disk,await manifest(disk))).text(),/Raw received bytes/);
 });
+
+test('PDF originals, page anchored notes and bookmarks survive folder backup and restore without rewriting the PDF',async t=>{
+  const record=document('pdf-doc');record.name='읽는 책.pdf';record.metadata.format='pdf';record.metadata.execution={allowScripts:false};record.metadata.view.pdfPosition={page:2,y:.25};record.metadata.bookmarks[0].pdfPosition={page:2,y:.25};
+  const raw=new Blob(['%PDF-1.7\nimmutable PDF source\n%%EOF'],{type:'application/pdf'}),lib=library([record]);lib.contents.set(record.id,{file:raw});const disk=memoryFolder();await manager(t,lib).connect(disk);const head=await manifest(disk);assert.match(head.documents[0].source.name,/\.pdf$/);assert.match(head.documents[0].copy.name,/\.pdf$/);assert.equal(head.documents[0].sourceType,'file');
+  const receiver=library([]);await manager(t,receiver).connect(disk);const restored=receiver.records.get(record.id);assert.equal(restored.metadata.format,'pdf');assert.deepEqual(restored.metadata.view.pdfPosition,{page:2,y:.25});assert.deepEqual(new Uint8Array(await receiver.contents.get(record.id).file.arrayBuffer()),new Uint8Array(await raw.arrayBuffer()));
+  const before=head.documents[0].source;record.metadata.annotations[0].text='Edited annotation only';lib.records.set(record.id,record);const backup=manager(t,lib);await backup.connect(disk);const next=await manifest(disk);assert.deepEqual(next.documents[0].source,before);
+});

@@ -3,7 +3,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { resolve, extname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { root, prepareAssets } from './assets.mjs';
-const types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.webmanifest':'application/manifest+json','.svg':'image/svg+xml','.png':'image/png','.zip':'application/zip'};
+const types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.mjs':'text/javascript; charset=utf-8','.wasm':'application/wasm','.pdf':'application/pdf','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.webmanifest':'application/manifest+json','.svg':'image/svg+xml','.png':'image/png','.zip':'application/zip'};
 export function createServer(directory=resolve(root,'public')){
   return http.createServer(async(request,response)=>{
     try{

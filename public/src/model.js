@@ -3,6 +3,7 @@ export const TEXT_TOOLS = ['highlight', 'underline', 'strike'];
 export const DRAW_TOOLS = ['pen', 'rect', 'circle', 'ellipse', 'arrow', 'area', 'area-underline'];
 export const FILL_TOOLS = ['rect', 'circle', 'ellipse'];
 export const ANNOTATION_LABELS = {pen:'펜 그림',highlight:'형광펜',underline:'밑줄',strike:'취소선',note:'메모',text:'텍스트',rect:'사각형',circle:'원',ellipse:'타원',arrow:'화살표',area:'영역 강조','area-underline':'영역 밑줄'};
+export function validPDFPosition(value){return value&&Number.isInteger(value.page)&&value.page>=1&&value.page<=100000&&Number.isFinite(value.y)&&value.y>=0&&value.y<=1;}
 export function validateAnnotations(value) {
   if (!Array.isArray(value)) throw new Error('주석 데이터 형식이 올바르지 않습니다.');
   if (value.length > 20000) throw new Error('한 문서의 주석 수가 너무 많습니다.');
@@ -11,6 +12,8 @@ export function validateAnnotations(value) {
   return value.map(item => {
     if (!item || typeof item.id !== 'string' || !/^[\w-]{1,80}$/.test(item.id) || ids.has(item.id) || !valid.includes(item.type)) throw new Error('지원하지 않거나 손상된 주석입니다.');
     ids.add(item.id);
+    if(item.pdfPage!=null&&(!Number.isInteger(item.pdfPage)||item.pdfPage<1||item.pdfPage>100000))throw Error('주석의 PDF 페이지가 올바르지 않습니다.');
+    if(item.pdfRects!=null&&(!TEXT_TOOLS.includes(item.type)||!Array.isArray(item.pdfRects)||!item.pdfRects.length||item.pdfRects.length>10000||item.pdfRects.some(r=>!validPDFPosition(r)||['x','w','h'].some(k=>!Number.isFinite(r[k])||r[k]<0||r[k]>1)||r.w<=0||r.h<=0||r.x+r.w>1.00001||r.y+r.h>1.00001)))throw Error('PDF 글자 주석 위치가 손상되었습니다.');
     if (!/^#[\da-f]{6}$/i.test(item.color)) throw new Error('주석 색상 형식이 올바르지 않습니다.');
     if (!Number.isFinite(item.width) || item.width < .1 || item.width > 100) throw new Error('주석 굵기가 올바르지 않습니다.');
     if (!Number.isFinite(item.opacity) || item.opacity < 0 || item.opacity > 1) throw new Error('주석 투명도가 올바르지 않습니다.');

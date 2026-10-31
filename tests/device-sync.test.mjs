@@ -324,3 +324,10 @@ test('a returned merge cannot omit this device original annotations',async()=>{
  await join.mergeStreamBundle(await host.getStreamBundle(),()=>['merge']);const reply=await join.getStreamBundle();reply.manifest.documents[0].record.metadata.annotations=reply.manifest.documents[0].record.metadata.annotations.filter(n=>n.id!=='mac');
  await assert.rejects(host.mergeStreamBundle(reply),/합친 주석/);assert.deepEqual(a.docs.get('book').metadata.annotations.map(n=>n.id),['mac']);assert.equal(a.calls.length,0);
 });
+
+test('PDF streams and repeated unchanged sync preserve binary sources and page bookmarks',async()=>{
+  const row=await record('pdf-sync');delete row.html;row.name='책.pdf';row.file=new Blob(['%PDF-1.7\nimmutable source\n%%EOF'],{type:'application/pdf'});row.sourceIdentity=await localFileIdentity(row.file);row.metadata.format='pdf';row.metadata.view.pdfPosition={page:2,y:.4};row.metadata.bookmarks=[{id:'b',title:'쪽 위치',top:100,left:0,pdfPosition:{page:2,y:.4}}];
+  const sender=fixture([row]),receiver=fixture([]),bundle=await sender.adapter({includeSettings:false}).getStreamBundle();await receiver.adapter({includeSettings:false}).mergeStreamBundle(bundle,()=>assert.fail('new PDF should not conflict'));
+  const received=receiver.docs.get(row.id);assert.equal(received.metadata.format,'pdf');assert.equal(received.file.type,'application/pdf');assert.deepEqual(new Uint8Array(await received.file.arrayBuffer()),new Uint8Array(await row.file.arrayBuffer()));assert.deepEqual(received.metadata.bookmarks,row.metadata.bookmarks);
+  const next=await sender.adapter({includeSettings:false}).getStreamBundle();await receiver.adapter({includeSettings:false}).mergeStreamBundle(next,()=>assert.fail('unchanged PDF should not conflict'));assert.equal(receiver.calls.at(-1).length,0);
+});

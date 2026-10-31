@@ -42,7 +42,7 @@ test('an optional identity-cache write failure does not block opening the existi
 test('duplicate import presents exactly the three requested choices and safely focuses cancel',async()=>{
   const a=app(),pending=a.context.openLocalFile(local);await tick();
   assert.deepEqual([...a.doc.querySelectorAll('button')].map(b=>b.textContent),['취소','새롭게 열기','기존의 주석 파일로 가기']);
-  assert.equal(a.doc.querySelector('button[autofocus]').getAttribute('value'),'cancel');assert.match(a.doc.body.textContent,/기존 문서와 주석, 원본 HTML 파일은 변경하지 않습니다/);
+  assert.equal(a.doc.querySelector('button[autofocus]').getAttribute('value'),'cancel');assert.match(a.doc.body.textContent,/기존 문서와 주석, 원본 파일은 변경하지 않습니다/);
   a.dialog.close('cancel');assert.equal(await pending,null);assert.equal(a.created.length,0);assert.equal(a.opened.length,0);assert.deepEqual(a.rows,[record]);assert.equal(a.restored,1);
 });
 test('Escape or backdrop close is cancellation, not permission to create a new document',async()=>{

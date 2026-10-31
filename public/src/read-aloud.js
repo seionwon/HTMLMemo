@@ -785,7 +785,10 @@ export function createReadAloud(reader) {
     var ctx = run;
     if (!ctx || ctx.stopped) return;
     if (!scopeIsCurrent()) {invalidateSelection();return;}
-    if (i >= ctx.sents.length) { stop(); return; }
+    if (i >= ctx.sents.length) {
+      if(reader.pdf&&!selectionScope){reader.pdf.nextSpeechPage(()=>run===ctx&&!ctx.stopped).then(moved=>{if(run!==ctx||ctx.stopped)return;if(moved)startReading();else stop();}).catch(()=>failSpeech());return;}
+      stop(); return;
+    }
     ctx.i = i; render();
     var sent = ctx.sents[i];
     // Paint the sentence + follow it without bobbing (twin of the in-app band rule).
@@ -880,8 +883,13 @@ export function createReadAloud(reader) {
     run = { sents: sents, i: at, stopped: true };
     jump(at + delta);
   }
+  var pdfPlayGeneration=0;
   function pauseResume() {
     closePanel();
+    if(reader.pdf&&!selectionScope&&state!=='playing'){
+      const generation=++pdfPlayGeneration,expected=state;
+      reader.pdf.prepareSpeech().then(hasText=>{if(generation!==pdfPlayGeneration||state!==expected||reader.disposed)return;if(!hasText){reader.callbacks?.onNotice?.('이 쪽에는 읽을 수 있는 텍스트가 없습니다.');return;}if(state==='ready')startReading();else if(state==='paused')resumeReading();}).catch(()=>failSpeech());return;
+    }
     try {
       if (state === 'ready') startReading();
       // Pause cancels and remembers the view; Play uses a new reading position when it changed.
@@ -893,6 +901,7 @@ export function createReadAloud(reader) {
     } catch (e) {failSpeech();}
   }
   function stop() {                     // ⏹ stops the voice, keeps the bar (back to 'ready')
+    pdfPlayGeneration++;
     closePanel();
     resetPause();
     if (run) run.stopped = true;
@@ -948,6 +957,7 @@ export function createReadAloud(reader) {
   return {
     toggle() { if(state !== 'idle') {close();return;} buildBar();state='ready';render(); },
     openSelection,
+    isPlaying:()=>state==='playing',
     refreshPaint:refreshDiagramPaint,
     close,
     escape() {if(state==='idle')return false;if(panel)closePanel();else close();return true;},

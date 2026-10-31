@@ -132,7 +132,7 @@ test('real Chrome: Pages-only empty library waits for folder permission and rest
       window.libraryHintViolations=[];window.holdLibraryManifest=sessionStorage.getItem('fixture-hold-library-manifest')==='1';
       new MutationObserver(()=>{
         const hint=document.querySelector('#empty-library');
-        if(!hint||hint.hidden||hint.querySelector('h3')?.textContent!=='첫 HTML 문서를 보관해보세요.')return;
+        if(!hint||hint.hidden||hint.querySelector('h3')?.textContent!=='첫 문서를 보관해보세요.')return;
         if(document.documentElement.dataset.storageSetup!=='ready'||sessionStorage.getItem('fixture-expect-library-document')==='1')
           if(libraryHintViolations.length<10)libraryHintViolations.push({state:document.documentElement.dataset.storageSetup,documents:document.querySelectorAll('.document-card').length});
       }).observe(document,{subtree:true,childList:true,attributes:true,attributeFilter:['hidden','data-storage-setup']});
