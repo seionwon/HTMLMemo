@@ -174,7 +174,7 @@ export class Reader {
       [data-htmlmemo-topbar-grid]{grid-template-rows:calc(24px * var(--htmlmemo-reader-ui-scale,1)) minmax(0,1fr)!important}
       [data-htmlmemo-topbar-pad]{padding-top:calc(24px * var(--htmlmemo-reader-ui-scale,1))!important}
       [data-htmlmemo-topbar-offset]{top:calc(24px * var(--htmlmemo-reader-ui-scale,1))!important}
-      [data-htmlmemo-doc-sidebar-ui],[data-htmlmemo-native-sidebar] #reader-tree,[data-htmlmemo-native-sidebar]>details{zoom:var(--htmlmemo-reader-ui-scale,1)}
+      [data-htmlmemo-doc-sidebar-ui],[data-htmlmemo-native-sidebar] #reader-tree,[data-htmlmemo-native-sidebar]>details,[data-htmlmemo-native-sidebar]>a{zoom:var(--htmlmemo-reader-ui-scale,1)}
       [data-htmlmemo-toc-resizer],[data-htmlmemo-toc-resizer-bound]{width:calc(10px * var(--htmlmemo-reader-ui-scale,1))!important;min-width:0!important}
       [data-htmlmemo-toc-strip],[data-htmlmemo-toc-item-strip]{width:calc(8px * var(--htmlmemo-reader-ui-scale,1))!important;min-width:calc(8px * var(--htmlmemo-reader-ui-scale,1))!important;max-width:calc(8px * var(--htmlmemo-reader-ui-scale,1))!important;flex-basis:calc(8px * var(--htmlmemo-reader-ui-scale,1))!important}
       [data-htmlmemo-toc-strip] [data-htmlmemo-toc-resizer],[data-htmlmemo-toc-strip] [data-htmlmemo-toc-resizer-bound]{width:calc(8px * var(--htmlmemo-reader-ui-scale,1))!important}

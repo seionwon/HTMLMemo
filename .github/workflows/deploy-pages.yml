@@ -36,6 +36,8 @@ jobs:
         run: node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/browser-results.xml tests/browser-export.integration.mjs
       - name: Verify the current folder and sharing guide before the complete suite
         run: node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/browser-results.xml --test-name-pattern='Pages-only data folder copies imported originals' tests/browser.integration.mjs
+      - name: Verify original HTML outline links match common sidebar rows at every scale
+        run: node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/browser-results.xml --test-name-pattern='Pages-only MemoSuite book and fallback sidebar' tests/browser-format-parity.integration.mjs
       # Every former focused check is included in this complete suite. Run all
       # cases once and preserve its complete structured report for review.
       - run: npm run test:browser

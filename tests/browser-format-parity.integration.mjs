@@ -126,9 +126,13 @@ test('real Chrome: Pages-only MemoSuite book and fallback sidebar share tab, sea
     await chooseFile(page,Buffer.from(reference),'MemoSuite 도구줄.html');await page.evaluate(`${doc}.querySelector('[data-action=zoom]').click()`);await page.click('#zoom-reset');
     const native=doc+`.querySelector('[data-htmlmemo-doc-sidebar-ui]')`;
     const sidebarMetric=async expression=>{await page.send('Input.dispatchMouseEvent',{type:'mouseMoved',x:1,y:1});return page.evaluate(`(()=>{${metricCode}const p=${expression};return {tabs:[...p.querySelectorAll('.sidebar-views button')].map(n=>({key:n.dataset.sidebarView||'close',...metric(n)})),fields:[...p.querySelectorAll('input')].filter(n=>n.getBoundingClientRect().height>0).map(metric),add:p.querySelector('.bookmark-add-button')?metric(p.querySelector('.bookmark-add-button')):null};})()`);};
+    const outlineMetric=expression=>page.evaluate(`(()=>{${metricCode}const node=${expression},{appearance,...result}=metric(node);return {...result,textDecorationLine:node.ownerDocument.defaultView.getComputedStyle(node).textDecorationLine};})()`);
+    const nativeOutline=await outlineMetric(doc+`.querySelector('#reader-nav > a:last-of-type')`);
+    await writeFile(join(root,'test-results/pages-only-format-parity-native-outline-1280.png'),await page.screenshot());
     await page.evaluate(`${native}.querySelector('[data-sidebar-view=search]').click()`);const nativeSearch=await sidebarMetric(native);
     assert.equal(nativeSearch.fields.length,2);assert.ok(nativeSearch.tabs.every(tab=>tab.height===24));
     await page.evaluate(`${native}.querySelector('[data-sidebar-view=bookmarks]').click()`);const nativeBookmarks=await sidebarMetric(native);
+    await page.evaluate(`${native}.querySelector('[data-sidebar-view=outline]').click()`);
     const scaleStates=[];
     for(const width of [1280,390,320]){
       await viewport(page,width);
@@ -136,19 +140,21 @@ test('real Chrome: Pages-only MemoSuite book and fallback sidebar share tab, sea
         await page.evaluate(`${doc}.querySelector('[data-action=zoom]').click()`);await page.waitFor('!document.querySelector("#tool-popover").hidden');
         await page.evaluate(`(()=>{const i=document.querySelector('#zoom-value');i.value=${JSON.stringify(String(percent))};i.dispatchEvent(new Event('change',{bubbles:true}));})()`);await page.click('[data-popover-close]');
         await page.evaluate('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
-        const state=await page.evaluate(`(()=>{const f=${frame},d=f.contentDocument,fr=f.getBoundingClientRect(),s=fr.width/f.offsetWidth,b=d.querySelector('[data-htmlmemo-doc-topbar]').getBoundingClientRect(),n=d.querySelector('#reader-nav').getBoundingClientRect(),p=d.querySelector('[data-htmlmemo-doc-sidebar-ui] .sidebar-views').getBoundingClientRect(),button=d.querySelector('[data-action=speak]'),r=button.getBoundingClientRect();return {width:innerWidth,percent:${percent},header:b.height*s,headerWidth:b.width*s,headerLeft:fr.left+b.left*s,headerTop:fr.top+b.top*s,chrome:document.querySelector('.chrome').getBoundingClientRect().bottom,sidebar:n.width*s,tabs:p.height*s,button:r.height*s,speakReachable:d.elementFromPoint(r.left+r.width/2,r.top+r.height/2)?.closest('[data-action=speak]')===button};})()`);
+        const state=await page.evaluate(`(()=>{const f=${frame},d=f.contentDocument,fr=f.getBoundingClientRect(),s=fr.width/f.offsetWidth,b=d.querySelector('[data-htmlmemo-doc-topbar]').getBoundingClientRect(),n=d.querySelector('#reader-nav').getBoundingClientRect(),p=d.querySelector('[data-htmlmemo-doc-sidebar-ui] .sidebar-views').getBoundingClientRect(),link=d.querySelector('#reader-nav > a:last-of-type').getBoundingClientRect(),button=d.querySelector('[data-action=speak]'),r=button.getBoundingClientRect();return {width:innerWidth,percent:${percent},header:b.height*s,headerWidth:b.width*s,headerLeft:fr.left+b.left*s,headerTop:fr.top+b.top*s,chrome:document.querySelector('.chrome').getBoundingClientRect().bottom,sidebar:n.width*s,tabs:p.height*s,outlineRowHeight:link.height*s,outlineRowWidth:link.width*s,button:r.height*s,speakReachable:d.elementFromPoint(r.left+r.width/2,r.top+r.height/2)?.closest('[data-action=speak]')===button};})()`);
         assert.ok(Math.abs(state.header-24)<.2,JSON.stringify(state));assert.ok(Math.abs(state.headerWidth-width)<1,JSON.stringify(state));assert.ok(Math.abs(state.headerLeft)<1,JSON.stringify(state));assert.ok(Math.abs(state.headerTop-state.chrome)<1,JSON.stringify(state));assert.ok(Math.abs(state.sidebar-Math.min(300,width-40))<1,JSON.stringify(state));assert.ok(Math.abs(state.tabs-25)<.2,JSON.stringify(state));assert.ok(Math.abs(state.button-20)<.2,JSON.stringify(state));assert.equal(state.speakReachable,true,JSON.stringify(state));scaleStates.push(state);
+        assert.ok(Math.abs(state.outlineRowHeight-35.2)<.3,JSON.stringify(state));assert.ok(Math.abs(state.outlineRowWidth-(state.sidebar-25))<1.2,JSON.stringify(state));
       }
     }
     await page.evaluate(`${native}.querySelector('[data-sidebar-close]').click()`);assert.equal(await page.evaluate(`${doc}.body.classList.contains('toc-open')`),false);
     await page.click('#toolbar [data-action=more]');await page.click('#tool-popover [data-more=sidebar]');
     assert.equal(await page.evaluate(`${doc}.body.classList.contains('toc-open')`),true);assert.equal(await page.evaluate(`${native}.getBoundingClientRect().height>0`),true);
     await page.evaluate(`${doc}.body.classList.remove('toc-open')`);await viewport(page,1280);await page.evaluate(`${doc}.querySelector('[data-action=zoom]').click()`);await page.click('#zoom-reset');
-    await chooseFile(page,Buffer.from(html),'공통 사이드바.html');await page.click(control('zoom'));await page.click('#zoom-reset');
+    await chooseFile(page,Buffer.from(html.replace(/h[23]>/g,'h1>')),'공통 사이드바.html');await page.click(control('zoom'));await page.click('#zoom-reset');
+    const commonOutline=await outlineMetric(`Array.from(document.querySelectorAll('#sidebar [data-heading]')).at(-1)`);assert.deepEqual(commonOutline,nativeOutline,'source plain links and common outline rows share size, fonts, colors and padding');
     await page.click('#sidebar [data-sidebar-view=search]');const sharedSearch=await sidebarMetric('document.querySelector("#sidebar")');
     assert.deepEqual(sharedSearch,nativeSearch,'source and fallback search fields and tabs have the same dimensions, fonts and colors');
     await page.click('#sidebar [data-sidebar-view=bookmarks]');const sharedBookmarks=await sidebarMetric('document.querySelector("#sidebar")');assert.deepEqual(sharedBookmarks,nativeBookmarks);
     await writeFile(join(root,'test-results/pages-only-format-parity-sidebar-1280.png'),await page.screenshot());
-    assert.deepEqual(chrome.errors,[]);await writeFile(join(root,'test-results/pages-only-format-parity-sidebar.json'),JSON.stringify({status:'pass',search:sharedSearch,bookmarks:sharedBookmarks,sourceAndFallbackMatch:true,compactCloseAndReopen:true,scaleStates,errors:[]},null,2));
+    assert.deepEqual(chrome.errors,[]);await writeFile(join(root,'test-results/pages-only-format-parity-sidebar.json'),JSON.stringify({status:'pass',outline:commonOutline,search:sharedSearch,bookmarks:sharedBookmarks,sourceAndFallbackMatch:true,compactCloseAndReopen:true,scaleStates,errors:[]},null,2));
   }finally{await chrome?.close();await env.close();}
 });
