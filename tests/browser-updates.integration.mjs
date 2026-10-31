@@ -125,7 +125,7 @@ test('real Chrome: Pages-only PWA updater startup is silent when current and pre
   }finally{await chrome?.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}
 });
 
-test('real Chrome: PWA startup updates run before folder permissions on every launch',{timeout:180000},async()=>{
+test('real Chrome: PWA startup updates run before folder permissions on every launch',{timeout:120000},async()=>{
  await prepareAssets();await mkdir(root+'/test-results',{recursive:true});const assets=await packageAssets(),releases=new Map();
  for(const version of ['0.4.1','0.4.2']){
   const app={...assets.app,'sw.js':{text:startupWorkerProbe+assets.app['sw.js'].text},'src/version.js':{text:`export const APP_VERSION = ${JSON.stringify(version)};\n`},'index.html':{text:assets.app['index.html'].text.replace('<html lang="ko">',`<html lang="ko" data-test-release="${version}">`)},'styles.css':{text:assets.app['styles.css'].text+`\n/* startup-order-${version} */`}};
@@ -173,9 +173,9 @@ test('real Chrome: PWA startup updates run before folder permissions on every la
   await writeFile(root+'/test-results/pwa-startup-before-folder-resume.png',await page.screenshot());assert.deepEqual(chrome.errors,[]);report.status='pass';
  }catch(error){report.error=error.stack;if(chrome){
   const targets=await fetch('http://'+new URL(chrome.page.socket.url).host+'/json/list').then(r=>r.json()).catch(()=>[]);
-  report.workerDiagnostics=await Promise.all(targets.filter(t=>t.type==='service_worker').map(async target=>{
+  report.workerDiagnostics=await Promise.all(targets.filter(t=>t.type==='service_worker'&&t.url===`http://127.0.0.1:${server.address().port}/HTMLMemo/sw.js`).map(async target=>{
    const probe=await CDP.connect(target.webSocketDebuggerUrl);let timer;
-   try{return {url:target.url,...await Promise.race([probe.evaluate(`(async()=>({cache:typeof CACHE==='string'?CACHE:null,trace:globalThis.fixtureWorkerTrace,locks:await navigator.locks.query(),clients:(await self.clients.matchAll({type:'window',includeUncontrolled:true})).map(c=>({id:c.id,url:c.url})),selected:typeof read==='function'?await read('selected'):null}))()`),new Promise(resolve=>{timer=setTimeout(()=>resolve({unresponsive:true}),3000);})])};}catch(e){return {url:target.url,error:e.message};}finally{clearTimeout(timer);await probe.close();}
+   try{return {url:target.url,...await Promise.race([probe.evaluate(`(async()=>({cache:typeof CACHE==='string'?CACHE:null,active:self.registration.active?.state,waiting:self.registration.waiting?.state,trace:globalThis.fixtureWorkerTrace,locks:await navigator.locks.query(),clients:(await self.clients.matchAll({type:'window',includeUncontrolled:true})).map(c=>({id:c.id,url:c.url})),selected:typeof read==='function'?await read('selected'):null}))()`),new Promise(resolve=>{timer=setTimeout(()=>resolve({unresponsive:true}),3000);})])};}catch(e){return {url:target.url,error:e.message};}finally{clearTimeout(timer);await probe.close();}
   }));
   report.state=await chrome.page.evaluate('({release:document.documentElement.dataset.testRelease,update:document.documentElement.dataset.appUpdate,storage:document.documentElement.dataset.storageSetup,dialog:document.querySelector("#dialog")?.textContent,updateDialog:document.querySelector("#app-update-dialog")?.textContent,events:window.startupFolderEvents})').catch(()=>null);await writeFile(root+'/test-results/pwa-startup-before-folder-failure.png',await chrome.page.screenshot());
  }throw error;}

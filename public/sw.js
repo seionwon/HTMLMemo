@@ -21,28 +21,35 @@ async function prepare(){
       if(expected!==undefined&&checksum(new Uint8Array(await response.clone().arrayBuffer()))!==expected)throw Error('새 앱 파일이 일치하지 않습니다.');
       await cache.put(url.href,response);
     }));
-    await locked(async()=>{if(!await read('selected'))await write('selected',identity);await write('latest',identity);await prune();});
+    await locked(async()=>{if(!await read('selected'))await write('selected',identity);await write('latest',identity);});
+    await prune();
   }catch(error){if((await read('selected'))?.cache!==STORE)await caches.delete(STORE);throw error;}
 }
 async function pin(id,value){if(id)await write('client/'+id,value);return value;}
 async function chosen(id){return id&&await read('client/'+id)||await read('selected')||identity;}
 async function prune(){
+  const control=await caches.open(CONTROL),before=new Set((await control.keys()).map(request=>request.url));
   const live=(await self.clients.matchAll({type:'window',includeUncontrolled:true})).filter(client=>application(client.url));
   const liveIds=new Set(live.map(client=>client.id));
-  const selected=await read('selected')||identity,keep=new Set([CONTROL,STORE,selected.cache]);
+  // Window discovery can queue work on those windows. Never hold the navigation
+  // lock while waiting for it, or make worker activation wait for discovery.
+  return locked(async()=>{
+  const selected=await read('selected')||identity,latest=await read('latest'),keep=new Set([CONTROL,STORE,selected.cache]);
+  if(latest?.cache)keep.add(latest.cache);
   for(const client of live){const value=await chosen(client.id);keep.add(value.cache);await pin(client.id,value);}
-  const control=await caches.open(CONTROL);
   for(const request of await control.keys())if(request.url.startsWith(key('client/'))){
     // clients.get() can wait for a navigating window to become execution-ready.
     // That navigation needs this same update lock to select its cached shell.
     // Use the completed client snapshot instead; selected/new caches are kept
     // above, and every live old window already retains its own pinned cache.
-    if(!liveIds.has(request.url.slice(key('client/').length)))await control.delete(request);
+    if(!liveIds.has(request.url.slice(key('client/').length))&&before.has(request.url))await control.delete(request);
+    else keep.add((await(await control.match(request)).json()).cache);
   }
   for(const name of await caches.keys())if(name.startsWith('htmlmemo-')&&name.endsWith(':'+BASE.pathname)&&!keep.has(name))await caches.delete(name);
+  });
 }
 self.addEventListener('install',event=>event.waitUntil(prepare()));
-self.addEventListener('activate',event=>event.waitUntil(locked(prune).then(()=>self.clients.claim())));
+self.addEventListener('activate',event=>event.waitUntil(self.clients.claim()));
 self.addEventListener('fetch',event=>{
   const url=new URL(event.request.url);
   if(event.request.method!=='GET'||url.origin!==BASE.origin||!url.pathname.startsWith(BASE.pathname))return;

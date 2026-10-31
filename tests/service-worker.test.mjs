@@ -13,7 +13,7 @@ class Cache{
   async keys(){return[...this.rows.keys()].map(url=>new Request(url));}
   async delete(input){return this.rows.delete(this.url(input));}
 }
-function fixture({getClient=(id,clients)=>clients.get(id)}={}){
+function fixture({getClient=(id,clients)=>clients.get(id),matchClients=clients=>[...clients.values()]}={}){
   const stores=new Map(),clients=new Map(),network=new Map(),requests=[];
   const caches={async open(name){if(!stores.has(name))stores.set(name,new Cache());return stores.get(name);},async keys(){return[...stores.keys()];},async delete(name){return stores.delete(name);}};
   function worker(version,{bad=false,networkFailure=false,activation=async()=>{}}={}){
@@ -21,7 +21,7 @@ function fixture({getClient=(id,clients)=>clients.get(id)}={}){
     for(const[name,body]of Object.entries(files))network.set(new URL(name,base).href,body);network.set(base,files['index.html']);
     const digests=Object.fromEntries(Object.entries(files).map(([name,body])=>[name,crc32(new TextEncoder().encode(body))]));
     if(bad)network.set(new URL('styles.css',base).href,'Wrong deployed file');if(networkFailure)network.delete(new URL('styles.css',base).href);
-    const self={location:new URL('sw.js',base),addEventListener:(type,fn)=>events.set(type,fn),clients:{async matchAll(){return[...clients.values()];},async get(id){return getClient(id,clients);},async claim(){}},skipWaiting:async()=>{w.skips++;await activation();}};
+    const self={location:new URL('sw.js',base),addEventListener:(type,fn)=>events.set(type,fn),clients:{async matchAll(){return matchClients(clients);},async get(id){return getClient(id,clients);},async claim(){}},skipWaiting:async()=>{w.skips++;await activation();}};
     const context=vm.createContext({self,caches,URL,Request,Response,Uint8Array,fetch:async request=>{requests.push(request.url);const body=network.get(request.url);return new Response(body??'Unavailable',{status:body===undefined?503:200});}});
     const script=source.replace(/const CACHE = '[^']+';/,`const CACHE = 'htmlmemo-${version}';`).replace(/const VERSION = [^;]+;/,`const VERSION = ${JSON.stringify(version)};`).replace(/const DIGESTS = [^;]+;/,`const DIGESTS = ${JSON.stringify(digests)};`).replace(/const SHELL = [^;]+;/,`const SHELL = ['./','./index.html','./styles.css','./src/version.js'];`);
     vm.runInContext(script,context);
@@ -57,6 +57,13 @@ test('cache pruning never waits for a navigating client and preserves live old w
   assert.match(await(await two.fetch('styles.css',{id:'other'})).text(),/one/);
   assert.ok(f.stores.has('htmlmemo-one:/HTMLMemo/'));
 });
+test('worker activation does not wait for window discovery during a pending navigation',async()=>{
+  let discovering=false,queries=0;
+  const f=fixture({matchClients:clients=>{queries++;return discovering?new Promise(()=>{}):[...clients.values()];}});
+  const one=f.worker('one');await one.event('install');queries=0;discovering=true;let timer;
+  try{await Promise.race([one.event('activate'),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Activation waited for the pending window')),500);})]);}finally{clearTimeout(timer);}
+  assert.equal(queries,0);assert.match(await(await one.fetch('',{navigation:true,next:'new-window'})).text(),/one/);
+});
 test('incomplete or mixed releases never replace the selected app or offer an install',async()=>{
   for(const failure of ['bad','networkFailure']){
     const f=fixture();f.client('page');const one=f.worker('one');await one.event('install');await one.event('activate');await one.fetch('',{navigation:true,next:'page'});
@@ -83,6 +90,9 @@ test('old app resources stay cached offline and cache cleanup is limited to this
   const f=fixture();await f.caches.open('htmlmemo-other:/Other/');await f.caches.open('another-app');f.client('page');const one=f.worker('one');await one.event('install');await one.event('activate');await one.fetch('',{navigation:true,next:'page'});
   f.requests.length=0;f.network.clear();assert.match(await(await one.fetch('styles.css?reload=1',{id:'page'})).text(),/one/);assert.equal(f.requests.length,0);
   const two=f.worker('two');await two.event('install');await two.message('page',{type:'HTMLMEMO_UPDATE_APPLY',build:'htmlmemo-two'});f.clients.clear();await two.event('activate');
+  // Activation never waits for window discovery. Unused previous caches are
+  // collected when preparing the next release; the selected one stays intact.
+  assert.ok(f.stores.has('htmlmemo-one:/HTMLMemo/'));const three=f.worker('three');await three.event('install');
   assert.ok(!f.stores.has('htmlmemo-one:/HTMLMemo/'));assert.ok(f.stores.has('htmlmemo-other:/Other/'));assert.ok(f.stores.has('another-app'));
   assert.equal(await two.fetch('https://foreign.test/file.js'),null);assert.equal(await two.fetch('styles.css',{method:'POST'}),null);
 });
