@@ -169,6 +169,7 @@ export class Reader {
       [data-htmlmemo-compact-ui] .reader-layout[data-htmlmemo-sidebar-grid]{grid-template-columns:minmax(0,1fr)!important}
       [data-htmlmemo-compact-ui] #reader-nav[data-htmlmemo-native-sidebar]{position:fixed!important;left:0!important;top:calc(24px * var(--htmlmemo-reader-ui-scale,1))!important;bottom:0!important;z-index:6;display:none!important}
       [data-htmlmemo-compact-ui] body.toc-open #reader-nav[data-htmlmemo-native-sidebar]{display:block!important}
+      [data-htmlmemo-compact-ui] #reader-shade{display:none!important}
       [data-htmlmemo-doc-topbar-item]{height:calc(24px * var(--htmlmemo-reader-ui-scale,1))!important;min-height:calc(24px * var(--htmlmemo-reader-ui-scale,1))!important;max-height:calc(24px * var(--htmlmemo-reader-ui-scale,1))!important}
       [data-htmlmemo-topbar-grid]{grid-template-rows:calc(24px * var(--htmlmemo-reader-ui-scale,1)) minmax(0,1fr)!important}
       [data-htmlmemo-topbar-pad]{padding-top:calc(24px * var(--htmlmemo-reader-ui-scale,1))!important}
