@@ -121,7 +121,7 @@ test('real Chrome: Pages-only PWA updater startup is silent when current and pre
   }finally{await chrome?.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}
 });
 
-test('real Chrome: PWA startup updates run before folder permissions on every launch',{timeout:120000},async()=>{
+test('real Chrome: PWA startup updates run before folder permissions on every launch',{timeout:180000},async()=>{
  await prepareAssets();await mkdir(root+'/test-results',{recursive:true});const assets=await packageAssets(),releases=new Map();
  for(const version of ['0.4.1','0.4.2']){
   const app={...assets.app,'src/version.js':{text:`export const APP_VERSION = ${JSON.stringify(version)};\n`},'index.html':{text:assets.app['index.html'].text.replace('<html lang="ko">',`<html lang="ko" data-test-release="${version}">`)},'styles.css':{text:assets.app['styles.css'].text+`\n/* startup-order-${version} */`}};
@@ -134,7 +134,14 @@ test('real Chrome: PWA startup updates run before folder permissions on every la
   // A blocked beforeunload prevents both navigation and later Runtime.evaluate
   // diagnostics. Inspect the ordinary listener before each explicit restart;
   // never dismiss an unsaved-data dialog to make this test pass.
-  const navigate=page.navigate.bind(page);report.restarts=[];
+  const navigate=page.navigate.bind(page);report.restarts=[];report.browserEvents=[];
+  await page.send('Network.enable');await page.send('ServiceWorker.enable');
+  page.on('Page.frameStartedLoading',event=>report.browserEvents.push({type:'loading',frame:event.frameId}));
+  page.on('Page.frameNavigated',event=>{if(!event.frame.parentId)report.browserEvents.push({type:'navigated',url:event.frame.url});});
+  page.on('Network.requestWillBeSent',event=>{if(event.type==='Document')report.browserEvents.push({type:'request',url:event.request.url});});
+  page.on('Network.responseReceived',event=>{if(event.type==='Document')report.browserEvents.push({type:'response',url:event.response.url,status:event.response.status});});
+  page.on('Network.loadingFailed',event=>report.browserEvents.push({type:'network-error',error:event.errorText,canceled:event.canceled}));
+  page.on('ServiceWorker.workerVersionUpdated',event=>{report.workers=event.versions.map(({versionId,status,runningStatus,controlledClients})=>({versionId,status,runningStatus,controlledClients}));});
   page.on('Page.javascriptDialogOpening',event=>{report.unexpectedDialog={type:event.type,message:event.message};});
   page.navigate=async target=>{
    const state=await page.evaluate(`(()=>{const event=new Event('beforeunload',{cancelable:true});window.dispatchEvent(event);return {blocked:event.defaultPrevented,release:document.documentElement.dataset.testRelease,update:document.documentElement.dataset.appUpdate,storage:document.documentElement.dataset.storageSetup,folder:document.querySelector('#data-folder-status')?.textContent,events:window.startupFolderEvents};})()`);
@@ -160,6 +167,13 @@ test('real Chrome: PWA startup updates run before folder permissions on every la
   await page.evaluate('window.releaseStartupUpdateInfo()');await page.waitFor('document.documentElement.dataset.appUpdate==="current"&&!!document.querySelector("[data-folder-resume]")');await ordered();report.checks.push('The app remains at the version check while its response is pending, without exposing folder setup or enabled app controls');
   await page.click('#cancel-folder-setup');await page.waitFor('document.documentElement.dataset.storageSetup==="paused"');await page.send('Network.enable');await page.send('Network.emulateNetworkConditions',{offline:true,latency:0,downloadThroughput:-1,uploadThroughput:-1});await page.navigate(url);await page.waitFor('document.documentElement.dataset.appUpdate==="current"&&!!document.querySelector("[data-folder-resume]")');await ordered();assert.equal((await counts()).requests,0);assert.deepEqual(await data(page),before);report.checks.push('An offline launch uses its prepared update check before folder recovery and preserves documents, notes, bookmarks and history');
   await writeFile(root+'/test-results/pwa-startup-before-folder-resume.png',await page.screenshot());assert.deepEqual(chrome.errors,[]);report.status='pass';
- }catch(error){report.error=error.stack;if(chrome){report.state=await chrome.page.evaluate('({release:document.documentElement.dataset.testRelease,update:document.documentElement.dataset.appUpdate,storage:document.documentElement.dataset.storageSetup,dialog:document.querySelector("#dialog")?.textContent,updateDialog:document.querySelector("#app-update-dialog")?.textContent,events:window.startupFolderEvents})').catch(()=>null);await writeFile(root+'/test-results/pwa-startup-before-folder-failure.png',await chrome.page.screenshot());}throw error;}
+ }catch(error){report.error=error.stack;if(chrome){
+  const targets=await fetch('http://'+new URL(chrome.page.socket.url).host+'/json/list').then(r=>r.json()).catch(()=>[]);
+  report.workerDiagnostics=await Promise.all(targets.filter(t=>t.type==='service_worker').map(async target=>{
+   const probe=await CDP.connect(target.webSocketDebuggerUrl);let timer;
+   try{return await Promise.race([probe.evaluate(`(async()=>({cache:typeof CACHE==='string'?CACHE:null,locks:await navigator.locks.query(),clients:(await self.clients.matchAll({type:'window',includeUncontrolled:true})).map(c=>({id:c.id,url:c.url})),selected:typeof read==='function'?await read('selected'):null}))()`),new Promise(resolve=>{timer=setTimeout(()=>resolve({unresponsive:true}),3000);})]);}catch(e){return {error:e.message};}finally{clearTimeout(timer);await probe.close();}
+  }));
+  report.state=await chrome.page.evaluate('({release:document.documentElement.dataset.testRelease,update:document.documentElement.dataset.appUpdate,storage:document.documentElement.dataset.storageSetup,dialog:document.querySelector("#dialog")?.textContent,updateDialog:document.querySelector("#app-update-dialog")?.textContent,events:window.startupFolderEvents})').catch(()=>null);await writeFile(root+'/test-results/pwa-startup-before-folder-failure.png',await chrome.page.screenshot());
+ }throw error;}
  finally{await writeFile(root+'/test-results/pwa-startup-before-folder.json',JSON.stringify(report,null,2)+'\n');await chrome?.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}
 });
