@@ -7,7 +7,7 @@ const isMHTML = file => /\.(?:mhtml|mht)$/i.test(file.name||'') || /^(?:multipar
 const hasDocumentExtension = file => !!documentExtension(file?.name);
 export const isLocalHTMLFile = file => !!file && (isPDFFile(file)||hasDocumentExtension(file)||officeFormat(file) || /^(?:text\/html|multipart\/related|application\/x-mimearchive)(?:;|$)/i.test(file.type||''));
 export function htmlExportName(name, annotations = false) {
-  const value=String(name||'문서.html');return (documentExtension(value)?value.replace(/\.[a-z0-9]+$/i,''):value)+(annotations?'-주석':'')+'.html';
+  const value=String(name||'문서.html'),ext=documentExtension(value);return (ext?value.slice(0,-ext.length-1):value)+(annotations?'-주석':'')+'.html';
 }
 
 const identities=new WeakMap(),localSources=new WeakMap(),nativeLegacyCopies=new WeakMap();

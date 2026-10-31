@@ -28,9 +28,10 @@ export async function renderOffice(input,format,title){
   let bytes=input instanceof Uint8Array?input:new Uint8Array(input);
   if(!bytes.length||bytes.length>OFFICE_MAX_BYTES)throw Error('문서 파일은 비어 있지 않은 100MB 이하 파일이어야 합니다.');
   const warnings=[];
-  if(bytes[0]===0x50&&bytes[1]===0x4b)await inspectOfficeZip(bytes,format,warnings);
+  if(OFFICE_FORMATS[format]!=='ebook'&&bytes[0]===0x50&&bytes[1]===0x4b)await inspectOfficeZip(bytes,format,warnings);
   let body;
-  if(OFFICE_FORMATS[format]==='hangul'){const {renderHangul}=await import('./office-hangul.js');body=await renderHangul(bytes,format,warnings);}
+  if(OFFICE_FORMATS[format]==='ebook'){const {renderEbook}=await import('./office-ebook.js');body=await renderEbook(bytes,format,warnings);}
+  else if(OFFICE_FORMATS[format]==='hangul'){const {renderHangul}=await import('./office-hangul.js');body=await renderHangul(bytes,format,warnings);}
   else if(OFFICE_FORMATS[format]==='word'){
     if(format!=='docx'){const result=await convertOdtToDocx(bytes);bytes=result.docx;if(result.dropped.length)warnings.push('OpenDocument 변환에서 지원하지 않는 개체 '+result.dropped.reduce((n,d)=>n+d.count,0)+'개는 생략되었습니다. 원본 파일은 그대로 보관합니다.');}
     body=renderWord(await parseDocx(bytes,{expandAltChunks:false}),warnings);

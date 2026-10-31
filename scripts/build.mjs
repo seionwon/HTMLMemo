@@ -8,6 +8,7 @@ import { PUBLIC_APP_URL } from '../public/src/install.js';
 await compileDesign();
 await import('./build-office.mjs');
 await import('./build-rhwp.mjs');
+await import('./build-foliate.mjs');
 await prepareAssets();
 const output=join(root,'dist');
 await rm(output,{recursive:true,force:true});

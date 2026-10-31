@@ -1,0 +1,6 @@
+{
+  "repository": "https://github.com/fb55/boolbase",
+  "commit": "54811f01c797a6bb1c263183ae90b7dd627e0638",
+  "file": "LICENSE",
+  "reason": "boolbase 1.0.0 declares ISC but omits license text from its npm archive"
+}

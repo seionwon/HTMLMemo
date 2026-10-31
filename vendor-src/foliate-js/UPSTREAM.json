@@ -1,0 +1,47 @@
+{
+  "repository": "https://github.com/johnfactotum/foliate-js",
+  "commit": "78914aef4466eb960965702401634c2cb348e9b1",
+  "license": "MIT",
+  "files": [
+    {
+      "path": "epub.js",
+      "sha256": "dfe347495039e9b5991478986ec6b7713cf9efbcd8f475a77ef7b967c5176298",
+      "bytes": 43685
+    },
+    {
+      "path": "epubcfi.js",
+      "sha256": "e1a688ad5c84bf31f33cef467f92c7a6d060a0f17ec37c1d3c048e9c7b1cf645",
+      "bytes": 13233
+    },
+    {
+      "path": "mobi.js",
+      "sha256": "016526df13a9f11ee6671a8c74346e1cf41fe6bdfe50165fdcbf744f015694f3",
+      "bytes": 47716
+    },
+    {
+      "path": "fb2.js",
+      "sha256": "09a7890bf191f1b6c6dd435fae2868b86c75e73e00731b0051c02f2a998a180a",
+      "bytes": 12273
+    },
+    {
+      "path": "comic-book.js",
+      "sha256": "7f3bf77561ca77300d5244015fcb1f73805787db246928074dc49fb56c88762e",
+      "bytes": 1811
+    },
+    {
+      "path": "LICENSE",
+      "sha256": "b621ffc351fe263bc9b09dd0bc1c9332fda9c462a3904c1e4f0b4d3236b9c28c",
+      "bytes": 1070
+    },
+    {
+      "path": "README.md",
+      "sha256": "56f46064f70484ac8c0014c04352a8f093091822ae1f682c5d3af76647f1f0dd",
+      "bytes": 22828
+    },
+    {
+      "path": "view.js",
+      "sha256": "e0093af921feb03bb58fb51aeedc321fa108a4158d215f6913ecf7925415c945",
+      "bytes": 22850
+    }
+  ]
+}
