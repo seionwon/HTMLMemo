@@ -64,7 +64,7 @@ export async function auditLowResolution(w=window,onProgress=()=>{}) {
   // Equivalent to dragging the compact bar to the right edge; no speech starts.
   bar.style.left=Math.max(4,w.innerWidth-bar.offsetWidth-4)+'px';bar.style.top=Math.max(4,Math.floor(w.innerHeight/2))+'px';bar.style.bottom='auto';
   await click('[data-tts-gear]');await inspect('tts-settings','.mstts-panel');
-  for(const button of [...d.querySelectorAll('.mstts-select-trigger')]){button.click();await frames();await inspect('tts-options','.mstts-select-menu');button.click();await frames();}
+  for(const label of [...d.querySelectorAll('.mstts-select-trigger')].map(button=>button.getAttribute('aria-label'))){const trigger=()=>[...d.querySelectorAll('.mstts-select-trigger')].find(button=>button.getAttribute('aria-label')===label);trigger().click();await frames();await wait(()=>$('.mstts-select-menu'));w.speechSynthesis.dispatchEvent(new w.Event('voiceschanged'));await frames();await inspect('tts-options','.mstts-select-menu');trigger().click();await frames();}
   await click('.mstts-player > button:last-of-type');
   await click('#toolbar [data-action=select]');await popClose();await click('#library-tab');await wait(()=>$('[data-card-menu]'));
   await click('[data-card-menu]');await inspect('document-menu','#dialog');await close();

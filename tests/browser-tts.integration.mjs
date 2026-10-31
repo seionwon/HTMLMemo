@@ -1,3 +1,4 @@
+import {chooseDocumentExport} from './export-flow.mjs';
 // Requires permission to bind localhost and launch a dedicated Chrome process.
 // These are real browser checks, separate from the DOM/unit test suite.
 import test from 'node:test';
@@ -21,8 +22,8 @@ test('real Chrome: MemoSuite TTS toolbar in LibreMemo',{timeout:90000},async t=>
       // A native OPFS FileSystemFileHandle exercises the same browser write and
       // IndexedDB structured-clone contracts as an external picked file.
       await page.evaluate(`window.showSaveFilePicker=async()=>{const root=await navigator.storage.getDirectory();return root.getFileHandle('picked-document.html',{create:true});};`);
-      await page.click('#save-page');await page.waitFor('!document.querySelector("#toolbar").hidden && document.querySelector("#status-left").textContent.includes("자동 저장됨")');
-      await page.click('#save-page');await page.waitFor(`(async()=>{try{const root=await navigator.storage.getDirectory();return (await(await root.getFileHandle('picked-document.html')).getFile()).size>0;}catch{return false;}})()`);
+      await chooseDocumentExport(page,'html');await page.waitFor('!document.querySelector("#toolbar").hidden && document.querySelector("#status-left").textContent.includes("자동 저장됨")');
+      await chooseDocumentExport(page,'html');await page.waitFor(`(async()=>{try{const root=await navigator.storage.getDirectory();return (await(await root.getFileHandle('picked-document.html')).getFile()).size>0;}catch{return false;}})()`);
       const html=await page.evaluate(`(async()=>{const root=await navigator.storage.getDirectory();return (await (await root.getFileHandle('picked-document.html')).getFile()).text();})()`);assert.match(html,/data:image\/svg\+xml;base64/);assert.match(html,/htmlmemo-data/);assert.ok(!html.includes('fixtureLoaded'));
     });
     await t.test('compact toolbar opens without speech and retains all playback controls',async()=>{try {

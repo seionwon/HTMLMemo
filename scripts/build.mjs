@@ -9,6 +9,7 @@ await compileDesign();
 await import('./build-office.mjs');
 await import('./build-rhwp.mjs');
 await import('./build-foliate.mjs');
+await import('./build-pdf-export.mjs');
 await copyFile(join(root,'LICENSE'),join(root,'public/LICENSE.txt'));
 await prepareAssets();
 const output=join(root,'dist');

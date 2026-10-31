@@ -4,7 +4,7 @@ import { isPDFFile, verifyPDF, PDF_ARCHIVE_MARKER, readPDFArchive } from './pdf-
 import {documentExtension,officeFormat,verifyOffice} from './office-formats.js';
 
 const isMHTML = file => /\.(?:mhtml|mht)$/i.test(file.name||'') || /^(?:multipart\/related|application\/x-mimearchive)(?:;|$)/i.test(file.type||'');
-const hasDocumentExtension = file => !!documentExtension(file?.name);
+const hasDocumentExtension = file => !!documentExtension(file?.name)||/\.librememo$/i.test(file?.name||'');
 export const isLocalHTMLFile = file => !!file && (isPDFFile(file)||hasDocumentExtension(file)||officeFormat(file) || /^(?:text\/html|multipart\/related|application\/x-mimearchive)(?:;|$)/i.test(file.type||''));
 export function htmlExportName(name, annotations = false) {
   const value=String(name||'문서.html'),ext=documentExtension(value);return (ext?value.slice(0,-ext.length-1):value)+(annotations?'-주석':'')+'.html';
@@ -53,6 +53,7 @@ export function sameLocalFile(a,b) {
   return a?.version===1&&b?.version===1&&Number.isSafeInteger(a.size)&&a.size>=0&&a.size===b.size&&/^[a-f0-9]{64}$/.test(a.digest)&&a.digest===b.digest;
 }
 export async function findLocalDuplicates(local, records, loadRecord) {
+  if(local.importArchiveIdentity)return records.filter(record=>sameLocalFile(record.importArchiveIdentity,local.importArchiveIdentity));
   const matches=[],pdfArchive=local.snapshot.pdf&&local.originalFile;let preparedHTML,archiveIdentity;
   const sourceSize=local.sourceIdentity?.size??localSources.get(local)?.size;
   // Most first imports cannot match any known source size. Do not scan their
@@ -103,6 +104,21 @@ export async function readLocalHTML(input, {native = false, allowScripts = false
   const originalHandle = input?.kind === 'file' && typeof input.getFile === 'function' ? input : null;
   const file = originalHandle ? await originalHandle.getFile() : input;
   if (!isLocalHTMLFile(file) || typeof file.text !== 'function') throw new Error('HTML, PDF, HWP·HWPX·HML, Office, OpenDocument, CSV·TSV, Markdown 또는 텍스트·JSON 파일을 선택해주세요.');
+  if(/\.librememo$/i.test(file.name||'')){
+    const {readDocumentArchive}=await import('./document-archive.js');
+    const archive=await readDocumentArchive(file),metadata=archive.metadata;
+    const originalIdentity=await localFileIdentity(archive.original),importArchiveIdentity=await localFileIdentity(file);
+    let snapshot;
+    if(archive.manifest.reading.kind==='pdf')snapshot={pdf:archive.reading,title:metadata.title,metadata};
+    else{
+      // Use the ordinary HTML encoding/CSP/sandbox path. Raw originals can be UTF-16
+      // or contain their own CSP; merely prefixing such bytes would corrupt the view.
+      const local=await readLocalHTML(new File([archive.reading],'reading.html',{type:'text/html'}),{native,allowScripts:metadata.execution.allowScripts,identify:false});
+      if(local.snapshot.pdf||local.snapshot.office)throw Error('보관 파일의 읽기 형식이 맞지 않습니다.');
+      snapshot={...local.snapshot,title:metadata.title,archiveMetadata:metadata};
+    }
+    return {snapshot,name:archive.original.name,handle:null,originalHandle,originalFile:archive.original,originalExact:archive.manifest.original.exact,originalReading:archive.manifest.reading.path===archive.manifest.original.path,sourceIdentity:originalIdentity,importArchiveIdentity};
+  }
   const format=officeFormat(file);
   if(format){
     await verifyOffice(file,format);

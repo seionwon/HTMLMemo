@@ -433,7 +433,12 @@ export function createReadAloud(reader) {
   var voices = [];
   function loadVoices() { try { voices = W.speechSynthesis.getVoices() || []; } catch (e) { voices = []; } }
   loadVoices();
-  if (W.speechSynthesis.addEventListener) listen(W.speechSynthesis,'voiceschanged',function () { loadVoices(); if (panel) fillPanel(); });
+  if (W.speechSynthesis.addEventListener) listen(W.speechSynthesis,'voiceschanged',function () {
+    loadVoices();if(!panel)return;
+    const expanded=panel.querySelector('.mstts-select-trigger[aria-expanded=true]')?.getAttribute('aria-label');
+    fillPanel();
+    if(expanded)[...panel.querySelectorAll('.mstts-select-trigger')].find(button=>button.getAttribute('aria-label')===expanded)?.click();
+  });
   function resolveVoice() {
     var list = voicesForLang(voices, lang);
     if (voiceURI && voiceURI !== 'auto') {

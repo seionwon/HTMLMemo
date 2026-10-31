@@ -149,3 +149,19 @@ test('reader and migration never give an imported document scripts together with
   for(const path of ['reader.js','migrate.js']){const source=await readFile(new URL('../public/src/'+path,import.meta.url),'utf8');assert.doesNotMatch(source,/setAttribute\('sandbox',\s*'[^']*allow-scripts[^']*allow-same-origin|setAttribute\('sandbox',\s*'[^']*allow-same-origin[^']*allow-scripts/);assert.match(source,/new IsolatedRuntime/);}
   const source=await readFile(new URL('../public/src/isolated-runtime.js',import.meta.url),'utf8');assert.match(source,/setAttribute\('sandbox','allow-scripts'\)/);assert.match(source,/event\.source!==frame\.contentWindow/);assert.match(source,/value\?\.channel!==this\.channel/);
 });
+
+test('source drawer commands require the document channel and change only the fixed drawer state',async()=>{
+  const text=await readFile(new URL('../public/src/isolated-runtime.js',import.meta.url),'utf8'),start=text.indexOf('  const command=value=>{'),end=text.indexOf('  // srcdoc inherits',start);
+  const doc=documentFor('<html><head></head><body><nav id="reader-nav"></nav><button id="reader-menu" aria-expanded="false"></button><p id="private">untouched</p></body></html>');let changes=0;
+  const command=new Function('document','channel','schedule',text.slice(start,end)+';return command;')(doc,'this-document',()=>changes++);
+  command({channel:'another-document',type:'sidebar',open:true});assert.equal(doc.body.classList.contains('toc-open'),false);assert.equal(changes,0);
+  for(const open of ['true',1,{},null])command({channel:'this-document',type:'sidebar',open});assert.equal(changes,0);
+  command({channel:'this-document',type:'sidebar',open:true,selector:'#private',value:'must not run'});assert.equal(doc.body.classList.contains('toc-open'),true);assert.equal(doc.querySelector('#reader-menu').getAttribute('aria-expanded'),'true');assert.equal(doc.querySelector('#private').textContent,'untouched');assert.equal(changes,1);
+  command({channel:'this-document',type:'sidebar',open:true});assert.equal(changes,1,'unchanged state cannot generate a mutation/reply loop');command({channel:'this-document',type:'sidebar',open:false});assert.equal(doc.body.classList.contains('toc-open'),false);assert.equal(doc.querySelector('#reader-menu').getAttribute('aria-expanded'),'false');assert.equal(changes,2);
+});
+
+test('local source drawer updates invalidate only their class and accessibility baselines',()=>{
+  const doc=documentFor('<html><head></head><body data-htmlmemo-runtime-id="r1" class="original"><nav id="reader-nav"></nav><button id="reader-menu" data-htmlmemo-runtime-id="r2" aria-expanded="true"></button></body></html>'),r=Object.create(IsolatedRuntime.prototype),sent=[];
+  Object.assign(r,{doc,nodes:new Map(),attributes:new Map(),send:value=>sent.push(value)});r.index(doc.documentElement);doc.body.classList.add('toc-open');doc.querySelector('#reader-menu').setAttribute('aria-expanded','false');r.setSidebar(false);
+  assert.equal(r.attributes.get('r1').get('class'),'original toc-open');assert.equal(r.attributes.get('r2').get('aria-expanded'),'false');assert.deepEqual(sent,[{type:'sidebar',open:false}]);assert.equal(doc.body.getAttribute('class'),'original toc-open');
+});

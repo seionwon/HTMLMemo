@@ -109,7 +109,7 @@ function clearReaderSidebarArtifacts(root) {
   const nodes = [root, ...(root.querySelectorAll?.('[data-htmlmemo-toc-active],[data-htmlmemo-toc-main],[data-htmlmemo-toc-collapsed],[data-htmlmemo-sidebar-folded],[data-htmlmemo-sidebar-grid],[data-htmlmemo-sidebar-grid-item],[data-htmlmemo-sidebar-flex],[data-htmlmemo-toc-sidebar],[data-htmlmemo-toc-item],[data-htmlmemo-toc-strip],[data-htmlmemo-toc-item-strip],[data-htmlmemo-toc-resizer-bound],[data-htmlmemo-toc-resizer-bound-left],[data-htmlmemo-toc-resizing],[data-htmlmemo-topbar-active],[data-htmlmemo-doc-topbar],[data-htmlmemo-doc-topbar-item],[data-htmlmemo-topbar-grid],[data-htmlmemo-topbar-pad],[data-htmlmemo-topbar-offset],[data-htmlmemo-scroll-host],[style*="--htmlmemo-toc-grid-columns"],[style*="--htmlmemo-toc-width"],[style*="--htmlmemo-topbar-grid-rows"]') || [])];
   for (const element of nodes) {
     if (!element?.removeAttribute) continue;
-    element.removeAttribute('data-htmlmemo-compact-ui');for(const name of ['--htmlmemo-reader-ui-scale','--htmlmemo-reader-ui-width','--htmlmemo-reader-ui-left','--htmlmemo-reader-sidebar-left'])element.style?.removeProperty(name);
+    element.removeAttribute('data-htmlmemo-compact-ui');element.removeAttribute('data-htmlmemo-sidebar-open');for(const name of ['--htmlmemo-reader-ui-scale','--htmlmemo-reader-ui-width','--htmlmemo-reader-ui-left','--htmlmemo-reader-sidebar-left'])element.style?.removeProperty(name);
     if (element.hasAttribute?.('data-htmlmemo-toc-resizer-bound-left')) {
       const prevLeft = element.getAttribute('data-htmlmemo-toc-resizer-bound-left');
       if (prevLeft) element.style?.setProperty('left', prevLeft);

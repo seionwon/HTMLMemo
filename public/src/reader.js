@@ -166,9 +166,9 @@ export class Reader {
       [data-htmlmemo-compact-ui] [data-htmlmemo-doc-topbar].reader-head .reader-title{min-width:48px!important}
       [data-htmlmemo-compact-ui] [data-htmlmemo-doc-topbar].reader-head .reader-position{display:none!important}
       [data-htmlmemo-compact-ui] [data-htmlmemo-doc-topbar].reader-head #reader-menu{display:inline-flex!important}
-      [data-htmlmemo-compact-ui] .reader-layout[data-htmlmemo-sidebar-grid]{grid-template-columns:minmax(0,1fr)!important}
+      [data-htmlmemo-compact-ui] [data-htmlmemo-sidebar-grid]{grid-template-columns:minmax(0,1fr)!important}
       [data-htmlmemo-compact-ui] #reader-nav[data-htmlmemo-native-sidebar]{position:fixed!important;left:0!important;top:calc(24px * var(--htmlmemo-reader-ui-scale,1))!important;bottom:0!important;z-index:6;display:none!important}
-      [data-htmlmemo-compact-ui] body.toc-open #reader-nav[data-htmlmemo-native-sidebar]{display:block!important}
+      [data-htmlmemo-compact-ui] body.toc-open #reader-nav[data-htmlmemo-native-sidebar],html[data-htmlmemo-compact-ui][data-htmlmemo-sidebar-open] #reader-nav[data-htmlmemo-native-sidebar]{display:block!important}
       [data-htmlmemo-compact-ui] #reader-shade{display:none!important}
       [data-htmlmemo-doc-topbar-item]{height:calc(24px * var(--htmlmemo-reader-ui-scale,1))!important;min-height:calc(24px * var(--htmlmemo-reader-ui-scale,1))!important;max-height:calc(24px * var(--htmlmemo-reader-ui-scale,1))!important}
       [data-htmlmemo-topbar-grid]{grid-template-rows:calc(24px * var(--htmlmemo-reader-ui-scale,1)) minmax(0,1fr)!important}
@@ -896,6 +896,7 @@ export class Reader {
       if(!topbar){
         // Copy the book's reader-head structure; source HTML keeps its own bar.
         controls.classList.add('reader-head','htmlmemo-source-toolbar');
+        controls.style.removeProperty('position');
         const menu=button('toggle-sidebar','목차','☰',()=>{this.callbacks.onReadingAction?.('toggle-sidebar',menu);this.updateReadingControls();});menu.setAttribute('aria-controls','sidebar');
         const title=doc.createElement('span');title.className='reader-title';title.textContent=this.metadata.title||this.doc.title;title.title=title.textContent;
         const back=button('reading-back','뒤로','↶',()=>this.back());
@@ -1129,12 +1130,16 @@ export class Reader {
     if(['annotations','bookmarks'].includes(this.documentSidebarMode))this.showDocumentSidebarView(this.documentSidebarMode,{reveal:false});
   }
   setDocumentSidebarDrawer(open){
-    if(this.tocResize?.sidebar?.id!=='reader-nav'||!this.doc.documentElement.hasAttribute('data-htmlmemo-compact-ui'))return;
+    if(this.tocResize?.sidebar?.id!=='reader-nav')return;
+    if(!this.doc.documentElement.hasAttribute('data-htmlmemo-compact-ui')&&this.doc.defaultView?.getComputedStyle?.(this.tocResize.sidebar)?.position!=='fixed')return;
     this.doc.body.classList.toggle('toc-open',open);
     this.doc.getElementById('reader-menu')?.setAttribute('aria-expanded',String(open));
+    this.runtime?.setSidebar?.(!!open);
   }
-  toggleDocumentSidebar(open=this.tocStrip){
+  toggleDocumentSidebar(open){
     if(!this.documentSidebarUI?.isConnected)return;
+    if(open==null)open=this.doc.documentElement.hasAttribute('data-htmlmemo-compact-ui')?!this.doc.documentElement.hasAttribute('data-htmlmemo-sidebar-open')&&!this.doc.body.classList.contains('toc-open'):this.tocStrip;
+    if(this.doc.documentElement.hasAttribute('data-htmlmemo-compact-ui'))this.doc.documentElement.toggleAttribute('data-htmlmemo-sidebar-open',open);
     const unit=this.sidebarUnit();this.applyTocWidth(open?Math.max(TOC_STRIP_SNAP*unit,this.tocExpandedWidth||300*unit):TOC_MIN*unit,{persist:false,snapStrip:true});
     if(open)this.showDocumentSidebarView(this.documentSidebarMode||'outline');
     else {this.doc.getElementById('reader-close')?.click();this.setDocumentSidebarDrawer(false);}
@@ -1848,10 +1853,11 @@ export class Reader {
   fitZoom() { const focused=!!this.host.closest('.reader-focus'); return clamp(this.viewport.clientWidth / this.naturalWidth, .2, focused ? 8 : 2); }
   applyZoom() {
     const set=(style,key,value)=>{if(style[key]!==value)style[key]=value;};
-    if(this.nativeScroll&&this.topbarNode?.isConnected)set(this.frame.style,'width',Math.max(this.naturalWidth,this.viewport.clientWidth/this.zoom)+'px');
+    const pinnedSourceUI=this.nativeScroll&&(this.topbarNode?.isConnected||this.tocResize?.sidebar?.isConnected);
+    if(pinnedSourceUI)set(this.frame.style,'width',Math.max(this.naturalWidth,this.viewport.clientWidth/this.zoom)+'px');
     if(this.nativeScroll)set(this.frame.style,'height',Math.max(200,this.viewport.clientHeight/this.zoom)+'px');
     set(this.frame.style,'transform',`scale(${this.zoom})`);
-    set(this.sizer.style,'width',Math.max(this.naturalWidth*this.zoom,this.nativeScroll&&this.topbarNode?.isConnected?this.viewport.clientWidth:0)+'px');
+    set(this.sizer.style,'width',Math.max(this.naturalWidth*this.zoom,pinnedSourceUI?this.viewport.clientWidth:0)+'px');
     set(this.sizer.style,'height',(this.nativeScroll?Math.max(200*this.zoom,this.viewport.clientHeight):(this.naturalHeight||800)*this.zoom)+'px');
     if(this.doc?.documentElement){
       const previous=this.uiScale||1;this.uiScale=1/this.zoom;
@@ -3033,7 +3039,7 @@ export class Reader {
     if(this.pdf){void this.pdf.nextSearch(direction).catch(error=>this.callbacks.onError?.(error));return true;}
     if(!this.searchQuery?.trim())return false;
     const cache=this.searchCache(),index=cache.get();
-    if(this.searchTextIndex!==index&&this.searchQuery)this.search(this.searchQuery,false);
+    if(this.searchTextIndex!==index&&this.searchQuery){const previous=this.searchPosition;this.search(this.searchQuery,false);this.searchPosition=clamp(previous,-1,this.searchResults.length-1);}
     if (!this.searchResults.length) return false;
     const position=clamp(this.searchPosition+direction,0,this.searchResults.length-1);
     if(position===this.searchPosition)return false;

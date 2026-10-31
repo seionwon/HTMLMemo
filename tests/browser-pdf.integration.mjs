@@ -1,3 +1,4 @@
+import {chooseDocumentExport} from './export-flow.mjs';
 // Actual Chrome only in CI / trusted environments. This uses the shipped app,
 // its ordinary import, toolbar, folder autosave and export paths.
 import test from 'node:test';
@@ -57,7 +58,7 @@ test('real Chrome: Pages-only PDF uses the HTML and Markdown UI, saves page anno
     await page.click('#library-tab');await page.click('#paste-button');await page.evaluate("document.querySelector('#paste-title').value='UI comparison';document.querySelector('#paste-text').value='# First\\n\\nText body.\\n\\n## Next\\n\\nAnother section.'");await page.click('#paste-save');await page.waitFor(frame+'?.style.visibility==="visible"');const markdownControls=await page.evaluate(controls);assert.deepEqual(markdownControls,pdfControls);
     await chooseFile(page,Buffer.from('<!doctype html><title>HTML comparison</title><h1>First</h1><p>Text body.</p><h2>Next</h2>'),'UI comparison.html');await page.waitFor(frame+'?.style.visibility==="visible"');assert.deepEqual(await page.evaluate(controls),pdfControls);
     await page.click('#library-tab');await page.click('[data-open="'+await page.evaluate('window.__pdfRecords[0].id')+'"]');await page.waitFor(ready,30000);
-    await page.evaluate(`(async()=>{const root=await navigator.storage.getDirectory();window.__pdfExport=await root.getFileHandle('PDF annotations.html',{create:true});window.showSaveFilePicker=async()=>window.__pdfExport;})()`);await page.click('#save-page');await page.waitFor("document.querySelector('#toast').textContent.includes('내보냈습니다')");
+    await page.evaluate(`(async()=>{const root=await navigator.storage.getDirectory();window.__pdfExport=await root.getFileHandle('PDF annotations.html',{create:true});window.showSaveFilePicker=async()=>window.__pdfExport;})()`);await chooseDocumentExport(page,'html');await page.waitFor("document.querySelector('#toast').textContent.includes('내보냈습니다')");
     const exported=Buffer.from(await page.evaluate(`(async()=>{const f=await window.__pdfExport.getFile(),bytes=new Uint8Array(await f.arrayBuffer());let binary='';for(let i=0;i<bytes.length;i+=16384)binary+=String.fromCharCode(...bytes.subarray(i,i+16384));return btoa(binary);})()`),'base64');assert.ok(exported.length>original.length);
     receiver=await launchChrome();await receiver.page.navigate(env.url);
     await chooseFile(receiver.page,original,'Receiver original.pdf');await receiver.page.waitFor(ready,30000);await saved(receiver.page,'window.__pdfRecords.length===1');

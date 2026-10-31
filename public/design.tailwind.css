@@ -273,6 +273,7 @@ html[data-app-sidebar-resizing] iframe{pointer-events:none!important}
 /* One sidebar presentation in the app shell and in a MemoSuite book. The
    document's live TOC/search nodes keep their original handlers and anchors. */
 [data-htmlmemo-native-sidebar]{box-sizing:border-box!important;padding:0!important;border-right:calc(1px * var(--htmlmemo-reader-ui-scale,1)) solid var(--line)!important;box-shadow:calc(8px * var(--htmlmemo-reader-ui-scale,1)) 0 calc(30px * var(--htmlmemo-reader-ui-scale,1)) #1439210b!important;scrollbar-gutter:auto!important;background:var(--surface)!important;color:var(--text)!important}
+[data-htmlmemo-native-sidebar]{padding-bottom:calc(64px * var(--htmlmemo-reader-ui-scale,1))!important;scroll-padding-bottom:calc(64px * var(--htmlmemo-reader-ui-scale,1))}
 :is(#sidebar,[data-htmlmemo-doc-sidebar-ui]){font:400 12px/1.6 var(--app-font);color:var(--text);background:var(--surface);letter-spacing:normal;text-align:left}
 :is(#sidebar,[data-htmlmemo-doc-sidebar-ui]) button{box-sizing:border-box;font:inherit;color:inherit;letter-spacing:normal;box-shadow:none}
 :is(#sidebar,[data-htmlmemo-doc-sidebar-ui]) .sidebar-views{height:25px;min-height:25px;max-height:25px;gap:3px;margin:0!important;padding:0 8px;border-bottom:1px solid var(--line);background:var(--surface)}

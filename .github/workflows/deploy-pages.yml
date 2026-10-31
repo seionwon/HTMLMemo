@@ -32,6 +32,8 @@ jobs:
       - run: npm test
       - run: npm run check
       - run: mkdir -p test-results
+      - name: Verify source archives, standard PDF and self-contained offline HTML exports
+        run: node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/browser-results.xml tests/browser-export.integration.mjs
       - name: Verify shared toolbar sizes, sidebar and reading actions for every format
         run: node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/browser-results.xml tests/browser-format-parity.integration.mjs
       - name: Verify zoom popup values follow applied scale in native and plain readers
@@ -74,6 +76,7 @@ jobs:
             test-results/sidebar-views-collapse-*.json
             test-results/toolbar-modes-selection-note-*.json
             test-results/pages-only-*.json
+            test-results/pages-only-export-native.pdf
             test-results/pwa-startup-*.json
             test-results/librememo-branding*.json
             test-results/*.png
@@ -118,7 +121,7 @@ jobs:
           import {readFile} from 'node:fs/promises';
           import {PDF_ASSETS} from './public/src/pdf/assets.js';
           import {APP_FILES} from './public/src/distribution.js';
-          const files=[...APP_FILES.filter(name=>name.startsWith('src/office-')||name.startsWith('vendor/office/')||name.startsWith('vendor/ebook/')||name==='LICENSE.txt'),'index.html','src/app.js','src/updates.js','src/help.js','src/help-content.js','src/utils.js','src/preferences.js','src/web.js','src/markdown.js','vendor/markdown-it.js','vendor/markdown-it-LICENSE.txt','src/reader.js','src/isolated-runtime.js','src/read-aloud.js','src/search-index.js','src/model.js','src/document.js','src/bookmark-location.js','src/migrate.js','src/local-files.js','src/mhtml.js','src/storage.js','src/data-folder.js','src/library-folders.js','src/folder-tree.js','manifest.webmanifest','styles.css','src/sync-service.js','src/sync-crypto.js','src/sync-adapter.js','src/sync-ui.js','src/sync-device-service.js','src/sync-peer.js','src/sync-stream.js','src/sync-temp.js','src/sync-qr.js','vendor/html5-qrcode.min.js','vendor/html5-qrcode-LICENSE.txt','vendor/qrcodegen-LICENSE.txt','src/pdf-document.js','src/pdf-reader.js','src/pdf/assets.js','src/pdf/text-search.js','src/pdf/embedded-search-index.js','src/pdf/page-rendering.js','src/pdf/search-cache.js','src/pdf/viewport-window.js',...PDF_ASSETS];
+          const files=[...APP_FILES.filter(name=>name.startsWith('src/office-')||name.startsWith('vendor/office/')||name.startsWith('vendor/ebook/')||name.startsWith('vendor/pdf-export/')||['src/document-archive.js','src/document-export.js','src/pdf-export-plan.js','src/pdf-export-worker.js','LICENSE.txt'].includes(name)),'index.html','src/app.js','src/updates.js','src/help.js','src/help-content.js','src/utils.js','src/preferences.js','src/web.js','src/markdown.js','vendor/markdown-it.js','vendor/markdown-it-LICENSE.txt','src/reader.js','src/isolated-runtime.js','src/read-aloud.js','src/search-index.js','src/model.js','src/document.js','src/bookmark-location.js','src/migrate.js','src/local-files.js','src/mhtml.js','src/storage.js','src/data-folder.js','src/library-folders.js','src/folder-tree.js','manifest.webmanifest','styles.css','src/sync-service.js','src/sync-crypto.js','src/sync-adapter.js','src/sync-ui.js','src/sync-device-service.js','src/sync-peer.js','src/sync-stream.js','src/sync-temp.js','src/sync-qr.js','vendor/html5-qrcode.min.js','vendor/html5-qrcode-LICENSE.txt','vendor/qrcodegen-LICENSE.txt','src/pdf-document.js','src/pdf-reader.js','src/pdf/assets.js','src/pdf/text-search.js','src/pdf/embedded-search-index.js','src/pdf/page-rendering.js','src/pdf/search-cache.js','src/pdf/viewport-window.js',...PDF_ASSETS];
           const expected=await Promise.all(files.map(file=>readFile('public/'+file)));
           let matched=false;
           for(let attempt=0;attempt<30;attempt++){
@@ -135,7 +138,7 @@ jobs:
           console.log('Published app, reader and model match this commit.');
           NODE
           mkdir -p test-results
-          node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/published-browser-results.xml --test-name-pattern='MHTML import|compact library|folder setup|whole-book search|long-document search|duplicate HTML import|reading controls|palette controls|toolbar mode groups|sidebar view choices|annotation tree|font-scaled pen|Pages-only|Chrome companion|adaptive file tabs|TTS paused resume|TTS transport controls|TTS selection|device sync entry' tests/browser-format-parity.integration.mjs tests/browser-office.integration.mjs tests/browser-pdf.integration.mjs tests/browser.integration.mjs tests/browser-library-folders.integration.mjs tests/browser-annotation-jump.integration.mjs tests/browser-security.integration.mjs tests/browser-annotation-picking.integration.mjs tests/browser-device-sync.integration.mjs tests/browser-mobile.integration.mjs tests/browser-help.integration.mjs tests/browser-updates.integration.mjs tests/browser-branding.integration.mjs
+          node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/published-browser-results.xml --test-name-pattern='MHTML import|compact library|folder setup|whole-book search|long-document search|duplicate HTML import|reading controls|palette controls|toolbar mode groups|sidebar view choices|annotation tree|font-scaled pen|Pages-only|Chrome companion|adaptive file tabs|TTS paused resume|TTS transport controls|TTS selection|device sync entry' tests/browser-export.integration.mjs tests/browser-format-parity.integration.mjs tests/browser-office.integration.mjs tests/browser-pdf.integration.mjs tests/browser.integration.mjs tests/browser-library-folders.integration.mjs tests/browser-annotation-jump.integration.mjs tests/browser-security.integration.mjs tests/browser-annotation-picking.integration.mjs tests/browser-device-sync.integration.mjs tests/browser-mobile.integration.mjs tests/browser-help.integration.mjs tests/browser-updates.integration.mjs tests/browser-branding.integration.mjs
       - name: Keep published desktop and mobile verification screenshots
         if: always()
         uses: actions/upload-artifact@v4
@@ -173,5 +176,6 @@ jobs:
             test-results/annotation-tree-*.png
             test-results/pages-only-*.png
             test-results/pages-only-*.json
+            test-results/pages-only-export-native.pdf
             test-results/chrome-companion-*.png
           if-no-files-found: ignore

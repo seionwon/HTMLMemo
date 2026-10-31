@@ -122,6 +122,13 @@ function bootstrap(channel,preferences,mutationRoots) {
   }).observe(document,{subtree:true,childList:true,characterData:true,attributes:true});
   const command=value=>{
     if(value?.channel!==channel)return;
+    if(value?.type==='sidebar'&&typeof value.open==='boolean'){
+      if(!document.getElementById('reader-nav'))return;
+      const menu=document.getElementById('reader-menu');let changed=false;
+      if(document.body.classList.contains('toc-open')!==value.open){document.body.classList.toggle('toc-open',value.open);changed=true;}
+      if(menu&&menu.getAttribute('aria-expanded')!==String(value.open)){menu.setAttribute('aria-expanded',String(value.open));changed=true;}
+      if(changed)schedule();return;
+    }
     if(value.type==='hash'&&typeof value.hash==='string'&&value.hash.length<2000){
       navigationEnabled=false;pendingNavigation=null;const before=location.href;setHashSilently(value.hash);
       // A script can change chapters without changing its URL. Replaying an
@@ -280,6 +287,16 @@ export class IsolatedRuntime {
     const id=target.getAttribute(ID);if(validId(id))this.attributes.set(id,next);
   }
   send(value) {if(!this.disposed)this.port?.postMessage({channel:this.channel,...value});}
+  setSidebar(open) {
+    if(typeof open!=='boolean'||!this.doc.getElementById('reader-nav'))return;
+    // The reader just changed these two source attributes locally. Track that
+    // baseline so a coalesced source reply can restore its current toggle state.
+    for(const [node,name] of [[this.doc.body,'class'],[this.doc.getElementById('reader-menu'),'aria-expanded']]){
+      if(!node)continue;const previous=this.attributes.get(node.getAttribute(ID));if(!previous)continue;
+      if(node.hasAttribute(name))previous.set(name,node.getAttribute(name));else previous.delete(name);
+    }
+    this.send({type:'sidebar',open});
+  }
   exportDocument() {
     // Restore original executable markup only into a detached export clone.
     // It never re-enters the live, scriptless reader or the app document.

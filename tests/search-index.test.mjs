@@ -96,6 +96,11 @@ test('reader navigation performs no full text walks or body normalization after 
   r.search('키워드');const first=r.searchTextIndex;for(let i=0;i<10;i++){r.nextSearch(1);r.nextSearch(-1);}
   r.search('마지막',false);assert.strictEqual(r.searchTextIndex,first);assert.equal(f.walks(),1);assert.equal(r.searchResults.length,1);r.search('');assert.equal(f.doc.querySelector('[data-htmlmemo-search]'),null);r.searchCache().dispose();
 });
+test('refreshing a changed source index keeps the requested next match instead of jumping to the first',()=>{
+  const f=controlled('<p>word one, word two, word three.</p>'),r=reader(f.doc);r.search('word',false);r.searchPosition=1;
+  const text=f.doc.querySelector('p').firstChild;text.textContent+=' Extra text.';f.observers[0].records.push({type:'characterData',target:text});
+  assert.equal(r.nextSearch(1),true);assert.equal(r.searchPosition,2);assert.equal(r.searchResults.length,3);assert.equal(f.doc.querySelector('[data-htmlmemo-search]').textContent,'word');r.searchCache().dispose();
+});
 
 test('empty-search Enter or navigation never builds an otherwise unused index',()=>{
   const f=fixture(),r=reader(f.doc);assert.equal(r.nextSearch(1),false);r.search('');assert.equal(r.nextSearch(1),false);r.search('   ');assert.equal(r.nextSearch(-1),false);assert.equal(f.walks(),0);assert.equal(r.searchCache().entries.size,0);r.searchCache().dispose();

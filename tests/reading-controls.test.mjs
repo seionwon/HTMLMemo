@@ -11,6 +11,17 @@ function fixture(header=''){
   Object.assign(r,{host:outer.querySelector('#host'),doc,zoom:1.25,topbarNode:doc.querySelector('header'),metadata:{annotations:[],view:{}},callbacks:{onReadingAction:(action,node)=>calls.push({action,node})}});
   return {r,doc,outer,calls};
 }
+test('a native sidebar with an app toolbar stays inside the iframe at manual zoom',()=>{
+  const {r,doc}=fixture(),before=doc.body.textContent;
+  Object.assign(r,{nativeScroll:true,naturalWidth:1100,zoom:.5,viewport:{clientWidth:1280,clientHeight:800},frame:{style:{}},sizer:{style:{}},tocResize:{sidebar:doc.querySelector('main')},syncAnnotationPicking(){},updateReadingControls(){}});
+  r.applyZoom();assert.equal(r.frame.style.width,'2560px');assert.equal(r.sizer.style.width,'1280px');
+  r.zoom=1;r.applyZoom();assert.equal(r.frame.style.width,'1280px');assert.equal(r.sizer.style.width,'1280px');assert.equal(doc.body.textContent,before);
+});
+test('the app menu opens a closed compact native sidebar before toggling it shut',()=>{
+  const {r,doc}=fixture(),widths=[];doc.documentElement.setAttribute('data-htmlmemo-compact-ui','');
+  Object.assign(r,{documentSidebarUI:doc.querySelector('main'),tocStrip:false,tocExpandedWidth:300,tocResize:{sidebar:doc.querySelector('main')},applyTocWidth:width=>widths.push(width),showDocumentSidebarView(){},syncAfterTocResize(){},updateReadingControls(){}});
+  r.toggleDocumentSidebar();assert.equal(doc.documentElement.hasAttribute('data-htmlmemo-sidebar-open'),true);r.toggleDocumentSidebar();assert.equal(doc.documentElement.hasAttribute('data-htmlmemo-sidebar-open'),false);assert.deepEqual(widths,[300,8]);
+});
 test('speaker is immediately before A− while zoom and source font handlers stay intact',()=>{
   const {r,doc,calls}=fixture('<header class="topbar"><strong>책</strong><div class="controls"><button id="prev">‹</button><button id="font">A−</button><button>A+</button></div></header>');
   const font=doc.querySelector('#font'),handler=()=>{};font.onclick=handler;
@@ -27,6 +38,7 @@ test('speaker is immediately before A− while zoom and source font handlers sta
 test('plain documents copy the HTML reader header with its title, navigation, position and theme controls',()=>{
   const {r,doc,outer,calls}=fixture();r.setupReadingControls();
   assert.equal(r.host.firstElementChild,r.readingControls);assert.equal(r.host.classList.contains('reader-controls-row'),true);
+  assert.notEqual(r.readingControls.style.getPropertyValue('position'),'relative','the source toolbar must use the fixed CSS position instead of an inline relative offset');
   assert.deepEqual([...r.readingControls.querySelectorAll('button')].map(node=>node.dataset.action),['toggle-sidebar','reading-back','previous-heading','next-heading','speak','font-smaller','font-larger','zoom']);
   assert.equal(r.readingControls.classList.contains('reader-head'),true);assert.equal(r.plainReadingButtons.back.textContent,'↶');
   assert.equal(r.plainReadingButtons.previous.disabled,true);assert.equal(r.plainReadingButtons.next.disabled,true);assert.equal(r.plainReadingButtons.back.disabled,true);

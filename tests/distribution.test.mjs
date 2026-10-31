@@ -337,9 +337,9 @@ test('single-file save guidance stays in library and execution help without a pe
   for(const open of openers){open();check(doc.querySelector('#dialog [data-single-file-guide]'));assert.match(doc.querySelector('#dialog').textContent,/이미 가진 HTML 파일은 그대로 가져올 수 있습니다\./);assert.ok(doc.querySelector('#web-help-import'));assert.ok(doc.querySelector('#web-help-paste'));}
 });
 
-test('export sharing help explains one HTML file, recipient import and local-only autosave without changing saved notes',async()=>{
+test('export sharing help explains three formats, recipient import and local-only storage without changing saved notes',async()=>{
   const record={id:'share-guide',title:'공유 안내',name:'공유.html',created:1,modified:2,metadata:{annotations:[{id:'kept',text:'기존 주석'}],bookmarks:[{id:'kept-mark'}]}},before=structuredClone(record),app=await fileApp({documents:[record]}),doc=app.doc;
-  const check=guide=>{assert.ok(guide);assert.equal(guide.hasAttribute('open'),false);assert.match(guide.querySelector('summary').textContent,/주석을 포함한 HTML 파일/);assert.equal(guide.querySelectorAll('li').length,3);assert.match(guide.textContent,/HTML 파일 하나/);assert.match(guide.textContent,/방금 내보낸 \.html 파일/);assert.match(guide.textContent,/내 서재 → 파일 가져오기/);assert.match(guide.textContent,/다시 내보내세요/);assert.match(guide.textContent,/Ctrl\/⌘ S/);assert.match(guide.textContent,/앱 URL만 보내면 문서·주석은 전달되지 않습니다/);assert.match(guide.textContent,/새롭게 열기는 주석 없는 사본/);assert.equal(guide.querySelector('a').getAttribute('href'),PUBLIC_APP_URL);};
+  const check=guide=>{assert.ok(guide);assert.equal(guide.hasAttribute('open'),false);assert.match(guide.querySelector('summary').textContent,/원본·주석 파일/);assert.equal(guide.querySelectorAll('li').length,3);for(const text of ['원본 포함 보관 파일 (.librememo)','읽기용 HTML 사본 (.html)','주석 포함 PDF (.pdf)','파일 가져오기','다시 내보내세요','앱 URL만 보내면 문서와 주석이 전달되지 않습니다','원본 파일과 이미 내보낸 사본은 자동으로 덮어쓰지 않습니다','전체 백업은 전용 폴더를 복사'])assert.ok(guide.textContent.includes(text),text);assert.match(guide.textContent,/로그인·서버 업로드는 필요하지 않으며/);};
   openExecution(app);check(doc.querySelector('#execution-export-guide [data-export-guide]'));
   doc.querySelector('#library-tab').onclick();doc.querySelector('[data-card-menu="share-guide"]').click();check(doc.querySelector('#dialog [data-export-guide]'));assert.ok(doc.querySelector('#menu-export'));assert.deepEqual(record,before);
 });

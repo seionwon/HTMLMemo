@@ -45,7 +45,7 @@ const reader = () => active()?.reader;
 const savePicker = () => typeof window.showSaveFilePicker === 'function';
 const openPicker = () => typeof window.showOpenFilePicker === 'function';
 const htmlTypes = [{description:'HTML 문서',accept:{'text/html':['.html','.htm']}}];
-const importTypes = [{description:'문서 · 스프레드시트 · 슬라이드',accept:{'text/html':['.html','.htm'],'multipart/related':['.mhtml','.mht'],'application/x-mimearchive':['.mhtml','.mht'],'application/pdf':['.pdf'],...OFFICE_MIMES}}];
+const importTypes = [{description:'문서 · 스프레드시트 · 슬라이드',accept:{'text/html':['.html','.htm'],'multipart/related':['.mhtml','.mht'],'application/x-mimearchive':['.mhtml','.mht'],'application/pdf':['.pdf'],'application/zip':['.librememo'],...OFFICE_MIMES}}];
 const safely = fn => (...args) => { try { Promise.resolve(fn(...args)).catch(showError); } catch(error) { showError(error); } };
 function toast(message, error = false) { const el=$('#toast'); el.textContent=message; el.classList.toggle('error',error); el.hidden=false; clearTimeout(toast.timer); toast.timer=setTimeout(()=>el.hidden=true,error?6500:3500); }
 function showError(error) { if (error?.name !== 'AbortError') toast(error?.message || String(error),true); }
@@ -84,7 +84,7 @@ function modal(html, bind = () => {}) {
   $$('[data-dialog-close]',dialog).forEach(button=>button.onclick=()=>dialog.close()); bind(dialog);
 }
 function annotationExportGuide() {
-  return `<details class="export-guide" data-export-guide><summary>주석을 포함한 HTML 파일 저장·보내는 방법</summary>${$('#export-guide-content').innerHTML}</details>`;
+  return `<details class="export-guide" data-export-guide><summary>원본·주석 파일 저장·보내는 방법</summary>${$('#export-guide-content').innerHTML}</details>`;
 }
 function aboutDialog() {
   modal(`<div class="dialog-heading"><h2>About</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div>${$('#about-content').innerHTML}<div class="dialog-actions"><button class="primary-button" data-dialog-close>확인</button></div>`,()=>{$('#app-version').textContent=APP_VERSION;});
@@ -425,8 +425,8 @@ function updateChrome() {
   $('.chrome').dataset.page=local?'document':tab?'browser':activeId;
   if(!$('.chrome').classList.contains('address-editing'))$('#address').value=local?tab.record.name:tab?.url||'';
   $('#address-icon').innerHTML=icon(local?'file':'globe',15);$('#local-label').hidden=!local;
-  setIconButton('#save-page',execution?'globe':local?'download':tab?.external?'folder':'save',execution?'URL 복사':local?'HTML 내보내기':tab?.external?'Chrome에서 가져오기':'페이지 저장',17);
-  if(local){$('#save-page').title='HTML 내보내기 · 본문·주석·북마크를 HTML 파일 하나로 저장';$('#save-page').setAttribute('aria-description','현재 주석을 포함한 HTML 파일을 저장해 다른 사람에게 보낼 수 있습니다.');}
+  setIconButton('#save-page',execution?'globe':local?'download':tab?.external?'folder':'save',execution?'URL 복사':local?'내보내기':tab?.external?'Chrome에서 가져오기':'페이지 저장',17);
+  if(local){$('#save-page').title='내보내기 · 원본 포함 보관 파일, 읽기용 HTML, 주석 포함 PDF';$('#save-page').setAttribute('aria-description','원본·주석·북마크를 함께 보관하거나 다른 사람에게 전달할 형식을 선택합니다.');}
   else $('#save-page').removeAttribute('aria-description');
   $('#save-page').disabled=execution?sharingApp:!tab||!!tab.capturing;
   if(local)saveStatus(tab); else if(tab)$('#status-left').textContent=tab.external?'웹 탐색은 브라우저 탭 · 복사한 글과 저장한 HTML은 여기서 주석 달기':tab.capturing?'읽기용 사본을 준비하는 중…':tab.readable?'페이지 저장 → 주석 달기 · 추가 설치 없음':'앱 문서를 준비하는 중…';
@@ -551,9 +551,13 @@ async function createDocument(snapshot, handle = null, name = null, local = {}) 
   const identity=identifyLocalFile(local);identity.catch(()=>{});
   const office=!!snapshot.office;if(office){toast('문서를 읽는 중…');snapshot=await prepareOffice(snapshot);}
   const parsed=snapshot.pdf?preparePDF(snapshot.pdf,{title:snapshot.title,metadata:snapshot.metadata,freshAnnotations:!!local.freshAnnotations}):snapshot.file ? {...parseHTML('<html><head></head><body></body></html>',{title:snapshot.title,execution:{allowScripts:!!snapshot.allowScripts}}),file:snapshot.file,nativeScroll:true,freshAnnotations:!!local.freshAnnotations} : parseHTML(snapshot.html,{title:snapshot.title,source:snapshot.url,viewport:snapshot.viewport,warnings:snapshot.warnings},{includeMetadata:true,allowScripts:snapshot.allowScripts,freshAnnotations:!!local.freshAnnotations});
+  if(snapshot.archiveMetadata){parsed.metadata=structuredClone(snapshot.archiveMetadata);if(local.freshAnnotations){parsed.metadata.annotations=[];parsed.metadata.bookmarks=[];parsed.metadata.view={scrollTop:0,scrollLeft:0,autoFit:true};}parsed.savedMetadata=true;}
   const title=parsed.metadata.title; const record={id:uid(),title,name:name||handle?.name||filename(title),source:parsed.metadata.source,created:Date.now(),modified:Date.now(),folderId:local.libraryFolderId??libraryFolderId,fileHandle:handle,originalHandle:local.originalHandle||null,metadata:parsed.metadata};
   if(snapshot.pdf)record.file=snapshot.pdf;else if(snapshot.file)record.file=snapshot.file;else record.html=parsed.html;
   if(local.originalFile)record.originalFile=local.originalFile;
+  if(local.originalExact===false)record.originalExact=false;
+  if(local.originalReading===true)record.originalReading=true;
+  if(local.importArchiveIdentity)record.importArchiveIdentity=local.importArchiveIdentity;
   if(local.sourceIdentity)record.sourceIdentity=local.sourceIdentity;
   if(local.diskStamp)record.diskStamp=local.diskStamp;
   else if(handle){const disk=await handle.getFile();record.diskStamp={modified:disk.lastModified,size:disk.size};}
@@ -777,19 +781,9 @@ async function capturePage(tab) {
   try{return await saving;}finally{tab.capturing=null;renderBrowserState(tab);if(active()===tab)updateChrome();}
 }
 async function exportDocument(tab) {
-  if (tab.reader.bookIntegrity?.complete === false) throw new Error(tab.reader.bookIntegrity.message);
-  // Invoke the picker before awaiting persistence, while the click still has user activation.
-  let handle;
-  if(savePicker()) {
-    try { handle=await window.showSaveFilePicker({suggestedName:htmlExportName(tab.record.name,true),types:htmlTypes}); }
-    catch(error){if(!['SecurityError','NotSupportedError'].includes(error.name))throw error;}
-  }
-  await tab.reader.ready;tab.reader.rememberPosition();await tab.queue.flush();
-  const source = tab.reader.bookIntegrity?.complete ? await getDocument(tab.record.id) : null;
-  const html=tab.reader.pdf?await tab.reader.pdf.exportHTML(tab.reader.metadata):source ? await serializeBookSource(source.file || new Blob([source.html], {type:'text/html;charset=utf-8'}), tab.reader.metadata) : tab.reader.html();
-  if(handle){const disk=await handle.getFile();await writeExternalHTML({fileHandle:handle,diskStamp:{modified:disk.lastModified,size:disk.size}},html);}
-  else download(html,htmlExportName(tab.record.name));
-  toast('현재 주석을 포함한 HTML을 내보냈습니다. 저장한 .html 파일을 보내세요.');
+  if(tab.reader.bookIntegrity?.complete===false)throw Error(tab.reader.bookIntegrity.message);
+  const {openDocumentExport}=await import('./document-export.js');
+  openDocumentExport(tab,{modal,getDocument,toast});
 }
 
 function webContext(){return active()?.type==='browser'?active():tabs.includes(lastWebTab)?lastWebTab:null;}
@@ -1206,7 +1200,7 @@ function toolAction(action,button=null) {
     const items=[['circle','circle','원'],['ellipse','ellipse','타원'],['arrow','arrow','화살표'],['strike','strike','취소선'],['history','history','주석 저장 이력'],['migrate','file-transfer','새 판으로 주석/북마크 옮기기'],['info','info','문서 정보']];
     // Books already expose their three sidebar views. Plain HTML needs only a
     // way to reopen its closed panel, not a second copy of every sidebar tab.
-    if((!r.documentSidebarUI?.isConnected && $('#sidebar').hidden)||r.tocStrip)items.unshift(['sidebar','list','사이드바 열기']);
+    if((!r.documentSidebarUI?.isConnected && $('#sidebar').hidden)||r.tocStrip||(r.documentSidebarUI?.isConnected&&r.documentSidebarUI.getClientRects?.().length===0))items.unshift(['sidebar','list','사이드바 열기']);
     showPopover('more',`<div class="popover-heading"><h3>문서 도구</h3><button class="icon-button popover-close" data-popover-close aria-label="문서 도구 닫기" title="닫기">${icon('close',16)}</button></div><div class="more-grid">${items.map(([id,name,label])=>`<button class="menu-button" data-more="${id}">${icon(name,16)}<span>${label}</span></button>`).join('')}</div>`,()=>{
       $('[data-popover-close]',$('#tool-popover')).onclick=closePopover;
       $$('[data-more]',$('#tool-popover')).forEach(button=>button.onclick=safely(()=>{const id=button.dataset.more;closePopover();return toolAction(id);}));
@@ -1517,7 +1511,7 @@ async function annotationHistory(tab, selection = {}, valid = () => true) {
 }
 function documentInfo(tab) {
   const m=tab.reader.metadata;
-  modal(`<div class="dialog-heading"><h2>문서 정보</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><dl class="document-info"><dt>제목</dt><dd>${esc(m.title)}</dd><dt>파일</dt><dd>${esc(tab.record.name)}</dd><dt>원본</dt><dd>${m.source?`<a href="${esc(m.source)}" target="_blank" rel="noopener noreferrer">${esc(m.source)}</a>`:'로컬 문서 파일'}</dd><dt>저장 위치</dt><dd>앱 보관함 (원본 파일은 변경하지 않음)</dd><dt>주석</dt><dd>${m.annotations.length}개</dd></dl>${m.warnings.length?`<details class="capture-warnings"><summary>보관하지 못한 리소스 ${m.warnings.length}개</summary><ul>${m.warnings.map(w=>`<li>${esc(w)}</li>`).join('')}</ul></details>`:''}<p class="dialog-description small">작업은 이 기기의 서재에 자동 저장됩니다. 다른 사람에게 주석을 보내려면 HTML 내보내기로 저장한 .html 파일을 보내세요.</p>${annotationExportGuide()}`);
+  modal(`<div class="dialog-heading"><h2>문서 정보</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><dl class="document-info"><dt>제목</dt><dd>${esc(m.title)}</dd><dt>파일</dt><dd>${esc(tab.record.name)}</dd><dt>원본</dt><dd>${m.source?`<a href="${esc(m.source)}" target="_blank" rel="noopener noreferrer">${esc(m.source)}</a>`:'로컬 문서 파일'}</dd><dt>저장 위치</dt><dd>앱 보관함 (원본 파일은 변경하지 않음)</dd><dt>주석</dt><dd>${m.annotations.length}개</dd></dl>${m.warnings.length?`<details class="capture-warnings"><summary>보관하지 못한 리소스 ${m.warnings.length}개</summary><ul>${m.warnings.map(w=>`<li>${esc(w)}</li>`).join('')}</ul></details>`:''}<p class="dialog-description small">작업은 이 기기의 서재에 자동 저장됩니다. 다른 사람에게 주석을 보내려면 내보내기에서 보관 파일·HTML·PDF 중 알맞은 형식을 선택하세요.</p>${annotationExportGuide()}`);
 }
 function pickHTMLFile() {
   if(openPicker())return window.showOpenFilePicker({types:importTypes}).then(([handle])=>handle,error=>{if(['SecurityError','NotSupportedError'].includes(error.name))return inputFile();throw error;});
@@ -1621,7 +1615,7 @@ async function emptyLibraryTrash() {
   try{await deleteTrashedDocuments(ids);await finishTrashChange('휴지통을 비웠습니다.');}finally{trashBusy=false;}
 }
 function documentMenu(record) {
-  modal(`<div class="dialog-heading"><h2>${esc(record.title)}</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><div class="document-actions"><button class="menu-button" id="menu-open">${icon('file')} 열기</button><button class="menu-button" id="menu-export">${icon('download')} HTML 내보내기</button><button class="menu-button" id="menu-history">${icon('undo')} 주석 저장 이력</button><button class="menu-button" id="menu-migrate">${icon('file')} 새 판으로 주석/북마크 옮기기</button><button class="menu-button danger" id="menu-remove">${icon('trash')} 휴지통으로 이동</button></div><p class="dialog-description small">HTML 내보내기는 본문·현재 주석·북마크를 HTML 파일 하나로 저장합니다.</p>${annotationExportGuide()}`,()=>{
+  modal(`<div class="dialog-heading"><h2>${esc(record.title)}</h2><button class="icon-button" data-dialog-close aria-label="닫기">${icon('close')}</button></div><div class="document-actions"><button class="menu-button" id="menu-open">${icon('file')} 열기</button><button class="menu-button" id="menu-export">${icon('download')} 내보내기</button><button class="menu-button" id="menu-history">${icon('undo')} 주석 저장 이력</button><button class="menu-button" id="menu-migrate">${icon('file')} 새 판으로 주석/북마크 옮기기</button><button class="menu-button danger" id="menu-remove">${icon('trash')} 휴지통으로 이동</button></div><p class="dialog-description small">내보내기에서 원본 포함 보관 파일·읽기용 HTML·주석 포함 PDF를 선택합니다.</p>${annotationExportGuide()}`,()=>{
     $('#menu-open').onclick=safely(async()=>{$('#dialog').close();await openRecord(record);});$('#menu-export').onclick=safely(async()=>{$('#dialog').close();const tab=await openRecord(record);await exportDocument(tab);});
     $('#menu-history').onclick=safely(async()=>{$('#dialog').close();await annotationHistory(await openRecord(record));});
     $('#menu-migrate').onclick=safely(async()=>{$('#dialog').close();await migrateEdition(await openRecord(record));});
