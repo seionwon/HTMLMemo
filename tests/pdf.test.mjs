@@ -29,6 +29,19 @@ test('PDF annotations, bookmarks, theme and position survive a self-contained HT
   const fresh=preparePDF(reopened.pdf,{metadata:reopened.metadata,freshAnnotations:true});assert.deepEqual(fresh.metadata.annotations,[]);assert.deepEqual(fresh.metadata.bookmarks,[]);assert.equal(reopened.metadata.annotations.length,1);
   assert.equal(documentFor(await archive.text()).querySelectorAll('script:not([type="application/json"])').length,0);
 });
+test('shared PDF archives retain incoming notes beside the same PDF while exact archive reimports remain duplicates',async()=>{
+  const source=file(),parsed=preparePDF(source);parsed.metadata.annotations=[mark];
+  const archive=await exportPDFHTML(source,parsed.metadata),incoming=await readLocalHTML(new File([archive],'shared.html'));
+  const identity=await localFileIdentity(source),raw={id:'raw',name:'original.pdf',sourceIdentity:identity},shared={id:'shared',name:'renamed.html',sourceIdentity:identity};
+  const load=async id=>id==='raw'?{file:source}:{file:source,originalFile:archive};
+  assert.deepEqual(await findLocalDuplicates(incoming,[raw],load),[]);
+  assert.deepEqual(await findLocalDuplicates(incoming,[raw,shared],load),[shared]);
+  parsed.metadata.annotations=[{...mark,color:'#c0ffee'}];
+  const changed=await readLocalHTML(new File([await exportPDFHTML(source,parsed.metadata)],'different-notes.html'),{identify:false});
+  assert.deepEqual(await findLocalDuplicates(changed,[raw,shared],load),[]);
+  assert.deepEqual(changed.snapshot.metadata.annotations,parsed.metadata.annotations);assert.deepEqual(incoming.snapshot.metadata.annotations,[mark]);
+  assert.deepEqual(incoming.sourceIdentity,identity);
+});
 test('PDF archive streams across base64 chunk boundaries and rejects truncation, corrupt data and injected markup',async()=>{
   const source=new Blob([bytes,new Uint8Array(700001)]),parsed=preparePDF(source),archive=await exportPDFHTML(source,parsed.metadata),restored=await readPDFArchive(archive);
   assert.deepEqual(new Uint8Array(await restored.pdf.arrayBuffer()),new Uint8Array(await source.arrayBuffer()));

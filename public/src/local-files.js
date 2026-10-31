@@ -52,13 +52,24 @@ export function sameLocalFile(a,b) {
   return a?.version===1&&b?.version===1&&Number.isSafeInteger(a.size)&&a.size>=0&&a.size===b.size&&/^[a-f0-9]{64}$/.test(a.digest)&&a.digest===b.digest;
 }
 export async function findLocalDuplicates(local, records, loadRecord) {
-  const matches=[];let preparedHTML;
+  const matches=[],pdfArchive=local.snapshot.pdf&&local.originalFile;let preparedHTML,archiveIdentity;
   const sourceSize=local.sourceIdentity?.size??localSources.get(local)?.size;
   // Most first imports cannot match any known source size. Do not scan their
   // entire contents here; a new document fingerprints while its reader opens.
   if(records.some(record=>record.sourceIdentity?.version===1&&record.sourceIdentity.size===sourceSize))await identifyLocalFile(local);
   for(const record of records){
-    if(sameLocalFile(local.sourceIdentity,record.sourceIdentity)){matches.push(record);continue;}
+    if(sameLocalFile(local.sourceIdentity,record.sourceIdentity)){
+      // A shared PDF archive can contain a different set of notes on the same
+      // immutable PDF. Only the exact imported archive is a duplicate here;
+      // keep the PDF identity itself unchanged for search and device sync.
+      if(pdfArchive){
+        const original=(await loadRecord(record.id))?.originalFile;
+        if(!(original instanceof Blob)||original.size!==pdfArchive.size)continue;
+        archiveIdentity??=await localFileIdentity(pdfArchive);
+        if(!sameLocalFile(archiveIdentity,await localFileIdentity(original)))continue;
+      }
+      matches.push(record);continue;
+    }
     // A different known digest is never treated as the same file merely
     // because its filename, size, title or modification date matches.
     if(record.sourceIdentity||record.name!==local.name)continue;
