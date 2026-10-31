@@ -29,7 +29,11 @@ test('real Chrome: Pages-only GenOffice opens every format read-only with the ex
     chrome=await launchChrome();const page=chrome.page;await page.navigate(env.url);
     await chooseFile(page,Buffer.from('<!doctype html><title>Baseline</title><h1>첫 장</h1><p>본문</p>'),'baseline.html');await saved(page,'baseline.html');const baseline=await page.evaluate(controls),results=[];
     for(const [format,bytes] of Object.entries(await officeFixtures())){
-      const name='읽기 전용.'+format;await chooseFile(page,bytes,name);await saved(page,name);await page.waitFor(frame+'?.style.visibility==="visible"');
+      const name='읽기 전용.'+format;await chooseFile(page,bytes,name);
+      // .md and .markdown intentionally share exact bytes. Exercise the normal
+      // duplicate choice instead of waiting for a record the user has not chosen.
+      if(format==='markdown'){await page.waitFor('document.querySelector("[data-duplicate-import]")');await page.click('[data-duplicate-import] [value=new]');}
+      await saved(page,name);await page.waitFor(frame+'?.style.visibility==="visible"');
       assert.deepEqual(await page.evaluate(controls),baseline,format+' has identical controls');
       const info=await page.evaluate(`(async()=>{const r=window.__officeRecord,{textIndex}=await import('./src/document.js'),bytes=new Uint8Array(await r.originalFile.arrayBuffer());return {name:r.name,text:textIndex(${doc}).text,unsafe:${doc}.querySelectorAll('script,object,embed,[contenteditable]').length,script:r.metadata.execution.allowScripts,original:Array.from(bytes)};})()`);
       assert.match(info.text,/본문|한국어/,format);assert.equal(info.unsafe,0);assert.equal(info.script,false);assert.deepEqual(info.original,[...bytes]);results.push({format,originalBytes:bytes.length,searchable:true,readOnly:true});
@@ -52,6 +56,9 @@ test('real Chrome: Pages-only Office annotations, bookmarks, slide scaling, expo
       await page.click('[data-sidebar-view=bookmarks]');await page.click('#add-bookmark');await page.evaluate("document.querySelector('#note-text').value='Office 돌아올 곳'");await page.click('.note-form button[value=save]');await saved(page,name,'window.__officeRecord.metadata.bookmarks.length===1');
     }
     const width=await page.evaluate(doc+'.querySelector(".office-slide>svg").getBoundingClientRect().width');await page.click('.document-host:not([hidden]) [data-action=font-larger]');await saved(page,'주석.pptx','window.__officeRecord.metadata.view.fontScale===1.1');const ratio=await page.evaluate(doc+'.querySelector(".office-slide>svg").getBoundingClientRect().width/'+width);assert.ok(Math.abs(ratio-1.1)<.03,'slide zoom '+ratio);
+    for(let i=0;i<4;i++)await page.click('.document-host:not([hidden]) [data-action=font-larger]');
+    const overflow=await page.evaluate(`(()=>{const d=${doc};d.defaultView.scrollTo(100000,0);return {width:d.documentElement.scrollWidth,viewport:d.documentElement.clientWidth,left:d.defaultView.scrollX};})()`);assert.ok(overflow.width>overflow.viewport&&overflow.left>0,'large slide zoom must remain horizontally reachable: '+JSON.stringify(overflow));
+    for(let i=0;i<4;i++)await page.click('.document-host:not([hidden]) [data-action=font-smaller]');await page.evaluate(doc+'.defaultView.scrollTo(0,0)');
     await page.click('[data-sidebar-view=search]');await page.evaluate("const input=document.querySelector('#book-search');input.value='검색';input.dispatchEvent(new Event('input',{bubbles:true}));");await page.waitFor('document.querySelector("[data-whole-search-index]")',30000);await page.click('[data-whole-search-index="0"]');
     await page.evaluate(`(async()=>{const root=await navigator.storage.getDirectory();window.__officeExport=await root.getFileHandle('Office annotations.html',{create:true});window.showSaveFilePicker=async()=>window.__officeExport;})()`);await page.click('#save-page');await page.waitFor("document.querySelector('#toast').textContent.includes('내보냈습니다')");
     const exported=Buffer.from(await page.evaluate(`(async()=>{const f=await window.__officeExport.getFile(),bytes=new Uint8Array(await f.arrayBuffer());let s='';for(let i=0;i<bytes.length;i+=16384)s+=String.fromCharCode(...bytes.subarray(i,i+16384));return btoa(s);})()`),'base64');

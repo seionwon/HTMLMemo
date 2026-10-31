@@ -28,6 +28,7 @@ test('Word headings, merged tables and rich text use the common searchable HTML'
 });
 test('Slide body text uses HTML spans inside SVG so search and saved highlights survive reopening',async()=>{
   const parsed=parseHTML((await renderOffice(fixtures.pptx,'pptx','Slides')).html),doc=documentFor(parsed.html),index=textIndex(doc),start=index.text.indexOf('검색');assert.ok(start>=0);
+  assert.equal(parsed.nativeScroll,true);
   assert.equal(doc.querySelectorAll('.office-slide').length,2);assert.ok(doc.querySelector('foreignObject [data-office-text]'));
   const marks=wrapOffsets(doc,start,start+2,{'data-htmlmemo-mark':'slide-highlight'},'background:#ff0',index);assert.ok(marks.length);assert.equal(marks[0].namespaceURI,'http://www.w3.org/1999/xhtml');
   const metadata={...parsed.metadata,annotations:[{id:'m',type:'highlight',color:'#ffee00',opacity:.3,width:2,textAnchor:{start,end:start+2,quote:'검색'}}],bookmarks:[{id:'b',title:'둘째 슬라이드',top:100,left:0}]};
