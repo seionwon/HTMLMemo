@@ -97,8 +97,8 @@ test('malformed MHTML, missing HTML roots, broken encodings and unsupported char
   await assert.rejects(read(archive([part('text/html; charset=not-a-charset','content')])),/지원하지 않는 MHTML 문자 인코딩/);
 });
 test('HTML and MHTML pick/drop names and HTML export extensions stay consistent',async()=>{
-  const files=['a.html','b.HTM','c.mhtml','d.MHT','x.txt'].map(name=>file('',name,''));assert.deepEqual(files.map(isLocalHTMLFile),[true,true,true,true,false]);assert.deepEqual(await droppedHTMLFiles({files}),files.slice(0,4));
+  const files=['a.html','b.HTM','c.mhtml','d.MHT','x.exe'].map(name=>file('',name,''));assert.deepEqual(files.map(isLocalHTMLFile),[true,true,true,true,false]);assert.deepEqual(await droppedHTMLFiles({files}),files.slice(0,4));
   const handle={kind:'file',name:'from-picker.MHT'};assert.deepEqual(await droppedHTMLFiles({items:[{kind:'file',getAsFileSystemHandle:async()=>handle}]}),[handle]);
   for(const name of ['book.html','book.htm','book.mhtml','book.MHT']){assert.equal(htmlExportName(name),'book.html');assert.equal(htmlExportName(name,true),'book-주석.html');}
-  assert.equal(htmlExportName('renamed'),'renamed.html');await assert.rejects(readLocalHTML(files[4]),/HTML, HTM, MHTML, MHT 또는 PDF/);
+  assert.equal(htmlExportName('renamed'),'renamed.html');await assert.rejects(readLocalHTML(files[4]),/HTML, PDF, Office/);
 });

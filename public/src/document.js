@@ -295,7 +295,7 @@ export function serializeHTML(doc, metadata) {
 function textWalker(doc,root) {
   return doc.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
-      if (!node.textContent || node.parentElement?.closest('script,style,noscript,svg,textarea,template,[data-htmlmemo-ui]')) return NodeFilter.FILTER_REJECT;
+      if (!node.textContent || node.parentElement?.closest('script,style,noscript,textarea,template,[data-htmlmemo-ui]') || node.parentElement?.closest('svg')&&!node.parentElement?.closest('foreignObject [data-office-text]')) return NodeFilter.FILTER_REJECT;
       return NodeFilter.FILTER_ACCEPT;
     },
   });

@@ -4,6 +4,8 @@ import { SaveQueue, AnnotationCheckpoints, ANNOTATION_LABELS } from './model.js'
 import { openEditionProbe, migrateAnnotations } from './migrate.js';
 import { Reader } from './reader.js';
 import { preparePDF, isPDFDocument } from './pdf-document.js';
+import {prepareOffice} from './office-import.js';
+import {OFFICE_MIMES} from './office-formats.js';
 import { listDocuments, getDocument, trashDocument, restoreDocument, deleteDocument, deleteTrashedDocuments, getSetting, setSetting, saveDocumentHTML, listRevisionPeriods, listRevisionDay, adjacentRevisionDay, getRevision, putDocumentRevision, checkpointAnnotations, putDocumentView, putDocumentSourceIdentity, writeExternalHTML, updateLibraryFolders, onStorageChange, readLibrary } from './storage.js';
 import {readWebPage,pastedPage,PASTE_LIMIT,isWebSearch,BrowserTabs} from './web.js';
 import { readLocalHTML, droppedHTMLFiles, findLocalDuplicates, identifyLocalFile, htmlExportName } from './local-files.js';
@@ -43,7 +45,7 @@ const reader = () => active()?.reader;
 const savePicker = () => typeof window.showSaveFilePicker === 'function';
 const openPicker = () => typeof window.showOpenFilePicker === 'function';
 const htmlTypes = [{description:'HTML 문서',accept:{'text/html':['.html','.htm']}}];
-const importTypes = [{description:'HTML · MHTML · PDF 문서',accept:{'text/html':['.html','.htm'],'multipart/related':['.mhtml','.mht'],'application/x-mimearchive':['.mhtml','.mht'],'application/pdf':['.pdf']}}];
+const importTypes = [{description:'문서 · 스프레드시트 · 슬라이드',accept:{'text/html':['.html','.htm'],'multipart/related':['.mhtml','.mht'],'application/x-mimearchive':['.mhtml','.mht'],'application/pdf':['.pdf'],...OFFICE_MIMES}}];
 const safely = fn => (...args) => { try { Promise.resolve(fn(...args)).catch(showError); } catch(error) { showError(error); } };
 function toast(message, error = false) { const el=$('#toast'); el.textContent=message; el.classList.toggle('error',error); el.hidden=false; clearTimeout(toast.timer); toast.timer=setTimeout(()=>el.hidden=true,error?6500:3500); }
 function showError(error) { if (error?.name !== 'AbortError') toast(error?.message || String(error),true); }
@@ -543,6 +545,7 @@ async function createDocument(snapshot, handle = null, name = null, local = {}) 
   // New, size-unmatched files prepare the reader and fingerprint concurrently.
   // Attach a rejection handler now; openRecord awaits it before baseline save.
   const identity=identifyLocalFile(local);identity.catch(()=>{});
+  const office=!!snapshot.office;if(office){toast('문서를 읽는 중…');snapshot=await prepareOffice(snapshot);}
   const parsed=snapshot.pdf?preparePDF(snapshot.pdf,{title:snapshot.title,metadata:snapshot.metadata,freshAnnotations:!!local.freshAnnotations}):snapshot.file ? {...parseHTML('<html><head></head><body></body></html>',{title:snapshot.title,execution:{allowScripts:!!snapshot.allowScripts}}),file:snapshot.file,nativeScroll:true,freshAnnotations:!!local.freshAnnotations} : parseHTML(snapshot.html,{title:snapshot.title,source:snapshot.url,viewport:snapshot.viewport,warnings:snapshot.warnings},{includeMetadata:true,allowScripts:snapshot.allowScripts,freshAnnotations:!!local.freshAnnotations});
   const title=parsed.metadata.title; const record={id:uid(),title,name:name||handle?.name||filename(title),source:parsed.metadata.source,created:Date.now(),modified:Date.now(),folderId:local.libraryFolderId??libraryFolderId,fileHandle:handle,originalHandle:local.originalHandle||null,metadata:parsed.metadata};
   if(snapshot.pdf)record.file=snapshot.pdf;else if(snapshot.file)record.file=snapshot.file;else record.html=parsed.html;
@@ -559,12 +562,12 @@ async function createDocument(snapshot, handle = null, name = null, local = {}) 
   tab.opening=false;renderLibrary();activate(tab.id);
   if(tab.queue.error)return tab;
   if(tab.reader.bookIntegrity?.complete === false)toast(tab.reader.bookIntegrity.message, true);
-  else if(parsed.metadata.warnings.length)toast(`페이지를 저장했습니다. ${parsed.metadata.warnings.length}개의 리소스를 보관하지 못했습니다. 문서 정보에서 확인할 수 있어요.`,true);
+  else if(parsed.metadata.warnings.length)toast(office?'문서를 열었습니다. 표시 범위 안내를 본문에서 확인해주세요.':`페이지를 저장했습니다. ${parsed.metadata.warnings.length}개의 리소스를 보관하지 못했습니다. 문서 정보에서 확인할 수 있어요.`,true);
   else toast(local.originalHandle||name?'문서를 주석 탭에서 열었습니다.':'서재에 저장하고 주석 탭에서 열었습니다.');
   return tab;
 }
 function dataFolderGuide() {
-  return `<details class="export-guide" data-folder-guide><summary>전용 폴더 자동 저장과 새 기기로 옮기는 방법</summary><p>처음 실행할 때 Documents(문서)를 선택하면 그 아래에 <strong>입력한 이름의 전용 하위 폴더</strong>를 만듭니다. 예: <code>문서/LibreMemo</code>. 문서 폴더 전체 선택이 제한되면 선택 창에서 하위 폴더를 만든 뒤 기존 저장 폴더 연결로 선택하세요.</p><p>연결하면 기존 서재와 앞으로 가져오는 모든 HTML·MHTML·PDF 문서의 복사본, 주석·북마크·주석 이력·읽기 위치·앱 설정을 자동 보관합니다. 원래 파일을 이동·삭제해도 보관한 문서는 열 수 있습니다. <strong>설정 파일을 따로 저장할 필요가 없습니다.</strong></p><p>폴더 연결 시 브라우저 내부 데이터의 자동 삭제 방지도 함께 요청합니다. 브라우저가 허용하지 않아도 전용 폴더 자동 저장은 계속됩니다.</p><p>평소에는 원본 복사본과 주석을 분리해 저장하며 원본에 새 주석을 합치지 않습니다. <strong>다른 사람에게 주석까지 보내려면 문서를 열고 상단의 HTML 내보내기로 .html 파일을 새로 저장한 뒤 그 파일을 보내세요.</strong> 원본 파일만 보내면 앱에서 추가한 주석은 전달되지 않습니다. 받는 분도 LibreMemo의 파일 가져오기로 엽니다.</p><ol><li>새 기기로 옮기기 전에 <strong>폴더 자동 저장 완료</strong> 표시를 확인하고 앱을 닫습니다.</li><li><strong>전용 폴더 전체를 하위 폴더·파일 빠짐없이</strong> 새 기기의 Documents(문서) 폴더로 복사합니다. 일부 HTML만 옮기면 주석·설정이 빠집니다.</li><li>새 기기의 LibreMemo에서 <strong>설정 → 데이터 폴더 → 폴더 연결</strong>로 옮긴 폴더를 선택하고 쓰기를 허용하면 모두 자동 복원됩니다.</li></ol><p>브라우저가 권한을 회수하거나 폴더를 옮겼다면 다시 연결해야 합니다. 권한·용량·저장 오류는 화면 아래와 설정에 계속 표시하며 변경은 앱에 남겨둡니다. 저장이 끝나기 전에 앱을 강제 종료하지 마세요. 서로 다른 기기의 동시 편집을 실시간 동기화하지는 않습니다.</p></details>`;
+  return `<details class="export-guide" data-folder-guide><summary>전용 폴더 자동 저장과 새 기기로 옮기는 방법</summary><p>처음 실행할 때 Documents(문서)를 선택하면 그 아래에 <strong>입력한 이름의 전용 하위 폴더</strong>를 만듭니다. 예: <code>문서/LibreMemo</code>. 문서 폴더 전체 선택이 제한되면 선택 창에서 하위 폴더를 만든 뒤 기존 저장 폴더 연결로 선택하세요.</p><p>연결하면 기존 서재와 앞으로 가져오는 모든 문서·표·슬라이드 원본의 복사본, 주석·북마크·주석 이력·읽기 위치·앱 설정을 자동 보관합니다. 원래 파일을 이동·삭제해도 보관한 문서는 열 수 있습니다. <strong>설정 파일을 따로 저장할 필요가 없습니다.</strong></p><p>폴더 연결 시 브라우저 내부 데이터의 자동 삭제 방지도 함께 요청합니다. 브라우저가 허용하지 않아도 전용 폴더 자동 저장은 계속됩니다.</p><p>평소에는 원본 복사본과 주석을 분리해 저장하며 원본에 새 주석을 합치지 않습니다. <strong>다른 사람에게 주석까지 보내려면 문서를 열고 상단의 HTML 내보내기로 .html 파일을 새로 저장한 뒤 그 파일을 보내세요.</strong> 원본 파일만 보내면 앱에서 추가한 주석은 전달되지 않습니다. 받는 분도 LibreMemo의 파일 가져오기로 엽니다.</p><ol><li>새 기기로 옮기기 전에 <strong>폴더 자동 저장 완료</strong> 표시를 확인하고 앱을 닫습니다.</li><li><strong>전용 폴더 전체를 하위 폴더·파일 빠짐없이</strong> 새 기기의 Documents(문서) 폴더로 복사합니다. 일부 HTML만 옮기면 주석·설정이 빠집니다.</li><li>새 기기의 LibreMemo에서 <strong>설정 → 데이터 폴더 → 폴더 연결</strong>로 옮긴 폴더를 선택하고 쓰기를 허용하면 모두 자동 복원됩니다.</li></ol><p>브라우저가 권한을 회수하거나 폴더를 옮겼다면 다시 연결해야 합니다. 권한·용량·저장 오류는 화면 아래와 설정에 계속 표시하며 변경은 앱에 남겨둡니다. 저장이 끝나기 전에 앱을 강제 종료하지 마세요. 서로 다른 기기의 동시 편집을 실시간 동기화하지는 않습니다.</p></details>`;
 }
 function folderStatusText() {
   if(!folder)return '데이터 폴더 미연결 · 브라우저 데이터 삭제 시 잃을 수 있습니다.';
@@ -1501,6 +1504,7 @@ async function migrateEdition(tab) {
       const pdfReader=new Reader(host,preparePDF(local.snapshot.pdf,{title:local.snapshot.title,metadata:local.snapshot.metadata}),{});probe={dispose:()=>pdfReader.dispose()};await pdfReader.ready;
       result=await pdfReader.pdf.migrate({annotations,bookmarks,onProgress});
     }else{
+      if(local.snapshot.office)local.snapshot=await prepareOffice(local.snapshot);
       probe=await openEditionProbe(local.snapshot);
       result=await migrateAnnotations({annotations,bookmarks,oldDoc:tab.reader.doc,probe,onProgress});
     }

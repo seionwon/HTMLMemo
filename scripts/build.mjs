@@ -6,6 +6,7 @@ import { pwaEntries } from '../public/src/distribution.js';
 import { PUBLIC_APP_URL } from '../public/src/install.js';
 
 await compileDesign();
+await import('./build-office.mjs');
 await prepareAssets();
 const output=join(root,'dist');
 await rm(output,{recursive:true,force:true});

@@ -1,0 +1,11 @@
+export {parseDocx} from '../../vendor-src/genoffice/packages/docx-engine/src/parse.ts';
+export {ommlToMathML} from '../../vendor-src/genoffice/packages/docx-engine/src/math.ts';
+export {computeListMarkers} from '../../vendor-src/genoffice/packages/docx-engine/src/list-markers.ts';
+export {openPptx} from '../../vendor-src/genoffice/packages/pptx-engine/src/index.ts';
+export {buildRenderSlide} from '../../vendor-src/genoffice/packages/pptx-render/src/build-slide.ts';
+export {HeuristicMetrics} from '../../vendor-src/genoffice/packages/pptx-render/src/metrics.ts';
+export {convertOdtToDocx,convertOdpToPptx} from '../../vendor-src/genoffice/packages/odf2ooxml/src/index.ts';
+export {decodeCsvBuffer,parseCsv} from '../../vendor-src/genoffice/packages/xlsx-gateway/src/gateway/csv-import.ts';
+export {assertZipInflatesWithinLimits} from '../../vendor-src/genoffice/packages/zip-gate/src/index.ts';
+export {XMLParser} from 'fast-xml-parser';
+export {default as JSZip} from 'jszip';

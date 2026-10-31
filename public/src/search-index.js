@@ -1,6 +1,6 @@
 import {textIndex,textIndexAsync} from './document.js';
 
-const ignored=node=>(node?.nodeType===3?node.parentElement:node)?.closest?.('script,style,noscript,svg,textarea,template,[data-htmlmemo-ui]');
+const ignored=node=>{const element=node?.nodeType===3?node.parentElement:node;return element?.closest?.('script,style,noscript,textarea,template,[data-htmlmemo-ui]')||element?.closest?.('svg')&&!element?.closest?.('foreignObject [data-office-text]');};
 const observeOptions={subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['data-htmlmemo-ui']};
 
 // DOM nodes cannot safely survive closing a document. Keep one bounded, lazy

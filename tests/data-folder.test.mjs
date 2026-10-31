@@ -4,6 +4,7 @@ import {DataFolder,FOLDER_MANIFEST,FOLDER_PREVIOUS,FOLDER_DATA,FOLDER_GUIDE,fold
 import {PREFERENCES_KEY,normalizePreferences} from '../public/src/preferences.js';
 import {memoryFolder,memoryLocal,settleUntil} from './folder-fixture.mjs';
 import {LIBRARY_FOLDERS_KEY,editLibraryFolders} from '../public/src/library-folders.js';
+import {officeFixtures} from './office-fixtures.mjs';
 
 function document(id='doc') {
   const note={id:'note',type:'note',color:'#edcf67',width:3,opacity:1,points:[{x:20,y:30}],text:'Separate annotation'};
@@ -17,6 +18,15 @@ function library(documents=[document()]) {
 function manager(t,lib,storage=memoryLocal(),extra={}) { const backup=new DataFolder({storage,operations:lib.operations,lock:fn=>fn(),delay:100000,...extra});t.after(()=>backup.dispose());return backup; }
 const manifest=async folder=>JSON.parse(await (await (await folder.getFileHandle(FOLDER_MANIFEST)).getFile()).text());
 const readObject=async(folder,ref)=> (await(await(await folder.getDirectoryHandle(FOLDER_DATA)).getFileHandle(ref.name)).getFile()).text();
+
+test('all Office formats keep byte-identical originals and extensions through folder backup and fresh-device restore',async t=>{
+  const fixtures=await officeFixtures(),sender=library(Object.keys(fixtures).map(format=>({...document('office-'+format),name:'원본.'+format}))),disk=memoryFolder();
+  for(const [format,bytes] of Object.entries(fixtures))sender.contents.set('office-'+format,{html:'<!doctype html><h1>읽기 화면</h1><p>원본과 분리된 주석</p>',originalFile:new File([bytes],'원본.'+format)});
+  await manager(t,sender).connect(disk);const head=await manifest(disk);
+  for(const [format,bytes] of Object.entries(fixtures)){const item=head.documents.find(d=>d.id==='office-'+format);assert.ok(item.original.name.endsWith('.'+format));assert.ok(item.copy.name.endsWith('.'+format));assert.ok(item.source.name.endsWith('.html'));const blob=await(await(await disk.getDirectoryHandle(FOLDER_DATA)).getFileHandle(item.original.name)).getFile();assert.deepEqual(new Uint8Array(await blob.arrayBuffer()),bytes);}
+  const recipient=library([]);await manager(t,recipient).connect(disk);
+  for(const [format,bytes] of Object.entries(fixtures)){const id='office-'+format;assert.deepEqual(new Uint8Array(await recipient.contents.get(id).originalFile.arrayBuffer()),bytes);assert.equal(recipient.records.get(id).metadata.bookmarks.length,1);assert.equal(recipient.records.get(id).metadata.annotations.length,1);}
+});
 
 test('new storage prefers existing Documents or 문서 and creates only a named child',async()=>{
   for(const name of ['Documents','문서']){

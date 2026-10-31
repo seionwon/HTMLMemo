@@ -4,6 +4,25 @@
 
 웹 페이지를 HTML 한 파일로 보관하고, 저장한 문서와 로컬 HTML에 주석을 남기는 독립 PWA입니다. 모든 문서·주석·설정은 기기 안에만 저장합니다. GitHub Pages는 설치할 앱의 정적 코드만 제공합니다. 데이터 영구 저장용 서버·로그인·API 키는 사용하지 않습니다. 사용자가 기기 간 동기화를 선택할 때만 연결 정보를 암호화해 외부 중계 서버로 교환하며, 최신 버전끼리의 원본 파일은 기기 간 암호화 연결로 전송합니다.
 
+## 읽기 전용 문서 형식
+
+**내 서재 → 파일 가져오기**에서 HTML·HTM·MHTML·MHT·PDF 외에 다음 파일을 엽니다. 모두 같은 읽기 도구·검색·주석·북마크·TTS 화면을 사용하며 원본 내용을 편집하지 않습니다.
+
+| 종류 | 확장자 |
+|---|---|
+| Word / OpenDocument Text | DOCX, ODT, OTT |
+| 스프레드시트 | XLSX, XLSM, XLS, CSV, TSV, ODS, OTS |
+| 슬라이드 | PPTX, ODP, OTP |
+| Markdown / 텍스트 | MD, MARKDOWN, TXT, JSON |
+
+[GenOffice](https://github.com/genspark-ai/genoffice/tree/36a509e8fc16ace85ed7afa3c37acb7b9c441ad1)의 실제 파일 열기 경로에 등록된 형식입니다. DOC·PPT는 해당 경로에서도 직접 지원하지 않습니다. Word·PowerPoint 해석, 슬라이드 배치, ODF 변환, CSV 해석과 압축 검사 코드를 재사용했습니다. GenOffice의 데스크톱 전용 스프레드시트 프로세스 대신 SheetJS CE 0.20.3을 브라우저 안에서 사용합니다. 출처·원본 SHA-256은 [UPSTREAM.json](vendor-src/genoffice/UPSTREAM.json), 변형한 브라우저 연결부는 [packages/office](packages/office), 재배포 라이선스는 [THIRD-PARTY-NOTICES.txt](public/vendor/office/THIRD-PARTY-NOTICES.txt)에 있습니다. GenOffice의 Electron·AI·편집 UI는 포함하지 않습니다.
+
+원본 바이트와 확장자는 전용 폴더에 그대로 보관하며 읽기 화면·주석·북마크는 별도로 자동 저장합니다. Office 문서의 **HTML 내보내기**는 읽기 화면과 주석·북마크를 하나로 보냅니다. Office 원본 자체가 필요한 상대에게는 전용 폴더의 원본 사본도 별도로 전달합니다. 가져오기 워커와 엔진은 앱에 포함되며 런타임 서버·외부 CDN·확장이 필요하지 않습니다. 설치 후 오프라인 캐시가 준비되면 오프라인 가져오기도 가능합니다.
+
+고급 페이지 배치·특수 글꼴·도형은 원본 앱과 다를 수 있습니다. 슬라이드의 애니메이션·동영상 재생, 시트의 차트·그림·대화형 피벗, 수식 재계산·매크로 실행은 포함하지 않습니다. 시트에는 저장된 계산 결과를 표시하고 결과가 없으면 수식 자체를 글자로 표시합니다. 외부 파일을 자동으로 내려받지 않습니다. 파일당 100MB, 압축 해제 합계 256MiB·단일 부분 64MiB, 시트당 50,000행·1,024열·250,000칸, 통합 문서 500,000칸·256시트, 슬라이드 2,000장, 텍스트 8백만 글자를 한도로 검사하며 실패한 가져오기는 서재에 추가하지 않습니다. 상세 사용법과 제한은 **설정 → 도움말 → Office·OpenDocument·텍스트를 읽기 전용으로 열기**에서 확인합니다.
+
+`npm run build:office`로 고정된 원본과 의존성에서 엔진을 재생성합니다. `npm run build`도 같은 단계를 실행합니다. `tests/office.test.mjs`와 `tests/browser-office.integration.mjs`가 형식별 가져오기·원본 보존·같은 UI·주석·공유·오프라인 경로를 검사합니다.
+
 ## 설치와 URL 공유
 
 **이 앱은 구글 크롬에서만 정상적으로 작동합니다. 크롬에서 실행해주세요.**

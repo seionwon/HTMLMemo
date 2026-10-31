@@ -985,7 +985,7 @@ export class Reader {
     this.readingFontSize ||= Number.parseFloat(this.doc.defaultView?.getComputedStyle?.(this.doc.body)?.fontSize)||18;
     let style=this.doc.getElementById('htmlmemo-reading-font-style');
     if(!style){style=this.doc.createElement('style');style.id='htmlmemo-reading-font-style';style.setAttribute('data-htmlmemo-ui','');this.doc.head.append(style);}
-    const css='body{font-size:'+(this.readingFontSize*scale).toFixed(3)+'px!important}';if(style.textContent!==css)style.textContent=css;
+    const css='body{font-size:'+(this.readingFontSize*scale).toFixed(3)+'px!important}article[data-office-slides]>.office-slide{max-width:'+(scale*100)+'%}';if(style.textContent!==css)style.textContent=css;
   }
   setReadingFontScale(value) {
     if(!Number.isFinite(value)||this.disposed||this.preparing||this.topbarNode?.isConnected)return false;
@@ -1704,7 +1704,7 @@ export class Reader {
       node=caret?.offsetNode||range?.startContainer;offset=caret?.offset??range?.startOffset;
     }catch{/* Missing hit-testing must not turn a word selection into fullscreen. */}
     if(!node){return target.matches?.('p,span,strong,em,b,i,u,small,h1,h2,h3,h4,h5,h6,li,td,th,pre,code')?{unknown:true}:null;}
-    if(node.nodeType!==3||!node.textContent.trim()||node.parentElement?.closest('script,style,noscript,svg,textarea,template,[data-htmlmemo-ui]'))return null;
+    if(node.nodeType!==3||!node.textContent.trim()||(node.parentElement?.closest('script,style,noscript,textarea,template,[data-htmlmemo-ui]')||node.parentElement?.closest('svg')&&!node.parentElement?.closest('foreignObject [data-office-text]')))return null;
     const range=doc.createRange();
     for(const at of [offset,offset-1]){
       if(at<0||at>=node.textContent.length)continue;
@@ -2090,7 +2090,7 @@ export class Reader {
     if (!element || element === this.doc.body || element === this.doc.documentElement || !this.doc.createRange?.().getClientRects) return null;
     const nodes = []; let text = '', count = 0;
     const walker = this.doc.createTreeWalker(element, NodeFilter.SHOW_TEXT, {acceptNode:node =>
-      node.parentElement?.closest('script,style,noscript,svg,textarea,template,[data-htmlmemo-ui]') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT});
+      (node.parentElement?.closest('script,style,noscript,textarea,template,[data-htmlmemo-ui]')||node.parentElement?.closest('svg')&&!node.parentElement?.closest('foreignObject [data-office-text]')) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT});
     while (walker.nextNode()) {
       const node = walker.currentNode;
       if (++count > 2000 || text.length + node.textContent.length > 64000) return null;
@@ -2263,7 +2263,7 @@ export class Reader {
     // text caret, while refusing controls and text outside this document.
     let node,offset;
     try{const caret=this.doc.caretPositionFromPoint?.(event.clientX,event.clientY),range=caret?null:this.doc.caretRangeFromPoint?.(event.clientX,event.clientY);node=caret?.offsetNode||range?.startContainer;offset=caret?.offset??range?.startOffset;}catch{return null;}
-    if(node?.nodeType!==3||!Number.isInteger(offset)||!node.isConnected||!node.textContent.trim()||!this.doc.body.contains(node)||this.isInteractiveControl(node)||node.parentElement?.closest('script,style,noscript,svg,textarea,template,[data-htmlmemo-ui],[contenteditable]'))return null;
+    if(node?.nodeType!==3||!Number.isInteger(offset)||!node.isConnected||!node.textContent.trim()||!this.doc.body.contains(node)||this.isInteractiveControl(node)||(node.parentElement?.closest('script,style,noscript,textarea,template,[data-htmlmemo-ui],[contenteditable]')||node.parentElement?.closest('svg')&&!node.parentElement?.closest('foreignObject [data-office-text]')))return null;
     return {node,offset:clamp(offset,0,node.textContent.length-1)};
   }
   startTextMarkGesture(event) {

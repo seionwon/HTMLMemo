@@ -1,12 +1,13 @@
 import { LOCAL_CSP, SCRIPT_CSP, parseHTML } from './document.js';
 import { readMHTML } from './mhtml.js';
 import { isPDFFile, verifyPDF, PDF_ARCHIVE_MARKER, readPDFArchive } from './pdf-document.js';
+import {documentExtension,officeFormat,verifyOffice} from './office-formats.js';
 
 const isMHTML = file => /\.(?:mhtml|mht)$/i.test(file.name||'') || /^(?:multipart\/related|application\/x-mimearchive)(?:;|$)/i.test(file.type||'');
-const hasDocumentExtension = file => /\.(?:html?|mhtml|mht|pdf)$/i.test(file?.name||'');
-export const isLocalHTMLFile = file => !!file && (isPDFFile(file)||hasDocumentExtension(file) || /^(?:text\/html|multipart\/related|application\/x-mimearchive)(?:;|$)/i.test(file.type||''));
+const hasDocumentExtension = file => !!documentExtension(file?.name);
+export const isLocalHTMLFile = file => !!file && (isPDFFile(file)||hasDocumentExtension(file)||officeFormat(file) || /^(?:text\/html|multipart\/related|application\/x-mimearchive)(?:;|$)/i.test(file.type||''));
 export function htmlExportName(name, annotations = false) {
-  return String(name||'문서.html').replace(/\.(?:html?|mhtml|mht|pdf)$/i,'')+(annotations?'-주석':'')+'.html';
+  const value=String(name||'문서.html');return (documentExtension(value)?value.replace(/\.[a-z0-9]+$/i,''):value)+(annotations?'-주석':'')+'.html';
 }
 
 const identities=new WeakMap(),localSources=new WeakMap(),nativeLegacyCopies=new WeakMap();
@@ -101,7 +102,13 @@ export async function findLocalDuplicates(local, records, loadRecord) {
 export async function readLocalHTML(input, {native = false, allowScripts = false, identify = true} = {}) {
   const originalHandle = input?.kind === 'file' && typeof input.getFile === 'function' ? input : null;
   const file = originalHandle ? await originalHandle.getFile() : input;
-  if (!isLocalHTMLFile(file) || typeof file.text !== 'function') throw new Error('HTML, HTM, MHTML, MHT 또는 PDF 파일을 선택해주세요.');
+  if (!isLocalHTMLFile(file) || typeof file.text !== 'function') throw new Error('HTML, PDF, Office, OpenDocument, CSV·TSV, Markdown 또는 텍스트·JSON 파일을 선택해주세요.');
+  const format=officeFormat(file);
+  if(format){
+    await verifyOffice(file,format);
+    const local={snapshot:{office:file,officeFormat:format,title:file.name},name:file.name,handle:null,originalHandle,originalFile:file,sourceIdentity:identify?await localFileIdentity(file):null,diskStamp:originalHandle?{modified:file.lastModified,size:file.size}:null};
+    localSources.set(local,file);return local;
+  }
   if(isPDFFile(file)){
     await verifyPDF(file);const local={snapshot:{pdf:file,title:file.name},name:file.name,handle:null,originalHandle,sourceIdentity:identify?await localFileIdentity(file):null,diskStamp:originalHandle?{modified:file.lastModified,size:file.size}:null};localSources.set(local,file);return local;
   }

@@ -28,7 +28,7 @@ test('UTF-16 local documents are decoded and normalized to UTF-8 on save',async(
 });
 test('drop acquires every original file handle before awaiting and falls back to ordinary files',async()=>{
   let release;const gate=new Promise(resolve=>release=resolve);let calls=0;const a={kind:'file',name:'a.html'};const b=file('b','b.htm');
-  const pending=droppedHTMLFiles({items:[{kind:'file',getAsFileSystemHandle(){calls++;return gate;},getAsFile:()=>null},{kind:'file',getAsFileSystemHandle(){calls++;return Promise.reject(new Error('unsupported'));},getAsFile:()=>b}],files:[]});assert.equal(calls,2);release(a);assert.deepEqual(await pending,[a,b]);assert.equal((await droppedHTMLFiles({files:[b,file('x','x.txt')]})).length,1);
+  const pending=droppedHTMLFiles({items:[{kind:'file',getAsFileSystemHandle(){calls++;return gate;},getAsFile:()=>null},{kind:'file',getAsFileSystemHandle(){calls++;return Promise.reject(new Error('unsupported'));},getAsFile:()=>b}],files:[]});assert.equal(calls,2);release(a);assert.deepEqual(await pending,[a,b]);assert.equal((await droppedHTMLFiles({files:[b,file('x','x.exe')]})).length,1);
 });
 test('external automatic write includes annotation data and updates the conflict checkpoint',async()=>{
   let content='original';let modified=1234;const handle={queryPermission:async()=> 'granted',getFile:async()=>({lastModified:modified,size:Buffer.byteLength(content)}),createWritable:async()=>{let next;return {write:async value=>next=value,close:async()=>{content=next;modified++;},abort:async()=>{}};}};
