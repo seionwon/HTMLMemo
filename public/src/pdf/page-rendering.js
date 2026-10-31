@@ -86,9 +86,9 @@ export class PdfPageImage {
             const url=URL.createObjectURL(blob),image=this.element.ownerDocument.createElement('img');
             image.alt='';image.draggable=false;image.dataset.pdfRaster='';
             Object.assign(image.style,{display:'block',position:'absolute',left:'0',top:'0',width:width+'px',height:height+'px',zIndex:'1',pointerEvents:'none'});
-            image.onload=()=>{if(this.disposed||this.revision!==revision){URL.revokeObjectURL(url);image.remove();return;}this.image?.remove();if(this.url)URL.revokeObjectURL(this.url);this.url=url;this.image=image;};
+            image.onload=()=>{if(this.disposed||this.revision!==revision){URL.revokeObjectURL(url);image.remove();return;}this.element.prepend(image);this.image?.remove();if(this.url)URL.revokeObjectURL(this.url);this.url=url;this.image=image;};
             image.onerror=()=>{URL.revokeObjectURL(url);image.remove();};
-            image.src=url;this.element.prepend(image);
+            image.src=url;
         },'image/png');
     }
     dispose() { this.disposed=true;this.revision++;this.discardCanvas(this.canvas);this.canvas=null;this.image?.remove();this.image=null;if(this.url)URL.revokeObjectURL(this.url);this.url=null; }
