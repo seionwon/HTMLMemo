@@ -1,0 +1,55 @@
+{
+  "status": "pass",
+  "sourceCommit": "a194337e305179ed9168a337f3f2342f122eae7e",
+  "run": 41166334148,
+  "url": "https://github.com/seionwon/HTMLMemo/actions/runs/41166334148",
+  "jobs": [
+    {
+      "completed_at": "2026-10-31T04:15:24Z",
+      "conclusion": "success",
+      "id": 124434625969,
+      "name": "build",
+      "started_at": "2026-10-31T03:54:40Z",
+      "status": "completed"
+    },
+    {
+      "completed_at": "2026-10-31T04:15:35Z",
+      "conclusion": "success",
+      "id": 124439055472,
+      "name": "deploy",
+      "started_at": "2026-10-31T04:15:27Z",
+      "status": "completed"
+    },
+    {
+      "completed_at": "2026-10-31T04:23:25Z",
+      "conclusion": "success",
+      "id": 124439097824,
+      "name": "verify",
+      "started_at": "2026-10-31T04:15:37Z",
+      "status": "completed"
+    }
+  ],
+  "unit": {
+    "tests": 774,
+    "pass": 773,
+    "fail": 0,
+    "skipped": 1
+  },
+  "sourceChrome": {
+    "tests": 101,
+    "pass": 101,
+    "fail": 0,
+    "skipped": 0
+  },
+  "postPublishChrome": {
+    "tests": 67,
+    "pass": 67,
+    "fail": 0,
+    "skipped": 0
+  },
+  "notes": [
+    "Linux omits the macOS-only Chrome sandbox guard; all 774 unit tests passed locally on macOS.",
+    "The post-publication group includes one temporary old/new-path storage fixture; the separate public-browser.json checks the actual published app at two widths."
+  ],
+  "verifiedAt": "2026-10-31T13:26:45+09:00"
+}

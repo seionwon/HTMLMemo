@@ -4862,7 +4862,7 @@ Chrome 검사는 실제 OPFS 폴더 핸들과 IndexedDB, Android 사용자 에�
 
 | ID | 변경 종류 | 상태 |
 |---|---|---|
-| hist-20261031-004 | 앱 이름·PWA·도움말·디자인·배포·CodeMemo 연결 | 구현·로컬 검증 완료 · 기존 주소의 Pages 게시 대기 · 저장소 이름 변경은 사용자 단계 |
+| hist-20261031-004 | 앱 이름·PWA·도움말·디자인·배포·CodeMemo 연결 | 완료 · LibreMemo 1.3.1 기존 주소 게시·공개 검증 완료 · 저장소 이름 변경은 사용자 단계 |
 
 **요청·범위:** HTMLMemo의 새 이름을 LibreMemo로 정하고 필요한 표기·설정·안내를 바꾸며 GitHub repository를 언제 바꾸면 되는지 설명한다. 별도 앱이나 새 데이터 저장소를 만들지 않는다. 버전은 **1.3.1**이다.
 
@@ -4879,3 +4879,9 @@ Chrome 검사는 실제 OPFS 폴더 핸들과 IndexedDB, Android 사용자 에�
 **범위·제한:** GitHub의 repository 이름 변경은 아직 실행하지 않았다. 사용자가 시점을 물었으므로 코드 준비와 기존 주소 배포 후 수동 단계로 안내한다. GitHub가 Git 주소를 리디렉션해도 Pages 프로젝트 주소는 자동 리디렉션하지 않는다. [공식 안내](https://docs.github.com/en/repositories/creating-and-managing-repositories/renaming-a-repository). 정식 CI·게시·공개 파일·공개 Chrome 검사는 실제 완료 후 이 항목에 보충한다.
 
 **게시 전 검사 보충:** 첫 Actions 41165873388은 PWA 시작 순서 검사에서 중단됐다. 앱 이름을 바꾼 테스트 서버 경로가 여전히 옛 이름의 길이 `10`으로 잘려 정적 모듈을 찾지 못한 것이 원인이었다. 테스트 경로를 `'/LibreMemo/'.length`로 계산하도록 고쳤다. 실제 Chrome의 PWA 업데이트 4개 검사(완전 종료 후 취소 유지·다른 창 보존·구 작업자 업데이트/응답 유실 복구·오프라인·폴더 권한보다 먼저 검사)가 모두 통과했다. 첫 실행은 Pages 게시 전에 중단됐으며 성공으로 기록하지 않는다. 공유 주소의 사용자 정보 제거도 보충하고 관련 69개 검사를 통과했다.
+
+**2026-10-31T13:26:45+09:00 최종 게시·공개 검증 완료:** 최종 구현 커밋 `a194337e305179ed9168a337f3f2342f122eae7e`의 [Actions 41166334148](https://github.com/seionwon/HTMLMemo/actions/runs/41166334148)에서 **build · deploy · verify 모두 성공**했다. Linux 단위 검사는 총 774개 중 773개 통과·macOS 전용 안전 검사 1개 건너뛰기·실패 0개였다. macOS 로컬에서는 774개 모두 통과했다. 전체 Chrome 러너 **101개**, 게시 후 Chrome 검사 묶음 **67개**가 모두 통과했다. 게시 후 묶음에는 임시 출처의 구·신 경로 자료 보존 fixture도 포함되며, 전체를 실물 폰이나 실제 사용자 자료로 시험했다고 표현하지 않는다. 취소된 41166206733은 마지막 안내문 표기를 보충한 최종 소스로 대체한 이전 실행이며 게시 성공으로 기록하지 않는다.
+
+실제 [기존 공개 주소](https://seionwon.github.io/HTMLMemo/)에서 **LibreMemo 1.3.1**을 제공한다. CI Pages 아티팩트의 앱 자산 **258개·13,868,223바이트**가 공개 파일과 모두 일치했다. `upload-pages-artifact`가 제외하는 `.nojekyll` 제어 파일은 필수 앱 자산과 구분했다. 허용된 앱 파일 목록 이외의 파일이 배포물에 없는 것도 확인했다. 공개 UI를 별도 임시 Chrome 프로필로 열어 1280·320px에서 새 문서 제목·LibreMemo 설정·가로 넘침 없음·기존 실제 공유 URL·JavaScript 오류 0개를 확인하고 화면을 직접 검토했다. [CI 결과](verification/librememo-rename-2026-10-31/ci.json), [공개 파일 전체 대조](verification/librememo-rename-2026-10-31/public-files.json), [공개 브라우저](verification/librememo-rename-2026-10-31/public-browser.json), [공개 휴대폰 크기 화면](verification/librememo-rename-2026-10-31/public-320.png).
+
+MemoSuite의 CodeMemo 연결도 정식 배포·공개 자산 대조와 실제 열기·복사 검사를 통과했다. User ID 1의 프로젝트 49는 표시 이름만 LibreMemo로 바꿨고 경로·대화·실행 설정 JSON은 바꾸지 않았다. 이제 사용자가 저장소 이름을 **LibreMemo**로 바꾼 뒤 이름 변경 안내의 **Run workflow → 새 주소 확인 → 로컬 origin 갱신**을 수행하면 된다. 새 저장소 주소에 이미 게시했다고 표현하지 않는다. 현재 소스 폴더 `.../CodeMemo/HTMLMemo`와 자료 호환 식별자는 의도적으로 유지한다. 이번 후속 기록 커밋은 배포 앱 파일을 바꾸지 않는 문서·검증 결과 보존이며 `[skip ci]`로 불필요한 재게시를 하지 않는다.

@@ -1,5 +1,5 @@
 {
-  "status": "local-verified-publication-pending",
+  "status": "deployed-and-verified",
   "version": "1.3.1",
   "recordedAt": "2026-10-31 12:46:26 +09:00",
   "unitTests": 774,
@@ -7,7 +7,7 @@
   "build": "pass",
   "browser": "browser.json",
   "publicRepository": "seionwon/HTMLMemo",
-  "repositoryRename": "user action after the old-address release is verified",
+  "repositoryRename": "not executed; ready for the user to rename the existing repository now",
   "pwaID": "/HTMLMemo/",
   "dataMigration": "existing storage and file-format identities retained",
   "sharingAndDistributionChecks": {
@@ -24,5 +24,30 @@
     "conclusion": "failure before deployment",
     "cause": "renamed test-server path still used old fixed prefix length",
     "corrected": "derive length from the actual prefix; all four real-Chrome updater tests passed"
-  }
+  },
+  "completedAt": "2026-10-31T13:26:45+09:00",
+  "sourceCommit": "a194337e305179ed9168a337f3f2342f122eae7e",
+  "githubActions": {
+    "id": 41166334148,
+    "conclusion": "success"
+  },
+  "publicFiles": {
+    "count": 258,
+    "bytes": 13868223,
+    "report": "public-files.json"
+  },
+  "publicBrowser": "public-browser.json",
+  "ci": "ci.json",
+  "supersededRuns": [
+    {
+      "id": 41165873388,
+      "conclusion": "failure before deployment",
+      "reason": "old fixed prefix length in renamed test server; corrected and verified"
+    },
+    {
+      "id": 41166206733,
+      "conclusion": "cancelled before deployment",
+      "reason": "superseded by the final data-folder guide label correction"
+    }
+  ]
 }
