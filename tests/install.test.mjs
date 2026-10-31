@@ -66,5 +66,6 @@ test('handoff addresses retain the project scope and drop private file paths, qu
 test('public sharing follows the actual old or renamed deployment without credentials, query or hash',()=>{
   assert.equal(publicAppURL(new URL('https://seionwon.github.io/HTMLMemo/index.html?capture=private#note')),LEGACY_PUBLIC_APP_URL);
   assert.equal(publicAppURL(new URL('https://seionwon.github.io/LibreMemo/?capture=private#note')),PUBLIC_APP_URL);
+  assert.equal(publicAppURL(new URL('https://private:secret@seionwon.github.io/HTMLMemo/?capture=private#note')),LEGACY_PUBLIC_APP_URL);
   for(const address of ['https://seionwon.github.io/other/','https://seionwon.github.io/LibreMemoOther/','file:///Users/example/LibreMemo.html','http://localhost:4173/'])assert.equal(publicAppURL(new URL(address)),PUBLIC_APP_URL);
 });

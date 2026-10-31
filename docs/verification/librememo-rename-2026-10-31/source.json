@@ -9,5 +9,10 @@
   "publicRepository": "seionwon/HTMLMemo",
   "repositoryRename": "user action after the old-address release is verified",
   "pwaID": "/HTMLMemo/",
-  "dataMigration": "existing storage and file-format identities retained"
+  "dataMigration": "existing storage and file-format identities retained",
+  "sharingAndDistributionChecks": {
+    "passed": 69,
+    "failed": 0,
+    "credentials": "stripped from public sharing URLs"
+  }
 }

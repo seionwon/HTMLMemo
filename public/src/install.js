@@ -8,6 +8,7 @@ export function publicAppURL(location = globalThis.location) {
     const url = new URL(location?.href);
     if (url.origin === 'https://seionwon.github.io' &&
         /^\/(?:HTMLMemo|LibreMemo)\/(?:index\.html)?$/.test(url.pathname)) {
+      url.username = ''; url.password = '';
       return new URL('./', url).href;
     }
   } catch { /* A local or non-browser caller has no public deployment URL. */ }
