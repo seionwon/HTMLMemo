@@ -1,0 +1,924 @@
+{
+  "hardwarePhoneTested": false,
+  "method": "Real isolated Chrome with Android user agent, viewport resizing and CDP touch input",
+  "layouts": [
+    {
+      "width": 240,
+      "height": 480,
+      "screens": [
+        {
+          "name": "library-card",
+          "controls": 11
+        },
+        {
+          "name": "library-list",
+          "controls": 11
+        },
+        {
+          "name": "paste",
+          "controls": 6
+        },
+        {
+          "name": "web-import-guide",
+          "controls": 3
+        },
+        {
+          "name": "new-folder",
+          "controls": 4
+        },
+        {
+          "name": "folder-help",
+          "controls": 2
+        },
+        {
+          "name": "trash",
+          "controls": 9
+        },
+        {
+          "name": "settings",
+          "controls": 9
+        },
+        {
+          "name": "settings-backup",
+          "controls": 11
+        },
+        {
+          "name": "data-folder",
+          "controls": 5
+        },
+        {
+          "name": "about",
+          "controls": 4
+        },
+        {
+          "name": "sync-host",
+          "controls": 7
+        },
+        {
+          "name": "sync-join",
+          "controls": 6
+        },
+        {
+          "name": "help",
+          "controls": 9
+        },
+        {
+          "name": "execution",
+          "controls": 6
+        },
+        {
+          "name": "reading-header",
+          "controls": 5
+        },
+        {
+          "name": "palette",
+          "controls": 34
+        },
+        {
+          "name": "highlight-options",
+          "controls": 3
+        },
+        {
+          "name": "rect-options",
+          "controls": 3
+        },
+        {
+          "name": "note-options",
+          "controls": 3
+        },
+        {
+          "name": "document-tools",
+          "controls": 8
+        },
+        {
+          "name": "sidebar-outline",
+          "controls": 9
+        },
+        {
+          "name": "sidebar-search",
+          "controls": 7
+        },
+        {
+          "name": "sidebar-annotations",
+          "controls": 5
+        },
+        {
+          "name": "sidebar-bookmarks",
+          "controls": 6
+        },
+        {
+          "name": "toolbar-with-sidebar",
+          "controls": 9
+        },
+        {
+          "name": "document-info",
+          "controls": 2
+        },
+        {
+          "name": "document-history",
+          "controls": 6
+        },
+        {
+          "name": "tts-settings",
+          "controls": 2
+        },
+        {
+          "name": "tts-options",
+          "controls": 12
+        },
+        {
+          "name": "tts-options",
+          "controls": 2
+        },
+        {
+          "name": "document-menu",
+          "controls": 8
+        },
+        {
+          "name": "library-with-content",
+          "controls": 14
+        },
+        {
+          "name": "library-list-with-content",
+          "controls": 14
+        },
+        {
+          "name": "folder-menu",
+          "controls": 5
+        },
+        {
+          "name": "move-folder",
+          "controls": 3
+        }
+      ],
+      "failures": []
+    },
+    {
+      "width": 280,
+      "height": 560,
+      "screens": [
+        {
+          "name": "library-card",
+          "controls": 14
+        },
+        {
+          "name": "library-list",
+          "controls": 14
+        },
+        {
+          "name": "paste",
+          "controls": 6
+        },
+        {
+          "name": "web-import-guide",
+          "controls": 3
+        },
+        {
+          "name": "new-folder",
+          "controls": 4
+        },
+        {
+          "name": "folder-help",
+          "controls": 2
+        },
+        {
+          "name": "trash",
+          "controls": 9
+        },
+        {
+          "name": "settings",
+          "controls": 9
+        },
+        {
+          "name": "settings-backup",
+          "controls": 11
+        },
+        {
+          "name": "data-folder",
+          "controls": 5
+        },
+        {
+          "name": "about",
+          "controls": 4
+        },
+        {
+          "name": "sync-host",
+          "controls": 7
+        },
+        {
+          "name": "sync-join",
+          "controls": 6
+        },
+        {
+          "name": "help",
+          "controls": 9
+        },
+        {
+          "name": "execution",
+          "controls": 6
+        },
+        {
+          "name": "reading-header",
+          "controls": 5
+        },
+        {
+          "name": "palette",
+          "controls": 34
+        },
+        {
+          "name": "highlight-options",
+          "controls": 3
+        },
+        {
+          "name": "rect-options",
+          "controls": 3
+        },
+        {
+          "name": "note-options",
+          "controls": 3
+        },
+        {
+          "name": "document-tools",
+          "controls": 9
+        },
+        {
+          "name": "sidebar-outline",
+          "controls": 9
+        },
+        {
+          "name": "sidebar-search",
+          "controls": 7
+        },
+        {
+          "name": "sidebar-annotations",
+          "controls": 5
+        },
+        {
+          "name": "sidebar-bookmarks",
+          "controls": 6
+        },
+        {
+          "name": "toolbar-with-sidebar",
+          "controls": 9
+        },
+        {
+          "name": "document-info",
+          "controls": 2
+        },
+        {
+          "name": "document-history",
+          "controls": 6
+        },
+        {
+          "name": "tts-settings",
+          "controls": 2
+        },
+        {
+          "name": "tts-options",
+          "controls": 12
+        },
+        {
+          "name": "tts-options",
+          "controls": 2
+        },
+        {
+          "name": "document-menu",
+          "controls": 8
+        },
+        {
+          "name": "library-with-content",
+          "controls": 14
+        },
+        {
+          "name": "library-list-with-content",
+          "controls": 14
+        },
+        {
+          "name": "folder-menu",
+          "controls": 5
+        },
+        {
+          "name": "move-folder",
+          "controls": 3
+        }
+      ],
+      "failures": []
+    },
+    {
+      "width": 320,
+      "height": 480,
+      "screens": [
+        {
+          "name": "library-card",
+          "controls": 14
+        },
+        {
+          "name": "library-list",
+          "controls": 14
+        },
+        {
+          "name": "paste",
+          "controls": 6
+        },
+        {
+          "name": "web-import-guide",
+          "controls": 3
+        },
+        {
+          "name": "new-folder",
+          "controls": 4
+        },
+        {
+          "name": "folder-help",
+          "controls": 2
+        },
+        {
+          "name": "trash",
+          "controls": 9
+        },
+        {
+          "name": "settings",
+          "controls": 9
+        },
+        {
+          "name": "settings-backup",
+          "controls": 11
+        },
+        {
+          "name": "data-folder",
+          "controls": 5
+        },
+        {
+          "name": "about",
+          "controls": 4
+        },
+        {
+          "name": "sync-host",
+          "controls": 7
+        },
+        {
+          "name": "sync-join",
+          "controls": 6
+        },
+        {
+          "name": "help",
+          "controls": 9
+        },
+        {
+          "name": "execution",
+          "controls": 6
+        },
+        {
+          "name": "reading-header",
+          "controls": 5
+        },
+        {
+          "name": "palette",
+          "controls": 34
+        },
+        {
+          "name": "highlight-options",
+          "controls": 3
+        },
+        {
+          "name": "rect-options",
+          "controls": 3
+        },
+        {
+          "name": "note-options",
+          "controls": 3
+        },
+        {
+          "name": "document-tools",
+          "controls": 9
+        },
+        {
+          "name": "sidebar-outline",
+          "controls": 9
+        },
+        {
+          "name": "sidebar-search",
+          "controls": 7
+        },
+        {
+          "name": "sidebar-annotations",
+          "controls": 5
+        },
+        {
+          "name": "sidebar-bookmarks",
+          "controls": 6
+        },
+        {
+          "name": "toolbar-with-sidebar",
+          "controls": 9
+        },
+        {
+          "name": "document-info",
+          "controls": 2
+        },
+        {
+          "name": "document-history",
+          "controls": 6
+        },
+        {
+          "name": "tts-settings",
+          "controls": 2
+        },
+        {
+          "name": "tts-options",
+          "controls": 12
+        },
+        {
+          "name": "tts-options",
+          "controls": 2
+        },
+        {
+          "name": "document-menu",
+          "controls": 8
+        },
+        {
+          "name": "library-with-content",
+          "controls": 14
+        },
+        {
+          "name": "library-list-with-content",
+          "controls": 14
+        },
+        {
+          "name": "folder-menu",
+          "controls": 5
+        },
+        {
+          "name": "move-folder",
+          "controls": 3
+        }
+      ],
+      "failures": []
+    },
+    {
+      "width": 360,
+      "height": 640,
+      "screens": [
+        {
+          "name": "library-card",
+          "controls": 14
+        },
+        {
+          "name": "library-list",
+          "controls": 14
+        },
+        {
+          "name": "paste",
+          "controls": 6
+        },
+        {
+          "name": "web-import-guide",
+          "controls": 3
+        },
+        {
+          "name": "new-folder",
+          "controls": 4
+        },
+        {
+          "name": "folder-help",
+          "controls": 2
+        },
+        {
+          "name": "trash",
+          "controls": 9
+        },
+        {
+          "name": "settings",
+          "controls": 9
+        },
+        {
+          "name": "settings-backup",
+          "controls": 11
+        },
+        {
+          "name": "data-folder",
+          "controls": 5
+        },
+        {
+          "name": "about",
+          "controls": 4
+        },
+        {
+          "name": "sync-host",
+          "controls": 7
+        },
+        {
+          "name": "sync-join",
+          "controls": 6
+        },
+        {
+          "name": "help",
+          "controls": 9
+        },
+        {
+          "name": "execution",
+          "controls": 6
+        },
+        {
+          "name": "reading-header",
+          "controls": 5
+        },
+        {
+          "name": "palette",
+          "controls": 34
+        },
+        {
+          "name": "highlight-options",
+          "controls": 3
+        },
+        {
+          "name": "rect-options",
+          "controls": 3
+        },
+        {
+          "name": "note-options",
+          "controls": 3
+        },
+        {
+          "name": "document-tools",
+          "controls": 9
+        },
+        {
+          "name": "sidebar-outline",
+          "controls": 9
+        },
+        {
+          "name": "sidebar-search",
+          "controls": 7
+        },
+        {
+          "name": "sidebar-annotations",
+          "controls": 5
+        },
+        {
+          "name": "sidebar-bookmarks",
+          "controls": 6
+        },
+        {
+          "name": "toolbar-with-sidebar",
+          "controls": 9
+        },
+        {
+          "name": "document-info",
+          "controls": 2
+        },
+        {
+          "name": "document-history",
+          "controls": 6
+        },
+        {
+          "name": "tts-settings",
+          "controls": 2
+        },
+        {
+          "name": "tts-options",
+          "controls": 12
+        },
+        {
+          "name": "tts-options",
+          "controls": 2
+        },
+        {
+          "name": "document-menu",
+          "controls": 8
+        },
+        {
+          "name": "library-with-content",
+          "controls": 14
+        },
+        {
+          "name": "library-list-with-content",
+          "controls": 14
+        },
+        {
+          "name": "folder-menu",
+          "controls": 5
+        },
+        {
+          "name": "move-folder",
+          "controls": 3
+        }
+      ],
+      "failures": []
+    },
+    {
+      "width": 568,
+      "height": 280,
+      "screens": [
+        {
+          "name": "library-card",
+          "controls": 14
+        },
+        {
+          "name": "library-list",
+          "controls": 14
+        },
+        {
+          "name": "paste",
+          "controls": 6
+        },
+        {
+          "name": "web-import-guide",
+          "controls": 3
+        },
+        {
+          "name": "new-folder",
+          "controls": 4
+        },
+        {
+          "name": "folder-help",
+          "controls": 2
+        },
+        {
+          "name": "trash",
+          "controls": 9
+        },
+        {
+          "name": "settings",
+          "controls": 9
+        },
+        {
+          "name": "settings-backup",
+          "controls": 11
+        },
+        {
+          "name": "data-folder",
+          "controls": 5
+        },
+        {
+          "name": "about",
+          "controls": 4
+        },
+        {
+          "name": "sync-host",
+          "controls": 7
+        },
+        {
+          "name": "sync-join",
+          "controls": 6
+        },
+        {
+          "name": "help",
+          "controls": 9
+        },
+        {
+          "name": "execution",
+          "controls": 6
+        },
+        {
+          "name": "reading-header",
+          "controls": 5
+        },
+        {
+          "name": "palette",
+          "controls": 34
+        },
+        {
+          "name": "highlight-options",
+          "controls": 3
+        },
+        {
+          "name": "rect-options",
+          "controls": 3
+        },
+        {
+          "name": "note-options",
+          "controls": 3
+        },
+        {
+          "name": "document-tools",
+          "controls": 9
+        },
+        {
+          "name": "sidebar-outline",
+          "controls": 9
+        },
+        {
+          "name": "sidebar-search",
+          "controls": 7
+        },
+        {
+          "name": "sidebar-annotations",
+          "controls": 5
+        },
+        {
+          "name": "sidebar-bookmarks",
+          "controls": 6
+        },
+        {
+          "name": "toolbar-with-sidebar",
+          "controls": 9
+        },
+        {
+          "name": "document-info",
+          "controls": 2
+        },
+        {
+          "name": "document-history",
+          "controls": 6
+        },
+        {
+          "name": "tts-settings",
+          "controls": 2
+        },
+        {
+          "name": "tts-options",
+          "controls": 12
+        },
+        {
+          "name": "tts-options",
+          "controls": 2
+        },
+        {
+          "name": "document-menu",
+          "controls": 8
+        },
+        {
+          "name": "library-with-content",
+          "controls": 14
+        },
+        {
+          "name": "library-list-with-content",
+          "controls": 14
+        },
+        {
+          "name": "folder-menu",
+          "controls": 5
+        },
+        {
+          "name": "move-folder",
+          "controls": 3
+        }
+      ],
+      "failures": []
+    },
+    {
+      "width": 320,
+      "height": 240,
+      "screens": [
+        {
+          "name": "library-card",
+          "controls": 14
+        },
+        {
+          "name": "library-list",
+          "controls": 14
+        },
+        {
+          "name": "paste",
+          "controls": 6
+        },
+        {
+          "name": "web-import-guide",
+          "controls": 3
+        },
+        {
+          "name": "new-folder",
+          "controls": 4
+        },
+        {
+          "name": "folder-help",
+          "controls": 2
+        },
+        {
+          "name": "trash",
+          "controls": 9
+        },
+        {
+          "name": "settings",
+          "controls": 9
+        },
+        {
+          "name": "settings-backup",
+          "controls": 11
+        },
+        {
+          "name": "data-folder",
+          "controls": 5
+        },
+        {
+          "name": "about",
+          "controls": 4
+        },
+        {
+          "name": "sync-host",
+          "controls": 7
+        },
+        {
+          "name": "sync-join",
+          "controls": 6
+        },
+        {
+          "name": "help",
+          "controls": 9
+        },
+        {
+          "name": "execution",
+          "controls": 6
+        },
+        {
+          "name": "reading-header",
+          "controls": 5
+        },
+        {
+          "name": "palette",
+          "controls": 34
+        },
+        {
+          "name": "highlight-options",
+          "controls": 3
+        },
+        {
+          "name": "rect-options",
+          "controls": 3
+        },
+        {
+          "name": "note-options",
+          "controls": 3
+        },
+        {
+          "name": "document-tools",
+          "controls": 9
+        },
+        {
+          "name": "sidebar-outline",
+          "controls": 9
+        },
+        {
+          "name": "sidebar-search",
+          "controls": 7
+        },
+        {
+          "name": "sidebar-annotations",
+          "controls": 5
+        },
+        {
+          "name": "sidebar-bookmarks",
+          "controls": 6
+        },
+        {
+          "name": "toolbar-with-sidebar",
+          "controls": 9
+        },
+        {
+          "name": "document-info",
+          "controls": 2
+        },
+        {
+          "name": "document-history",
+          "controls": 6
+        },
+        {
+          "name": "tts-settings",
+          "controls": 2
+        },
+        {
+          "name": "tts-options",
+          "controls": 12
+        },
+        {
+          "name": "tts-options",
+          "controls": 2
+        },
+        {
+          "name": "document-menu",
+          "controls": 8
+        },
+        {
+          "name": "library-with-content",
+          "controls": 14
+        },
+        {
+          "name": "library-list-with-content",
+          "controls": 14
+        },
+        {
+          "name": "folder-menu",
+          "controls": 5
+        },
+        {
+          "name": "move-folder",
+          "controls": 3
+        }
+      ],
+      "failures": []
+    }
+  ],
+  "toolbarTouchAndKeyboard": true,
+  "openPaletteSurvivesViewportChange": true,
+  "ttsSettingsTouchScroll": true,
+  "longOutlineTarget": {
+    "scroll": 3622,
+    "top": 414.8636363636364,
+    "bottom": 427.42727272727274,
+    "viewportTop": 49,
+    "viewportBottom": 451
+  },
+  "longOutlineAndToolbar": true,
+  "status": "pass"
+}
