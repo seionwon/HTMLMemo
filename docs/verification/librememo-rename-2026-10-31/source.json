@@ -14,5 +14,15 @@
     "passed": 69,
     "failed": 0,
     "credentials": "stripped from public sharing URLs"
+  },
+  "pwaUpdateBrowserChecks": {
+    "passed": 4,
+    "failed": 0
+  },
+  "supersededCI": {
+    "id": 41165873388,
+    "conclusion": "failure before deployment",
+    "cause": "renamed test-server path still used old fixed prefix length",
+    "corrected": "derive length from the actual prefix; all four real-Chrome updater tests passed"
   }
 }
