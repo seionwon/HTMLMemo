@@ -125,6 +125,7 @@ export class PdfReader{
   schedule(){if(this.disposed||this.frame)return;this.frame=this.doc.defaultView.requestAnimationFrame(()=>{this.frame=null;void this.updateVisible().catch(error=>{if(!this.disposed)this.reader.callbacks.onError?.(error);});});}
   async updateVisible(){
     if(this.reader.host.hidden||this.disposed)return;
+    if(this.reader.annotationDrag||this.reader.gesture||this.reader.textMarkGesture)return;
     const logical=this.logicalTop,page=this.pageAt(logical),end=this.pageAt(logical+this.reader.viewport.clientHeight/this.reader.zoom),wanted=new Set();
     if(this.total*this.scale>WINDOW_HEIGHT&&(logical-this.base<WINDOW_HEIGHT*.15||logical-this.base>WINDOW_HEIGHT*.8)){const old=this.base;this.windowAt(logical);if(old!==this.base)this.doc.defaultView.scrollTo(this.reader.rootScrollLeft(),logical-this.base);}
     for(let p=Math.max(1,page-1);p<=Math.min(this.count,end+1,page+63);p++)wanted.add(p);this.wanted=wanted;
@@ -138,7 +139,7 @@ export class PdfReader{
     const retained=[...this.slots.values()].sort((a,b)=>b.used-a.used);
     for(const slot of retained.slice(12)){if(wanted.has(slot.page)||slot.node.contains(selection?.anchorNode)||slot.node.contains(selection?.focusNode)||slot.node.contains(this.speechRoot))continue;slot.controller.abort();slot.textLayer?.cancel();slot.image.dispose();slot.node.remove();this.slots.delete(slot.page);}
     if(!this.reader.readAloud?.isPlaying?.())this.setSpeechRoot(page);
-    this.reader.renderDrawingLayer();this.reader.updateReadingControls();
+    if(!this.reader.annotationDrag&&!this.reader.gesture&&!this.reader.textMarkGesture)this.reader.renderDrawingLayer();this.reader.updateReadingControls();
   }
   seek(page,y=0,remember=true){
     this.setLogicalTop((this.tops[page-1]+this.size(page).height*y)*this.scale);
@@ -232,7 +233,7 @@ export class PdfReader{
     }
     return result;
   }
-  async jumpAnnotation(a){const page=a.pdfPage||a.pdfRects?.[0]?.page||Number(/^n(\d+)$/.exec(a.anchor||'')?.[1]);if(!page)return false;const y=a.pdfRects?.[0]?.y??a.points?.[0]?.y??0;await this.go(page,Math.max(0,y-.25));this.reader.selectedId=a.id;return true;}
+  async jumpAnnotation(a){const page=a.pdfPage||a.pdfRects?.[0]?.page||Number(/^n(\d+)$/.exec(a.anchor||'')?.[1]);if(!page)return false;const y=a.pdfRects?.[0]?.y??a.points?.[0]?.y??0;if(!await this.go(page,Math.max(0,y-.25)))return false;this.reader.selectedId=a.id;return true;}
   path(page){const stack=[];for(const item of this.entries){if(item.page>page)continue;while(stack.length&&stack.at(-1).level>=item.level)stack.pop();stack.push({id:item.node.id||'pdf-page-'+item.page,title:item.title,level:item.level,order:item.page,kind:'heading'});}if(stack.at(-1)?.title!==page+'쪽')stack.push({id:'pdf-page-'+page,title:page+'쪽',order:page,kind:'section'});return stack;}
   annotationPage(a){return a.pdfPage||a.pdfRects?.[0]?.page||Number(/^n(\d+)$/.exec(a.anchor||'')?.[1])||1;}
   tree(field){const r=this.reader;return r.locationTree(r.metadata[field],field,item=>this.path(field==='bookmarks'?item.pdfPosition?.page||1:this.annotationPage(item)));}
@@ -257,16 +258,16 @@ export class PdfReader{
     return (progress?.matches||[]).map(match=>({...match,quote:match.page+'쪽 · '+match.before+match.text+match.after}));
   }
   async jumpWhole(match){
-    const signal=this.wholeAbort?.signal||new AbortController().signal,generation=this.wholeAbort;await this.go(match.page);if(this.disposed||signal.aborted||generation!==this.wholeAbort)return false;
-    const [located]=await this.searchEngine.locate([match],signal);if(this.disposed||signal.aborted||generation!==this.wholeAbort)return false;
+    const signal=this.wholeAbort?.signal||new AbortController().signal,generation=this.wholeAbort;if(!await this.go(match.page))return false;const jump=this.jumpVersion;if(this.disposed||signal.aborted||generation!==this.wholeAbort)return false;
+    const [located]=await this.searchEngine.locate([match],signal);if(this.disposed||signal.aborted||generation!==this.wholeAbort||jump!==this.jumpVersion)return false;
     for(const old of this.doc.querySelectorAll('[data-htmlmemo-pdf-book-search]'))old.remove();
     const slot=this.slots.get(match.page),size=this.size(match.page),layer=svg(this.doc,'svg',{class:'htmlmemo-pdf-marks',viewBox:'0 0 '+size.width+' '+size.height,'data-htmlmemo-ui':'','data-htmlmemo-pdf-book-search':''});
     for(const b of located?.rects||[])layer.append(svg(this.doc,'rect',{x:b.x*size.width,y:b.y*size.height,width:b.w*size.width,height:b.h*size.height,fill:'#f0a85b80',stroke:'#df9057','stroke-width':1,'pointer-events':'none'}));slot.inner.append(layer);if(located?.rects?.length)this.seek(match.page,Math.max(0,located.rects[0].y-.3));return true;
   }
   async nextSearch(direction){
     const r=this.reader;if(!r.searchResults.length)return false;const position=clamp(r.searchPosition+direction,0,r.searchResults.length-1);if(position===r.searchPosition)return false;r.searchPosition=position;r.callbacks.onSearchChange?.(r);
-    const match=r.searchResults[position],generation=this.searchGeneration;await this.go(match.page,0);if(this.disposed||generation!==this.searchGeneration||r.searchPosition!==position)return false;
-    const located=await this.searchEngine.locate([match],this.searchAbort.signal);if(this.disposed||generation!==this.searchGeneration||r.searchPosition!==position)return false;const rects=located[0]?.rects||[];this.clearSearch();const slot=this.slots.get(match.page),size=this.size(match.page);
+    const match=r.searchResults[position],generation=this.searchGeneration;if(!await this.go(match.page,0))return false;const jump=this.jumpVersion;if(this.disposed||generation!==this.searchGeneration||r.searchPosition!==position)return false;
+    const located=await this.searchEngine.locate([match],this.searchAbort.signal);if(this.disposed||generation!==this.searchGeneration||r.searchPosition!==position||jump!==this.jumpVersion)return false;const rects=located[0]?.rects||[];this.clearSearch();const slot=this.slots.get(match.page),size=this.size(match.page);
     const layer=svg(this.doc,'svg',{class:'htmlmemo-pdf-marks',viewBox:'0 0 '+size.width+' '+size.height,'data-htmlmemo-ui':'','data-htmlmemo-pdf-search':''});for(const b of rects)layer.append(svg(this.doc,'rect',{x:b.x*size.width,y:b.y*size.height,width:b.w*size.width,height:b.h*size.height,fill:'#f0a85b80',stroke:'#df9057','stroke-width':1,'pointer-events':'none'}));slot.inner.append(layer);if(rects.length)this.seek(match.page,Math.max(0,rects[0].y-.3));return true;
   }
   setSpeechRoot(page){const slot=this.slots.get(page);if(!slot?.text)return;this.speechRoot?.removeAttribute('data-tts-root');this.speechRoot=slot.text;this.speechRoot.setAttribute('data-tts-root','');}
@@ -284,6 +285,7 @@ html,body{margin:0;padding:0;min-height:100%;background:var(--htmlmemo-reader-pa
 .htmlmemo-pdf-link{position:absolute;z-index:4;background:transparent;cursor:pointer}.htmlmemo-pdf-link:hover{background:#6f9eff18}.htmlmemo-pdf-link:focus-visible{outline:2px solid #557bba}
 .htmlmemo-pdf-marks{position:absolute;inset:0;width:100%;height:100%;z-index:3;pointer-events:none;overflow:visible}
 html[data-htmlmemo-picking] [data-htmlmemo-pdf-mark]{cursor:pointer!important}html:not([data-htmlmemo-picking]) [data-htmlmemo-pdf-mark],html:not([data-htmlmemo-picking]) [data-htmlmemo-pdf-mark] *{pointer-events:none!important}
+html[data-htmlmemo-moving] .htmlmemo-pdf-marks *{pointer-events:none!important}
 .textLayer{position:absolute;inset:0;text-align:initial;line-height:1;text-size-adjust:none;forced-color-adjust:none;transform-origin:0 0;caret-color:CanvasText;z-index:2;--min-font-size:1;--text-scale-factor:calc(var(--total-scale-factor) * var(--min-font-size));--min-font-size-inv:calc(1 / var(--min-font-size))}
 .textLayer :is(span,br){color:transparent;position:absolute;white-space:pre;cursor:text;transform-origin:0 0}
 .textLayer> :not(.markedContent),.textLayer .markedContent span:not(.markedContent){z-index:1;--font-height:0;--scale-x:1;--rotate:0deg;font-size:calc(var(--text-scale-factor) * var(--font-height));transform:rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv))}

@@ -365,6 +365,9 @@ export class Reader {
     }
   }
   startFontObserver() {
+    // PDF page boxes and their explicit scale are owned by PdfReader. Watching
+    // raster publication as source font edits can cancel an annotation drag.
+    if(this.pdf)return;
     if (this.fontObserver) return;
     const win = this.doc.defaultView;
     if (!win?.MutationObserver || !win.requestAnimationFrame) return;
