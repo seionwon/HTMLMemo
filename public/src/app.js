@@ -137,8 +137,9 @@ function promptText(type, initial = '') {
   const inputTab=active();
   return new Promise(resolve=>{
     modal(`<form method="dialog" class="note-form"><div class="dialog-heading"><h2>${type==='text'?'텍스트 입력':'메모 남기기'}</h2><button class="icon-button" value="cancel" aria-label="닫기">${icon('close')}</button></div><textarea id="note-text" placeholder="생각을 적어보세요…" maxlength="10000" rows="6">${esc(initial)}</textarea><div class="dialog-actions"><button class="secondary-button" value="cancel">취소</button><button class="primary-button" value="save">저장</button></div></form>`,dialog=>{
-      $('#note-text').oninput=()=>inputTab?.checkpoints?.activity();
-      const done=()=>{ resolve(dialog.returnValue==='save'?$('#note-text').value:null); dialog.removeEventListener('close',done); }; dialog.addEventListener('close',done); requestAnimationFrame(()=>$('#note-text').focus());
+      const input=$('#note-text',dialog),current=()=>input.isConnected&&dialog.contains(input);
+      input.oninput=()=>inputTab?.checkpoints?.activity();
+      const done=()=>{ resolve(dialog.returnValue==='save'&&current()?input.value:null); dialog.removeEventListener('close',done); }; dialog.addEventListener('close',done); requestAnimationFrame(()=>{if(dialog.open&&current())input.focus();});
     });
   });
 }

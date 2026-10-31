@@ -32,6 +32,8 @@ jobs:
       - run: npm test
       - run: npm run check
       - run: mkdir -p test-results
+      - name: Verify memo close-before-focus and automatic history checkpoints
+        run: node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/browser-results.xml --test-name-pattern='Pages-only annotation history groups' tests/browser.integration.mjs
       - name: Verify all GenOffice and rhwp formats and common read-only annotation flows
         run: node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/browser-results.xml tests/browser-office.integration.mjs
       - name: Verify folder startup, small phone layouts and touch scrolling first
