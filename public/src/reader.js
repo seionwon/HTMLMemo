@@ -1104,7 +1104,7 @@ export class Reader {
     this.setupDocumentBookSearch();
     this.showDocumentSidebarView(this.documentSidebarMode||'outline');
   }
-  showDocumentSidebarView(mode) {
+  showDocumentSidebarView(mode,{reveal=true}={}) {
     if(!['outline','search','annotations','bookmarks'].includes(mode)||!this.documentSidebarUI?.isConnected)return;
     const sidebar=this.tocResize.sidebar,previous=this.documentSidebarMode||'outline';
     this.setupDocumentBookSearch();
@@ -1120,18 +1120,24 @@ export class Reader {
     this.callbacks.onSidebarView(mode,this.documentSidebarUI,this);
     if(search){if(mode==='search'){this.documentSidebarUI.querySelector('.sidebar-content').prepend(search);search.hidden=false;}else this.documentSidebarUI.append(search);}
     this.syncDocumentBookSearchResults();
+    if(reveal&&!this.tocStrip)this.setDocumentSidebarDrawer(true);
     if(mode==='outline'&&Number.isFinite(this.documentTocScrollTop))sidebar.scrollTop=this.documentTocScrollTop;
     else if(mode!==previous)sidebar.scrollTop=0;
   }
   refreshDocumentSidebar() {
     this.callbacks.onSidebarCounts?.(this.documentSidebarUI,this);
-    if(['annotations','bookmarks'].includes(this.documentSidebarMode))this.showDocumentSidebarView(this.documentSidebarMode);
+    if(['annotations','bookmarks'].includes(this.documentSidebarMode))this.showDocumentSidebarView(this.documentSidebarMode,{reveal:false});
+  }
+  setDocumentSidebarDrawer(open){
+    if(this.tocResize?.sidebar?.id!=='reader-nav'||!this.doc.documentElement.hasAttribute('data-htmlmemo-compact-ui'))return;
+    this.doc.body.classList.toggle('toc-open',open);
+    this.doc.getElementById('reader-menu')?.setAttribute('aria-expanded',String(open));
   }
   toggleDocumentSidebar(open=this.tocStrip){
     if(!this.documentSidebarUI?.isConnected)return;
     const unit=this.sidebarUnit();this.applyTocWidth(open?Math.max(TOC_STRIP_SNAP*unit,this.tocExpandedWidth||300*unit):TOC_MIN*unit,{persist:false,snapStrip:true});
     if(open)this.showDocumentSidebarView(this.documentSidebarMode||'outline');
-    else this.doc.getElementById('reader-close')?.click();
+    else {this.doc.getElementById('reader-close')?.click();this.setDocumentSidebarDrawer(false);}
     this.syncAfterTocResize();this.updateReadingControls();this.callbacks.onView?.();
   }
   collapseDocumentToc() {
@@ -1260,7 +1266,7 @@ export class Reader {
     const win=this.doc.defaultView;
     if(win.CSS?.highlights&&win.Highlight)win.CSS.highlights.set('htmlmemo-book-search',new win.Highlight(range));
     else this.bookSearchMarks=this.searchCache().mutate(index,()=>wrapOffsets(this.doc,match.start,match.end,{'data-htmlmemo-search':'','data-htmlmemo-book-search-hit':''},'background:#f0a85b80;outline:2px solid #df9057;border-radius:2px;color:inherit',index));
-    if(move){const rect=range.getBoundingClientRect(),origin=this.layerOrigin();this.scrollTop=Math.max(0,(rect.top-origin.top+rect.height/2)*this.zoom-this.viewport.clientHeight/2);this.scrollLeft=Math.max(0,(rect.left-origin.left+rect.width/2)*this.zoom-this.viewport.clientWidth/2);}
+    if(move){this.revealNestedScroll(range);const rect=range.getBoundingClientRect(),origin=this.layerOrigin();this.scrollTop=Math.max(0,(rect.top-origin.top+rect.height/2)*this.zoom-this.viewport.clientHeight/2);this.scrollLeft=Math.max(0,(rect.left-origin.left+rect.width/2)*this.zoom-this.viewport.clientWidth/2);}
     this.documentBookSearchStatus.textContent=`이 장에서 ${hit.position+1} / ${matches.length}${matches.length===3000?'+':''}`;
     for(const button of this.documentBookSearchResults.querySelectorAll('[data-book-search-step]'))button.disabled=matches.length<2;
     return true;
@@ -1850,7 +1856,9 @@ export class Reader {
     if(this.doc?.documentElement){
       const previous=this.uiScale||1;this.uiScale=1/this.zoom;
       if(this.doc.documentElement.style?.getPropertyValue('--htmlmemo-reader-ui-scale')!==String(this.uiScale))this.doc.documentElement.style?.setProperty('--htmlmemo-reader-ui-scale',String(this.uiScale));
-      this.doc.documentElement.toggleAttribute?.('data-htmlmemo-compact-ui',(this.host?.ownerDocument?.defaultView?.innerWidth||this.viewport.clientWidth)<=760);
+      const compact=(this.host?.ownerDocument?.defaultView?.innerWidth||this.viewport.clientWidth)<=760,enteringCompact=compact&&!this.doc.documentElement.hasAttribute?.('data-htmlmemo-compact-ui');
+      this.doc.documentElement.toggleAttribute?.('data-htmlmemo-compact-ui',compact);
+      if(enteringCompact&&this.documentSidebarUI?.isConnected&&!this.tocStrip)this.setDocumentSidebarDrawer(true);
       if(this.callbacks?.sidebarWidth&&this.tocResize?.sidebar?.isConnected){
         if(Number.isFinite(this.tocExpandedWidth))this.tocExpandedWidth*=this.uiScale/previous;
         this.applyTocWidth((this.tocStrip?8:this.callbacks.sidebarWidth())*this.uiScale,{persist:false,snapStrip:false});

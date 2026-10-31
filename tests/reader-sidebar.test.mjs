@@ -113,6 +113,17 @@ function collapsibleSidebar(){
   return {...a,doc,tree:doc.querySelector('#reader-tree'),choose:mode=>a.r.documentSidebarUI.querySelector(`[data-sidebar-view="${mode}"]`).onclick()};
 }
 
+test('compact book sidebar opens through shared search and reopens after its common close button',()=>{
+  const a=collapsibleSidebar(),before=structuredClone(a.r.metadata);a.doc.documentElement.setAttribute('data-htmlmemo-compact-ui','');
+  const menu=a.doc.createElement('button');menu.id='reader-menu';menu.setAttribute('aria-expanded','false');a.doc.body.prepend(menu);
+  a.r.showDocumentSidebarView('search');assert.equal(a.doc.body.classList.contains('toc-open'),true);assert.equal(menu.getAttribute('aria-expanded'),'true');
+  a.r.applyTocWidth=width=>{a.r.tocStrip=width<48;};a.r.syncAfterTocResize=()=>{};a.r.updateReadingControls=()=>{};
+  a.r.documentSidebarUI.querySelector('[data-sidebar-close]').onclick();assert.equal(a.doc.body.classList.contains('toc-open'),false);assert.equal(menu.getAttribute('aria-expanded'),'false');
+  a.r.toggleDocumentSidebar(true);assert.equal(a.doc.body.classList.contains('toc-open'),true);assert.equal(a.r.documentSidebarMode,'search');assert.equal(menu.getAttribute('aria-expanded'),'true');
+  a.r.showDocumentSidebarView('bookmarks');a.doc.body.classList.remove('toc-open');a.r.refreshDocumentSidebar();assert.equal(a.doc.body.classList.contains('toc-open'),false,'background count refresh does not reopen a source drawer');
+  assert.deepEqual(a.r.metadata,before);
+});
+
 test('reselecting the active outline collapses every source TOC level but not body or annotation disclosures',()=>{
   const a=collapsibleSidebar(),before=structuredClone(a.r.metadata),tree=a.tree,link=tree.querySelector('a');let clicked=0;link.onclick=()=>clicked++;
   const ui=a.doc.createElement('details');ui.setAttribute('open','');ui.innerHTML='<summary>앱 주석 그룹</summary>';a.r.documentSidebarUI.append(ui);

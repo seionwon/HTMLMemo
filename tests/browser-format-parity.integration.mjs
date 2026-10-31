@@ -131,7 +131,7 @@ test('real Chrome: Pages-only MemoSuite book and fallback sidebar share tab, sea
     await page.evaluate(`${native}.querySelector('[data-sidebar-view=bookmarks]').click()`);const nativeBookmarks=await sidebarMetric(native);
     const scaleStates=[];
     for(const width of [1280,390,320]){
-      await viewport(page,width);if(width<600)await page.evaluate(`${doc}.body.classList.add('toc-open')`);
+      await viewport(page,width);
       for(const percent of [25,50,100,125,200]){
         await page.evaluate(`${doc}.querySelector('[data-action=zoom]').click()`);await page.waitFor('!document.querySelector("#tool-popover").hidden');
         await page.evaluate(`(()=>{const i=document.querySelector('#zoom-value');i.value=${JSON.stringify(String(percent))};i.dispatchEvent(new Event('change',{bubbles:true}));})()`);await page.click('[data-popover-close]');
@@ -140,12 +140,15 @@ test('real Chrome: Pages-only MemoSuite book and fallback sidebar share tab, sea
         assert.ok(Math.abs(state.header-24)<.2,JSON.stringify(state));assert.ok(Math.abs(state.headerWidth-width)<1,JSON.stringify(state));assert.ok(Math.abs(state.headerLeft)<1,JSON.stringify(state));assert.ok(Math.abs(state.headerTop-state.chrome)<1,JSON.stringify(state));assert.ok(Math.abs(state.sidebar-Math.min(300,width-40))<1,JSON.stringify(state));assert.ok(Math.abs(state.tabs-25)<.2,JSON.stringify(state));assert.ok(Math.abs(state.button-20)<.2,JSON.stringify(state));assert.equal(state.speakReachable,true,JSON.stringify(state));scaleStates.push(state);
       }
     }
+    await page.evaluate(`${native}.querySelector('[data-sidebar-close]').click()`);assert.equal(await page.evaluate(`${doc}.body.classList.contains('toc-open')`),false);
+    await page.click('#toolbar [data-action=more]');await page.click('#tool-popover [data-more=sidebar]');
+    assert.equal(await page.evaluate(`${doc}.body.classList.contains('toc-open')`),true);assert.equal(await page.evaluate(`${native}.getBoundingClientRect().height>0`),true);
     await page.evaluate(`${doc}.body.classList.remove('toc-open')`);await viewport(page,1280);await page.evaluate(`${doc}.querySelector('[data-action=zoom]').click()`);await page.click('#zoom-reset');
     await chooseFile(page,Buffer.from(html),'공통 사이드바.html');await page.click(control('zoom'));await page.click('#zoom-reset');
     await page.click('#sidebar [data-sidebar-view=search]');const sharedSearch=await sidebarMetric('document.querySelector("#sidebar")');
     assert.deepEqual(sharedSearch,nativeSearch,'source and fallback search fields and tabs have the same dimensions, fonts and colors');
     await page.click('#sidebar [data-sidebar-view=bookmarks]');const sharedBookmarks=await sidebarMetric('document.querySelector("#sidebar")');assert.deepEqual(sharedBookmarks,nativeBookmarks);
     await writeFile(join(root,'test-results/pages-only-format-parity-sidebar-1280.png'),await page.screenshot());
-    assert.deepEqual(chrome.errors,[]);await writeFile(join(root,'test-results/pages-only-format-parity-sidebar.json'),JSON.stringify({status:'pass',search:sharedSearch,bookmarks:sharedBookmarks,sourceAndFallbackMatch:true,scaleStates,errors:[]},null,2));
+    assert.deepEqual(chrome.errors,[]);await writeFile(join(root,'test-results/pages-only-format-parity-sidebar.json'),JSON.stringify({status:'pass',search:sharedSearch,bookmarks:sharedBookmarks,sourceAndFallbackMatch:true,compactCloseAndReopen:true,scaleStates,errors:[]},null,2));
   }finally{await chrome?.close();await env.close();}
 });

@@ -385,7 +385,9 @@ test('real Chrome: Pages-only low-resolution screens keep controls reachable and
     await page.waitFor('document.querySelector(".tab.document.active .tab-title")?.textContent==="Long mobile outline"&&document.querySelector(".document-host:not([hidden]) iframe.document-frame")?.style.visibility==="visible"');
     assert.equal(await page.evaluate(`document.querySelector('.document-host:not([hidden]) iframe.document-frame').contentDocument.querySelector('#mobile-section-40')?.textContent`),'Section 40');
     if(await page.evaluate('document.querySelector("#sidebar").hidden')){await page.click('#toolbar [data-action=more]');await page.click('[data-more=sidebar]');}
-    await page.click('#sidebar [data-sidebar-view=outline]');await page.click('#sidebar [data-heading]:last-child');
+    if(await page.evaluate(`document.querySelector('#sidebar [data-sidebar-view=outline]').getAttribute('aria-pressed')!=='true'`))await page.click('#sidebar [data-sidebar-view=outline]');
+    const lastHeading=await page.evaluate(`Array.from(document.querySelectorAll('#sidebar [data-heading]')).at(-1).dataset.heading`);
+    await page.click('#sidebar [data-heading="'+lastHeading+'"]');
     await page.waitFor(`(()=>{const host=document.querySelector('.document-host:not([hidden])'),f=host.querySelector('iframe.document-frame'),v=host.querySelector('.reader-viewport'),d=f.contentDocument,r=d.querySelector('#mobile-section-40').getBoundingClientRect(),b=f.getBoundingClientRect(),edge=v.getBoundingClientRect(),scale=b.width/f.offsetWidth,top=b.top+r.top*scale,bottom=b.top+r.bottom*scale,scroll=Math.max(v.scrollTop,d.scrollingElement.scrollTop);window.longOutlineProof={scroll,top,bottom,viewportTop:edge.top,viewportBottom:edge.bottom};return scroll>100&&top>=edge.top-1&&bottom<=edge.bottom+1;})()`);
     report.longOutlineTarget=await page.evaluate('window.longOutlineProof');
     await page.click('#toolbar [data-action=palette]');await page.waitFor('!document.querySelector("#tool-popover").hidden&&!!document.querySelector("#pen-width")');
