@@ -52,7 +52,10 @@ export async function launchChrome({firstRun=false}={}){
   try{endpoint=await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('Chrome launch timeout: '+output.slice(-1800))),60000);child.stderr.on('data',chunk=>{output+=chunk.toString();const match=output.match(/DevTools listening on (ws:\/\/[^\s]+)/);if(match){clearTimeout(timer);resolve(match[1]);}});child.once('exit',code=>{clearTimeout(timer);reject(new Error('Chrome exited '+code+': '+output.slice(-1800)));});});}
   catch(error){child.kill();await rm(profile,{recursive:true,force:true}).catch(()=>{});throw error;}
   const debugURL='http://'+new URL(endpoint).host;
-  const targets=await fetch(debugURL+'/json/list').then(response=>response.json());const page=await CDP.connect(targets.find(t=>t.type==='page').webSocketDebuggerUrl);await page.send('Page.enable');await page.send('Runtime.enable');await page.send('Target.setAutoAttach',{autoAttach:true,waitForDebuggerOnStart:false,flatten:true});
+  const targets=await fetch(debugURL+'/json/list').then(response=>response.json());const page=await CDP.connect(targets.find(t=>t.type==='page').webSocketDebuggerUrl);await page.send('Page.enable');await page.send('Runtime.enable');
+  // Only isolated document frames need Runtime instrumentation. PDF workers and
+  // updating service workers must keep their ordinary, unattached lifecycle.
+  await page.send('Target.setAutoAttach',{autoAttach:true,waitForDebuggerOnStart:false,flatten:true,filter:[{type:'iframe',exclude:false},{exclude:true}]});
   // Routine fixtures really connect an isolated OPFS directory through the setup UI.
   // First-run cases keep the untouched profile and exercise picker/cancel/permission UX.
   if(!firstRun){
