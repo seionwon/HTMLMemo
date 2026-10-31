@@ -168,6 +168,7 @@ export class Reader {
       [data-htmlmemo-compact-ui] [data-htmlmemo-doc-topbar].reader-head #reader-menu{display:inline-flex!important}
       [data-htmlmemo-compact-ui] [data-htmlmemo-sidebar-grid]{grid-template-columns:minmax(0,1fr)!important}
       [data-htmlmemo-compact-ui] #reader-nav[data-htmlmemo-native-sidebar]{position:fixed!important;left:0!important;top:calc(24px * var(--htmlmemo-reader-ui-scale,1))!important;bottom:0!important;z-index:6;display:none!important}
+      [data-htmlmemo-compact-ui]:not([data-htmlmemo-topbar-active]) #reader-nav[data-htmlmemo-native-sidebar]{top:0!important}
       [data-htmlmemo-compact-ui] body.toc-open #reader-nav[data-htmlmemo-native-sidebar],html[data-htmlmemo-compact-ui][data-htmlmemo-sidebar-open] #reader-nav[data-htmlmemo-native-sidebar]{display:block!important}
       [data-htmlmemo-compact-ui] #reader-shade{display:none!important}
       [data-htmlmemo-doc-topbar-item]{height:calc(24px * var(--htmlmemo-reader-ui-scale,1))!important;min-height:calc(24px * var(--htmlmemo-reader-ui-scale,1))!important;max-height:calc(24px * var(--htmlmemo-reader-ui-scale,1))!important}
@@ -175,6 +176,7 @@ export class Reader {
       [data-htmlmemo-topbar-pad]{padding-top:calc(24px * var(--htmlmemo-reader-ui-scale,1))!important}
       [data-htmlmemo-topbar-offset]{top:calc(24px * var(--htmlmemo-reader-ui-scale,1))!important}
       [data-htmlmemo-doc-sidebar-ui],[data-htmlmemo-native-sidebar] #reader-tree,[data-htmlmemo-native-sidebar]>details,[data-htmlmemo-native-sidebar]>a{zoom:var(--htmlmemo-reader-ui-scale,1)}
+      [data-htmlmemo-doc-sidebar-ui] #reader-tree{zoom:1}
       [data-htmlmemo-toc-resizer],[data-htmlmemo-toc-resizer-bound]{width:calc(10px * var(--htmlmemo-reader-ui-scale,1))!important;min-width:0!important}
       [data-htmlmemo-toc-strip],[data-htmlmemo-toc-item-strip]{width:calc(8px * var(--htmlmemo-reader-ui-scale,1))!important;min-width:calc(8px * var(--htmlmemo-reader-ui-scale,1))!important;max-width:calc(8px * var(--htmlmemo-reader-ui-scale,1))!important;flex-basis:calc(8px * var(--htmlmemo-reader-ui-scale,1))!important}
       [data-htmlmemo-toc-strip] [data-htmlmemo-toc-resizer],[data-htmlmemo-toc-strip] [data-htmlmemo-toc-resizer-bound]{width:calc(8px * var(--htmlmemo-reader-ui-scale,1))!important}

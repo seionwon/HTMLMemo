@@ -305,13 +305,14 @@ html[data-app-sidebar-resizing] iframe{pointer-events:none!important}
 :is(#sidebar,[data-htmlmemo-doc-sidebar-ui]) .bookmark-add-button:focus-visible{outline:2px solid var(--green);outline-offset:2px}
 [data-htmlmemo-doc-sidebar-ui] .sidebar-book-search input::-webkit-search-cancel-button{appearance:none}
 :is(.sidebar-outline-tree,[data-htmlmemo-native-sidebar] #reader-tree){min-width:0;margin:0;padding:0 12px;font:400 12px/1.6 var(--app-font);color:var(--text)}
-.sidebar-content>.sidebar-outline-tree{padding:0}
+:is(#sidebar,[data-htmlmemo-doc-sidebar-ui]) .sidebar-content>.sidebar-outline-tree{padding:0}
 :is(.sidebar-outline-tree,[data-htmlmemo-native-sidebar] #reader-tree) details{min-width:0;margin:3px 0}
 :is(.sidebar-outline-tree,[data-htmlmemo-native-sidebar] #reader-tree) summary{display:flex;align-items:center;gap:5px;min-width:0;margin:0;padding:8px 3px;border:0!important;border-radius:5px;list-style:none;color:var(--text);font:600 12px/1.6 var(--app-font);cursor:pointer;overflow-wrap:anywhere}
 :is(.sidebar-outline-tree,[data-htmlmemo-native-sidebar] #reader-tree) summary::-webkit-details-marker{display:none}
 :is(.sidebar-outline-tree,[data-htmlmemo-native-sidebar] #reader-tree) summary::before{content:'▸';display:block;flex:none;width:12px;color:var(--muted)}
 :is(.sidebar-outline-tree,[data-htmlmemo-native-sidebar] #reader-tree) details[open]>summary::before{transform:rotate(90deg)}
-.sidebar-outline-tree summary>.outline-item{flex:1;padding:0;border-radius:0;font-weight:600}
+:is(#sidebar,[data-htmlmemo-doc-sidebar-ui]) .sidebar-outline-tree summary>.outline-item{flex:1;padding:0;border-radius:0;font-weight:600}
+:is(#sidebar,[data-htmlmemo-doc-sidebar-ui]) .sidebar-outline-tree summary>.outline-item[aria-current]{font-weight:650}
 :is(.sidebar-outline-tree,[data-htmlmemo-native-sidebar] #reader-tree) :is(.outline-group-body,.toc-children){min-width:0;margin-left:6px;padding-left:8px;border-left:1px solid var(--line)}
 [data-htmlmemo-native-sidebar] #reader-tree a{display:block;width:100%;margin:0;padding:8px 12px;border-radius:5px;background:transparent;color:var(--text);font:400 12px/1.6 var(--app-font);text-decoration:none;overflow-wrap:anywhere}
 [data-htmlmemo-native-sidebar] #reader-tree a:hover,[data-htmlmemo-native-sidebar] #reader-tree summary:hover{background:var(--surface-muted)}

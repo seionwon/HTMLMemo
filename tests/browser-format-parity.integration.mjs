@@ -101,6 +101,8 @@ test('real Chrome: Pages-only common outline folding and horizontal search match
   try{
     chrome=await launchChrome();const page=chrome.page;await page.navigate(env.url);await chooseFile(page,Buffer.from(html),'계층 목차.html');
     assert.equal(await page.evaluate('document.querySelectorAll("#sidebar [data-outline-group]").length'),2);
+    const headingRow=await page.evaluate(`(()=>{const row=document.querySelector('#sidebar [data-outline-group] > summary');return {height:row.getBoundingClientRect().height,titleHeight:row.querySelector('[data-heading]').getBoundingClientRect().height};})()`);
+    assert.ok(Math.abs(headingRow.height-35.2)<.2,JSON.stringify(headingRow));assert.ok(Math.abs(headingRow.titleHeight-19.2)<.2,JSON.stringify(headingRow));
     await page.click('#sidebar [data-heading="2"]');assert.equal(await page.evaluate(`document.querySelector('#sidebar [data-heading="2"]').getAttribute('aria-current')`),'location');
     await page.click('#sidebar [data-sidebar-view=outline]');assert.equal(await page.evaluate('document.querySelectorAll("#sidebar [data-outline-group][open]").length'),0);
     await page.click('#sidebar [data-sidebar-view=search]');await page.click('#sidebar [data-sidebar-view=outline]');assert.equal(await page.evaluate('document.querySelectorAll("#sidebar [data-outline-group][open]").length'),0);

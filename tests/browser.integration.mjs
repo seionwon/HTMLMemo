@@ -2281,6 +2281,13 @@ test('real Chrome: whole-book search shows live results and jumps to highlighted
       await page.waitFor(`${doc}.querySelector('#reader-search-status').textContent==='3개 장 검색됨'&&${doc}.querySelectorAll('.sidebar-book-results #reader-tree a').length===3`);
       assert.equal(await page.evaluate(`${doc}.querySelector('.sidebar-book-results #reader-tree').getBoundingClientRect().height>0`),true);
       assert.equal(await page.evaluate(`[...${doc}.querySelectorAll('.sidebar-book-results details')].every(d=>d.open)`),true);
+      const appZoom='.document-host:not([hidden]) [data-action=zoom]';await page.click(appZoom);await page.click('#zoom-reset');
+      const resultRow=()=>page.evaluate(`(()=>{const f=${frame},d=f.contentDocument,a=d.querySelector('.sidebar-book-results #reader-tree a'),r=a.getBoundingClientRect(),fr=f.getBoundingClientRect(),s=fr.width/f.offsetWidth;return {width:r.width*s,height:r.height*s,sidebarTop:fr.top+d.querySelector('#reader-nav').getBoundingClientRect().top*s,toolbarBottom:document.querySelector('.document-host:not([hidden]) [data-htmlmemo-reading-controls]').getBoundingClientRect().bottom};})()`),normalRow=await resultRow(),resultScales=[];
+      for(const percent of [25,200,100]){
+        await page.click(appZoom);await page.evaluate(`(()=>{const input=document.querySelector('#zoom-value');input.value=${JSON.stringify(String(percent))};input.dispatchEvent(new Event('change',{bubbles:true}));})()`);await page.click('[data-popover-close]');await page.evaluate('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
+        const actual=await resultRow();assert.ok(Math.abs(actual.height-normalRow.height)<.5,JSON.stringify({width,percent,normalRow,actual}));assert.ok(Math.abs(actual.width-normalRow.width)<1.2,JSON.stringify({width,percent,normalRow,actual}));assert.ok(Math.abs(actual.sidebarTop-actual.toolbarBottom)<1,JSON.stringify({width,percent,actual}));resultScales.push({percent,...actual});
+      }
+      await writeFile(join(root,`test-results/pages-only-book-search-ui-scale-${width}.json`),JSON.stringify({status:'pass',width,normalRow,results:resultScales},null,2));
       if(width===1280){assert.deepEqual(await page.scriptEvaluate('window.renderedSections'),['v0:opening']);assert.deepEqual(await page.scriptEvaluate('window.decodedVolumes'),[0]);}
       await writeFile(join(root,`test-results/book-search-results-${width}.png`),await page.screenshot());
       await clickNative('.sidebar-book-results a[href="#v1%3Aone"]');
