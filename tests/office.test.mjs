@@ -47,6 +47,13 @@ test('Office text, links and embedded resources cannot become executable or remo
   for(const format of ['txt','json'])assert.equal(documentFor((await renderOffice(fixtures[format],format,format)).html).querySelector('script,img'),null);
   assert.equal(officeFormat({name:'macro.exe',type:'text/plain'}),null);
 });
+
+test('plain text and JSON retain their whitespace and explicitly participate in the common TTS player',async()=>{
+  for(const format of ['txt','json']){
+    const doc=documentFor((await renderOffice(fixtures[format],format,format)).html),pre=doc.querySelector('pre.office-plain');
+    assert.ok(pre.hasAttribute('data-tts-keep'));assert.equal(pre.textContent,new TextDecoder().decode(fixtures[format]));
+  }
+});
 test('Unsafe XML, archive paths, expansion bombs, empty, encrypted and mismatched files fail before library creation',async()=>{
   for(const [name,value,pattern] of [['word/document.xml','<!DOCTYPE test [<!ENTITY x SYSTEM "https://example.invalid/">]><w:document/>',/엔터티/],['../bad.xml','<x/>',/경로/]]){
     const zip=await JSZip.loadAsync(fixtures.docx);zip.file(name,value);await assert.rejects(renderOffice(await zip.generateAsync({type:'uint8array'}),'docx','bad'),pattern);

@@ -33,7 +33,18 @@ export class CDP {
   }
   async scriptWaitFor(expression,timeout=15000){const start=Date.now();while(Date.now()-start<timeout){try{if(await this.scriptEvaluate(expression))return;}catch{}await delay(100);}throw Error('Timed out waiting for isolated source: '+expression);}
   async waitFor(expression,timeout=15000){const start=Date.now();while(Date.now()-start<timeout){try{if(await this.evaluate(expression))return;}catch{/* Execution contexts disappear during navigation. */}await delay(100);}throw new Error('Timed out waiting for: '+expression);}
-  async navigate(url){await this.send('Page.navigate',{url});await this.waitFor('document.readyState === "complete"');}
+  async navigate(url){
+    const result=await this.send('Page.navigate',{url});if(result.errorText)throw Error('Navigation failed: '+result.errorText);
+    // A same-URL reload can still expose the previous document's "complete"
+    // state while the public URL is loading. Wait for the new committed loader
+    // before querying the replacement app, especially during offline reopen.
+    if(result.loaderId){
+      const start=Date.now();let committed=false;
+      while(Date.now()-start<30000){const {frameTree}=await this.send('Page.getFrameTree');if(frameTree.frame.loaderId===result.loaderId){committed=true;break;}await delay(100);}
+      if(!committed)throw Error('Navigation did not commit its new document');
+    }
+    await this.waitFor('document.readyState === "complete"',30000);
+  }
   async click(selector){const rect=await this.evaluate(`(async()=>{const element=document.querySelector(${JSON.stringify(selector)});if(!element||element.hidden)throw Error('Missing element: '+${JSON.stringify(selector)});element.scrollIntoView({block:'nearest',inline:'nearest'});await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));const current=document.querySelector(${JSON.stringify(selector)});if(!current||current.hidden)throw Error('Missing element after redraw: '+${JSON.stringify(selector)});const r=current.getBoundingClientRect();if(!current.isConnected||r.width<=0||r.height<=0)throw Error('Element is not visible: '+${JSON.stringify(selector)});return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);await this.send('Input.dispatchMouseEvent',{type:'mousePressed',x:rect.x,y:rect.y,button:'left',clickCount:1});await this.send('Input.dispatchMouseEvent',{type:'mouseReleased',x:rect.x,y:rect.y,button:'left',clickCount:1});}
   async screenshot(){const result=await this.send('Page.captureScreenshot',{format:'png'});return Buffer.from(result.data,'base64');}
   async close(){this.socket.close();for(const pending of this.pending.values()){clearTimeout(pending.timer);pending.reject(new Error('CDP closed'));}this.pending.clear();}

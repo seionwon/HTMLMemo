@@ -42,7 +42,7 @@ export async function renderOffice(input,format,title){
   else{
     const text=decodeCsvBuffer(bytes,'euc-kr');
     if(text.length>8*1024*1024)throw Error('텍스트 문서는 8백만 글자 이하로 나누어 가져와 주세요.');
-    body=OFFICE_FORMATS[format]==='markdown'?renderMarkdown(text).html:'<pre class="office-plain">'+esc(text)+'</pre>';
+    body=OFFICE_FORMATS[format]==='markdown'?renderMarkdown(text).html:'<pre class="office-plain" data-tts-keep>'+esc(text)+'</pre>';
   }
   const unique=[...new Set(warnings)],html=officeHTML(title,body,unique);
   if(html.length>64*1024*1024)throw Error('읽기 화면이 너무 큽니다. 문서를 나누어 가져와 주세요.');

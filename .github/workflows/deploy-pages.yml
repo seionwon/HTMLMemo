@@ -32,6 +32,8 @@ jobs:
       - run: npm test
       - run: npm run check
       - run: mkdir -p test-results
+      - name: Verify shared toolbar sizes, sidebar and reading actions for every format
+        run: node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/browser-results.xml tests/browser-format-parity.integration.mjs
       - name: Verify zoom popup values follow applied scale in native and plain readers
         run: node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/browser-results.xml --test-name-pattern='reading controls provide one app TTS' tests/browser.integration.mjs
       - name: Verify memo close-before-focus and automatic history checkpoints
@@ -133,7 +135,7 @@ jobs:
           console.log('Published app, reader and model match this commit.');
           NODE
           mkdir -p test-results
-          node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/published-browser-results.xml --test-name-pattern='MHTML import|compact library|folder setup|whole-book search|long-document search|duplicate HTML import|reading controls|palette controls|toolbar mode groups|sidebar view choices|annotation tree|font-scaled pen|Pages-only|Chrome companion|adaptive file tabs|TTS paused resume|TTS transport controls|TTS selection|device sync entry' tests/browser-office.integration.mjs tests/browser-pdf.integration.mjs tests/browser.integration.mjs tests/browser-library-folders.integration.mjs tests/browser-annotation-jump.integration.mjs tests/browser-security.integration.mjs tests/browser-annotation-picking.integration.mjs tests/browser-device-sync.integration.mjs tests/browser-mobile.integration.mjs tests/browser-help.integration.mjs tests/browser-updates.integration.mjs tests/browser-branding.integration.mjs
+          node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/published-browser-results.xml --test-name-pattern='MHTML import|compact library|folder setup|whole-book search|long-document search|duplicate HTML import|reading controls|palette controls|toolbar mode groups|sidebar view choices|annotation tree|font-scaled pen|Pages-only|Chrome companion|adaptive file tabs|TTS paused resume|TTS transport controls|TTS selection|device sync entry' tests/browser-format-parity.integration.mjs tests/browser-office.integration.mjs tests/browser-pdf.integration.mjs tests/browser.integration.mjs tests/browser-library-folders.integration.mjs tests/browser-annotation-jump.integration.mjs tests/browser-security.integration.mjs tests/browser-annotation-picking.integration.mjs tests/browser-device-sync.integration.mjs tests/browser-mobile.integration.mjs tests/browser-help.integration.mjs tests/browser-updates.integration.mjs tests/browser-branding.integration.mjs
       - name: Keep published desktop and mobile verification screenshots
         if: always()
         uses: actions/upload-artifact@v4

@@ -3,7 +3,7 @@ import { PdfReader } from './pdf-reader.js';
 import {bookmarkTextAnchor,captureBookmarkLocations,findBookmarkText} from './bookmark-location.js';
 import { SearchIndexCache } from './search-index.js';
 import { IsolatedRuntime,needsIsolatedRuntime } from './isolated-runtime.js';
-import { clamp, uid, icon } from './utils.js';
+import { clamp, uid, icon, sidebarWidthAction } from './utils.js';
 import { History, TEXT_TOOLS, DRAW_TOOLS, FILL_TOOLS } from './model.js';
 import { LAYER_ID, LOCAL_CSP, parseHTML, savedMainFrame, prepareLoadedHTML, cleanAnnotations, textIndex, selectionAnchor, resolveTextAnchor, wrapOffsets, rangeFromOffsets, sentenceOffsets, serializeHTML, inspectBookDocument, drawingTargetQuote, describeDrawingTarget, currentSection, bookmarkAnchorTarget } from './document.js';
 
@@ -155,8 +155,33 @@ export class Reader {
     });
   }
   baseEditorStyle() {
-    return 'html[data-htmlmemo-picking] [data-htmlmemo-mark],html[data-htmlmemo-picking] [data-htmlmemo-mark] *{cursor:pointer!important}html[data-htmlmemo-picking] [data-htmlmemo-hit]{pointer-events:stroke!important;cursor:pointer!important}html[data-htmlmemo-picking="select"] #htmlmemo-annotation-layer,html[data-htmlmemo-picking="select"] [data-htmlmemo-id],html[data-htmlmemo-picking="select"] [data-htmlmemo-hit]{touch-action:none!important}[data-htmlmemo-preview],[data-htmlmemo-preview] *{pointer-events:none!important}[data-htmlmemo-drag-source]{opacity:.25!important;pointer-events:none!important}html[data-htmlmemo-moving],html[data-htmlmemo-moving][data-htmlmemo-picking] *{cursor:grabbing!important;user-select:none!important;-webkit-user-select:none!important}' + this.layoutEditorStyle() + this.textMarkingStyle();
+    return 'html[data-htmlmemo-picking] [data-htmlmemo-mark],html[data-htmlmemo-picking] [data-htmlmemo-mark] *{cursor:pointer!important}html[data-htmlmemo-picking] [data-htmlmemo-hit]{pointer-events:stroke!important;cursor:pointer!important}html[data-htmlmemo-picking="select"] #htmlmemo-annotation-layer,html[data-htmlmemo-picking="select"] [data-htmlmemo-id],html[data-htmlmemo-picking="select"] [data-htmlmemo-hit]{touch-action:none!important}[data-htmlmemo-preview],[data-htmlmemo-preview] *{pointer-events:none!important}[data-htmlmemo-drag-source]{opacity:.25!important;pointer-events:none!important}html[data-htmlmemo-moving],html[data-htmlmemo-moving][data-htmlmemo-picking] *{cursor:grabbing!important;user-select:none!important;-webkit-user-select:none!important}' + this.layoutEditorStyle() + this.textMarkingStyle() + this.readerUIScaleStyle();
   }
+  readerUIScaleStyle(){
+    return `[data-htmlmemo-doc-topbar]{zoom:var(--htmlmemo-reader-ui-scale,1);width:var(--htmlmemo-reader-ui-width,100%)!important;translate:var(--htmlmemo-reader-ui-left,0px) 0px;overflow-x:auto!important;scrollbar-width:none;white-space:nowrap}
+      [data-htmlmemo-native-sidebar],[data-htmlmemo-toc-resizer],[data-htmlmemo-toc-resizer-bound]{translate:var(--htmlmemo-reader-sidebar-left,0px) 0px}
+      [data-htmlmemo-doc-topbar].reader-head{flex-wrap:nowrap!important;overflow-x:auto!important;scrollbar-width:none;min-width:0!important}
+      [data-htmlmemo-compact-ui] [data-htmlmemo-doc-topbar].reader-head{gap:3.2px!important;padding-left:4.8px!important;padding-right:4.8px!important}
+      [data-htmlmemo-compact-ui] [data-htmlmemo-doc-topbar].reader-head button:not([data-action]){padding-left:7.2px!important;padding-right:7.2px!important}
+      [data-htmlmemo-compact-ui] [data-htmlmemo-doc-topbar].reader-head .reader-title{min-width:48px!important}
+      [data-htmlmemo-compact-ui] [data-htmlmemo-doc-topbar].reader-head .reader-position{display:none!important}
+      [data-htmlmemo-compact-ui] [data-htmlmemo-doc-topbar].reader-head #reader-menu{display:inline-flex!important}
+      [data-htmlmemo-compact-ui] .reader-layout[data-htmlmemo-sidebar-grid]{grid-template-columns:minmax(0,1fr)!important}
+      [data-htmlmemo-compact-ui] #reader-nav[data-htmlmemo-native-sidebar]{position:fixed!important;left:0!important;top:calc(24px * var(--htmlmemo-reader-ui-scale,1))!important;bottom:0!important;z-index:6;display:none!important}
+      [data-htmlmemo-compact-ui] body.toc-open #reader-nav[data-htmlmemo-native-sidebar]{display:block!important}
+      [data-htmlmemo-doc-topbar-item]{height:calc(24px * var(--htmlmemo-reader-ui-scale,1))!important;min-height:calc(24px * var(--htmlmemo-reader-ui-scale,1))!important;max-height:calc(24px * var(--htmlmemo-reader-ui-scale,1))!important}
+      [data-htmlmemo-topbar-grid]{grid-template-rows:calc(24px * var(--htmlmemo-reader-ui-scale,1)) minmax(0,1fr)!important}
+      [data-htmlmemo-topbar-pad]{padding-top:calc(24px * var(--htmlmemo-reader-ui-scale,1))!important}
+      [data-htmlmemo-topbar-offset]{top:calc(24px * var(--htmlmemo-reader-ui-scale,1))!important}
+      [data-htmlmemo-doc-sidebar-ui],[data-htmlmemo-native-sidebar] #reader-tree,[data-htmlmemo-native-sidebar]>details{zoom:var(--htmlmemo-reader-ui-scale,1)}
+      [data-htmlmemo-toc-resizer],[data-htmlmemo-toc-resizer-bound]{width:calc(10px * var(--htmlmemo-reader-ui-scale,1))!important;min-width:0!important}
+      [data-htmlmemo-toc-strip],[data-htmlmemo-toc-item-strip]{width:calc(8px * var(--htmlmemo-reader-ui-scale,1))!important;min-width:calc(8px * var(--htmlmemo-reader-ui-scale,1))!important;max-width:calc(8px * var(--htmlmemo-reader-ui-scale,1))!important;flex-basis:calc(8px * var(--htmlmemo-reader-ui-scale,1))!important}
+      [data-htmlmemo-toc-strip] [data-htmlmemo-toc-resizer],[data-htmlmemo-toc-strip] [data-htmlmemo-toc-resizer-bound]{width:calc(8px * var(--htmlmemo-reader-ui-scale,1))!important}
+      [data-htmlmemo-toc-resizer]::before,[data-htmlmemo-toc-resizer-bound]::before{display:none!important}
+      [data-htmlmemo-toc-resizer]::after,[data-htmlmemo-toc-resizer-bound]::after{content:'';position:absolute;top:0;bottom:0;right:0;width:calc(2px * var(--htmlmemo-reader-ui-scale,1));background:transparent}
+      [data-htmlmemo-toc-resizer]:hover::after,[data-htmlmemo-toc-resizer-bound]:hover::after,[data-htmlmemo-toc-resizer]:focus-visible::after,[data-htmlmemo-toc-resizer-bound]:focus-visible::after{background:var(--green,#64748b)}`;
+  }
+  sidebarUnit(){return this.callbacks?.sidebarWidth?this.uiScale||1:1;}
   textMarkingStyle() {
     // Touch and pen mark text directly; mouse keeps native text selection.
     return 'html[data-htmlmemo-text-marking] body{touch-action:none!important}';
@@ -373,9 +398,13 @@ export class Reader {
     if (!win?.MutationObserver || !win.requestAnimationFrame) return;
     // A source reader can change a root CSS variable while its fixed-size
     // body/scroller never resizes. Coalesce those changes without rescanning text.
+    const rootStyle=()=>String(this.doc.documentElement.getAttribute('style')||'').replace(/--htmlmemo-reader-(?:ui-(?:scale|width|left)|sidebar-left)\s*:[^;]*;?/gi,'').trim();this.fontRootStyle=rootStyle();
     this.fontObserver = new win.MutationObserver(records => {
       if (this.disposed || this.preparing || this.tocDrag || this.fontFrame || !this.metadata.annotations.some(a => a.type === 'pen')) return;
-      if (!records.some(record => !record.target.closest?.('#'+LAYER_ID+',#htmlmemo-editor-style,#htmlmemo-annotation-style,[data-htmlmemo-ui],[data-htmlmemo-mark],[data-htmlmemo-search]'))) return;
+      if (!records.some(record => {
+        if(record.target===this.doc.documentElement&&record.attributeName==='style'){const value=rootStyle();if(value===this.fontRootStyle)return false;this.fontRootStyle=value;}
+        return !record.target.closest?.('#'+LAYER_ID+',#htmlmemo-editor-style,#htmlmemo-annotation-style,[data-htmlmemo-ui],[data-htmlmemo-mark],[data-htmlmemo-search]');
+      })) return;
       this.fontFrame = win.requestAnimationFrame(() => {
         this.fontFrame = null;
         if (this.disposed || this.host?.hidden || this.tocDrag) return;
@@ -433,7 +462,7 @@ export class Reader {
         if (btn && !this.tocResize?.sidebar?.contains?.(btn)) {
           const info = `${btn.id || ''} ${typeof btn.className === 'string' ? btn.className : ''} ${btn.getAttribute?.('title') || ''} ${btn.getAttribute?.('aria-label') || ''} ${btn.getAttribute?.('aria-controls') || ''} ${btn.textContent || ''}`;
           if (/목차|차례|\btoc\b|sidebar|사이드바/i.test(info)) {
-            this.applyTocWidth(Math.max(TOC_STRIP_SNAP, this.tocExpandedWidth || this.tocDefaultWidth || TOC_DEFAULT), {persist: true, snapStrip: true});
+            this.applyTocWidth(Math.max(TOC_STRIP_SNAP*this.sidebarUnit(), this.tocExpandedWidth || this.tocDefaultWidth || TOC_DEFAULT), {persist: true, snapStrip: true});
             this.syncAfterTocResize();
           }
         }
@@ -549,14 +578,16 @@ export class Reader {
   }
   maxTocWidth() {
     if (this.tocDrag && Number.isFinite(this.tocDrag.maxWidth)) return this.tocDrag.maxWidth;
+    if(this.callbacks?.sidebarMaxWidth)return this.callbacks.sidebarMaxWidth()*this.sidebarUnit();
     const docWidth = this.doc?.documentElement?.clientWidth || this.naturalWidth || 1100;
-    return Math.max(120, Math.min(TOC_MAX, docWidth - 180));
+    return Math.max(8,Math.min(this.callbacks?.sidebarMaxWidth?.()||TOC_MAX,Math.max(120, Math.min(TOC_MAX, docWidth - 180))));
   }
   clampTocWidth(value, snapStrip = true) {
     const numeric = Number(value);
     if (!Number.isFinite(numeric)) return this.tocDefaultWidth || TOC_DEFAULT;
-    if (numeric <= 24 || (snapStrip && numeric < TOC_STRIP_SNAP)) return TOC_MIN;
-    return Math.max(TOC_MIN, Math.min(this.maxTocWidth(), Math.round(numeric)));
+    const unit=this.sidebarUnit();
+    if (numeric <= 24*unit || (snapStrip && numeric < TOC_STRIP_SNAP*unit)) return TOC_MIN*unit;
+    return Math.max(TOC_MIN*unit, Math.min(this.maxTocWidth(), Math.round(numeric/unit)*unit));
   }
   gridTrackTokens(value) {
     const tokens = []; let current = '', depth = 0;
@@ -765,11 +796,15 @@ export class Reader {
       return false;
     };
     const explicitTopbar = '.topbar,#topbar,.top-bar,#top-bar,.book-header,#book-header,.reader-header,#reader-header,.doc-header,#doc-header,.app-header,#app-header,.navbar,#navbar,.nav-bar,#nav-bar,.toolbar,#toolbar,[role="toolbar"]';
-    const hasControls = node => !!node?.querySelector?.('button,select,[role="button"],input[type="range"],input[type="search"]');
+    const hasControls = node => [...node.querySelectorAll('button,select,[role="button"],input[type="range"]')].some(control=>{
+      if(control.closest('[data-htmlmemo-ui]'))return false;
+      const label=(control.textContent||'').trim(),description=[control.id,control.title,control.getAttribute('aria-label')].join(' ');
+      return /^A\s*[+−–-]$/i.test(label)||/reader-(?:back|previous|next|smaller|larger|theme)|(?:이전|다음)\s*(?:절|장|쪽)|(?:글자|글씨|폰트)\s*(?:크게|작게)|화면\s*모드|font.?size|reading.?theme/i.test(description);
+    });
     const isBarGeometry = node => {
       const rect = node.getBoundingClientRect?.();
       if (!rect || (rect.width === 0 && rect.height === 0)) return true;
-      return rect.height > 0 && rect.height <= 110 && rect.top <= 48;
+      const scale=this.uiScale?this.zoom:1;return rect.height > 0 && rect.height*scale <= 110 && rect.top*scale <= 48;
     };
     const candidates = [
       ...this.doc.querySelectorAll(explicitTopbar + ',header,[role="banner"],.header,#header'),
@@ -783,8 +818,11 @@ export class Reader {
       if (seen.has(node)) continue;
       seen.add(node);
       if (isMainOrToc(node) || !isBarGeometry(node)) continue;
-      if (node.matches?.(explicitTopbar) || hasControls(node)) return node;
-      if (sidebar && node.matches?.('header,[role="banner"],.header,#header') && !node.querySelector?.('p')) return node;
+      const style=this.doc.defaultView?.getComputedStyle?.(node);
+      if(node.closest('[hidden],[aria-hidden="true"]')||style?.display==='none'||style?.visibility==='hidden')continue;
+      // A page header, site navigation or search form is content, not a reader.
+      // Only an actual reading toolbar can replace the complete common row.
+      if (hasControls(node)) return node;
     }
     return null;
   }
@@ -827,8 +865,9 @@ export class Reader {
   }
   setupReadingControls() {
     if(this.disposed||this.preparing||!this.host?.ownerDocument)return;
-    const topbar=this.topbarNode?.isConnected?this.topbarNode:this.findDocumentTopbar();
+    const topbar=this.findDocumentTopbar();
     if(topbar&&topbar!==this.topbarNode)this.setupDocumentTopbar();
+    if(!topbar)this.topbarNode=null;
     // Imported HTML supplies content and layout, never a second TTS engine.
     const target=topbar?(topbar.querySelector('.controls,.toolbar-actions,.reader-actions')||topbar):this.host;
     const doc=target.ownerDocument;
@@ -901,6 +940,11 @@ export class Reader {
   readingControlsStyle() {
     return '[data-htmlmemo-reading-controls-group]{translate:var(--htmlmemo-controls-shift,0px) 0px!important}[data-htmlmemo-reading-controls]{display:inline-flex!important;align-items:center!important;gap:3px!important;flex:0 0 auto!important;vertical-align:middle!important;margin-inline-start:4px!important}[data-htmlmemo-reading-controls] button{box-sizing:border-box!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;font:500 12px/18px system-ui!important;letter-spacing:0!important;white-space:nowrap!important;width:auto!important;min-width:40px!important;height:20px!important;padding:0 5px!important;border:1px solid currentColor!important;border-radius:4px!important;background:transparent!important;color:inherit!important;cursor:pointer!important}[data-htmlmemo-reading-controls] [data-action=speak]{width:24px!important;min-width:24px!important;padding:0!important}[data-htmlmemo-reading-controls] svg{display:block!important;width:14px!important;height:14px!important;pointer-events:none!important}[data-htmlmemo-reading-controls] button:hover{background:#80808020!important}[data-htmlmemo-reading-controls] button:focus-visible{outline:2px solid currentColor!important;outline-offset:1px!important}[data-htmlmemo-reading-controls] [hidden]{display:none!important}';
   }
+  positionReadingUI(view,frame){
+    if(!this.uiScale||!view.width||!frame.width)return;
+    const root=this.doc.documentElement.style,pan=view.left-frame.left,scale=frame.width/this.frame.offsetWidth;
+    for(const [name,value]of [['--htmlmemo-reader-ui-width',view.width+'px'],['--htmlmemo-reader-ui-left',pan+'px'],['--htmlmemo-reader-sidebar-left',pan/scale+'px']])if(root.getPropertyValue(name)!==value)root.setProperty(name,value);
+  }
   updateReadingControls() {
     if(this.zoomControl){const text=Math.round(this.zoom*100)+'%';if(this.zoomControl.textContent!==text)this.zoomControl.textContent=text;}
     if(this.plainReadingButtons){
@@ -912,21 +956,26 @@ export class Reader {
       if(theme.value!==this.readingTheme())for(const option of theme.querySelectorAll('option'))option.selected=option.value===this.readingTheme();
       this.readingControls.dataset.theme=this.resolvedReadingTheme();
     }
+    if(this.uiScale&&this.tocResize?.sidebar?.isConnected&&this.readingControls?.ownerDocument!==this.doc&&this.frame?.getBoundingClientRect&&this.viewport?.getBoundingClientRect)this.positionReadingUI(this.viewport.getBoundingClientRect(),this.frame.getBoundingClientRect());
     if(!this.readingControls||this.readingControls.ownerDocument!==this.doc||!this.frame?.getBoundingClientRect||!this.viewport?.getBoundingClientRect)return;
     // Move a source action group together when it fits. Pinning just zoom can
     // put it over the book's previous/next buttons after horizontal panning.
     const view=this.viewport.getBoundingClientRect(),frame=this.frame.getBoundingClientRect();if(!view.width||!frame.width)return;
     const scale=frame.width/this.frame.offsetWidth,group=this.readingControlsGroup?.isConnected?this.readingControlsGroup:null;
+    if(this.uiScale){
+      this.positionReadingUI(view,frame);
+      if(!group){this.readingControls.style.removeProperty('--htmlmemo-controls-shift');this.readingControls.style.removeProperty('transform');return;}
+    }
     const grouped=!!group;
     const controls=grouped?group:this.readingControls;
     if(grouped){this.readingControls.style.removeProperty('--htmlmemo-controls-shift');this.readingControls.style.removeProperty('transform');}
     else group?.style.removeProperty('--htmlmemo-controls-shift');
     const rect=controls.getBoundingClientRect?.();if(!rect?.width)return;
-    const previous=Number.parseFloat(controls.style.getPropertyValue('--htmlmemo-controls-shift'))||0;
+    const unit=this.uiScale||1,previous=(Number.parseFloat(controls.style.getPropertyValue('--htmlmemo-controls-shift'))||0)*unit;
     const min=(view.left+2-frame.left)/scale-rect.left+previous,max=(view.right-2-frame.left)/scale-rect.right+previous;
     // A group wider than the viewport keeps its normal horizontal pan. Moving
     // only its zoom button would cover source controls inside that same group.
-    const shift=grouped&&rect.width*scale>view.width-4?0:Math.max(min,Math.min(0,max)),value=shift.toFixed(2)+'px';
+    const shift=grouped&&rect.width*scale>view.width-4?0:Math.max(min,Math.min(0,max)),value=(shift/unit).toFixed(2)+'px';
     if(controls.style.getPropertyValue('--htmlmemo-controls-shift')!==value)controls.style.setProperty('--htmlmemo-controls-shift',value);
     if(!grouped)this.readingControls.style.transform='translateX(var(--htmlmemo-controls-shift))';
   }
@@ -967,11 +1016,11 @@ export class Reader {
       this.readingThemeQuery?.addEventListener?.('change',this.readingThemeChange);
     }
     const dark=this.resolvedReadingTheme()==='dark';
-    const colors=dark?['#14161b','#1b1e25','#e8eaf0','#a5adbc','#383e4a','#252a34','#626d7d','#48536a']:['#fff','#f6f8fa','#1f2328','#57606a','#e5e7eb','#f2f4f7','#d0d7de','#d8dee4'];
+    const colors=dark?['#14161b','#1b1e25','#e8eaf0','#a5adbc','#383e4a','#252a34','#626d7d','#48536a','#8bb9f0','#30291c']:['#fff','#f6f8fa','#1f2328','#57606a','#e5e7eb','#f2f4f7','#d0d7de','#d8dee4','#255c9e','#faf6eb'];
     let style=this.doc.getElementById('htmlmemo-reading-theme-style');
     if(!style){style=this.doc.createElement('style');style.id='htmlmemo-reading-theme-style';style.setAttribute('data-htmlmemo-ui','');this.doc.head.append(style);}
-    const names=['paper','panel','ink','muted','line','inline-code','quote-line','table-line'];
-    const css=':root{color-scheme:'+(dark?'dark':'light')+';'+names.map((name,index)=>'--htmlmemo-reader-'+name+':'+colors[index]+';').join('')+'}';
+    const names=['paper','panel','ink','muted','line','inline-code','quote-line','table-line','link','notice'];
+    const css=':root{color-scheme:'+(dark?'dark':'light')+';'+names.map((name,index)=>'--htmlmemo-reader-'+name+':'+colors[index]+';').join('')+'}html,body{background-color:var(--htmlmemo-reader-'+(this.pdf?'panel':'paper')+');color:var(--htmlmemo-reader-ink)}';
     if(style.textContent!==css)style.textContent=css;
   }
   setReadingTheme(value) {
@@ -1019,14 +1068,15 @@ export class Reader {
     if (info.resizer) {
       info.resizer.setAttribute('data-htmlmemo-toc-resizer-bound', '');
       info.resizer.setAttribute('aria-valuemin', String(TOC_MIN));
-      info.resizer.setAttribute('aria-valuemax', String(this.maxTocWidth()));
+      info.resizer.setAttribute('aria-valuemax', String(Math.round(this.maxTocWidth()/this.sidebarUnit())));
     }
     const store = this.storage();
     let savedExpanded = null, savedWidth = null;
     try { savedExpanded = store?.getItem(TOC_EXPANDED_WIDTH_KEY); savedWidth = store?.getItem(TOC_WIDTH_KEY); } catch { /* ignore */ }
-    const parsedExpanded = savedExpanded !== null && savedExpanded !== '' ? Number(savedExpanded) : NaN;
-    this.tocExpandedWidth = Number.isFinite(parsedExpanded) && parsedExpanded >= TOC_STRIP_SNAP ? this.clampTocWidth(parsedExpanded, true) : info.defaultWidth;
-    const initialSaved = savedWidth !== null && savedWidth !== '' ? Number(savedWidth) : Number.isFinite(this.metadata?.view?.tocWidth) ? Number(this.metadata.view.tocWidth) : null;
+    const unit=this.sidebarUnit(),parsedExpanded = savedExpanded !== null && savedExpanded !== '' ? Number(savedExpanded)*unit : NaN;
+    this.tocExpandedWidth = Number.isFinite(parsedExpanded) && parsedExpanded >= TOC_STRIP_SNAP*unit ? this.clampTocWidth(parsedExpanded, true) : this.callbacks?.sidebarWidth?300*unit:info.defaultWidth;
+    const sharedWidth=this.callbacks?.sidebarWidth?.();
+    const initialSaved = Number.isFinite(sharedWidth)?sharedWidth*this.sidebarUnit():savedWidth !== null && savedWidth !== '' ? Number(savedWidth) : Number.isFinite(this.metadata?.view?.tocWidth) ? Number(this.metadata.view.tocWidth) : null;
     if (initialSaved !== null && Number.isFinite(initialSaved)) {
       this.applyTocWidth(initialSaved, {persist: false, snapStrip: true});
     } else {
@@ -1061,7 +1111,7 @@ export class Reader {
     // Park the live source controls outside the region about to be re-rendered.
     if(search){search.hidden=true;this.documentSidebarUI.append(search);}
     if(mode!=='outline'&&this.tocStrip){
-      this.applyTocWidth(Math.max(TOC_STRIP_SNAP,this.tocExpandedWidth||this.tocDefaultWidth||TOC_DEFAULT),{persist:true,snapStrip:true});
+      this.applyTocWidth(Math.max(TOC_STRIP_SNAP*this.sidebarUnit(),this.tocExpandedWidth||this.tocDefaultWidth||TOC_DEFAULT),{persist:true,snapStrip:true});
       this.syncAfterTocResize();
     }
     if(previous==='outline'&&mode!=='outline')this.documentTocScrollTop=sidebar.scrollTop;
@@ -1076,7 +1126,18 @@ export class Reader {
     this.callbacks.onSidebarCounts?.(this.documentSidebarUI,this);
     if(['annotations','bookmarks'].includes(this.documentSidebarMode))this.showDocumentSidebarView(this.documentSidebarMode);
   }
+  toggleDocumentSidebar(open=this.tocStrip){
+    if(!this.documentSidebarUI?.isConnected)return;
+    const unit=this.sidebarUnit();this.applyTocWidth(open?Math.max(TOC_STRIP_SNAP*unit,this.tocExpandedWidth||300*unit):TOC_MIN*unit,{persist:false,snapStrip:true});
+    if(open)this.showDocumentSidebarView(this.documentSidebarMode||'outline');
+    else this.doc.getElementById('reader-close')?.click();
+    this.syncAfterTocResize();this.updateReadingControls();this.callbacks.onView?.();
+  }
   collapseDocumentToc() {
+    this.outlineAllCollapsed=true;
+    this.outlineTreeOpen?.clear();
+    const panel=this.host?.ownerDocument?.getElementById('sidebar');
+    if(panel?.annotationReader===this)for(const group of panel.querySelectorAll('[data-outline-group]')){group.open=false;group.removeAttribute('open');}
     const sidebar=this.tocResize?.sidebar;
     if(this.preparing||this.disposed||!sidebar?.isConnected)return;
     // Keep source nodes/listeners and the app panel; only fold source TOC branches.
@@ -1111,6 +1172,12 @@ export class Reader {
       slot.textContent=textIndex(this.doc,node).text;
       node.before(slot);node.setAttribute('data-htmlmemo-book-search-part',key);host.append(node);
     });
+    if(unit===input){
+      const field=this.doc.createElement('div');field.className='search-field loaded-search-field';input.before(field);field.append(input);
+      const clear=this.doc.createElement('button');clear.type='button';clear.className='icon-button loaded-search-clear';clear.title='검색어 지우기';clear.setAttribute('aria-label','책 전체 검색어 지우기');clear.innerHTML=icon('close',14);clear.hidden=!input.value;
+      clear.onclick=()=>{input.value='';input.dispatchEvent(new this.doc.defaultView.Event('input',{bubbles:true}));clear.hidden=true;input.focus?.();};
+      input.addEventListener('input',()=>{clear.hidden=!input.value;});field.append(clear);this.documentBookSearchClear=clear;
+    }
     this.documentBookSearchHost=host;
     this.documentBookSearchInput=input;
     // Packed readers render their actual search results in the original TOC.
@@ -1147,6 +1214,7 @@ export class Reader {
     return this.annotationBookPaths().has(key)?key:'';
   }
   syncDocumentBookSearchResults() {
+    if(this.documentBookSearchClear)this.documentBookSearchClear.hidden=!this.documentBookSearchInput?.value;
     const tree=this.documentBookSearchTree,results=this.documentBookSearchResults;if(!tree||!results)return;
     const query=this.documentBookSearchInput.value.trim(),active=this.documentSidebarMode==='search'&&!!query;
     if(query!==this.documentBookSearchQuery){
@@ -1226,10 +1294,10 @@ export class Reader {
     const info = this.tocResize?.sidebar?.isConnected ? this.tocResize : this.ensureDocumentTocResize();
     if (!info?.sidebar?.isConnected) return TOC_DEFAULT;
     const width = this.clampTocWidth(value, snapStrip);
-    const strip = width < TOC_STRIP_SNAP;
-    if (!strip && (persist || width >= 96)) {
+    const unit=this.sidebarUnit(),strip = width < TOC_STRIP_SNAP*unit;
+    if (!strip && (persist || width >= 96*unit)) {
       this.tocExpandedWidth = width;
-      if (persist) { try { this.storage()?.setItem(TOC_EXPANDED_WIDTH_KEY, String(width)); } catch { /* ignore */ } }
+      if (persist) { try { this.storage()?.setItem(TOC_EXPANDED_WIDTH_KEY, String(width/unit)); } catch { /* ignore */ } }
     }
     if (!persist && this.tocApplied && width === this.tocWidth && strip === this.tocStrip) return width;
     const prevStrip = !!this.tocStrip;
@@ -1284,10 +1352,11 @@ export class Reader {
     }
     if (!strip && prevStrip && this.tocScrollTop != null) info.sidebar.scrollTop = this.tocScrollTop;
     if (persist) {
-      if (resizer) resizer.setAttribute('aria-valuenow', String(width));
-      try { this.storage()?.setItem(TOC_WIDTH_KEY, String(width)); } catch { /* ignore */ }
+      if (resizer) resizer.setAttribute('aria-valuenow', String(Math.round(width/unit)));
+      try { this.storage()?.setItem(TOC_WIDTH_KEY, String(width/unit)); } catch { /* ignore */ }
       this.callbacks.onPreferenceChange?.();
-      if (this.metadata?.view) this.metadata.view.tocWidth = width;
+      if (this.metadata?.view) this.metadata.view.tocWidth = width/unit;
+      this.callbacks.onSidebarWidth?.(clamp((Number(value)||width)/unit,8,TOC_MAX));
     }
     return width;
   }
@@ -1298,7 +1367,7 @@ export class Reader {
   resetTocWidth() {
     const info = this.ensureDocumentTocResize();
     if (!info?.sidebar?.isConnected) return;
-    const target = this.tocDefaultWidth || info.defaultWidth || TOC_DEFAULT;
+    const target = this.callbacks?.sidebarWidth?300*this.sidebarUnit():this.tocDefaultWidth || info.defaultWidth || TOC_DEFAULT;
     this.applyTocWidth(target, {persist: true, snapStrip: true});
     this.syncAfterTocResize();
   }
@@ -1360,7 +1429,7 @@ export class Reader {
     event.stopPropagation?.();
     event.stopImmediatePropagation?.();
     if (this.tocDrag) return true;
-    const info = this.tocResize;
+    const info = this.tocResize,unit=this.sidebarUnit();
     const {sidebar, sidebarItem, resizer} = info;
     try { resizer?.focus?.({preventScroll: true}); } catch { /* ignore */ }
     const boxNode = sidebarItem || sidebar;
@@ -1401,11 +1470,11 @@ export class Reader {
       if (state.moved && e.buttons === 0) { end(e); return; }
       const x = this.eventDocX(e);
       const currentX = Number.isFinite(x) ? x : state.startX;
-      if (Math.abs(currentX - state.startX) >= (state.initialWidth <= TOC_MIN ? 6 : 1)) state.moved = true;
+      if (Math.abs(currentX - state.startX) >= (state.initialWidth <= TOC_MIN*unit ? 6 : 1)) state.moved = true;
       if (!state.moved) return;
       e.preventDefault?.();
       const nextW = this.applyTocWidth(currentX - state.sidebarLeft - state.offset, {persist: false, snapStrip: false});
-      if (nextW >= TOC_STRIP_SNAP) state.expandedDuringDrag = true;
+      if (nextW >= TOC_STRIP_SNAP*unit) state.expandedDuringDrag = true;
     };
     const end = e => {
       if (this.tocDrag !== state) return;
@@ -1414,16 +1483,16 @@ export class Reader {
       this.tocResizeJustEnded = true;
       setTimeout(() => { this.tocResizeJustEnded = false; }, 0);
       if (!state.moved) {
-        if (state.initialWidth <= TOC_MIN) {
-          const restored = Math.max(TOC_STRIP_SNAP, this.tocExpandedWidth || this.tocDefaultWidth || TOC_DEFAULT);
+        if (state.initialWidth <= TOC_MIN*unit) {
+          const restored = Math.max(TOC_STRIP_SNAP*unit, this.tocExpandedWidth || this.tocDefaultWidth || TOC_DEFAULT);
           this.applyTocWidth(restored, {persist: true, snapStrip: true});
           this.syncAfterTocResize();
         }
         return;
       }
       let next = this.tocWidth;
-      if (state.initialWidth <= TOC_MIN && next < TOC_STRIP_SNAP && !state.expandedDuringDrag) {
-        next = Math.max(TOC_STRIP_SNAP, this.tocExpandedWidth || this.tocDefaultWidth || TOC_DEFAULT);
+      if (state.initialWidth <= TOC_MIN*unit && next < TOC_STRIP_SNAP*unit && !state.expandedDuringDrag) {
+        next = Math.max(TOC_STRIP_SNAP*unit, this.tocExpandedWidth || this.tocDefaultWidth || TOC_DEFAULT);
       }
       this.applyTocWidth(next, {persist: true, snapStrip: true});
       this.syncAfterTocResize();
@@ -1462,31 +1531,10 @@ export class Reader {
     const info = this.ensureDocumentTocResize();
     if (!info?.sidebar?.isConnected) return false;
     const current = Number.isFinite(this.tocWidth) ? this.tocWidth : info.defaultWidth;
-    if (event.key === 'ArrowLeft') {
-      event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation?.();
-      this.applyTocWidth(current - 16, {persist: true, snapStrip: true});
-      this.syncAfterTocResize(); return true;
-    }
-    if (event.key === 'ArrowRight') {
-      event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation?.();
-      const base = current < TOC_STRIP_SNAP ? Math.max(TOC_STRIP_SNAP, this.tocExpandedWidth || this.tocDefaultWidth || TOC_DEFAULT) : current + 16;
-      this.applyTocWidth(base, {persist: true, snapStrip: true});
-      this.syncAfterTocResize(); return true;
-    }
-    if (event.key === 'Home') {
-      event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation?.();
-      this.applyTocWidth(TOC_MIN, {persist: true, snapStrip: true});
-      this.syncAfterTocResize(); return true;
-    }
-    if (event.key === 'End') {
-      event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation?.();
-      this.resetTocWidth(); return true;
-    }
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation?.();
-      const next = current <= TOC_MIN ? Math.max(TOC_STRIP_SNAP, this.tocExpandedWidth || this.tocDefaultWidth || TOC_DEFAULT) : TOC_MIN;
-      this.applyTocWidth(next, {persist: true, snapStrip: true});
-      this.syncAfterTocResize(); return true;
+    const unit=this.sidebarUnit(),next=sidebarWidthAction(event.key,current/unit,{max:this.maxTocWidth()/unit,defaultWidth:this.callbacks?.sidebarWidth?300:this.tocDefaultWidth||info.defaultWidth||TOC_DEFAULT,expanded:(this.tocExpandedWidth||300*unit)/unit,shiftKey:event.shiftKey});
+    if(next!==null){
+      event.preventDefault();event.stopPropagation();event.stopImmediatePropagation?.();
+      this.applyTocWidth(next*unit,{persist:true,snapStrip:false});this.syncAfterTocResize();return true;
     }
     return false;
   }
@@ -1793,10 +1841,22 @@ export class Reader {
   fitZoom() { const focused=!!this.host.closest('.reader-focus'); return clamp(this.viewport.clientWidth / this.naturalWidth, .2, focused ? 8 : 2); }
   applyZoom() {
     const set=(style,key,value)=>{if(style[key]!==value)style[key]=value;};
+    if(this.nativeScroll&&this.topbarNode?.isConnected)set(this.frame.style,'width',Math.max(this.naturalWidth,this.viewport.clientWidth/this.zoom)+'px');
     if(this.nativeScroll)set(this.frame.style,'height',Math.max(200,this.viewport.clientHeight/this.zoom)+'px');
     set(this.frame.style,'transform',`scale(${this.zoom})`);
-    set(this.sizer.style,'width',this.naturalWidth*this.zoom+'px');
+    set(this.sizer.style,'width',Math.max(this.naturalWidth*this.zoom,this.nativeScroll&&this.topbarNode?.isConnected?this.viewport.clientWidth:0)+'px');
     set(this.sizer.style,'height',(this.nativeScroll?Math.max(200*this.zoom,this.viewport.clientHeight):(this.naturalHeight||800)*this.zoom)+'px');
+    if(this.doc?.documentElement){
+      const previous=this.uiScale||1;this.uiScale=1/this.zoom;
+      if(this.doc.documentElement.style?.getPropertyValue('--htmlmemo-reader-ui-scale')!==String(this.uiScale))this.doc.documentElement.style?.setProperty('--htmlmemo-reader-ui-scale',String(this.uiScale));
+      this.doc.documentElement.toggleAttribute?.('data-htmlmemo-compact-ui',(this.host?.ownerDocument?.defaultView?.innerWidth||this.viewport.clientWidth)<=760);
+      if(this.callbacks?.sidebarWidth&&this.tocResize?.sidebar?.isConnected){
+        if(Number.isFinite(this.tocExpandedWidth))this.tocExpandedWidth*=this.uiScale/previous;
+        this.applyTocWidth((this.tocStrip?8:this.callbacks.sidebarWidth())*this.uiScale,{persist:false,snapStrip:false});
+        const resizer=this.tocResize.resizer;if(resizer){resizer.setAttribute('aria-valuemax',String(Math.round(this.maxTocWidth()/this.uiScale)));resizer.setAttribute('aria-valuenow',String(Math.round(this.tocWidth/this.uiScale)));}
+        if(this.topbarNode?.isConnected&&this.doc.defaultView?.getComputedStyle?.(this.tocResize.sidebar)?.position==='fixed')this.tocResize.sidebar.setAttribute('data-htmlmemo-topbar-offset','');
+      }
+    }
     this.syncAnnotationPicking();
     this.updateReadingControls();
     this.readAloud?.refreshPaint?.();
@@ -2570,6 +2630,7 @@ export class Reader {
   async back() { const p = this.linkHistory.pop(); if (!p) return false; this.scrollTop=p.top; this.scrollLeft=p.left;this.readingHeadingCursor=p.heading?{node:p.heading,top:this.scrollTop}:null; this.rememberPosition();this.updateReadingControls();this.callbacks.onView?.(); return true; }
   jump(target) {
     if(this.pdf){void this.pdf.navigateNode(target).catch(error=>this.callbacks.onError?.(error));return;}
+    this.revealNestedScroll(target);
     const r = target.getBoundingClientRect(), origin = this.layerOrigin(); this.scrollTop = Math.max(0,(r.top-origin.top+r.height/2)*this.zoom-this.viewport.clientHeight/2); this.scrollLeft = Math.max(0,(r.left-origin.left+r.width/2)*this.zoom-this.viewport.clientWidth/2);
     if(this.plainReadingButtons)this.readingHeadingCursor=/^h[1-6]$/i.test(target.localName)?{node:target,top:this.scrollTop}:null;
   }
@@ -2908,6 +2969,19 @@ export class Reader {
     return result;
   }
   searchCache(){return this.searchIndexCache ||= new SearchIndexCache(this.doc);}
+  revealNestedScroll(target){
+    // Sheets and HTML tables scroll inside the document. Moving only the page
+    // leaves a hit in an off-screen column, even though its result was selected.
+    for(let node=(target.startContainer?.nodeType===1?target.startContainer:target.startContainer?.parentElement)||target.parentElement;node&&node!==this.doc.body&&node!==this.doc.documentElement;node=node.parentElement){
+      if(node===this.scrollHostEl)continue;
+      const style=this.doc.defaultView?.getComputedStyle?.(node);if(!style)continue;
+      const x=/auto|scroll/.test(style.overflowX)&&node.scrollWidth>node.clientWidth,y=/auto|scroll/.test(style.overflowY)&&node.scrollHeight>node.clientHeight;
+      if(!x&&!y)continue;
+      const hit=target.getBoundingClientRect(),box=node.getBoundingClientRect();
+      if(x&&(hit.left<box.left||hit.right>box.right))node.scrollLeft=clamp(node.scrollLeft+hit.left+hit.width/2-box.left-node.clientWidth/2,0,node.scrollWidth-node.clientWidth);
+      if(y&&(hit.top<box.top||hit.bottom>box.bottom))node.scrollTop=clamp(node.scrollTop+hit.top+hit.height/2-box.top-node.clientHeight/2,0,node.scrollHeight-node.clientHeight);
+    }
+  }
   async searchWhole(query,isCurrent=()=>true,onProgress=()=>{}){
     if(this.pdf)return this.pdf.searchWhole(query,isCurrent,onProgress);
     if(!query.trim())return [];
@@ -2918,7 +2992,9 @@ export class Reader {
     if(this.pdf)return this.pdf.jumpWhole(result).catch(error=>this.callbacks.onError?.(error));
     for(const mark of this.wholeSearchMarks||[])if(mark.isConnected)mark.replaceWith(...mark.childNodes);
     const index=this.searchCache().get(),range=rangeFromOffsets(this.doc,result.start,result.end,index);if(!range)return false;
+    this.revealNestedScroll(range);
     const rect=range.getBoundingClientRect(),origin=this.layerOrigin();this.scrollTop=Math.max(0,(rect.top-origin.top+rect.height/2)*this.zoom-this.viewport.clientHeight/2);
+    this.scrollLeft=Math.max(0,(rect.left-origin.left+rect.width/2)*this.zoom-this.viewport.clientWidth/2);
     this.wholeSearchMarks=this.searchCache().mutate(index,()=>wrapOffsets(this.doc,result.start,result.end,{'data-htmlmemo-search':'','data-htmlmemo-book-search-hit':''},'background:#f0a85b80;outline:2px solid #df9057;border-radius:2px;color:inherit',index));return true;
   }
   clearSearchHighlight() {
@@ -2955,6 +3031,7 @@ export class Reader {
     this.searchPosition=position;
     cache.mutate(null,()=>this.clearSearchHighlight(),false);const result=this.searchResults[this.searchPosition];
     const range=rangeFromOffsets(this.doc,result.start,result.end,index); if (!range) { this.callbacks?.onSearchChange?.(this); return false; }
+    this.revealNestedScroll(range);
     const rect=range.getBoundingClientRect(), origin=this.layerOrigin(); this.scrollTop=Math.max(0,(rect.top-origin.top+rect.height/2)*this.zoom-this.viewport.clientHeight/2);
     this.scrollLeft=Math.max(0,(rect.left-origin.left+rect.width/2)*this.zoom-this.viewport.clientWidth/2);
     this.searchMarks=cache.mutate(index,()=>wrapOffsets(this.doc,result.start,result.end,{'data-htmlmemo-search':''},'background:#f0a85b80;outline:2px solid #df9057;border-radius:2px;color:inherit',index));

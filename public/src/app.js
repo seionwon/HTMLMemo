@@ -1,4 +1,4 @@
-import { $, $$, icon, escapeHTML as esc, uid, filename, normalizeURL, displayHost, formatDate, formatBytes, download } from './utils.js';
+import { $, $$, icon, escapeHTML as esc, uid, filename, normalizeURL, displayHost, formatDate, formatBytes, download, sidebarWidthAction } from './utils.js';
 import { parseHTML, SCRIPT_CSP, serializeBookSource } from './document.js';
 import { SaveQueue, AnnotationCheckpoints, ANNOTATION_LABELS } from './model.js';
 import { openEditionProbe, migrateAnnotations } from './migrate.js';
@@ -411,7 +411,7 @@ function activate(id) {
   if(readerFocused && id!==activeId)void leaveReaderFocus();
   closePopover(); closeSidebar({remember:false,clearSearch:false});$('.chrome').classList.remove('address-editing');activeId=id; $('#library').hidden=id!=='library';$('#execution').hidden=id!=='execution';$('#workspace').hidden=id==='library'||id==='execution';
   tabs.forEach(tab=>tab.host.hidden=tab.id!==id);renderTabs();updateChrome();
-  if(reader()){renderToolbar();restoreSidebar();if(reader().dynamicDirty)reader().scheduleDynamicRefresh();}else $('#toolbar').hidden=true;
+  if(reader()){renderToolbar();if(reader().documentSidebarUI?.isConnected&&!reader().tocStrip){reader().applyTocWidth(preferences.sidebarWidth*reader().sidebarUnit(),{persist:false,snapStrip:false});reader().syncAfterTocResize();}restoreSidebar();if(reader().dynamicDirty)reader().scheduleDynamicRefresh();}else $('#toolbar').hidden=true;
   if(id==='library')renderLibrary();
   if(id==='execution'){$('#status-left').textContent='앱 설치 · URL 공유 · 모든 데이터는 이 기기에 저장';document.title='앱 설치 · URL 공유 · LibreMemo';}
 }
@@ -476,7 +476,7 @@ async function openRecord(record, prepared = null, {deferReady = false, sourceId
     sourceKey:record.contentKey||record.sourceIdentity?.digest||record.id,
     onChange:()=>{tab.queue.schedule();tab.checkpoints.schedule();if(activeId===tab.id){renderToolbar();if(['annotations','bookmarks'].includes(sidebarMode))renderSidebar(sidebarMode);else updateSidebarCounts($('#sidebar'),tab.reader);tab.reader?.refreshDocumentSidebar();}},
     onAnnotationInput:()=>tab.checkpoints.activity(),
-    onPosition:()=>{tab.queue.schedule({background:true});renderFolderState();},onSourceSettings:()=>{tab.queue.schedule({background:true});void tab.queue.flush().catch(showError);},onView:()=>{if(activeId===tab.id){updateChrome();updateToolbarState();}},
+    onPosition:()=>{tab.queue.schedule({background:true});renderFolderState();},onSourceSettings:()=>{tab.queue.schedule({background:true});void tab.queue.flush().catch(showError);},onView:()=>{if(activeId===tab.id){updateChrome();updateToolbarState();updateOutlineLocation($('#sidebar'),tab.reader);}},
     onPreferenceChange:()=>dataFolder?.schedule({settingsOnly:true}),
     onTextSelection:()=>{if(activeId===tab.id)showSelectionMenu(tab.reader);},
     onSelectionDismiss:()=>{if(popoverName==='selection'||popoverName.startsWith('tool-mode-'))closePopover();},
@@ -485,6 +485,9 @@ async function openRecord(record, prepared = null, {deferReady = false, sourceId
     onReadingAction:(action,button)=>{if(activeId===tab.id)toolAction(action,button);},
     onSidebarView:(mode,panel,documentReader)=>renderSidebar(mode,{panel,embedded:true,documentReader}),
     onSidebarCounts:(panel,documentReader)=>updateSidebarCounts(panel,documentReader),
+    sidebarWidth:()=>preferences.sidebarWidth,
+    sidebarMaxWidth:()=>appSidebarMaxWidth(),
+    onSidebarWidth:width=>{if(width!==preferences.sidebarWidth)saveAppSidebarWidth(width);},
     onSearchChange:documentReader=>updateSearchNavigation(documentReader),
     onSelect:id=>{if(activeId===tab.id)annotationDialog(tab,id);},
   });
@@ -1180,7 +1183,7 @@ function showSelectionMenu(r) {
 function toolAction(action,button=null) {
   const r=reader();if(!r)return;
   if(action==='speak'){closePopover();r.toggleReadAloud();return;}
-  if(action==='toggle-sidebar'){closePopover();if($('#sidebar').hidden)renderSidebar(r.appSidebarMode||'outline');else closeSidebar();return;}
+  if(action==='toggle-sidebar'){closePopover();if(r.documentSidebarUI?.isConnected)r.toggleDocumentSidebar();else if($('#sidebar').hidden)renderSidebar(r.appSidebarMode||'outline');else closeSidebar();return;}
   if(action==='note'){const anchor=r.captureTextSelection?.();if(anchor?.quote?.trim()){closePopover();return safely(()=>r.addSelectionNote(anchor))();}}
   if(['select','pen','highlight','underline','eraser','note','text','rect','rect-filled','circle','ellipse','arrow','area','area-underline','strike'].includes(action)){
     if(['highlight','area','underline','area-underline','note','text','rect','rect-filled'].includes(action)){r.toolChoices||={};r.toolChoices[annotationToolFamily(action)]=action;}
@@ -1203,13 +1206,13 @@ function toolAction(action,button=null) {
     const items=[['circle','circle','원'],['ellipse','ellipse','타원'],['arrow','arrow','화살표'],['strike','strike','취소선'],['history','history','주석 저장 이력'],['migrate','file-transfer','새 판으로 주석/북마크 옮기기'],['info','info','문서 정보']];
     // Books already expose their three sidebar views. Plain HTML needs only a
     // way to reopen its closed panel, not a second copy of every sidebar tab.
-    if(!r.documentSidebarUI?.isConnected && $('#sidebar').hidden)items.unshift(['sidebar','list','사이드바 열기']);
+    if((!r.documentSidebarUI?.isConnected && $('#sidebar').hidden)||r.tocStrip)items.unshift(['sidebar','list','사이드바 열기']);
     showPopover('more',`<div class="popover-heading"><h3>문서 도구</h3><button class="icon-button popover-close" data-popover-close aria-label="문서 도구 닫기" title="닫기">${icon('close',16)}</button></div><div class="more-grid">${items.map(([id,name,label])=>`<button class="menu-button" data-more="${id}">${icon(name,16)}<span>${label}</span></button>`).join('')}</div>`,()=>{
       $('[data-popover-close]',$('#tool-popover')).onclick=closePopover;
       $$('[data-more]',$('#tool-popover')).forEach(button=>button.onclick=safely(()=>{const id=button.dataset.more;closePopover();return toolAction(id);}));
     });return;
   }
-  if(action==='sidebar'){closePopover();if(r.documentSidebarUI?.isConnected)r.showDocumentSidebarView('outline');else renderSidebar(r.appSidebarMode||'outline');return;}
+  if(action==='sidebar'){closePopover();if(r.documentSidebarUI?.isConnected)r.toggleDocumentSidebar(true);else renderSidebar(r.appSidebarMode||'outline');return;}
   if(['search','outline','annotations','bookmarks'].includes(action)){closePopover();if(r.documentSidebarUI?.isConnected)r.showDocumentSidebarView(action);else renderSidebar(action);return;}
   if(action==='connect')return safely(()=>exportDocument(active()))();
   if(action==='history')return safely(()=>annotationHistory(active()))();
@@ -1238,6 +1241,7 @@ function applyAppSidebarWidth(value=preferences.sidebarWidth) {
   const width=Math.round(Math.max(8,Math.min(appSidebarMaxWidth(),Number(value)||300))),root=document.documentElement,handle=$('#sidebar-resizer');
   if(root.style.getPropertyValue('--app-sidebar-width')!==width+'px')root.style.setProperty('--app-sidebar-width',width+'px');
   $('#sidebar')?.toggleAttribute('data-app-sidebar-strip',width===8);
+  if(width>=48)$('#sidebar').sidebarExpandedWidth=width;
   if(handle)for(const [name,value] of Object.entries({'aria-valuemin':8,'aria-valuemax':appSidebarMaxWidth(),'aria-valuenow':width,'aria-valuetext':width+'픽셀'}))handle.setAttribute(name,String(value));
   return width;
 }
@@ -1268,9 +1272,8 @@ function bindAppSidebarResize(panel) {
   };
   handle.onkeydown=event=>{
     if(event.key==='Escape'&&panel.sidebarResize){event.preventDefault();event.stopPropagation();stopAppSidebarResize();return;}
-    if(!['ArrowLeft','ArrowRight','Home','End','Enter'].includes(event.key))return;
+    const next=sidebarWidthAction(event.key,applyAppSidebarWidth(),{max:appSidebarMaxWidth(),expanded:panel.sidebarExpandedWidth||300,shiftKey:event.shiftKey});if(next===null)return;
     event.preventDefault();event.stopPropagation();stopAppSidebarResize();
-    const width=applyAppSidebarWidth(),next=event.key==='Home'?8:event.key==='End'?appSidebarMaxWidth():event.key==='Enter'?300:Math.max(8,Math.min(appSidebarMaxWidth(),width+(event.key==='ArrowRight'?1:-1)*(event.shiftKey?40:10)));
     saveAppSidebarWidth(next);applyAppSidebarWidth();
   };
   handle.ondblclick=event=>{event.preventDefault();event.stopPropagation();stopAppSidebarResize();saveAppSidebarWidth(300);applyAppSidebarWidth();};
@@ -1279,6 +1282,25 @@ function restoreSidebar() {
   const r=reader();
   if(!r?.doc||r.preparing||r.disposed||readerFocused||r.documentSidebarUI?.isConnected||r.appSidebarClosed)return;
   renderSidebar(r.appSidebarMode||'outline',{focusSearch:false});
+}
+function renderOutlineTree(outline,r){
+  r.outlineTreeOpen ||= new Map();
+  const roots=[],stack=[];
+  outline.forEach((item,index)=>{
+    const node={...item,index,children:[]};
+    while(stack.length&&stack.at(-1).level>=node.level)stack.pop();
+    (stack.at(-1)?.children||roots).push(node);stack.push(node);
+  });
+  const row=item=>`<button class="outline-item" data-heading="${item.index}" title="${esc(item.title)}">${esc(item.title)}</button>`;
+  const branch=item=>item.children.length?`<details class="outline-group" data-outline-group="${item.index}"${(r.outlineTreeOpen.get(String(item.index))??!r.outlineAllCollapsed)?' open':''}><summary>${row(item)}</summary><div class="outline-group-body">${item.children.map(branch).join('')}</div></details>`:row(item);
+  return `<div class="sidebar-outline-tree">${roots.map(branch).join('')}</div>`;
+}
+function updateOutlineLocation(panel,r){
+  if(!panel?.isConnected||panel.annotationReader!==r||panel.sidebarMode!=='outline'||!panel.sidebarOutline?.length||!r.readingHeadingState)return;
+  const {nodes,current}=r.readingHeadingState(),target=nodes[current],index=panel.sidebarOutline?.findIndex(item=>item.node===target)??-1;
+  const active=$(`[data-heading="${index}"]`,panel);
+  if(panel.currentOutlineItem===active)return;
+  panel.currentOutlineItem?.removeAttribute('aria-current');active?.setAttribute('aria-current','location');panel.currentOutlineItem=active;
 }
 function updateSearchNavigation(r) {
   for(const panel of [$('#sidebar'),r.documentSidebarUI]){
@@ -1302,11 +1324,14 @@ function styleNativeSidebar(panel) {
   if(!doc.getElementById('htmlmemo-doc-sidebar-style')){
     // Reuse only the namespaced rules from the locally compiled Tailwind asset.
     const rules=[];
-    for(const sheet of document.styleSheets||[]){try{for(const rule of sheet.cssRules||[]){if(!rule.selectorText)continue;const selectors=rule.selectorText.split(',').filter(selector=>selector.includes('[data-htmlmemo-doc-sidebar-ui]')||selector.includes('[data-htmlmemo-native-sidebar]'));if(selectors.length)rules.push(selectors.join(',')+'{'+rule.style.cssText+'}');}}catch{/* App-owned same-origin stylesheets provide these rules. */}}
+    for(const sheet of document.styleSheets||[]){try{for(const rule of sheet.cssRules||[]){if(!rule.selectorText)continue;if(rule.selectorText.includes('[data-htmlmemo-doc-sidebar-ui]')||rule.selectorText.includes('[data-htmlmemo-native-sidebar]'))rules.push(rule.selectorText+'{'+rule.style.cssText+'}');}}catch{/* App-owned same-origin stylesheets provide these rules. */}}
     const style=doc.createElement('style');style.id='htmlmemo-doc-sidebar-style';style.setAttribute('data-htmlmemo-ui','');style.textContent=rules.join('\n')+'\n::highlight(htmlmemo-book-search){background:#f0a85b80;color:inherit}';doc.head.append(style);
   }
   const theme=getComputedStyle(document.documentElement);
-  for(const name of ['--bg','--surface','--surface-muted','--text','--muted','--line','--green','--green-light','--app-font'])panel.style.setProperty(name,theme.getPropertyValue(name));
+  const names=['--bg','--surface','--surface-muted','--text','--muted','--line','--green','--green-light','--app-font'];
+  for(const name of names)panel.style.setProperty(name,theme.getPropertyValue(name));
+  const style=doc.getElementById('htmlmemo-doc-sidebar-style');style.sidebarRules??=style.textContent;
+  style.textContent=style.sidebarRules+'\n[data-htmlmemo-native-sidebar],[data-htmlmemo-toc-resizer],[data-htmlmemo-toc-resizer-bound]{'+names.map(name=>name+':'+theme.getPropertyValue(name)).join(';')+'}';
 }
 function renderSidebar(mode,{panel=$('#sidebar'),embedded=false,documentReader=reader(),focusSearch=true}={}) {
   const r=documentReader;if(!r)return;
@@ -1317,6 +1342,7 @@ function renderSidebar(mode,{panel=$('#sidebar'),embedded=false,documentReader=r
     r[type+'TreeOpen'] ||= new Map();
     if(panel.annotationReader===r)$$(`[data-${type}-group]`,panel).forEach(group=>r[type+'TreeOpen'].set(group.getAttribute(`data-${type}-group`),!!(group.open||group.hasAttribute('open'))));
   }
+  if(panel.annotationReader===r&&panel.sidebarMode==='outline')for(const group of $$('[data-outline-group]',panel)){r.outlineTreeOpen ||= new Map();r.outlineTreeOpen.set(group.dataset.outlineGroup,!!(group.open||group.hasAttribute('open')));}
   panel.annotationReader=r;
   clearTimeout(panel.sidebarSearchTimer);panel.sidebarMode=mode;if(!embedded){sidebarMode=mode;r.appSidebarMode=mode;r.appSidebarClosed=false;$('#workspace')?.setAttribute('data-app-sidebar','');closePopover();}else styleNativeSidebar(panel);panel.hidden=false;
   if(!embedded)r.plainReadingButtons?.menu?.setAttribute('aria-expanded','true');
@@ -1324,12 +1350,16 @@ function renderSidebar(mode,{panel=$('#sidebar'),embedded=false,documentReader=r
   const title={search:'검색',outline:'목차',annotations:'주석',bookmarks:'북마크'}[mode];
   if(!$('.sidebar-views',panel)){
     const views=[['outline','list','목차'],['search','search','검색'],['annotations','note','주석'],['bookmarks','bookmark','북마크']];
-    panel.innerHTML=`<h2 id="${id('sidebar-title')}" hidden></h2><div class="sidebar-views" role="group" aria-label="사이드바 보기">${views.map(([view,name,label])=>`<button type="button" data-sidebar-view="${view}" title="${label}" aria-label="${label}" aria-pressed="false" aria-controls="${id('sidebar-content')}">${icon(name,14)}${['annotations','bookmarks'].includes(view)?`<span class="sidebar-nav-count" data-sidebar-count="${view}" aria-hidden="true"></span>`:''}</button>`).join('')}${embedded?'':`<button type="button" class="icon-button" id="close-sidebar" title="패널 닫기" aria-label="패널 닫기">${icon('close',14)}</button>`}</div><div id="${id('sidebar-content')}" class="sidebar-content" role="region" aria-labelledby="${id('sidebar-title')}"></div>`;
-    if(!embedded)q('close-sidebar').onclick=()=>closeSidebar();
+    panel.innerHTML=`<h2 id="${id('sidebar-title')}" hidden></h2><div class="sidebar-views" role="group" aria-label="사이드바 보기">${views.map(([view,name,label])=>`<button type="button" data-sidebar-view="${view}" title="${label}" aria-label="${label}" aria-pressed="false" aria-controls="${id('sidebar-content')}">${icon(name,14)}${['annotations','bookmarks'].includes(view)?`<span class="sidebar-nav-count" data-sidebar-count="${view}" aria-hidden="true"></span>`:''}</button>`).join('')}<button type="button" class="icon-button" id="${id('close-sidebar')}" data-sidebar-close title="패널 닫기" aria-label="패널 닫기">${icon('close',14)}</button></div><div id="${id('sidebar-content')}" class="sidebar-content" role="region" aria-labelledby="${id('sidebar-title')}"></div>`;
+    q('close-sidebar').onclick=()=>embedded?r.toggleDocumentSidebar(false):closeSidebar();
     $$('[data-sidebar-view]',panel).forEach(button=>button.onclick=()=>{
       const view=button.dataset.sidebarView;
       // Only an explicit re-click collapses the TOC, never a view change or restore.
-      if(view==='outline'&&panel.sidebarMode==='outline'){panel.annotationReader?.collapseDocumentToc?.();return;}
+      if(view==='outline'&&panel.sidebarMode==='outline'){
+        const current=panel.annotationReader;current?.collapseDocumentToc?.();
+        if(current){current.outlineAllCollapsed=true;current.outlineTreeOpen?.clear();}
+        for(const group of $$('[data-outline-group]',panel)){group.open=false;group.removeAttribute('open');}return;
+      }
       if(['annotations','bookmarks'].includes(view)&&panel.sidebarMode===view){
         const type=view==='annotations'?'annotation':'bookmark';
         panel.annotationReader?.[type+'TreeOpen']?.clear();
@@ -1361,8 +1391,14 @@ function renderSidebar(mode,{panel=$('#sidebar'),embedded=false,documentReader=r
     if(!embedded)renderWholeSearch(panel,r,content);
   }else if(mode==='outline'){
     // Native books keep their original TOC nodes below this editor-owned panel.
-    content.innerHTML=embedded?'':outline.length?outline.map((item,index)=>`<button class="outline-item" style="padding-left:${12+(item.level-1)*12}px" data-heading="${index}">${esc(item.title)}</button>`).join(''):'<p class="panel-empty">이 문서에 제목 목차가 없습니다.</p>';
-    $$('[data-heading]',panel).forEach(button=>button.onclick=()=>{const node=outline[Number(button.dataset.heading)].node;return r.navigateSourceTarget?r.navigateSourceTarget(node):r.jump(node);});
+    panel.sidebarOutline=outline;panel.currentOutlineItem=null;
+    content.innerHTML=embedded?'':outline.length?renderOutlineTree(outline,r):'<p class="panel-empty">이 문서에 제목 목차가 없습니다.</p>';
+    $$('[data-outline-group]',panel).forEach(group=>group.ontoggle=()=>r.outlineTreeOpen.set(group.dataset.outlineGroup,!!group.open));
+    $$('[data-heading]',panel).forEach(button=>button.onclick=event=>{
+      event?.preventDefault();event?.stopPropagation();
+      const node=outline[Number(button.dataset.heading)].node,result=r.navigateSourceTarget?r.navigateSourceTarget(node):r.jump(node);updateOutlineLocation(panel,r);return result;
+    });
+    updateOutlineLocation(panel,r);
   }else if(mode==='bookmarks'){
     const row=mark=>`<div class="bookmark-row"><button class="outline-item" data-bookmark="${esc(mark.id)}" title="${esc(mark.title)}">${icon('bookmark',14)} ${esc(mark.title)}</button><button class="icon-button" data-delete-bookmark="${esc(mark.id)}" aria-label="북마크 삭제">${icon('close',13)}</button></div>`;
     const tree=r.bookmarkTree?.()||[{id:'document',title:'문서 전체',count:r.metadata.bookmarks.length,bookmarks:r.metadata.bookmarks,children:[]}];

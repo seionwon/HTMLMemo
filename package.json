@@ -1,6 +1,6 @@
 {
   "name": "librememo",
-  "version": "1.6.1",
+  "version": "1.6.2",
   "private": true,
   "type": "module",
   "description": "웹 페이지를 한 파일로 보관하고 주석을 자동 저장하는 PWA",
@@ -18,7 +18,7 @@
     "build": "node scripts/build.mjs",
     "check": "node scripts/check.mjs",
     "test": "node --test --test-concurrency=1 tests/*.test.mjs",
-    "test:browser": "node -e \"require('node:fs').mkdirSync('test-results',{recursive:true})\" && node --test --test-concurrency=1 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/browser-results.xml tests/browser-office.integration.mjs tests/browser-pdf.integration.mjs tests/browser.integration.mjs tests/browser-tts.integration.mjs tests/browser-library-folders.integration.mjs tests/browser-annotation-jump.integration.mjs tests/browser-security.integration.mjs tests/browser-annotation-picking.integration.mjs tests/browser-device-sync.integration.mjs tests/browser-mobile.integration.mjs tests/browser-help.integration.mjs tests/browser-updates.integration.mjs tests/browser-branding.integration.mjs",
+    "test:browser": "node -e \"require('node:fs').mkdirSync('test-results',{recursive:true})\" && node --test --test-concurrency=1 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/browser-results.xml tests/browser-format-parity.integration.mjs tests/browser-office.integration.mjs tests/browser-pdf.integration.mjs tests/browser.integration.mjs tests/browser-tts.integration.mjs tests/browser-library-folders.integration.mjs tests/browser-annotation-jump.integration.mjs tests/browser-security.integration.mjs tests/browser-annotation-picking.integration.mjs tests/browser-device-sync.integration.mjs tests/browser-mobile.integration.mjs tests/browser-help.integration.mjs tests/browser-updates.integration.mjs tests/browser-branding.integration.mjs",
     "build:office": "node scripts/build-office.mjs",
     "build:rhwp": "node scripts/build-rhwp.mjs",
     "build:foliate": "node scripts/build-foliate.mjs"

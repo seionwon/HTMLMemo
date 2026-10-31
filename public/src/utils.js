@@ -69,3 +69,10 @@ const paths = {
   bookmark: '<path d="M6 3h12v18l-6-4-6 4z"/>', print: '<path d="M6 8V3h12v5M6 17H3V8h18v9h-3M6 14h12v7H6z"/>',
 };
 export const icon = (name, size = 18) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.file}</svg>`;
+
+// The native book sidebar and the app sidebar share the same keyboard contract.
+export function sidebarWidthAction(key,current,{max=640,defaultWidth=300,expanded=300,shiftKey=false}={}){
+  const step=shiftKey?40:16;
+  const value=key==='ArrowLeft'?current-step:key==='ArrowRight'?(current<=8?expanded:current+step):key==='Home'?8:key==='End'?max:key==='Enter'?defaultWidth:key===' '?(current<=8?expanded:8):null;
+  return value===null?null:Math.round(clamp(value,8,key==='Enter'?640:Math.max(8,max)));
+}

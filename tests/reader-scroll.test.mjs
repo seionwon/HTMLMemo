@@ -1,6 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Reader} from '../public/src/reader.js';
+import {documentFor} from './dom.mjs';
+
+test('text and annotation navigation reveals a nested scrolling table without changing text or scrolling a visible hit again',()=>{
+  const doc=documentFor('<html><head></head><body><main><div><p>표의 먼 열에 있는 검색어</p></div></main></body></html>'),container=doc.querySelector('div'),p=doc.querySelector('p'),text=p.textContent;
+  for(const [key,value]of Object.entries({clientWidth:200,scrollWidth:1600,clientHeight:100,scrollHeight:1000}))Object.defineProperty(container,key,{value});
+  container.scrollLeft=0;container.scrollTop=0;container.getBoundingClientRect=()=>({left:20,right:220,top:10,bottom:110});
+  const rect=()=>({left:1300-container.scrollLeft,right:1340-container.scrollLeft,width:40,top:300-container.scrollTop,bottom:320-container.scrollTop,height:20});p.getBoundingClientRect=rect;
+  Object.defineProperty(doc,'defaultView',{value:{getComputedStyle:node=>({overflowX:node===container?'auto':'visible',overflowY:node===container?'auto':'visible'})}});
+  const r=Object.create(Reader.prototype);r.doc=doc;
+  const range={startContainer:p.firstChild,getBoundingClientRect:rect};r.revealNestedScroll(range);
+  assert.equal(container.scrollLeft,1200);assert.equal(container.scrollTop,250);
+  r.revealNestedScroll(range);assert.equal(container.scrollLeft,1200);assert.equal(container.scrollTop,250);assert.equal(p.textContent,text);
+  container.scrollLeft=0;r.revealNestedScroll(p);assert.equal(container.scrollLeft,1200);assert.equal(p.textContent,text);
+});
 
 function scrollingReader(nativeScroll=false) {
   const frames=[];let frameId=0;

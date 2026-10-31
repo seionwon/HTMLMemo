@@ -43,6 +43,15 @@ test('plain documents copy the HTML reader header with its title, navigation, po
   sidebar.annotationReader={};r.updateReadingControls();assert.equal(r.plainReadingButtons.menu.getAttribute('aria-expanded'),'false');
 });
 
+test('article headers, site navigation, search forms and hidden controls never replace the complete book toolbar',()=>{
+  for(const header of ['<header class="header"><strong>문서 제목</strong><input type="search"><button>검색</button></header>','<header class="book-header"><h1>글 제목</h1></header>','<form><input type="search"><button>검색</button></form>','<div class="toolbar"><button>공유</button></div>','<header class="topbar" hidden><button>A+</button></header>']){
+    const {r,doc}=fixture(header);r.outline=()=>[];r.setupReadingControls();r.setupReadingControls();
+    assert.ok(r.plainReadingButtons);assert.equal(r.readingControls.parentElement,r.host);
+    assert.deepEqual([...r.readingControls.querySelectorAll('button')].map(node=>node.dataset.action),['toggle-sidebar','reading-back','previous-heading','next-heading','speak','font-smaller','font-larger','zoom']);
+    assert.equal(r.host.querySelectorAll('[data-htmlmemo-reading-controls]').length,1);assert.equal(doc.querySelector('[data-htmlmemo-reading-controls]'),null);
+  }
+});
+
 test('copied theme controls save a bounded document setting and remove transient palette styles on export',()=>{
   const {r,doc}=fixture();Object.assign(r,{viewport:{scrollTop:0,scrollLeft:0},cancelAnnotationDrag(){},measure(){},renderDrawingLayer(){}});let writes=0;r.callbacks.onPosition=()=>writes++;
   r.setupReadingControls();const original=textIndex(doc).text;r.setReadingTheme('dark');assert.equal(writes,1);assert.equal(r.metadata.view.readingTheme,'dark');assert.equal(r.readingControls.dataset.theme,'dark');assert.equal(r.plainReadingButtons.theme.value,'dark');
@@ -156,6 +165,16 @@ test('reader-only controls and styles never change export text offsets or the bo
 test('zoom label updates are safe before the reader has a document or controls',()=>{
   const r=Object.create(Reader.prototype);r.frame={getBoundingClientRect(){throw Error('not laid out');}};r.viewport=r.frame;
   assert.doesNotThrow(()=>r.updateReadingControls());
+});
+test('source UI scale keeps the same physical sidebar width across page magnifications and is excluded from exports',()=>{
+  const {r,doc}=fixture('<header class="topbar"><button>A+</button></header>');
+  r.callbacks.sidebarWidth=()=>300;r.callbacks.sidebarMaxWidth=()=>640;
+  for(const zoom of [.25,.5,1,1.25,2,8]){
+    r.zoom=zoom;r.uiScale=1/zoom;assert.equal(r.sidebarUnit(),1/zoom);assert.equal(r.maxTocWidth()*zoom,640);
+    assert.ok(Math.abs(r.clampTocWidth(300/zoom,false)*zoom-300)<=1);assert.equal(r.clampTocWidth(8/zoom,false)*zoom,8);
+  }
+  doc.documentElement.style.setProperty('--htmlmemo-reader-ui-scale','2');doc.documentElement.setAttribute('data-htmlmemo-compact-ui','');
+  const saved=serializeHTML(doc,r.metadata);assert.doesNotMatch(saved,/--htmlmemo-reader-ui-scale|data-htmlmemo-compact-ui/);
 });
 test('app reading controls stay reachable when the enlarged page is horizontally panned',()=>{
   const {r}=fixture('<header class="topbar"><button>A+</button></header>');r.setupReadingControls();

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFile} from 'node:fs/promises';
 import {DOMParser} from 'linkedom';
-import {$, $$, icon, escapeHTML} from '../public/src/utils.js';
+import {$, $$, icon, escapeHTML,sidebarWidthAction} from '../public/src/utils.js';
 import {Reader} from '../public/src/reader.js';
 import {ANNOTATION_LABELS} from '../public/src/model.js';
 import {documentFor,installDOM} from './dom.mjs';
@@ -19,7 +19,7 @@ function sidebar() {
     outline:()=>[{node:'heading-1',level:1,title:'첫 번째 절'}],jump:node=>calls.headings.push(node),jumpAnnotation:id=>calls.annotations.push(id),jumpBookmark(id){const mark=this.metadata.bookmarks.find(m=>m.id===id);this.scrollTop=mark.top*this.zoom;this.scrollLeft=mark.left*this.zoom;},
     search(query){this.searchQuery=query;calls.search.push(query);this.searchResults=query?[{quote:'찾은 문장: '+query}]:[];this.searchPosition=this.searchResults.length?0:-1;return this.searchResults;},nextSearch(direction){calls.next.push(direction);if(this.searchResults?.length)this.searchPosition=Math.max(0,Math.min(this.searchResults.length-1,this.searchPosition+direction));}};
   let current=r;
-  const context=vm.createContext({ANNOTATION_LABELS,document:doc,$:(selector,root=doc)=>$(selector,root),$$:(selector,root=doc)=>$$(selector,root),icon,esc:escapeHTML,
+  const context=vm.createContext({ANNOTATION_LABELS,sidebarWidthAction,document:doc,$:(selector,root=doc)=>$(selector,root),$$:(selector,root=doc)=>$$(selector,root),icon,esc:escapeHTML,
     reader:()=>current,active:()=>({queue:{schedule(){calls.saved++;}}}),closePopover(){},toolAction(){},innerWidth:1280,window:doc.createElement('div'),preferences:{sidebarWidth:300},changePreferences(patch){Object.assign(context.preferences,patch);calls.sizes.push(patch.sidebarWidth);context.applyAppSidebarWidth();},
     getComputedStyle:()=>({getPropertyValue:()=>''}),showError:error=>calls.errors.push(error.message),
     setTimeout(fn){const id=++timerId;timers.set(id,fn);return id;},clearTimeout(id){timers.delete(id);}});
@@ -37,6 +37,23 @@ function resizePointer(a){
   handle.onpointerdown({button:0,pointerId:1,clientX:300,preventDefault(){},stopPropagation(){}});
   return {handle,event,get captured(){return captured;}};
 }
+test('ordinary document outlines preserve heading hierarchy, fold on re-click and retain expansion per document',()=>{
+  const a=sidebar();a.r.outline=()=>[{node:'h1',level:1,title:'첫 장'},{node:'h2',level:2,title:'첫 절'},{node:'h3',level:3,title:'<작은 절>'},{node:'h4',level:1,title:'둘째 장'}];a.open('outline');
+  const panel=a.doc.querySelector('#sidebar');assert.equal(panel.querySelectorAll('[data-outline-group]').length,2);
+  assert.equal(panel.querySelector('[data-outline-group="0"] [data-outline-group="1"] [data-heading="2"]').textContent,'<작은 절>');
+  assert.equal(panel.querySelectorAll('[data-outline-group][open]').length,2);a.choose('outline');assert.equal(panel.querySelectorAll('[data-outline-group][open]').length,0);
+  a.choose('search');a.choose('outline');assert.equal(panel.querySelectorAll('[data-outline-group][open]').length,0);
+  let group=panel.querySelector('[data-outline-group="0"]');group.open=true;group.setAttribute('open','');group.ontoggle();panel.querySelector('[data-heading="0"]').onclick();assert.equal(group.open,true);assert.deepEqual(a.calls.headings,['h1']);
+  a.choose('bookmarks');a.choose('outline');assert.equal(panel.querySelector('[data-outline-group="0"]').hasAttribute('open'),true);assert.equal(panel.querySelector('[data-outline-group="1"]').hasAttribute('open'),false);
+  const other={...a.r,outlineTreeOpen:new Map(),outlineAllCollapsed:false};a.setReader(other);a.open('outline');assert.equal(panel.querySelectorAll('[data-outline-group][open]').length,2);
+  a.setReader(a.r);a.open('outline');assert.equal(panel.querySelectorAll('[data-outline-group][open]').length,1);assert.equal(panel.querySelector('script,img'),null);assert.equal(a.calls.saved,0);
+});
+test('source and common sidebar keys share bounds, step sizes, minimum strip, restore and reset behavior',()=>{
+  assert.equal(sidebarWidthAction('ArrowRight',300),316);assert.equal(sidebarWidthAction('ArrowLeft',316,{shiftKey:true}),276);
+  assert.equal(sidebarWidthAction('Home',276),8);assert.equal(sidebarWidthAction('ArrowRight',8,{expanded:276}),276);
+  assert.equal(sidebarWidthAction(' ',276),8);assert.equal(sidebarWidthAction(' ',8,{expanded:276}),276);
+  assert.equal(sidebarWidthAction('End',300,{max:280}),280);assert.equal(sidebarWidthAction('Enter',280,{max:280}),300);assert.equal(sidebarWidthAction('Escape',300),null);
+});
 test('shared sidebar resize previews width, saves once and keeps its search input and document data',()=>{
   const a=sidebar();a.open('search');const panel=a.doc.querySelector('#sidebar'),input=a.doc.querySelector('#document-search'),metadata=structuredClone(a.r.metadata),p=resizePointer(a);
   input.value='보존할 검색어';input.oninput();p.event('pointermove',460);assert.equal(a.doc.documentElement.style.getPropertyValue('--app-sidebar-width'),'460px');assert.equal(p.handle.getAttribute('aria-valuenow'),'460');assert.equal(p.captured,true);assert.deepEqual(a.calls.sizes,[]);assert.strictEqual(a.doc.querySelector('#document-search'),input);assert.equal(input.value,'보존할 검색어');
@@ -57,7 +74,7 @@ test('Escape, pointer cancellation, blur, lost capture, view changes and close r
 });
 test('sidebar keyboard controls and double click preserve bounds and reset the portable default',()=>{
   const a=sidebar();a.open('search');const h=a.doc.querySelector('#sidebar-resizer'),key=(key,shiftKey=false)=>h.onkeydown({key,shiftKey,preventDefault(){},stopPropagation(){}});
-  assert.equal(h.getAttribute('role'),'separator');assert.equal(h.getAttribute('aria-orientation'),'vertical');assert.equal(h.getAttribute('tabindex'),'0');assert.equal(h.getAttribute('aria-valuemin'),'8');key('ArrowRight');assert.equal(a.context.preferences.sidebarWidth,310);key('ArrowLeft',true);assert.equal(a.context.preferences.sidebarWidth,270);key('Home');assert.equal(a.context.preferences.sidebarWidth,8);assert.equal(a.doc.querySelector('#sidebar').hasAttribute('data-app-sidebar-strip'),true);key('ArrowLeft');assert.equal(a.context.preferences.sidebarWidth,8);key('ArrowRight');assert.equal(a.context.preferences.sidebarWidth,18);assert.equal(a.doc.querySelector('#sidebar').hasAttribute('data-app-sidebar-strip'),false);key('End');assert.equal(a.context.preferences.sidebarWidth,640);key('Enter');assert.equal(a.context.preferences.sidebarWidth,300);key('ArrowRight');h.ondblclick({preventDefault(){},stopPropagation(){}});assert.equal(a.context.preferences.sidebarWidth,300);assert.equal(h.getAttribute('aria-valuenow'),'300');
+  assert.equal(h.getAttribute('role'),'separator');assert.equal(h.getAttribute('aria-orientation'),'vertical');assert.equal(h.getAttribute('tabindex'),'0');assert.equal(h.getAttribute('aria-valuemin'),'8');key('ArrowRight');assert.equal(a.context.preferences.sidebarWidth,316);key('ArrowLeft',true);assert.equal(a.context.preferences.sidebarWidth,276);key('Home');assert.equal(a.context.preferences.sidebarWidth,8);assert.equal(a.doc.querySelector('#sidebar').hasAttribute('data-app-sidebar-strip'),true);key('ArrowLeft');assert.equal(a.context.preferences.sidebarWidth,8);key('ArrowRight');assert.equal(a.context.preferences.sidebarWidth,276);assert.equal(a.doc.querySelector('#sidebar').hasAttribute('data-app-sidebar-strip'),false);key('End');assert.equal(a.context.preferences.sidebarWidth,640);key('Enter');assert.equal(a.context.preferences.sidebarWidth,300);key('ArrowRight');h.ondblclick({preventDefault(){},stopPropagation(){}});assert.equal(a.context.preferences.sidebarWidth,300);assert.equal(h.getAttribute('aria-valuenow'),'300');
 });
 test('responsive clamping leaves reading space without overwriting a wider saved sidebar preference',()=>{
   const a=sidebar();a.context.preferences.sidebarWidth=600;a.open('search');const h=a.doc.querySelector('#sidebar-resizer');
