@@ -83,6 +83,7 @@ export function validateState(value, id) {
   const validateMarks = metadata => {
     validateAnnotations(metadata.annotations);
     if(metadata.bookmarks?.some(mark=>mark.pdfPosition!=null&&!validPDFPosition(mark.pdfPosition)))throw Error('PDF 북마크 위치가 손상되었습니다.');
+    if(metadata.bookmarks?.some(mark=>mark.pdfQuoteOffset!=null&&(!Number.isFinite(mark.pdfQuoteOffset)||Math.abs(mark.pdfQuoteOffset)>1)))throw Error('PDF 북마크의 본문 위치가 손상되었습니다.');
     if(metadata.view?.pdfPosition!=null&&!validPDFPosition(metadata.view.pdfPosition))throw Error('PDF 읽기 위치가 손상되었습니다.');
     if(!Array.isArray(metadata.bookmarks)||metadata.bookmarks.length>10000||metadata.bookmarks.some(b=>typeof b?.id!=='string'||typeof b.title!=='string'||!Number.isFinite(b.top)||!Number.isFinite(b.left)))throw Error('폴더의 북마크가 손상되었습니다.');
   };

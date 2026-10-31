@@ -5,7 +5,7 @@ import {installDOM,documentFor} from './dom.mjs';
 import {preparePDF,exportPDFHTML,readPDFArchive,verifyPDF,PDF_ARCHIVE_MARKER} from '../public/src/pdf-document.js';
 import {readLocalHTML,isLocalHTMLFile,droppedHTMLFiles,findLocalDuplicates,localFileIdentity,htmlExportName} from '../public/src/local-files.js';
 import {validateAnnotations,validPDFPosition} from '../public/src/model.js';
-import {blobRangeSource} from '../public/src/pdf-reader.js';
+import {blobRangeSource,PdfReader} from '../public/src/pdf-reader.js';
 import {PdfTextSearch,indexPdfSearchPage,findPdfPageMatches,normalizePdfQuery} from '../public/src/pdf/text-search.js';
 import {PdfRenderQueue} from '../public/src/pdf/page-rendering.js';
 import {PDF_SCROLL_WINDOW_HEIGHT,pdfWindowBase,pdfWindowScrollTop} from '../public/src/pdf/viewport-window.js';
@@ -66,4 +66,8 @@ test('ported PDFMemo rendering queue keeps a visible lane available and cancels 
 });
 test('ported PDFMemo window keeps a fifty-thousand-page document below the CSS height limit',()=>{
   const total=53192*1100,logical=total*.7,base=pdfWindowBase(total,logical,logical);assert.ok(base>0&&base<total);assert.ok(logical-base<PDF_SCROLL_WINDOW_HEIGHT);assert.equal(pdfWindowScrollTop(250,base,base+100,2),50);assert.equal(pdfWindowBase(1000,500),0);
+});
+test('PDF page identity tolerates rounded scroll positions after font scaling without choosing the preceding page',()=>{
+  const state={count:4,scale:1.1,tops:Float64Array.from([0,1078.6666666667,2157.3333333333,3236,4314.6666666667])};
+  for(const page of [2,3,4]){const target=state.tops[page-1]*state.scale;assert.equal(PdfReader.prototype.pageAt.call(state,Math.floor(target)),page);assert.equal(PdfReader.prototype.pageAt.call(state,target-12),page-1);}
 });

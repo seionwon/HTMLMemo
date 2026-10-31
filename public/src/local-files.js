@@ -96,7 +96,7 @@ export async function readLocalHTML(input, {native = false, allowScripts = false
   }
   const probeBytes=isMHTML(file)?null:new Uint8Array(await file.slice(0,native&&file.size>=4*1024*1024?65536:128).arrayBuffer());
   if(probeBytes&&new TextDecoder().decode(probeBytes.subarray(0,128)).startsWith(PDF_ARCHIVE_MARKER)){
-    const snapshot=await readPDFArchive(file),local={snapshot,name:file.name,handle:null,originalHandle,sourceIdentity:identify?await localFileIdentity(snapshot.pdf):null};localSources.set(local,snapshot.pdf);return local;
+    const snapshot=await readPDFArchive(file),local={snapshot,name:file.name,handle:null,originalHandle,originalFile:file,sourceIdentity:identify?await localFileIdentity(snapshot.pdf):null};localSources.set(local,snapshot.pdf);return local;
   }
   const sourceIdentity=identify?await localFileIdentity(file):null;
   if(isMHTML(file)){

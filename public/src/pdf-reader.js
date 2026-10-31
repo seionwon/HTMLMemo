@@ -39,7 +39,9 @@ export class PdfReader{
     try{this.pdf=await this.loading.promise;}catch(error){if(error?.name==='PasswordException'||/password|destroyed/i.test(error?.message||''))throw Error('암호가 설정된 PDF입니다. 암호를 해제한 사본을 가져와주세요.');throw Error('PDF를 열지 못했습니다. 파일이 손상되었거나 지원하지 않는 형식입니다.');}
     if(this.disposed){await this.loading.destroy();return;}
     if(!Number.isInteger(this.pdf.numPages)||this.pdf.numPages<1||this.pdf.numPages>100000)throw Error('지원하는 PDF 페이지 수를 벗어났습니다.');
-    this.count=this.pdf.numPages;const first=await this.pdf.getPage(1),viewport=first.getViewport({scale:SCALE});this.defaultSize={width:viewport.width,height:viewport.height};this.sizes.set(1,this.defaultSize);
+    this.count=this.pdf.numPages;
+    if(this.reader.metadata.annotations.some(a=>a.pdfPage>this.count||a.pdfRects?.some(rect=>rect.page>this.count))||this.reader.metadata.bookmarks.some(mark=>mark.pdfPosition?.page>this.count))throw Error('PDF 주석 또는 북마크의 쪽 정보가 원본과 맞지 않습니다. 원본 파일과 주석이 함께 있는 보관 파일을 확인해주세요.');
+    const first=await this.pdf.getPage(1),viewport=first.getViewport({scale:SCALE});this.defaultSize={width:viewport.width,height:viewport.height};this.sizes.set(1,this.defaultSize);
     this.tops=new Float64Array(this.count+1);this.relayout();
     this.reader.metadata.viewport.width=this.width*this.scale;this.reader.metadata.pdf={version:1,pages:this.count};
     this.root=this.doc.getElementById('htmlmemo-pdf-pages');this.root.removeAttribute('data-tts-root');
@@ -66,7 +68,9 @@ export class PdfReader{
     }
   }
   size(page){return this.sizes.get(page)||this.defaultSize;}
-  pageAt(top=this.logicalTop){let lo=0,hi=this.count-1;while(lo<hi){const mid=Math.ceil((lo+hi)/2);if(this.tops[mid]*this.scale<=top)lo=mid;else hi=mid-1;}return lo+1;}
+  // Browser scroll offsets round fractional page tops. A subpixel remainder
+  // must not make Play, a bookmark or the position counter select the prior page.
+  pageAt(top=this.logicalTop){const edge=top+1;let lo=0,hi=this.count-1;while(lo<hi){const mid=Math.ceil((lo+hi)/2);if(this.tops[mid]*this.scale<=edge)lo=mid;else hi=mid-1;}return lo+1;}
   get logicalTop(){return this.base+(this.reader.rootScrollTop()||0);}
   position(){const page=this.pageAt();return {page,y:clamp((this.logicalTop/this.scale-this.tops[page-1])/this.size(page).height,0,1)};}
   setLogicalTop(value){
@@ -179,7 +183,7 @@ export class PdfReader{
     const rects=this.captureRects(range);if(!rects.length||rects.length>10000)return false;
     if(type==='note'){const first=rects[0],slot=this.slots.get(first.page);if(!text?.trim())return false;r.commit([...r.metadata.annotations,r.annotation(type,{anchor:'n'+first.page,anchorTarget:{tag:'section',id:slot.node.id,rootId:'',section:'',quote:'',path:[]},pdfPage:first.page,textAnchor:{...anchor},points:[{x:first.x,y:first.y}],text:text.trim()})]);}
     else r.commit([...r.metadata.annotations,r.annotation(type,{textAnchor:{...anchor},pdfRects:rects,pdfPage:rects[0].page})]);
-    this.doc.getSelection()?.removeAllRanges();r.selection=null;return true;
+    if(type==='note')r.restoreTextSelection(anchor);else{this.doc.getSelection()?.removeAllRanges();r.selection=null;}return true;
   }
   renderTextMarks(){
     if(this.disposed)return;
@@ -228,7 +232,7 @@ export class PdfReader{
       const next=structuredClone(item);delete next.section;delete next.heading;delete next.editionPosition;
       if(field==='bookmarks'){next.pdfPosition={page:found.page,y:clamp(rects[0].y+(item.pdfQuoteOffset||0),0,1)};next.top=this.tops[found.page-1]+this.size(found.page).height*next.pdfPosition.y;next.left=0;}
       else if(TEXT_TOOLS.includes(next.type)){next.pdfRects=rects.map(rect=>({...rect,page:found.page}));next.pdfPage=found.page;next.textAnchor={start:found.start,end:found.end,quote:found.text,prefix:found.before.slice(-40),suffix:found.after.slice(0,40)};}
-      else{next.anchor='n'+found.page;next.pdfPage=found.page;next.anchorTarget={tag:'section',id:'pdf-page-'+found.page,rootId:'',section:'',quote:'',path:[]};delete next.penBasis;}
+      else{next.anchor='n'+found.page;next.pdfPage=found.page;next.anchorTarget={tag:'section',id:'pdf-page-'+found.page,rootId:'',section:'',quote:'',path:[]};if(item.textAnchor&&['note','text'].includes(item.type))next.points=[{x:rects[0].x,y:rects[0].y}];delete next.penBasis;}
       result[field].push(next);report.same++;onProgress(++done,work.length,'search');
     }
     return result;
@@ -271,7 +275,14 @@ export class PdfReader{
     const layer=svg(this.doc,'svg',{class:'htmlmemo-pdf-marks',viewBox:'0 0 '+size.width+' '+size.height,'data-htmlmemo-ui':'','data-htmlmemo-pdf-search':''});for(const b of rects)layer.append(svg(this.doc,'rect',{x:b.x*size.width,y:b.y*size.height,width:b.w*size.width,height:b.h*size.height,fill:'#f0a85b80',stroke:'#df9057','stroke-width':1,'pointer-events':'none'}));slot.inner.append(layer);if(rects.length)this.seek(match.page,Math.max(0,rects[0].y-.3));return true;
   }
   setSpeechRoot(page){const slot=this.slots.get(page);if(!slot?.text)return;this.speechRoot?.removeAttribute('data-tts-root');this.speechRoot=slot.text;this.speechRoot.setAttribute('data-tts-root','');}
-  async prepareSpeech(){const page=this.pageAt();await this.ensure(page);this.setSpeechRoot(page);return !!this.speechRoot?.textContent.trim();}
+  async prepareSpeech(){
+    const page=this.pageAt();await this.ensure(page);if(page<this.count)await this.ensure(page+1);if(this.disposed)return false;
+    // After following a sentence the viewport can start in the preceding
+    // page's bottom margin. Choose the first visible text, not that blank page.
+    const threshold=Math.min(80,this.reader.viewport.clientHeight/this.reader.zoom*.12),bottom=this.reader.viewport.clientHeight/this.reader.zoom;
+    const visible=[...this.slots.values()].filter(slot=>slot.page>=page&&slot.text).sort((a,b)=>a.page-b.page).find(slot=>[...slot.text.querySelectorAll('[data-pdf-text]')].some(span=>{if(!span.textContent.trim())return false;const rect=span.getBoundingClientRect();return rect.bottom>threshold&&rect.top<bottom;}));
+    this.setSpeechRoot(visible?.page||page);return !!this.speechRoot?.textContent.trim();
+  }
   async nextSpeechPage(isCurrent=()=>true){let page=Number(this.speechRoot?.closest('[data-pdf-page]')?.dataset.pdfPage)||this.pageAt();while(page<this.count&&!this.disposed&&isCurrent()){page++;await this.ensure(page);if(!isCurrent()||this.disposed)return false;await this.go(page);this.setSpeechRoot(page);if(this.speechRoot?.textContent.trim())return true;}return false;}
   exportHTML(metadata){return exportPDFHTML(this.source,metadata);}
   dispose(){this.disposed=true;this.jumpVersion++;this.searchGeneration++;this.searchAbort?.abort();this.wholeAbort?.abort();this.searchEngine?.clear();this.doc.defaultView.cancelAnimationFrame(this.frame);this.doc.defaultView.removeEventListener('scroll',this.onScroll);this.reader.viewport.removeEventListener('scroll',this.onScroll);for(const slot of this.slots.values()){slot.controller.abort();slot.textLayer?.cancel();slot.image.dispose();}this.slots.clear();void this.loading?.destroy().catch(()=>{});}
