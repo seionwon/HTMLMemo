@@ -34,7 +34,7 @@ async function db() {
   if (!database) database = new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, 4);
     let blocked=false;
-    request.onblocked=()=>{blocked=true;database=null;reject(new Error('다른 HTMLMemo 창이 이전 보관함을 사용하고 있습니다. 해당 창을 닫고 다시 열어주세요. 보관한 문서는 유지됩니다.'));};
+    request.onblocked=()=>{blocked=true;database=null;reject(new Error('다른 LibreMemo 창이 이전 보관함을 사용하고 있습니다. 해당 창을 닫고 다시 열어주세요. 보관한 문서는 유지됩니다.'));};
     request.onupgradeneeded = event => {
       const database = request.result;
       if (!database.objectStoreNames.contains('documents')) database.createObjectStore('documents', {keyPath:'id'});

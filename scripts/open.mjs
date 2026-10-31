@@ -3,7 +3,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { join } from 'node:path';
 import { root, prepareAssets } from './assets.mjs';
-await compileDesign();await prepareAssets();const path=join(root,'public/HTMLMemo.html');console.log('서버 없이 여는 실행 파일: '+path);
+await compileDesign();await prepareAssets();const path=join(root,'public/LibreMemo.html');console.log('서버 없이 여는 실행 파일: '+path);
 if(!process.argv.includes('--no-open')){
   const execute=promisify(execFile);
   try{if(process.platform==='darwin')await execute('open',['-a','Google Chrome',path]);else if(process.platform==='win32')await execute('explorer.exe',[path]);else await execute('xdg-open',[path]);}

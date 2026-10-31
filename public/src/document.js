@@ -44,7 +44,7 @@ export async function serializeBookSource(source, metadata) {
   const encoder = new TextEncoder(), parts = [];
   let offset = 0;
   const head = header.slice(0, end);
-  // HTMLMemo metadata is always an inert JSON script in the head. Keep every
+  // LibreMemo metadata is always an inert JSON script in the head. Keep every
   // other source byte, including nonce attributes, styles and book payloads.
   for (const match of head.matchAll(/<script\b((?:[^"'<>]|"[^"]*"|'[^']*')*)>[\s\S]*?<\/script\s*>/gi)) {
     const tag = new DOMParser().parseFromString('<html><head>' + match[0] + '</head><body></body></html>', 'text/html').querySelector('script');
@@ -63,7 +63,7 @@ export function cleanAnnotations(doc) {
   doc.getElementById(LAYER_ID)?.remove();
   doc.getElementById(DATA_ID)?.remove();
   doc.getElementById('htmlmemo-annotation-style')?.remove();
-  // Older HTMLMemo builds temporarily added a control and a collapsed-state
+  // Older LibreMemo builds temporarily added a control and a collapsed-state
   // attribute to the document's own table of contents.  Those editor-only
   // artifacts must never hide the source document's sidebar after reopening.
   doc.getElementById('htmlmemo-toc-toggle-style')?.remove();
@@ -204,8 +204,8 @@ function* prepareHTML(html, defaults, {includeMetadata = false, document: loaded
   let embedded = {};
   const data = doc.getElementById(DATA_ID);
   if (data) {
-    try { embedded = JSON.parse(data.textContent); } catch { throw new Error('HTMLMemo 주석 데이터가 손상되었습니다. 원본 파일을 확인해주세요.'); }
-    if (embedded.version !== FORMAT_VERSION) throw new Error('이 파일의 HTMLMemo 버전을 지원하지 않습니다.');
+    try { embedded = JSON.parse(data.textContent); } catch { throw new Error('LibreMemo 주석 데이터가 손상되었습니다. 원본 파일을 확인해주세요.'); }
+    if (embedded.version !== FORMAT_VERSION) throw new Error('이 파일의 LibreMemo 버전을 지원하지 않습니다.');
     embedded.annotations = validateAnnotations(embedded.annotations);
   }
   let source = embedded.source || defaults.source || '';

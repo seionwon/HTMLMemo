@@ -297,7 +297,7 @@ export async function migrateAnnotations({annotations = [], bookmarks = [], oldD
   } else {
     // First the section each annotation came from (sections keep their ids across editions), then
     // the sections whose text contains it — for moved sections and for annotations made before
-    // HTMLMemo recorded sections.
+    // LibreMemo recorded sections.
     const order = new Map(newSections.map((s, i) => [s.key, i]));
     const run = async (plan, label, approximate=false) => {
       const keys = [...plan.keys()].sort((a, b) => order.get(a) - order.get(b));

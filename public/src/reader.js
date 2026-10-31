@@ -2537,7 +2537,7 @@ export class Reader {
     const contentKey=JSON.stringify(drawings);
     const layoutKey=JSON.stringify(geometry.map(({points,scale})=>({points,scale})));
     if(!layer){
-      layer=svg(this.doc,'svg',{id:LAYER_ID,'aria-label':'HTMLMemo 주석',style:'position:absolute;top:0;left:0;z-index:2147483000;pointer-events:none;overflow:visible;'});
+      layer=svg(this.doc,'svg',{id:LAYER_ID,'aria-label':'LibreMemo 주석',style:'position:absolute;top:0;left:0;z-index:2147483000;pointer-events:none;overflow:visible;'});
       layer.dataset.htmlmemoUi='';hostParent.append(layer);
       this.drawingContentKey=null;this.drawingLayoutKey=null;
     } else if (layer.parentElement!==hostParent) {

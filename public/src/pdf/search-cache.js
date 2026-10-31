@@ -1,4 +1,4 @@
-// Adapted from PDFMemo search-cache.ts; presentation remains HTMLMemo-owned.
+// Adapted from PDFMemo search-cache.ts; presentation remains LibreMemo-owned.
 let database;
 function db() {
     return database ||= new Promise((resolve, reject) => {

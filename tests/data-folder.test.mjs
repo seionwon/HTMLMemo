@@ -23,15 +23,15 @@ test('new storage prefers existing Documents or 문서 and creates only a named 
     const root=memoryFolder('My device'),documents=await root.getDirectoryHandle(name,{create:true});
     const child=await createStorageSubfolder(root,'나의 서재');assert.equal(child,documents.children.get('나의 서재'));
     assert.deepEqual([...root.children.keys()],[name]);assert.deepEqual([...documents.children.keys()],['나의 서재']);
-    assert.equal(await createStorageSubfolder(documents,'HTMLMemo'),documents.children.get('HTMLMemo'));
+    assert.equal(await createStorageSubfolder(documents,'LibreMemo'),documents.children.get('LibreMemo'));
   }
-  const root=memoryFolder('Chosen location');assert.equal(await createStorageSubfolder(root,'HTMLMemo'),root.children.get('HTMLMemo'));
+  const root=memoryFolder('Chosen location');assert.equal(await createStorageSubfolder(root,'LibreMemo'),root.children.get('LibreMemo'));
 });
 test('storage creation rejects invalid paths and nonempty collisions without changing their files',async()=>{
   for(const name of ['', '.', '..', '../outside', 'a/b', 'a\\b', 'a:', 'a?', 'CON', 'LPT1.txt', 'name.', '한'.repeat(81)])assert.throws(()=>storageFolderName(name));
   const root=memoryFolder('Documents');for(const name of ['../outside','a/b'])await assert.rejects(createStorageSubfolder(root,name));assert.equal(root.children.size,0);
-  const collision=await root.getDirectoryHandle('HTMLMemo',{create:true}),file=await collision.getFileHandle('personal.txt',{create:true});file.replace('Keep this data');
-  await assert.rejects(createStorageSubfolder(root,'HTMLMemo'),/다른 파일/);assert.equal(await(await file.getFile()).text(),'Keep this data');
+  const collision=await root.getDirectoryHandle('LibreMemo',{create:true}),file=await collision.getFileHandle('personal.txt',{create:true});file.replace('Keep this data');
+  await assert.rejects(createStorageSubfolder(root,'LibreMemo'),/다른 파일/);assert.equal(await(await file.getFile()).text(),'Keep this data');
   const existing=await root.getDirectoryHandle('Existing',{create:true});await existing.getFileHandle(FOLDER_MANIFEST,{create:true});assert.equal(await createStorageSubfolder(root,'Existing'),existing);
 });
 
@@ -50,7 +50,7 @@ test('a fresh device restores only folder files with complete history and prefer
   assert.equal(receiver.records.size,1);assert.equal(receiver.records.get('doc').metadata.annotations[0].text,'Separate annotation');assert.equal(receiver.histories.get('doc').length,2);assert.equal(receiver.records.get('doc').fileHandle,undefined);assert.equal(JSON.parse(local.getItem(PREFERENCES_KEY)).annotation.width,7);assert.equal(restored.count,1);assert.match(await receiver.contents.get('doc').originalFile.text(),/Raw received bytes/);
 });
 test('trash status travels with the complete source, notes and history to a fresh device without rewriting HTML',async t=>{
-  const lib=library(),control={writes:[]},disk=memoryFolder('HTMLMemo',control),backup=manager(t,lib);await backup.connect(disk);const before=await manifest(disk),reads=lib.reads;control.writes.length=0;
+  const lib=library(),control={writes:[]},disk=memoryFolder('LibreMemo',control),backup=manager(t,lib);await backup.connect(disk);const before=await manifest(disk),reads=lib.reads;control.writes.length=0;
   lib.records.get('doc').trashedAt=123456789;backup.schedule({id:'doc'});await backup.flush();const trashed=await manifest(disk),state=JSON.parse(await readObject(disk,trashed.documents[0].state));
   assert.equal(state.record.trashedAt,123456789);assert.deepEqual(trashed.documents[0].source,before.documents[0].source);assert.deepEqual(trashed.documents[0].original,before.documents[0].original);assert.deepEqual(trashed.documents[0].history,before.documents[0].history);assert.equal(lib.reads,reads);assert.ok(!control.writes.some(name=>name.endsWith('.html')));
   const recipient=library([]);await manager(t,recipient).connect(disk);assert.equal(recipient.records.get('doc').trashedAt,123456789);assert.equal(recipient.records.get('doc').metadata.annotations[0].text,'Separate annotation');assert.equal(recipient.histories.get('doc').length,2);assert.match(await recipient.contents.get('doc').originalFile.text(),/Raw received bytes/);
@@ -60,7 +60,7 @@ test('invalid trash dates never replace the last complete portable snapshot',asy
   const lib=library(),disk=memoryFolder(),backup=manager(t,lib);await backup.connect(disk);const before=await manifest(disk);lib.records.get('doc').trashedAt=-1;backup.schedule({id:'doc'});await assert.rejects(backup.flush(),/삭제일/);assert.deepEqual(await manifest(disk),before);
 });
 test('a history-only checkpoint updates the portable history without changing annotations or rewriting source files',async t=>{
-  const lib=library(),control={writes:[]},disk=memoryFolder('HTMLMemo',control),backup=manager(t,lib);lib.records.get('doc').historyVersion=1;
+  const lib=library(),control={writes:[]},disk=memoryFolder('LibreMemo',control),backup=manager(t,lib);lib.records.get('doc').historyVersion=1;
   await backup.connect(disk);const first=await manifest(disk),reads=lib.reads;control.writes.length=0;
   lib.histories.get('doc').push({id:3,documentId:'doc',created:3000,kind:'edit',annotations:lib.records.get('doc').metadata.annotations,bookmarks:[]});lib.records.get('doc').historyVersion++;
   backup.schedule({id:'doc'});await backup.flush();const next=await manifest(disk);
@@ -78,7 +78,7 @@ test('frequent note edits reuse a versioned history until the next checkpoint, w
   lib.records.get('doc').metadata.annotations[0].width=-1;backup.schedule({id:'doc'});await assert.rejects(backup.flush());assert.equal(backup.state,'error');assert.equal(reads,2);
 });
 test('a removed cached history object is reconstructed, and an interrupted checkpoint is retried completely',async t=>{
-  const lib=library(),control={},disk=memoryFolder('HTMLMemo',control),backup=manager(t,lib);lib.records.get('doc').historyVersion=2;
+  const lib=library(),control={},disk=memoryFolder('LibreMemo',control),backup=manager(t,lib);lib.records.get('doc').historyVersion=2;
   let reads=0;const list=backup.ops.listRevisions;backup.ops.listRevisions=async id=>{reads++;return list(id);};await backup.connect(disk);
   const first=await manifest(disk),data=await disk.getDirectoryHandle(FOLDER_DATA);await data.removeEntry(first.documents[0].history.name);
   lib.records.get('doc').metadata.annotations[0].text='복원 뒤 메모';backup.schedule({id:'doc'});await backup.flush();assert.equal(reads,2);assert.equal(JSON.parse(await readObject(disk,(await manifest(disk)).documents[0].history)).revisions.length,2);
@@ -86,12 +86,12 @@ test('a removed cached history object is reconstructed, and an interrupted check
   control.failClose=null;await backup.flush();assert.equal(reads,4);assert.equal(JSON.parse(await readObject(disk,(await manifest(disk)).documents[0].history)).revisions.length,3);
 });
 test('annotation and view edits reuse original and prepared HTML without loading or rewriting source bodies',async t=>{
-  const lib=library(),control={writes:[]},disk=memoryFolder('HTMLMemo',control),backup=manager(t,lib);await backup.connect(disk);const first=await manifest(disk),reads=lib.reads;control.writes.length=0;
+  const lib=library(),control={writes:[]},disk=memoryFolder('LibreMemo',control),backup=manager(t,lib);await backup.connect(disk);const first=await manifest(disk),reads=lib.reads;control.writes.length=0;
   lib.records.get('doc').metadata.annotations[0].text='Updated note';lib.records.get('doc').metadata.view.scrollTop=3000;backup.schedule();await backup.flush();const next=await manifest(disk);
   assert.equal(lib.reads,reads);assert.deepEqual(next.documents[0].source,first.documents[0].source);assert.deepEqual(next.documents[0].original,first.documents[0].original);assert.notEqual(next.documents[0].state.name,first.documents[0].state.name);assert.ok(!control.writes.some(name=>name.endsWith('.html')));assert.equal(JSON.parse(await readObject(disk,next.documents[0].state)).record.metadata.view.scrollTop,3000);
 });
 test('permission loss and disk errors remain pending and keep the last complete manifest until an explicit reconnect',async t=>{
-  const lib=library(),control={},disk=memoryFolder('HTMLMemo',control),backup=manager(t,lib);await backup.connect(disk);const old=await manifest(disk);lib.records.get('doc').metadata.annotations[0].text='Not yet on disk';
+  const lib=library(),control={},disk=memoryFolder('LibreMemo',control),backup=manager(t,lib);await backup.connect(disk);const old=await manifest(disk);lib.records.get('doc').metadata.annotations[0].text='Not yet on disk';
   control.permission='denied';backup.schedule();await assert.rejects(backup.flush(),{name:'NotAllowedError'});assert.equal(backup.state,'error');assert.equal(backup.pending,true);assert.deepEqual(await manifest(disk),old);
   control.permission='granted';control.failClose=FOLDER_MANIFEST;await assert.rejects(backup.flush(),/Interrupted/);assert.deepEqual(await manifest(disk),old);assert.equal(control.aborts,1);
   control.failClose=null;await backup.connect(disk);assert.equal(backup.state,'saved');assert.equal(lib.records.size,1);assert.match(await readObject(disk,(await manifest(disk)).documents[0].state),/Not yet on disk/);
@@ -131,7 +131,7 @@ test('portable settings reject foreign keys and invalid preferences, and records
   const local=memoryLocal([['other-token','private'],['msuite_tts_rate','1.25']]);assert.deepEqual(folderSettings(local),{entries:{msuite_tts_rate:'1.25'}});assert.throws(()=>applyFolderSettings(local,{entries:{'other-token':'copy'}}));assert.throws(()=>applyFolderSettings(local,{entries:{[PREFERENCES_KEY]:'{"theme":"invalid"}'}}));assert.equal(portableRecord({...document(),fileHandle:{secret:true},originalFile:new Blob(['private'])}).fileHandle,undefined);
 });
 test('view-only saves reuse history and original files, while automatic debouncing drains edits made during a write',async t=>{
-  const lib=library(),control={writes:[]},disk=memoryFolder('HTMLMemo',control),backup=manager(t,lib,memoryLocal(),{delay:1});let historyReads=0;
+  const lib=library(),control={writes:[]},disk=memoryFolder('LibreMemo',control),backup=manager(t,lib,memoryLocal(),{delay:1});let historyReads=0;
   const readHistory=lib.operations.listRevisions;backup.ops.listRevisions=async id=>{historyReads++;return readHistory(id);};
   await backup.connect(disk);const first=await manifest(disk);control.writes.length=0;lib.records.get('doc').metadata.view.scrollTop=4000;backup.schedule({id:'doc'});await backup.flush();const moved=await manifest(disk);
   assert.equal(historyReads,1);assert.deepEqual(moved.documents[0].history,first.documents[0].history);assert.ok(!control.writes.includes(first.documents[0].history.name));assert.equal(lib.reads,1);
@@ -140,13 +140,13 @@ test('view-only saves reuse history and original files, while automatic debounci
   const last=await manifest(disk);assert.match(await readObject(disk,last.documents[0].state),/Edit during a write/);assert.equal(backup.pending,false);
 });
 test('an aborted first object write and a missing managed copy are repaired from the retained library on retry',async t=>{
-  const lib=library(),control={failClose:null},disk=memoryFolder('HTMLMemo',control),backup=manager(t,lib);
+  const lib=library(),control={failClose:null},disk=memoryFolder('LibreMemo',control),backup=manager(t,lib);
   let interrupted=false;control.onWrite=async name=>{if(!interrupted&&/^[a-f0-9]{64}\.html$/.test(name)){interrupted=true;control.failClose=name;}};
   await assert.rejects(backup.connect(disk),/Interrupted/);assert.equal(backup.state,'error');control.failClose=null;await backup.connect(disk);assert.equal(backup.state,'saved');
   const head=await manifest(disk),data=await disk.getDirectoryHandle(FOLDER_DATA);await data.removeEntry(head.documents[0].source.name);backup.schedule({id:'doc'});await backup.flush();assert.equal(await readObject(disk,(await manifest(disk)).documents[0].source),'<!doctype html><body>Original content</body>');
 });
 test('an interrupted very first manifest leaves no empty root file and reconnect completes without manual file cleanup',async t=>{
-  const lib=library(),control={failClose:FOLDER_MANIFEST},disk=memoryFolder('HTMLMemo',control),backup=manager(t,lib);
+  const lib=library(),control={failClose:FOLDER_MANIFEST},disk=memoryFolder('LibreMemo',control),backup=manager(t,lib);
   await assert.rejects(backup.connect(disk),/Interrupted/);await assert.rejects(disk.getFileHandle(FOLDER_MANIFEST),{name:'NotFoundError'});assert.equal(lib.records.size,1);
   control.failClose=null;await backup.connect(disk);assert.equal(backup.state,'saved');assert.equal((await manifest(disk)).documents.length,1);
 });
@@ -158,7 +158,7 @@ test('nested library folders are real directories and a fresh device restores th
   const other=library([]);await manager(t,other).connect(disk);assert.deepEqual(other.settings.get(LIBRARY_FOLDERS_KEY),hierarchy());assert.equal(other.records.get('doc').folderId,'part');assert.equal(other.records.get('doc').metadata.annotations[0].text,'Separate annotation');assert.equal(other.histories.get('doc').length,2);
 });
 test('moving a folder moves its nested raw copies without reading source bodies or rewriting annotation history',async t=>{
-  const lib=library(),control={writes:[]},disk=memoryFolder('HTMLMemo',control);lib.settings.set(LIBRARY_FOLDERS_KEY,hierarchy());lib.records.get('doc').folderId='part';const backup=manager(t,lib);await backup.connect(disk);const before=await manifest(disk),reads=lib.reads;control.writes.length=0;
+  const lib=library(),control={writes:[]},disk=memoryFolder('LibreMemo',control);lib.settings.set(LIBRARY_FOLDERS_KEY,hierarchy());lib.records.get('doc').folderId='part';const backup=manager(t,lib);await backup.connect(disk);const before=await manifest(disk),reads=lib.reads;control.writes.length=0;
   lib.settings.set(LIBRARY_FOLDERS_KEY,editLibraryFolders(hierarchy(),[...lib.records.values()],{type:'move',id:'books',parentId:'archive'}).folders);backup.schedule();await backup.flush();const after=await manifest(disk);
   assert.equal(disk.children.has('책'),false);assert.ok((await(await disk.getDirectoryHandle('보관')).getDirectoryHandle('책')).children.has('1부'));assert.match(await(await copyFile(disk,after)).text(),/Raw received bytes/);assert.equal(lib.reads,reads);assert.deepEqual(after.documents[0].history,before.documents[0].history);assert.deepEqual(after.documents[0].state,before.documents[0].state);assert.deepEqual(JSON.parse(await(await(await disk.getFileHandle(FOLDER_PREVIOUS)).getFile()).text()).folders,hierarchy());
 });

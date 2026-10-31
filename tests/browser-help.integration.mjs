@@ -14,7 +14,7 @@ async function setup(){
  return {page,browser,url,async close(){await browser.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}};
 }
 const preserved=page=>page.evaluate(`(async()=>{const s=await import('./src/storage.js'),record=await s.getDocument('help-preserved');return {id:record.id,title:record.title,html:record.html,annotations:record.metadata.annotations,bookmarks:record.metadata.bookmarks,revisions:(await s.listRevisions(record.id)).length};})()`);
-const openHelp=async page=>{await page.click('#settings-button');await page.click('#settings-help');await page.waitFor('document.querySelector(".help-browser h2")?.textContent==="HTMLMemo 도움말"');};
+const openHelp=async page=>{await page.click('#settings-button');await page.click('#settings-help');await page.waitFor('document.querySelector(".help-browser h2")?.textContent==="LibreMemo 도움말"');};
 const search=async(page,value)=>page.evaluate(`(()=>{const input=document.querySelector('#help-search');input.value=${JSON.stringify(value)};input.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText'}));})()`);
 const fits=page=>page.evaluate(`(()=>{const dialog=document.querySelector('#dialog'),r=dialog.getBoundingClientRect(),body=document.querySelector('#help-content'),b=body.getBoundingClientRect(),footerNode=document.querySelector('.help-footer'),footer=footerNode.getBoundingClientRect(),end=footerNode.checkVisibility()?footer.top:r.bottom;return r.left>=-1&&r.top>=-1&&r.right<=innerWidth+1&&r.bottom<=innerHeight+1&&dialog.scrollWidth<=dialog.clientWidth+1&&body.scrollWidth<=body.clientWidth+1&&footer.bottom<=r.bottom+1&&body.clientHeight>=60&&b.bottom<=end+1;})()`);
 const helpContrast=page=>page.evaluate(`(()=>{

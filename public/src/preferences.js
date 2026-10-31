@@ -120,7 +120,7 @@ export function serializeSettings(preferences,folderName='') {
 export function parseSettings(text) {
   if(typeof text!=='string'||text.length>131072)throw new Error('설정 파일은 128KB 이하의 JSON 파일이어야 합니다.');
   let input;try{input=JSON.parse(text.replace(/^\uFEFF/,''));}catch{throw new Error('설정 JSON 파일을 읽을 수 없습니다.');}
-  if(!object(input)||input.format!==SETTINGS_FORMAT||input.version!==1||input.storage!=='local'||!object(input.preferences))throw new Error('지원하는 HTMLMemo 로컬 설정 파일이 아닙니다.');
+  if(!object(input)||input.format!==SETTINGS_FORMAT||input.version!==1||input.storage!=='local'||!object(input.preferences))throw new Error('지원하는 LibreMemo 로컬 설정 파일이 아닙니다.');
   if(input.folderName!==undefined&&(typeof input.folderName!=='string'||input.folderName.length>255))throw new Error('저장 폴더 정보가 올바르지 않습니다.');
   return {preferences:normalizePreferences(input.preferences),folderName:input.folderName||''};
 }

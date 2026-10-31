@@ -1,4 +1,4 @@
-name: Deploy HTMLMemo to GitHub Pages
+name: Deploy LibreMemo to GitHub Pages
 
 on:
   push:
@@ -67,6 +67,7 @@ jobs:
             test-results/toolbar-modes-selection-note-*.json
             test-results/pages-only-*.json
             test-results/pwa-startup-*.json
+            test-results/librememo-branding*.json
             test-results/*.png
           if-no-files-found: ignore
       - run: npm run build
@@ -76,12 +77,14 @@ jobs:
 
   deploy:
     needs: build
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Publish HTMLMemo
+      - name: Publish LibreMemo
         id: deployment
         uses: actions/deploy-pages@v4
 
@@ -101,7 +104,7 @@ jobs:
           sudo apt-get install --no-install-recommends -y fonts-noto-cjk
       - name: Verify the published URL-only app, sidebar, annotation tree and pen scaling in Chrome
         env:
-          HTMLMEMO_SIDEBAR_TEST_URL: https://seionwon.github.io/HTMLMemo/
+          HTMLMEMO_SIDEBAR_TEST_URL: ${{ needs.deploy.outputs.page_url }}
         run: |
           node --input-type=module <<'NODE'
           import {readFile} from 'node:fs/promises';
@@ -123,7 +126,7 @@ jobs:
           console.log('Published app, reader and model match this commit.');
           NODE
           mkdir -p test-results
-          node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/published-browser-results.xml --test-name-pattern='MHTML import|compact library|folder setup|whole-book search|long-document search|duplicate HTML import|reading controls|palette controls|toolbar mode groups|sidebar view choices|annotation tree|font-scaled pen|Pages-only|Chrome companion|adaptive file tabs|TTS paused resume|TTS transport controls|TTS selection|device sync entry' tests/browser-pdf.integration.mjs tests/browser.integration.mjs tests/browser-library-folders.integration.mjs tests/browser-annotation-jump.integration.mjs tests/browser-security.integration.mjs tests/browser-annotation-picking.integration.mjs tests/browser-device-sync.integration.mjs tests/browser-mobile.integration.mjs tests/browser-help.integration.mjs tests/browser-updates.integration.mjs
+          node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/published-browser-results.xml --test-name-pattern='MHTML import|compact library|folder setup|whole-book search|long-document search|duplicate HTML import|reading controls|palette controls|toolbar mode groups|sidebar view choices|annotation tree|font-scaled pen|Pages-only|Chrome companion|adaptive file tabs|TTS paused resume|TTS transport controls|TTS selection|device sync entry' tests/browser-pdf.integration.mjs tests/browser.integration.mjs tests/browser-library-folders.integration.mjs tests/browser-annotation-jump.integration.mjs tests/browser-security.integration.mjs tests/browser-annotation-picking.integration.mjs tests/browser-device-sync.integration.mjs tests/browser-mobile.integration.mjs tests/browser-help.integration.mjs tests/browser-updates.integration.mjs tests/browser-branding.integration.mjs
       - name: Keep published desktop and mobile verification screenshots
         if: always()
         uses: actions/upload-artifact@v4

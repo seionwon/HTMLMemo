@@ -5,7 +5,7 @@ import {randomBytes} from 'node:crypto';
 import {mkdir,writeFile} from 'node:fs/promises';
 import {SyncService} from '../public/src/sync-service.js';
 const room='HM-CHECK-'+randomBytes(16).toString('hex'),run=randomBytes(12).toString('hex');
-const sides=[new Map([['host','Synthetic HTMLMemo transport check. '.repeat(140)]]),new Map([['peer','Synthetic receiver transport check. '.repeat(140)]])],states=[[],[]];
+const sides=[new Map([['host','Synthetic LibreMemo transport check. '.repeat(140)]]),new Map([['peer','Synthetic receiver transport check. '.repeat(140)]])],states=[[],[]];
 const report={scope:'Public ntfy encrypted attachment exchange; generated test strings only; no app library/account',status:'running'};
 let timer;
 const done=[];const waits=[0,1].map(i=>new Promise((resolve,reject)=>done[i]={resolve,reject}));

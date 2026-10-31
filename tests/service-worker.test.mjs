@@ -4,7 +4,7 @@ import vm from 'node:vm';
 import {readFile} from 'node:fs/promises';
 import {crc32} from '../public/src/zip.js';
 
-const source=await readFile(new URL('../public/sw.js',import.meta.url),'utf8'),base='https://app.test/HTMLMemo/';
+const source=await readFile(new URL('../public/sw.js',import.meta.url),'utf8'),base='https://app.test/LibreMemo/';
 class Cache{
   constructor(){this.rows=new Map();}
   url(input,ignoreSearch=false){const u=new URL(typeof input==='string'?input:input.url);if(ignoreSearch)u.search='';return u.href;}
@@ -43,7 +43,7 @@ test('cancel survives worker activation and a complete app close; accepting swit
   const result=await two.message('reopened',{type:'HTMLMEMO_UPDATE_APPLY',build:'htmlmemo-two'});assert.equal(result.ok,true);assert.equal(two.skips,1);
   assert.match(await(await two.fetch('',{navigation:true,next:'updated'})).text(),/two/);
   assert.match(await(await two.fetch('styles.css',{id:'other'})).text(),/one/);
-  await two.event('activate');assert.ok([...f.stores.keys()].some(key=>key==='htmlmemo-one:/HTMLMemo/'));
+  await two.event('activate');assert.ok([...f.stores.keys()].some(key=>key==='htmlmemo-one:/LibreMemo/'));
 });
 test('cache pruning never waits for a navigating client and preserves live old windows',async()=>{
   let navigating=false;
@@ -55,7 +55,7 @@ test('cache pruning never waits for a navigating client and preserves live old w
   try{await Promise.race([two.event('activate'),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Cache cleanup waited for the unfinished navigation')),500);})]);}finally{clearTimeout(timer);}
   assert.match(await(await two.fetch('',{navigation:true,next:'replacement'})).text(),/two/);
   assert.match(await(await two.fetch('styles.css',{id:'other'})).text(),/one/);
-  assert.ok(f.stores.has('htmlmemo-one:/HTMLMemo/'));
+  assert.ok(f.stores.has('htmlmemo-one:/LibreMemo/'));
 });
 test('worker activation does not wait for window discovery during a pending navigation',async()=>{
   let discovering=false,queries=0;
@@ -92,7 +92,7 @@ test('old app resources stay cached offline and cache cleanup is limited to this
   const two=f.worker('two');await two.event('install');await two.message('page',{type:'HTMLMEMO_UPDATE_APPLY',build:'htmlmemo-two'});f.clients.clear();await two.event('activate');
   // Activation never waits for window discovery. Unused previous caches are
   // collected when preparing the next release; the selected one stays intact.
-  assert.ok(f.stores.has('htmlmemo-one:/HTMLMemo/'));const three=f.worker('three');await three.event('install');
-  assert.ok(!f.stores.has('htmlmemo-one:/HTMLMemo/'));assert.ok(f.stores.has('htmlmemo-other:/Other/'));assert.ok(f.stores.has('another-app'));
+  assert.ok(f.stores.has('htmlmemo-one:/LibreMemo/'));const three=f.worker('three');await three.event('install');
+  assert.ok(!f.stores.has('htmlmemo-one:/LibreMemo/'));assert.ok(f.stores.has('htmlmemo-other:/Other/'));assert.ok(f.stores.has('another-app'));
   assert.equal(await two.fetch('https://foreign.test/file.js'),null);assert.equal(await two.fetch('styles.css',{method:'POST'}),null);
 });

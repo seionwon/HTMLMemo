@@ -1,6 +1,6 @@
-# HTMLMemo 기능 추가 이력
+# LibreMemo 기능 추가 이력
 
-HTMLMemo 프로젝트에서 구현과 관련 검증을 마친 변경을 기록합니다. 빌드 완료와 실제 배포 완료를 구분하며, 다른 프로젝트의 이력이나 개인 문서·자격 증명은 기록하지 않습니다.
+LibreMemo(구 HTMLMemo) 프로젝트에서 구현과 관련 검증을 마친 변경을 기록합니다. 빌드 완료와 실제 배포 완료를 구분하며, 다른 프로젝트의 이력이나 개인 문서·자격 증명은 기록하지 않습니다.
 
 <a id="hist-20261011-001"></a>
 
@@ -4856,3 +4856,24 @@ Chrome 검사는 실제 OPFS 폴더 핸들과 IndexedDB, Android 사용자 에�
 공개 앱에서 PDF 검색 결과의 해당 글자 이동·8쪽 북마크·전용 폴더 복사·주석 포함 HTML 공유와 재가져오기·기존 PDF 보존·동일 공유 파일 중복 취소가 통과했습니다. 펜 상대 위치·도형 채움·텍스트 주석 이동·선택 메모·같은 TTS 플레이어의 재생/일시정지/이동/선택 낭독·새 판 주석 3개와 북마크 1개 이동도 확인했습니다. 악성 PDF 스크립트 미실행·암호/손상 파일 안내·네트워크 차단 후 재열기도 통과했습니다. 공개 XML·진단 JSON·화면은 `test-results/pdf-integration-20261031/public-success/`, 파일 전체 대조는 `published-all-files.json`에 보존합니다. 이 후속 변경은 검증·게시 결과의 문서 기록이며 공개 앱 파일을 바꾸지 않습니다.
 
 **검증 범위:** 실제 Chrome의 데스크톱 및 휴대폰 크기 에뮬레이션과 합성 PDF를 사용했습니다. TTS 검사는 실제 앱 플레이어에 합성 음성 엔진을 연결했으므로 실물 기기의 소리 출력 검사와 구분합니다. 수만 쪽 스크롤 위치의 모델 검사는 실물 두꺼운 PDF의 성능 측정이 아닙니다. 실물 Android 시험·OCR·PDF 양식 편집·암호 해제·PDF 표준 주석으로 원본 다시 쓰기는 이번 완료 범위에 포함하지 않습니다. PDFMemo 원본 프로젝트는 변경하지 않았으며 별도 확장·서버 없이 기존 GitHub Pages URL과 PWA로 사용합니다.
+
+<a id="hist-20261031-004"></a>
+### 2026-10-31 12:46:26 +09:00 — LibreMemo로 이름 변경 · 기존 데이터 호환과 GitHub 저장소 전환 준비
+
+| ID | 변경 종류 | 상태 |
+|---|---|---|
+| hist-20261031-004 | 앱 이름·PWA·도움말·디자인·배포·CodeMemo 연결 | 구현·로컬 검증 완료 · 기존 주소의 Pages 게시 대기 · 저장소 이름 변경은 사용자 단계 |
+
+**요청·범위:** HTMLMemo의 새 이름을 LibreMemo로 정하고 필요한 표기·설정·안내를 바꾸며 GitHub repository를 언제 바꾸면 되는지 설명한다. 별도 앱이나 새 데이터 저장소를 만들지 않는다. 버전은 **1.3.1**이다.
+
+**화면과 파일:** 웹 제목, PWA 이름과 short_name, 설정·About·도움말·설치·주석 HTML 전달 안내·Chrome 실행 안내, 새 데이터 폴더의 기본 이름, 설정 JSON 제안 이름, 로컬 개발용 `LibreMemo.html`, 패키지 메타데이터, README·작업 지침·현재 디자인 카탈로그/시안의 이름을 바꿨다. 기존 선택한 문서 심볼과 색상은 유지했다. 별도 아이콘 비교판의 H 모노그램만 L 모노그램으로 고치고 원본 SVG에서 PNG를 다시 만들었다. 과거 게시·검증 기록과 미적용 통합 패치를 현재 이름으로 위조하지 않았다.
+
+**자료의 연속성:** IndexedDB `HTMLMemo-v1`, PDF 검색·동기화 임시 저장소, `htmlmemo-*` 설정/주석 속성, 저장 폴더의 관리 파일, 설정·PDF 공유 파일·동기화 규약의 식별자는 유지한다. 기계적 이름 변경으로 기존 서재가 비거나 백업을 못 읽게 하지 않는다. 새 폴더는 LibreMemo를 제안하고 기존 HTMLMemo 또는 사용자가 정한 이름의 폴더는 그대로 연결한다. PWA id는 옛 주소의 `./`와 같은 `/HTMLMemo/`로 고정하고 표시 이름만 LibreMemo로 바꾼다. 설치 아이콘의 시작 주소가 브라우저에서 자동 갱신됐다고 단정하지 않는다.
+
+**주소와 전환:** 현재 실제 저장소는 `seionwon/HTMLMemo`다. 먼저 이 저장소와 기존 `https://seionwon.github.io/HTMLMemo/`에 변경 버전을 게시한 뒤 사용자가 GitHub Settings에서 repository를 LibreMemo로 바꾼다. 그 다음 **Actions → Deploy LibreMemo to GitHub Pages → Run workflow → main**으로 새 주소를 게시·검증한다. 워크플로는 실제 deploy 출력 `page_url`을 verify에 넘기므로 경로를 다시 하드코딩하지 않는다. 앱의 URL 복사·전용 폴더 안내는 실제 열린 공식 옛/새 주소를 따르고 쿼리·해시는 공유하지 않는다. 보관된 Chrome 연결 소스도 두 공식 경로만 인식하며 다른 동일 출처 앱을 허용하지 않는다. 확장 기능 자체를 Pages에 새로 배포하지 않는다.
+
+**CodeMemo·원격·사용자 단계:** CodeMemo에는 프로젝트 표시 이름과 실행 안내를 LibreMemo로 반영하고, 새 주소의 manifest가 실제 LibreMemo인 것을 확인했을 때만 새 주소로 실행·복사 링크를 바꾸는 처리를 MemoSuite 본체에 함께 준비했다. 인터넷 실패·잘못된 manifest·취소·새 사이트 미게시 때는 기존 주소를 유지한다. 실제 로컬 소스 경로는 기존 대화가 참조하므로 `.../CodeMemo/HTMLMemo`를 유지한다. 저장소 이름 변경 후 `git remote set-url origin https://seionwon@github.com/seionwon/LibreMemo.git`을 그 경로에서 실행한다. 같은 Chrome 프로필·같은 Pages 호스트에서는 기존 자료를 읽으며, 다른 기기로 자료가 자동 이동한다는 뜻은 아니다. 즐겨찾기와 공유 주소를 갱신하고, 옛 주소로 시작하는 설치 아이콘은 새 주소에서 갱신한다. 사이트 데이터나 전용 폴더를 삭제하지 않는다. [상세 순서](rename-to-librememo.md).
+
+**로컬 검증:** `npm test` **774개 통과**, `npm run check` **166개 JavaScript와 JSON 검사 통과**, `npm run build`, `git diff --check`를 수행했다. 구버전 **1.3.0의 실제 storage 모듈**을 고정 fixture로 보관해 옛 IndexedDB에 문서·형광펜·북마크·휴지통·설정을 만들고, 같은 출처에서 `/HTMLMemo/` → `/LibreMemo/`로 이동했다. 실제 Chrome의 **1280·390·320px**에서 같은 내용, 형광펜 표시, 폴더 연결·휴지통·설정·PWA 식별자, 새 설정 제목과 가로 넘침 없음을 확인했다. 개인 Chrome 프로필·개인 문서는 사용하지 않았다. [검증 기록](verification/librememo-rename-2026-10-31/source.json), [브라우저 결과](verification/librememo-rename-2026-10-31/browser.json), [휴대폰 화면](verification/librememo-rename-2026-10-31/local-320.png).
+
+**범위·제한:** GitHub의 repository 이름 변경은 아직 실행하지 않았다. 사용자가 시점을 물었으므로 코드 준비와 기존 주소 배포 후 수동 단계로 안내한다. GitHub가 Git 주소를 리디렉션해도 Pages 프로젝트 주소는 자동 리디렉션하지 않는다. [공식 안내](https://docs.github.com/en/repositories/creating-and-managing-repositories/renaming-a-repository). 정식 CI·게시·공개 파일·공개 Chrome 검사는 실제 완료 후 이 항목에 보충한다.

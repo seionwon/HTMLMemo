@@ -96,7 +96,7 @@ test('moving annotations follows sections by id, searches moved text, and drops 
   const doomed={id:'h2',type:'underline',color:'#334155',width:3,opacity:1,textAnchor:{...anchorIn(index.text,'곧 지워질 문단입니다. 이 문장은 사라집니다.'),section:'v0:a'}};
   const pen={id:'p1',type:'pen',color:'#d94f4f',width:3,opacity:1,anchor:'n3',anchorTarget:describeDrawingTarget(oldBook.doc,oldBook.doc.querySelector('p')),points:[{x:.1,y:.2},{x:.5,y:.6}],penBasis:{width:600,height:80,fontSize:18}};
   await oldBook.show('v0:b');index=textIndex(oldBook.doc);
-  // Made before HTMLMemo recorded sections: found by searching the new edition's text.
+  // Made before LibreMemo recorded sections: found by searching the new edition's text.
   const legacy={id:'h3',type:'highlight',color:'#edcf67',width:3,opacity:.35,textAnchor:anchorIn(index.text,'결과를 확인합니다.')};
   const orphan={id:'n1',type:'note',color:'#334155',width:3,opacity:1,anchor:'n9',points:[{x:0,y:0}],text:'자리 정보가 없는 메모'};
   // New edition: a section was added in front (keys shift to another volume order), the install

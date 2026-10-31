@@ -9,27 +9,27 @@ async function setup(pwaUrl='http://localhost:4173/'){
     get:async id=>{if(!tabs.has(id))throw new Error('Tab closed');return tabs.get(id);},query:async()=>[...tabs.values()],create:async options=>{const tab={id:++serial,windowId:1,status:'complete',title:'Page',...options};tabs.set(tab.id,tab);return tab;},update:async(id,options)=>Object.assign(tabs.get(id),options),goBack:async()=>{},goForward:async()=>{},reload:async()=>{},sendMessage:async(id,message)=>notices.push({id,message}),onUpdated:signal(),onRemoved:signal()},windows:{update:async(id,options)=>windows.push({id,...options})},scripting:{
     executeScript:async options=>options.files?[]:[{result:{html:'<!doctype html><html><head><title>Article</title></head><body>Page content</body></html>',title:'Article',url:tabs.get(options.target.tabId).url,viewport:{width:960,height:800},warnings:[]}}],unregisterContentScripts:async()=>{},registerContentScripts:async()=>{}}};
   vm.runInNewContext(await readFile(new URL('../extension/background.js',import.meta.url),'utf8'),{chrome,crypto,URL,AbortSignal,fetch,btoa,setTimeout,clearTimeout,Uint8Array,Map,Set,Promise});
-  const app={id:chrome.runtime.id,tab:{id:99},url:local.pwaUrl||'https://seionwon.github.io/HTMLMemo/'};const popup={id:chrome.runtime.id,url:chrome.runtime.getURL('popup.html')};
+  const app={id:chrome.runtime.id,tab:{id:99},url:local.pwaUrl||'https://seionwon.github.io/LibreMemo/'};const popup={id:chrome.runtime.id,url:chrome.runtime.getURL('popup.html')};
   return {local,session,tabs,windows,notices,app,popup,send:(action,args={},sender=app)=>new Promise(resolve=>listener({action,...args},sender,resolve))};
 }
-test('Chrome bridge rejects requests from other sites and other localhost app paths',async()=>{const ctx=await setup();for(const url of ['https://evil.test/','http://localhost:4173/other','http://localhost:4174/']){const response=await ctx.send('openBrowser',{url:'https://example.test/'},{...ctx.app,url});assert.match(response.error,/설정된 HTMLMemo/);}assert.equal(ctx.tabs.size,1);assert.equal((await ctx.send('ping')).result.version,'1.2.0');});
+test('Chrome bridge rejects requests from other sites and other localhost app paths',async()=>{const ctx=await setup();for(const url of ['https://evil.test/','http://localhost:4173/other','http://localhost:4174/']){const response=await ctx.send('openBrowser',{url:'https://example.test/'},{...ctx.app,url});assert.match(response.error,/설정된 LibreMemo/);}assert.equal(ctx.tabs.size,1);assert.equal((await ctx.send('ping')).result.version,'1.2.0');});
 test('Chrome browse and capture operate only on explicitly connected tabs',async()=>{const ctx=await setup();assert.match((await ctx.send('captureTab',{tabId:1})).error,/연결한 Chrome 탭/);const opened=await ctx.send('openBrowser',{url:'https://example.test/page'});const captured=await ctx.send('captureTab',{tabId:opened.result.id});assert.match(captured.result.html,/Page content/);assert.equal(captured.result.url,'https://example.test/page');});
 test('popup captures remain in persistent storage until the PWA acknowledges durable storage',async()=>{const ctx=await setup();const saved=await ctx.send('popupSave',{tabId:1},ctx.popup);assert.equal(saved.result.title,'Article');assert.equal(ctx.local.captures.length,1);const received=await ctx.send('takeCaptures');assert.equal(received.result.length,1);assert.equal(ctx.local.captures.length,1);await ctx.send('ackCapture',{captureId:received.result[0].id});assert.equal(ctx.local.captures.length,0);});
 test('concurrent Chrome tab openings do not lose tracked tab ownership',async()=>{const ctx=await setup();const results=await Promise.all(Array.from({length:5},(_,i)=>ctx.send('openBrowser',{url:`https://example.test/${i}`})));assert.equal(ctx.session.tracked.length,5);assert.deepEqual(new Set(ctx.session.tracked),new Set(results.map(r=>r.result.id)));});
 test('concurrent page handoffs retain every snapshot',async()=>{const ctx=await setup();await Promise.all([ctx.send('popupSave',{tabId:1},ctx.popup),ctx.send('popupSave',{tabId:1},ctx.popup)]);assert.equal(ctx.local.captures.length,2);assert.notEqual(ctx.local.captures[0].id,ctx.local.captures[1].id);});
 test('invalid resource and executable navigation requests cannot reach privileged APIs',async()=>{const ctx=await setup();assert.match((await ctx.send('resource',{captureId:'unknown',url:'https://evil.test/'})).error,/유효한/);assert.match((await ctx.send('openBrowser',{url:'javascript:alert(1)'})).error,/http 또는 https/);assert.equal(ctx.tabs.size,1);});
 test('the bundled local app still browses and receives captures when explicitly selected',async()=>{const ctx=await setup('chrome-extension://htmlmemo-test/app/index.html');assert.equal((await ctx.send('getAppURL',{},ctx.popup)).result,'chrome-extension://htmlmemo-test/app/index.html');const sender={id:ctx.app.id,url:ctx.app.url};assert.ok((await ctx.send('ping',{},sender)).result);await ctx.send('popupSave',{tabId:1},ctx.popup);assert.ok([...ctx.tabs.values()].some(tab=>tab.url.startsWith(ctx.app.url)));assert.equal((await ctx.send('takeCaptures',{},sender)).result.length,1);});
-test('extension and file URLs compare their scheme and host as well as their path',async()=>{const ctx=await setup('chrome-extension://htmlmemo-test/app/index.html');for(const url of ['chrome-extension://other/app/index.html','file:///app/index.html'])assert.match((await ctx.send('ping',{}, {...ctx.app,url})).error,/설정된 HTMLMemo/);const file=await setup('file:///Users/example/HTMLMemo.html');assert.ok((await file.send('ping')).result);assert.match((await file.send('ping',{}, {...file.app,url:'file:///Users/other/HTMLMemo.html'})).error,/설정된 HTMLMemo/);});
-test('unrelated saved public app URLs never receive local captures',async()=>{const ctx=await setup('https://public.example/app/');assert.equal((await ctx.send('getAppURL',{},ctx.popup)).result,'https://seionwon.github.io/HTMLMemo/');assert.match((await ctx.send('takeCaptures')).error,/설정된 HTMLMemo/);});
-test('the default Pages app receives captures locally and accepts its index.html alias',async()=>{const ctx=await setup(null);assert.equal((await ctx.send('getAppURL',{},ctx.popup)).result,'https://seionwon.github.io/HTMLMemo/');assert.ok((await ctx.send('ping')).result);await ctx.send('popupSave',{tabId:1},ctx.popup);assert.equal((await ctx.send('takeCaptures',{}, {...ctx.app,url:'https://seionwon.github.io/HTMLMemo/index.html?capture=test'})).result.length,1);});
-test('other projects on the same GitHub Pages origin cannot access the extension',async()=>{const ctx=await setup(null);for(const url of ['https://seionwon.github.io/other/','https://seionwon.github.io/HTMLMemo/sub/index.html','https://seionwon.github.io/HTMLMemoOther/','http://seionwon.github.io/HTMLMemo/','https://other.github.io/HTMLMemo/','https://sweon.github.io/HTMLMemo/'])assert.match((await ctx.send('takeCaptures',{}, {...ctx.app,url})).error,/설정된 HTMLMemo/);});
+test('extension and file URLs compare their scheme and host as well as their path',async()=>{const ctx=await setup('chrome-extension://htmlmemo-test/app/index.html');for(const url of ['chrome-extension://other/app/index.html','file:///app/index.html'])assert.match((await ctx.send('ping',{}, {...ctx.app,url})).error,/설정된 LibreMemo/);const file=await setup('file:///Users/example/LibreMemo.html');assert.ok((await file.send('ping')).result);assert.match((await file.send('ping',{}, {...file.app,url:'file:///Users/other/LibreMemo.html'})).error,/설정된 LibreMemo/);});
+test('unrelated saved public app URLs never receive local captures',async()=>{const ctx=await setup('https://public.example/app/');assert.equal((await ctx.send('getAppURL',{},ctx.popup)).result,'https://seionwon.github.io/LibreMemo/');assert.match((await ctx.send('takeCaptures')).error,/설정된 LibreMemo/);});
+test('the default Pages app receives captures locally and accepts its index.html alias',async()=>{const ctx=await setup(null);assert.equal((await ctx.send('getAppURL',{},ctx.popup)).result,'https://seionwon.github.io/LibreMemo/');assert.ok((await ctx.send('ping')).result);await ctx.send('popupSave',{tabId:1},ctx.popup);assert.equal((await ctx.send('takeCaptures',{}, {...ctx.app,url:'https://seionwon.github.io/LibreMemo/index.html?capture=test'})).result.length,1);});
+test('other projects on the same GitHub Pages origin cannot access the extension',async()=>{const ctx=await setup(null);for(const url of ['https://seionwon.github.io/other/','https://seionwon.github.io/LibreMemo/sub/index.html','https://seionwon.github.io/HTMLMemoOther/','http://seionwon.github.io/LibreMemo/','https://other.github.io/LibreMemo/','https://sweon.github.io/LibreMemo/'])assert.match((await ctx.send('takeCaptures',{}, {...ctx.app,url})).error,/설정된 LibreMemo/);});
 test('a saved previous Pages address resolves to the new default and cannot read captured pages',async()=>{
-  const ctx=await setup('https://sweon.github.io/HTMLMemo/');
-  assert.equal((await ctx.send('getAppURL',{},ctx.popup)).result,'https://seionwon.github.io/HTMLMemo/');
+  const ctx=await setup('https://sweon.github.io/LibreMemo/');
+  assert.equal((await ctx.send('getAppURL',{},ctx.popup)).result,'https://seionwon.github.io/LibreMemo/');
   await ctx.send('popupSave',{tabId:1},ctx.popup);
-  assert.ok([...ctx.tabs.values()].some(tab=>tab.url.startsWith('https://seionwon.github.io/HTMLMemo/')));
-  assert.match((await ctx.send('takeCaptures')).error,/설정된 HTMLMemo/);
-  assert.equal((await ctx.send('takeCaptures',{}, {...ctx.app,url:'https://seionwon.github.io/HTMLMemo/'})).result.length,1);
+  assert.ok([...ctx.tabs.values()].some(tab=>tab.url.startsWith('https://seionwon.github.io/LibreMemo/')));
+  assert.match((await ctx.send('takeCaptures')).error,/설정된 LibreMemo/);
+  assert.equal((await ctx.send('takeCaptures',{}, {...ctx.app,url:'https://seionwon.github.io/LibreMemo/'})).result.length,1);
 });
 test('opening and navigating a linked page focus its Chrome window; background capture opening does not',async()=>{
   const ctx=await setup();const opened=(await ctx.send('openBrowser',{url:'https://example.test/first'})).result;
@@ -39,15 +39,15 @@ test('opening and navigating a linked page focus its Chrome window; background c
   await ctx.send('focusTab',{tabId:opened.id});assert.deepEqual(ctx.windows,[{id:1,focused:true}]);
   for(const action of ['backTab','forwardTab','reloadTab']){ctx.windows.length=0;await ctx.send(action,{tabId:opened.id});assert.deepEqual(ctx.windows,[{id:1,focused:true}]);}
 });
-test('return from the extension reuses and focuses the configured HTMLMemo tab without a capture notification',async()=>{
-  const ctx=await setup(null);ctx.tabs.set(20,{id:20,windowId:7,url:'https://seionwon.github.io/HTMLMemo/index.html',title:'HTMLMemo'});
+test('return from the extension reuses and focuses the configured LibreMemo tab without a capture notification',async()=>{
+  const ctx=await setup(null);ctx.tabs.set(20,{id:20,windowId:7,url:'https://seionwon.github.io/LibreMemo/index.html',title:'LibreMemo'});
   ctx.tabs.set(21,{id:21,windowId:8,url:'https://seionwon.github.io/other/',title:'Other project'});
   assert.equal((await ctx.send('openApp',{},ctx.popup)).error,undefined);assert.equal(ctx.tabs.size,3);assert.equal(ctx.tabs.get(20).active,true);assert.deepEqual(ctx.windows,[{id:7,focused:true}]);assert.deepEqual(ctx.notices,[]);
-  assert.match((await ctx.send('openApp')).error,/설정된 HTMLMemo/,'the web app cannot use popup-only commands');
+  assert.match((await ctx.send('openApp')).error,/설정된 LibreMemo/,'the web app cannot use popup-only commands');
 });
 test('return from the extension opens the official app only when absent and never invents a capture ID',async()=>{
   const ctx=await setup(null);await ctx.send('openApp',{},ctx.popup);const app=[...ctx.tabs.values()].find(tab=>tab.id!==1);
-  assert.equal(app.url,'https://seionwon.github.io/HTMLMemo/');assert.deepEqual(ctx.windows,[{id:1,focused:true}]);
+  assert.equal(app.url,'https://seionwon.github.io/LibreMemo/');assert.deepEqual(ctx.windows,[{id:1,focused:true}]);
   await ctx.send('openApp',{},ctx.popup);assert.equal(ctx.tabs.size,2);
 });
 test('popup return disables duplicate clicks, closes after the handoff and restores errors without opening another app URL',async()=>{
@@ -58,4 +58,10 @@ test('popup return disables duplicate clicks, closes after the handoff and resto
     const button=doc.getElementById('open-app'),pending=button.onclick();assert.equal(button.disabled,true);await pending;
     assert.deepEqual(calls,['openApp']);assert.equal(closed,fail?0:1);assert.equal(button.disabled,!fail);if(fail)assert.match(doc.getElementById('status').textContent,/연결/);
   }
+});
+
+test('the original exact Pages path retains bridge access after the LibreMemo rename',async()=>{
+  const ctx=await setup(null);
+  assert.ok((await ctx.send('ping',{}, {...ctx.app,url:'https://seionwon.github.io/HTMLMemo/index.html'})).result);
+  assert.match((await ctx.send('ping',{}, {...ctx.app,url:'https://seionwon.github.io/HTMLMemo/other/'})).error,/설정된 LibreMemo/);
 });

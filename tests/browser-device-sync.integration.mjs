@@ -195,7 +195,7 @@ test('device sync exchanges live documents while keeping each device trash local
   for(const client of topics.get(topic))client.write('data: '+JSON.stringify(message)+'\n\n');res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify(message));
  });
  await new Promise(r=>server.listen(0,'127.0.0.1',r));const origin='http://127.0.0.1:'+server.address().port;
- let a,b;const report={checks:[],errors:[],scope:'Independent device profiles, actual HTMLMemo sync UI and crypto; fixture relay only'};
+ let a,b;const report={checks:[],errors:[],scope:'Independent device profiles, actual LibreMemo sync UI and crypto; fixture relay only'};
  const check=name=>{report.checks.push(name);console.log('PASS:',name);};
  try{
   a=await launchChrome();b=await launchChrome();

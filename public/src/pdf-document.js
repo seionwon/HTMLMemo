@@ -20,11 +20,11 @@ export async function verifyPDF(source){
   const head=new TextDecoder('ascii').decode(await source.slice(0,1024).arrayBuffer());
   if(!/%PDF-\d\.\d/.test(head))throw Error('올바른 PDF 파일이 아닙니다. 원본 파일을 확인해주세요.');
 }
-/** Portable PDF+HTMLMemo annotations, without a network URL or executable code.
+/** Portable PDF+LibreMemo annotations, without a network URL or executable code.
  * Base64 is emitted in bounded chunks, never as one enormous intermediate string. */
 export async function exportPDFHTML(source,metadata){
   const doc=new DOMParser().parseFromString(pdfShell(metadata.title),'text/html');
-  const hint=doc.createElement('p');hint.textContent='이 파일은 PDF 원본과 주석을 함께 담고 있습니다. HTMLMemo의 파일 가져오기로 열어주세요.';doc.body.append(hint);
+  const hint=doc.createElement('p');hint.textContent='이 파일은 PDF 원본과 주석을 함께 담고 있습니다. LibreMemo의 파일 가져오기로 열어주세요.';doc.body.append(hint);
   let shell=serializeHTML(doc,metadata);const at=shell.indexOf('</body>');
   const parts=[PDF_ARCHIVE_MARKER,shell.slice(0,at),PAYLOAD];
   for(let offset=0;offset<source.size;offset+=196608){

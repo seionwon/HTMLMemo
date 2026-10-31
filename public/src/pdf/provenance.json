@@ -30,8 +30,8 @@
   ],
   "adaptations": [
     "Local range transport reads immutable Blob slices instead of Android HTTP endpoints.",
-    "Raster images use revocable local Blob URLs inside the script-free HTMLMemo reader.",
-    "Search cache uses source SHA-256 identity and an HTMLMemo-specific database.",
-    "React and Android UI are replaced by the existing HTMLMemo Reader and app controls."
+    "Raster images use revocable local Blob URLs inside the script-free LibreMemo reader.",
+    "Search cache uses source SHA-256 identity and an LibreMemo-specific database.",
+    "React and Android UI are replaced by the existing LibreMemo Reader and app controls."
   ]
 }

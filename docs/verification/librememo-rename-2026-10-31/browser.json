@@ -1,0 +1,30 @@
+{
+  "status": "pass",
+  "cases": [
+    {
+      "width": 1280,
+      "oldDataPreserved": true,
+      "trashPreserved": true,
+      "settingsPreserved": true,
+      "folderReady": true,
+      "pwaIdentityPreserved": true
+    },
+    {
+      "width": 390,
+      "oldDataPreserved": true,
+      "trashPreserved": true,
+      "settingsPreserved": true,
+      "folderReady": true,
+      "pwaIdentityPreserved": true
+    },
+    {
+      "width": 320,
+      "oldDataPreserved": true,
+      "trashPreserved": true,
+      "settingsPreserved": true,
+      "folderReady": true,
+      "pwaIdentityPreserved": true
+    }
+  ],
+  "errors": []
+}

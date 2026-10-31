@@ -33,6 +33,7 @@ export async function prepareAssets(){
   await writeFile(join(root,'public/src/version.js'),'// Generated from package.json by scripts/assets.mjs.\nexport const APP_VERSION = '+JSON.stringify(version)+';\n');
   await mkdir(join(root,'public/icons'),{recursive:true});await mkdir(join(root,'public/downloads'),{recursive:true});
   await writeFile(join(root,'public/icons/icon-192.png'),createIcon(192));await writeFile(join(root,'public/icons/icon-512.png'),createIcon(512));
-  const assets=await packageAssets();await writeFile(join(root,'public/distribution.json'),JSON.stringify(assets));await writeFile(join(root,'public/HTMLMemo.html'),standaloneHTML(assets));
-  for(const name of ['HTMLMemo-chrome.zip','htmlmemo-chrome.zip','HTMLMemo-local.zip','HTMLMemo-pages.zip','HTMLMemo-install.html'])await rm(join(root,'public/downloads',name),{force:true});
+  const assets=await packageAssets();await writeFile(join(root,'public/distribution.json'),JSON.stringify(assets));await writeFile(join(root,'public/LibreMemo.html'),standaloneHTML(assets));
+  for(const prefix of ['LibreMemo','HTMLMemo','htmlmemo'])for(const suffix of ['-chrome.zip','-local.zip','-pages.zip','-install.html'])await rm(join(root,'public/downloads',prefix+suffix),{force:true});
+  await rm(join(root,'public/HTMLMemo.html'),{force:true});
 }

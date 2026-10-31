@@ -76,7 +76,7 @@ export async function launchChrome({firstRun=false}={}){
       }
       if(await page.evaluate('!!document.querySelector("#app-update-dialog")?.open'))return;
       if(await page.evaluate("document.documentElement.dataset.storageSetup==='required'")){
-        await page.evaluate(`window.__fixturePicker=window.showDirectoryPicker;window.showDirectoryPicker=async()=> (await navigator.storage.getDirectory()).getDirectoryHandle('HTMLMemo browser fixture',{create:true});document.querySelector('#select-storage-folder').click();`);
+        await page.evaluate(`window.__fixturePicker=window.showDirectoryPicker;window.showDirectoryPicker=async()=> (await navigator.storage.getDirectory()).getDirectoryHandle('LibreMemo browser fixture',{create:true});document.querySelector('#select-storage-folder').click();`);
         await page.waitFor("document.documentElement.dataset.storageSetup==='ready'&&!document.querySelector('#dialog').open");
         await page.evaluate('window.showDirectoryPicker=window.__fixturePicker;delete window.__fixturePicker');
       }

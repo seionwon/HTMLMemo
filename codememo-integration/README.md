@@ -1,3 +1,5 @@
+> 제품 이름은 현재 **LibreMemo**입니다. 아래 HTMLMemo 이름의 패치와 경로는 이전 CodeMemo 통합 작업의 기록입니다. 현재 MemoSuite에는 후속 수정이 적용되어 있으므로 옛 패치를 다시 적용하지 않습니다. [현재 이름 변경 안내](../docs/rename-to-librememo.md).
+
 # HTMLMemo 실행 탭의 GitHub Pages 연결 수정 패치
 
 **현재 상태: 수정 패치와 로컬 검증 완료, CodeMemo 원본에는 미적용.**

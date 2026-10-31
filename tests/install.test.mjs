@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { InstallController, isIOS, installableLocation, installationURL, PUBLIC_APP_URL } from '../public/src/install.js';
+import { InstallController, isIOS, installableLocation, installationURL, PUBLIC_APP_URL, publicAppURL, LEGACY_PUBLIC_APP_URL } from '../public/src/install.js';
 
 function controller({navigator={},address=PUBLIC_APP_URL,standalone=false}={}) {
   const listeners=new Map(),states=[],guides=[];
@@ -41,7 +41,7 @@ test('prompt errors restore the button and a later browser event can retry',asyn
 });
 
 test('local files and insecure remote pages cannot invoke installation even if an event arrives',async()=>{
-  for(const address of ['file:///Users/private/HTMLMemo.html','http://example.test/']){
+  for(const address of ['file:///Users/private/LibreMemo.html','http://example.test/']){
     const ctx=controller({address});let prompted=false;
     ctx.emit('beforeinstallprompt',{preventDefault(){},prompt:async()=>prompted=true});
     await ctx.install.install();assert.deepEqual(ctx.guides,['local']);assert.equal(prompted,false);
@@ -57,8 +57,14 @@ test('standalone detection and appinstalled lead to the installed state without 
 });
 
 test('handoff addresses retain the project scope and drop private file paths, queries and credentials',()=>{
-  assert.equal(installationURL(new URL('https://seionwon.github.io/HTMLMemo/index.html?capture=private#note')),PUBLIC_APP_URL);
+  assert.equal(installationURL(new URL('https://seionwon.github.io/LibreMemo/index.html?capture=private#note')),PUBLIC_APP_URL);
   assert.equal(installationURL(new URL('https://name:secret@example.test/project/?token=private')),'https://example.test/project/');
-  assert.equal(installationURL(new URL('file:///Users/private/HTMLMemo.html')),PUBLIC_APP_URL);
+  assert.equal(installationURL(new URL('file:///Users/private/LibreMemo.html')),PUBLIC_APP_URL);
   assert.equal(installationURL(new URL('chrome-extension://id/app/index.html')),PUBLIC_APP_URL);
+});
+
+test('public sharing follows the actual old or renamed deployment without credentials, query or hash',()=>{
+  assert.equal(publicAppURL(new URL('https://seionwon.github.io/HTMLMemo/index.html?capture=private#note')),LEGACY_PUBLIC_APP_URL);
+  assert.equal(publicAppURL(new URL('https://seionwon.github.io/LibreMemo/?capture=private#note')),PUBLIC_APP_URL);
+  for(const address of ['https://seionwon.github.io/other/','https://seionwon.github.io/LibreMemoOther/','file:///Users/example/LibreMemo.html','http://localhost:4173/'])assert.equal(publicAppURL(new URL(address)),PUBLIC_APP_URL);
 });

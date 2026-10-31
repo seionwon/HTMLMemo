@@ -1,5 +1,5 @@
 // In-memory File System Access contract for unit tests; no real user folder is read.
-export function memoryFolder(name='HTMLMemo',control={}) {
+export function memoryFolder(name='LibreMemo',control={}) {
   const children=new Map();
   const folder={kind:'directory',name,children,control,
     queryPermission:async()=>control.permission||'granted',requestPermission:async()=>control.permission||'granted',

@@ -1,3 +1,4 @@
+import {publicAppURL} from './install.js';
 import { listDocuments, getDocument, listRevisions, restoreFolderDocuments, getSetting, setSetting, onStorageChange, permission, readLibrary } from './storage.js';
 import { localFileIdentity } from './local-files.js';
 import { PREFERENCES_KEY, normalizePreferences } from './preferences.js';
@@ -35,7 +36,7 @@ export async function createStorageSubfolder(parent,value,previousAttempt=null) 
     try{await child.getFileHandle(marker);return child;}
     catch(error){if(error.name!=='NotFoundError')throw error;}
   }
-  for await(const [entry] of child.entries())if(!['.DS_Store','desktop.ini','Thumbs.db'].includes(entry))throw Error('같은 이름의 폴더에 다른 파일이 있습니다. 다른 이름을 입력하거나 기존 HTMLMemo 저장 폴더를 연결해주세요.');
+  for await(const [entry] of child.entries())if(!['.DS_Store','desktop.ini','Thumbs.db'].includes(entry))throw Error('같은 이름의 폴더에 다른 파일이 있습니다. 다른 이름을 입력하거나 기존 LibreMemo 저장 폴더를 연결해주세요.');
   return child;
 }
 const FORMAT = 'HTMLMemo.library';
@@ -50,7 +51,7 @@ const message = error => ['NotAllowedError','SecurityError'].includes(error?.nam
   ? '폴더 쓰기 권한이 필요합니다. 다시 연결을 눌러 허용해주세요. 앱 내부의 변경은 유지됩니다.'
   : '폴더에 저장하지 못했습니다. 앱 내부의 변경은 유지됩니다. '+(error?.message || String(error));
 
-/** Only HTMLMemo's own settings are portable, never other same-origin apps or handles. */
+/** Only LibreMemo's own settings are portable, never other same-origin apps or handles. */
 export function folderSettings(storage) {
   const keys=new Set([PREFERENCES_KEY,'htmlmemo-theme','htmlmemo-doc-toc-width-v1','htmlmemo-doc-toc-expanded-width-v1','msuite_tts_rate']);
   for(let i=0;i<storage.length;i++){const key=storage.key(i);if(portableKey(key))keys.add(key);}
@@ -94,7 +95,7 @@ export function validateState(value, id) {
   return {record:portableRecord(record),revisions:value.revisions.map(({id:oldId,documentId,...revision})=>revision)};
 }
 function validateManifest(value) {
-  if(!object(value)||value.format!==FORMAT||![1,2].includes(value.version)||!validId(value.id)||!validId(value.revision)||!Array.isArray(value.documents)||value.documents.length>100000)throw Error('지원하지 않거나 손상된 HTMLMemo 데이터 폴더입니다.');
+  if(!object(value)||value.format!==FORMAT||![1,2].includes(value.version)||!validId(value.id)||!validId(value.revision)||!Array.isArray(value.documents)||value.documents.length>100000)throw Error('지원하지 않거나 손상된 LibreMemo 데이터 폴더입니다.');
   const folders=validateFolders(value.folders||(value.version===1?[]:null)),folderIds=new Set(['',...folders.map(f=>f.id)]);
   const seen=new Set();
   for(const entry of value.documents){
@@ -295,7 +296,7 @@ export class DataFolder {
     }
     const latest=await optionalText(this.handle,FOLDER_MANIFEST);
     if(!recovered&&latest!==(before?.raw??null))throw Error('저장 중 다른 프로그램에서 폴더를 변경했습니다. 다시 연결해주세요.');
-    await atomicWrite(this.handle,FOLDER_GUIDE,`HTMLMemo 데이터 폴더: ${this.handle.name}\n\n문서 원본 복사본·본문·주석·북마크·주석 이력·읽기 위치·설정을 자동 보관합니다. 평소에는 원본 HTML에 주석을 합치지 않습니다. 휴지통으로 옮긴 문서도 모두 보관하며 내 서재 → 휴지통에서 복원할 수 있습니다. 휴지통의 영구 삭제·비우기는 앱에서 복원할 수 없습니다.\n\n새 기기로 옮길 때\n1. HTMLMemo의 폴더 상태가 “폴더 자동 저장 완료”인지 확인하고 앱을 닫습니다.\n2. 이 폴더 전체를 하위 폴더·파일 빠짐없이 새 기기의 Documents(문서) 폴더로 복사합니다. 일부 HTML 파일만 옮기면 주석·설정이 빠집니다.\n3. https://seionwon.github.io/HTMLMemo/ 에서 설정 → 데이터 폴더 연결을 누르고 옮긴 폴더를 선택해 읽기·쓰기를 허용합니다. 문서·주석·설정은 자동 복원됩니다. 별도의 설정 파일 저장·불러오기는 필요 없습니다.\n\n다른 사람에게 문서 하나와 주석을 보낼 때\nHTMLMemo에서 문서를 열어 상단의 “HTML 내보내기”로 .html 파일을 새로 저장한 뒤 그 파일을 보내세요. 이 작업을 해야 현재 주석이 HTML 안에 포함됩니다. 받는 분도 HTMLMemo의 “HTML 파일 가져오기”로 엽니다. 원본 복사본만 보내면 앱에서 추가한 주석은 전달되지 않습니다.\n\n주의\n관리 파일 이름과 내용을 개별적으로 바꾸거나 일부만 삭제하지 마세요. 브라우저 데이터 삭제는 이 폴더의 파일을 지우지 않지만 다시 폴더를 선택해야 합니다. 권한 회수·이동·디스크 부족·앱 강제 종료 중 미완료 저장은 자동 보호할 수 없습니다. 폴더 자체 삭제나 기기 고장에도 대비하려면 폴더 전체를 다른 저장장치에 복사하세요. 다른 기기에서 동시에 편집하는 실시간 동기화 기능은 아닙니다.\n`);
+    await atomicWrite(this.handle,FOLDER_GUIDE,`LibreMemo 데이터 폴더: ${this.handle.name}\n\n문서 원본 복사본·본문·주석·북마크·주석 이력·읽기 위치·설정을 자동 보관합니다. 평소에는 원본 HTML에 주석을 합치지 않습니다. 휴지통으로 옮긴 문서도 모두 보관하며 내 서재 → 휴지통에서 복원할 수 있습니다. 휴지통의 영구 삭제·비우기는 앱에서 복원할 수 없습니다.\n\n새 기기로 옮길 때\n1. LibreMemo의 폴더 상태가 “폴더 자동 저장 완료”인지 확인하고 앱을 닫습니다.\n2. 이 폴더 전체를 하위 폴더·파일 빠짐없이 새 기기의 Documents(문서) 폴더로 복사합니다. 일부 HTML 파일만 옮기면 주석·설정이 빠집니다.\n3. ${publicAppURL()} 에서 설정 → 데이터 폴더 연결을 누르고 옮긴 폴더를 선택해 읽기·쓰기를 허용합니다. 문서·주석·설정은 자동 복원됩니다. 별도의 설정 파일 저장·불러오기는 필요 없습니다.\n\n다른 사람에게 문서 하나와 주석을 보낼 때\nHTMLMemo에서 문서를 열어 상단의 “HTML 내보내기”로 .html 파일을 새로 저장한 뒤 그 파일을 보내세요. 이 작업을 해야 현재 주석이 HTML 안에 포함됩니다. 받는 분도 LibreMemo의 “HTML 파일 가져오기”로 엽니다. 원본 복사본만 보내면 앱에서 추가한 주석은 전달되지 않습니다.\n\n주의\n관리 파일 이름과 내용을 개별적으로 바꾸거나 일부만 삭제하지 마세요. 브라우저 데이터 삭제는 이 폴더의 파일을 지우지 않지만 다시 폴더를 선택해야 합니다. 권한 회수·이동·디스크 부족·앱 강제 종료 중 미완료 저장은 자동 보호할 수 없습니다. 폴더 자체 삭제나 기기 고장에도 대비하려면 폴더 전체를 다른 저장장치에 복사하세요. 다른 기기에서 동시에 편집하는 실시간 동기화 기능은 아닙니다.\n`);
     if(base)await atomicWrite(this.handle,FOLDER_PREVIOUS,base.raw);
     const raw=JSON.stringify(manifest,null,2)+'\n';await atomicWrite(this.handle,FOLDER_MANIFEST,raw);
     this.head={raw,manifest};await this.ops.setSetting(CHECKPOINT,{id:manifest.id,revision:manifest.revision});

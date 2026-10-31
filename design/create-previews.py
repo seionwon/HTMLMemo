@@ -5,7 +5,7 @@ import subprocess
 ROOT = Path(__file__).resolve().parent
 ICONS = {
  'a-page': ('A', '페이지와 펜', '#343d59', '''<rect x="0" y="0" width="96" height="96" rx="23" fill="#343d59"/><path d="M27 20h30l13 13v43H27z" fill="#f8fafc"/><path d="M57 20v13h13" fill="#ccd4e8"/><path d="M37 43h20M37 52h16" stroke="#343d59" stroke-width="4" stroke-linecap="round"/><path d="m47 66 21-21 7 7-21 21-10 3z" fill="#f7c568"/><path d="m67 46 7 7" stroke="#343d59" stroke-width="3"/>'''),
- 'b-monogram': ('B', 'H 모노그램', '#245e50', '''<rect x="0" y="0" width="96" height="96" rx="23" fill="#245e50"/><path d="M26 25h12v18h20V25h12v46H58V55H38v16H26z" fill="#fbfbf3"/><path d="M49 67h26" stroke="#f2cc70" stroke-width="8" stroke-linecap="round"/>'''),
+ 'b-monogram': ('B', 'L 모노그램', '#245e50', '''<rect x="0" y="0" width="96" height="96" rx="23" fill="#245e50"/><path d="M27 25h13v33h31v13H27z" fill="#fbfbf3"/><path d="M49 67h26" stroke="#f2cc70" stroke-width="8" stroke-linecap="round"/>'''),
  'c-web': ('C', '웹 북마크', '#6655c8', '''<rect x="0" y="0" width="96" height="96" rx="23" fill="#6655c8"/><rect x="19" y="24" width="58" height="47" rx="7" fill="none" stroke="#faf9ff" stroke-width="5"/><path d="M20 37h55" stroke="#faf9ff" stroke-width="4"/><circle cx="28" cy="31" r="2" fill="#faf9ff"/><circle cx="35" cy="31" r="2" fill="#faf9ff"/><path d="m34 47-8 7 8 7m11-14 8 7-8 7" fill="none" stroke="#faf9ff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M59 44h12v34l-6-5-6 5z" fill="#f4ce77"/>'''),
  'd-library': ('D', '열린 서재', '#b55b3c', '''<rect x="0" y="0" width="96" height="96" rx="23" fill="#b55b3c"/><path d="M19 27c13-5 22-2 29 4 8-6 17-9 29-4v43c-12-4-21-1-29 4-7-5-16-8-29-4z" fill="#fff9ed"/><path d="M48 32v41M28 41l11 3M28 51l11 3M57 44l11-3" fill="none" stroke="#b55b3c" stroke-width="3" stroke-linecap="round"/><path d="M60 26h10v28l-5-4-5 4z" fill="#e7b548"/>''')
 }
@@ -43,7 +43,7 @@ def shell(t,x,y,w,h,reader=False):
  c+=rect(x,y,w,h,t['bg'],14,t['line'])
  c+=rect(x,y,w,54,t['bar'],14)
  c+=rect(x,y+30,w,24,t['bar'])
- c+=logo(t['logo'],x+18,y+14,28)+txt(x+56,y+34,'HTMLMemo',19,t['text'],600)
+ c+=logo(t['logo'],x+18,y+14,28)+txt(x+56,y+34,'LibreMemo',19,t['text'],600)
  c+=txt(x+w-145,y+33,'앱 설치',13,t['muted'])+glyph('settings',x+w-42,y+18,t['muted'],20)
  c+=rect(x,y+54,w,36,t['bar'])
  c+=rect(x+13,y+58,65,31,t['soft'],7)+txt(x+27,y+79,'내 서재',12,t['accent'],600)
@@ -121,7 +121,7 @@ for key,(code,name,color,art) in ICONS.items():
  for size in [192,512]:
   subprocess.run(['rsvg-convert','-w',str(size),'-h',str(size),str(ROOT/'icons'/f'{key}.svg'),'-o',str(ROOT/'icons'/f'{key}-{size}.png')],check=True)
 
-board=rect(0,0,1440,470,'#f2f3f5')+txt(32,45,'HTMLMemo · 아이콘 4종',28,'#263247',600)
+board=rect(0,0,1440,470,'#f2f3f5')+txt(32,45,'LibreMemo · 아이콘 4종',28,'#263247',600)
 for i,(key,(code,name,color,art)) in enumerate(ICONS.items()):
  x=32+i*352
  board+=rect(x,73,320,365,'#ffffff',18,'#e1e5eb')+txt(x+25,110,code+'  '+name,22,'#263247',600)
@@ -129,12 +129,12 @@ for i,(key,(code,name,color,art)) in enumerate(ICONS.items()):
  board+=txt(x+25,309,'작은 크기에서도 비교해 보세요',14,'#657084')
  for j,size in enumerate([16,32,64]):
   board+=logo(key,x+28+j*92,331+(64-size)/2,size)+txt(x+27+j*92,417,str(size)+' px',13,'#657084')
-(ROOT/'icon-options.svg').write_text(svg(1440,470,board,'HTMLMemo 아이콘 A 페이지와 펜, B H 모노그램, C 웹 북마크, D 열린 서재'),encoding='utf8')
+(ROOT/'icon-options.svg').write_text(svg(1440,470,board,'LibreMemo 아이콘 A 페이지와 펜, B L 모노그램, C 웹 북마크, D 열린 서재'),encoding='utf8')
 subprocess.run(['rsvg-convert',str(ROOT/'icon-options.svg'),'-o',str(ROOT/'icon-options.png')],check=True)
 for t in THEMES:
  board=rect(0,0,1440,830,'#f2f3f5')+txt(28,48,f"{t['id']} · {t['name']}",28,'#263247',600)+txt(220,46,t['tag'],18,'#667183')
  board+=txt(28,91,'서재',17,'#667183',500)+txt(470,91,'읽기 · 주석',17,'#667183',500)
  board+=library(t,28,109,408,680)+reader(t,470,109,942,680)
- out=ROOT/f"design-{t['id']}.svg";out.write_text(svg(1440,830,board,t['name']+' HTMLMemo 서재와 읽기 화면 디자인 시안'),encoding='utf8')
+ out=ROOT/f"design-{t['id']}.svg";out.write_text(svg(1440,830,board,t['name']+' LibreMemo 서재와 읽기 화면 디자인 시안'),encoding='utf8')
  subprocess.run(['rsvg-convert',str(out),'-o',str(ROOT/f"design-{t['id']}.png")],check=True)
 print('Created four original vector icons, eight icon PNGs, and three interface concept boards.')

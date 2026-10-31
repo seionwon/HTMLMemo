@@ -19,5 +19,5 @@ export function createServer(directory=resolve(root,'public')){
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
   const production=process.argv.includes('--production');if(!production)await prepareAssets();
   const directory=resolve(root,production?'dist':'public');const port=Number(process.env.PORT)||4173;const server=createServer(directory);
-  server.on('error',error=>{console.error(error.message);process.exitCode=1;});server.listen(port,process.env.HTMLMEMO_HOST||'127.0.0.1',()=>console.log(`HTMLMemo: http://localhost:${port}/`));
+  server.on('error',error=>{console.error(error.message);process.exitCode=1;});server.listen(port,process.env.LIBREMEMO_HOST||process.env.HTMLMEMO_HOST||'127.0.0.1',()=>console.log(`LibreMemo: http://localhost:${port}/`));
 }

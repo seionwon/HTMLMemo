@@ -1,4 +1,4 @@
-// Adapted from PDFMemo overrides/PdfPageRendering.ts; presentation remains HTMLMemo-owned.
+// Adapted from PDFMemo overrides/PdfPageRendering.ts; presentation remains LibreMemo-owned.
 const queues = new WeakMap();
 const aborted = () => new DOMException('Page no longer needed', 'AbortError');
 export class PdfRenderQueue {
@@ -62,7 +62,7 @@ export function pdfRenderQueue(doc) {
 }
 export const PDF_PREVIEW_PIXELS = 512 * 1024;
 /** Own the rasters inside a stable page box. Never resize a displayed canvas. */
-// HTMLMemo displays a Blob image in its script-free reader iframe. Chromium can
+// LibreMemo displays a Blob image in its script-free reader iframe. Chromium can
 // retain an unpainted canvas compositor layer across the iframe's hidden opening
 // phase even though its pixels are complete. The raster queue and budgets remain
 // PDFMemo's; each published image owns one revocable, local URL.

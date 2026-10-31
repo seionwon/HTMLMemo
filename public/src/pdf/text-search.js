@@ -1,4 +1,4 @@
-// Adapted from PDFMemo overrides/pdfTextSearch.ts; presentation remains HTMLMemo-owned.
+// Adapted from PDFMemo overrides/pdfTextSearch.ts; presentation remains LibreMemo-owned.
 import { openEmbeddedPdfSearchIndex } from './embedded-search-index.js';
 /** PDF text can split Korean syllables/words across items or lines. Treat layout
  * whitespace as insignificant, fold case and normalize ligatures/full-width text. */

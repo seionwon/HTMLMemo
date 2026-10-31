@@ -1,7 +1,7 @@
-const DEFAULT_APP = 'https://seionwon.github.io/HTMLMemo/';
+const DEFAULT_APP = 'https://seionwon.github.io/LibreMemo/';
 const BUNDLED_APP = chrome.runtime.getURL('app/index.html');
 const appPath = url => url.pathname.replace(/\/index\.html$/, '/');
-const projectApp = url => url.protocol==='https:'&&url.host==='seionwon.github.io'&&appPath(url)==='/HTMLMemo/';
+const projectApp = url => url.protocol==='https:'&&url.host==='seionwon.github.io'&&['/LibreMemo/','/HTMLMemo/'].includes(appPath(url));
 const jobs = new Map();
 let storageTail=Promise.resolve();
 const mutateStorage=fn=>{const result=storageTail.then(fn);storageTail=result.catch(()=>{});return result;};
@@ -11,12 +11,12 @@ async function appURL() {const saved=(await chrome.storage.local.get('pwaUrl')).
 async function isApp(sender) {
   if(sender.id!==chrome.runtime.id||!sender.url)return false;
   const expected=new URL(await appURL());const actual=new URL(sender.url);
-  const matching=actual.protocol===expected.protocol&&actual.host===expected.host&&(projectApp(expected)?appPath(actual)===appPath(expected):actual.pathname===expected.pathname);
+  const matching=actual.protocol===expected.protocol&&actual.host===expected.host&&(projectApp(expected)?projectApp(actual):actual.pathname===expected.pathname);
   return matching&&(!!sender.tab?.id||actual.href.split(/[?#]/)[0]===BUNDLED_APP);
 }
 async function tracked() {return (await chrome.storage.session.get('tracked')).tracked||[];}
 async function track(id) {return mutateStorage(async()=>{const ids=await tracked();if(!ids.includes(id))await chrome.storage.session.set({tracked:[...ids,id]});});}
-async function requireTracked(id) {if(!Number.isInteger(id)||!(await tracked()).includes(id))throw new Error('HTMLMemo에서 연결한 Chrome 탭이 아닙니다.');return chrome.tabs.get(id);}
+async function requireTracked(id) {if(!Number.isInteger(id)||!(await tracked()).includes(id))throw new Error('LibreMemo에서 연결한 Chrome 탭이 아닙니다.');return chrome.tabs.get(id);}
 async function waitReady(id) {
   const tab=await chrome.tabs.get(id);if(tab.status==='complete')return;
   await new Promise((resolve,reject)=>{
@@ -59,7 +59,7 @@ async function captureTab(id) {
 }
 async function openApp(captureId) {
   const url=await appURL();const expected=new URL(url);
-  const tabs=await chrome.tabs.query({});const existing=tabs.find(tab=>{try{const current=new URL(tab.url);return current.protocol===expected.protocol&&current.host===expected.host&&(projectApp(expected)?appPath(current)===appPath(expected):current.pathname===expected.pathname);}catch{return false;}});
+  const tabs=await chrome.tabs.query({});const existing=tabs.find(tab=>{try{const current=new URL(tab.url);return current.protocol===expected.protocol&&current.host===expected.host&&(projectApp(expected)?projectApp(current):current.pathname===expected.pathname);}catch{return false;}});
   if(existing){await chrome.tabs.update(existing.id,{active:true});await chrome.windows.update(existing.windowId,{focused:true});if(captureId){await chrome.tabs.sendMessage(existing.id,{event:'capture-ready'}).catch(()=>{});await chrome.runtime.sendMessage({event:'capture-ready'}).catch(()=>{});}return;}
   if(captureId)expected.searchParams.set('capture',captureId);
   const opened=await chrome.tabs.create({url:expected.href});await chrome.windows.update(opened.windowId,{focused:true});
@@ -69,13 +69,13 @@ async function dispatch(message,sender) {
   const internal=sender.id===chrome.runtime.id&&!sender.tab&&sender.url?.startsWith(chrome.runtime.getURL(''));
   if(internal&&message.action==='popupSave'){
     const pending=(await chrome.storage.local.get('captures')).captures||[];
-    if(pending.length>=10)throw new Error('HTMLMemo에 전달할 페이지가 10개입니다. 먼저 앱에서 저장을 완료해주세요.');
+    if(pending.length>=10)throw new Error('LibreMemo에 전달할 페이지가 10개입니다. 먼저 앱에서 저장을 완료해주세요.');
     const snapshot=await captureTab(message.tabId);await track(message.tabId);
-    await mutateStorage(async()=>{const current=(await chrome.storage.local.get('captures')).captures||[];if(current.length>=10)throw new Error('HTMLMemo에서 전달받은 페이지를 먼저 저장해주세요.');await chrome.storage.local.set({captures:[...current,snapshot]});});await openApp(snapshot.id);return {title:snapshot.title,warnings:snapshot.warnings.length};
+    await mutateStorage(async()=>{const current=(await chrome.storage.local.get('captures')).captures||[];if(current.length>=10)throw new Error('LibreMemo에서 전달받은 페이지를 먼저 저장해주세요.');await chrome.storage.local.set({captures:[...current,snapshot]});});await openApp(snapshot.id);return {title:snapshot.title,warnings:snapshot.warnings.length};
   }
   if(internal&&message.action==='getAppURL')return appURL();
   if(internal&&message.action==='openApp')return openApp();
-  if(!allowed.has(message.action)||!await isApp(sender))throw new Error('설정된 HTMLMemo 앱에서만 사용할 수 있습니다.');
+  if(!allowed.has(message.action)||!await isApp(sender))throw new Error('설정된 LibreMemo 앱에서만 사용할 수 있습니다.');
   if(message.action==='ping')return {version:'1.2.0'};
   if(message.action==='openBrowser') {const tab=await chrome.tabs.create({url:webURL(message.url),active:message.active!==false});await track(tab.id);if(message.active!==false)await chrome.windows.update(tab.windowId,{focused:true});return {id:tab.id,title:tab.title,url:tab.url||message.url};}
   if(message.action==='listTabs'){const ids=await tracked();const listed=await chrome.tabs.query({});return listed.filter(tab=>ids.includes(tab.id)).map(tab=>({id:tab.id,title:tab.title,url:tab.url||tab.pendingUrl,status:tab.status}));}

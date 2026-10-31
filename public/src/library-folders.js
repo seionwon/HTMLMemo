@@ -5,7 +5,7 @@ export function folderName(value) {
   if(typeof value !== 'string')throw Error('폴더 이름을 입력해주세요.');
   if(/[\u0000-\u001f\u007f]/.test(value))throw Error('폴더 이름에 제어 문자를 사용할 수 없습니다.');
   const name=value.trim().normalize('NFC');
-  if(!name || name.length>100 || /[\u0000-\u001f\u007f/\\<>:"|?*]/.test(name) || /[. ]$/.test(name) || /^\./.test(name) || /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(name) || /^HTMLMemo(?:[.-]|$)/i.test(name) || name==='새 기기로 옮기는 방법.txt')throw Error('폴더 이름은 1~100자로 입력하세요. 경로 기호, 숨김 이름, HTMLMemo 관리 이름은 사용할 수 없습니다.');
+  if(!name || name.length>100 || /[\u0000-\u001f\u007f/\\<>:"|?*]/.test(name) || /[. ]$/.test(name) || /^\./.test(name) || /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(name) || /^(?:HTMLMemo|LibreMemo)(?:[.-]|$)/i.test(name) || name==='새 기기로 옮기는 방법.txt')throw Error('폴더 이름은 1~100자로 입력하세요. 경로 기호, 숨김 이름, LibreMemo 관리 이름은 사용할 수 없습니다.');
   if(new TextEncoder().encode(name).length>240)throw Error('폴더 이름이 너무 깁니다. 한글은 80자 이내로 줄여주세요.');
   return name;
 }

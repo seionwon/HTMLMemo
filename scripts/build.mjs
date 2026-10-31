@@ -15,4 +15,6 @@ for(const entry of pwaEntries(await packageAssets())){
   await writeFile(target,entry.data);
 }
 console.log('GitHub Pages 정적 앱 빌드 완료: dist/');
-console.log('게시 후 사용자에게 공유할 URL: '+PUBLIC_APP_URL);
+const repository=process.env.GITHUB_REPOSITORY;
+const published=repository&&/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)?'https://'+repository.split('/')[0]+'.github.io/'+repository.split('/')[1]+'/':PUBLIC_APP_URL;
+console.log('게시 후 사용자에게 공유할 URL: '+published);

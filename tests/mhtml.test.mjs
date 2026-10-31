@@ -85,7 +85,7 @@ test('MHTML supports BOM/legacy charsets and preserves notes through self-contai
   const legacy=await read(archive([part('text/html; charset=windows-1252',base64(Buffer.from(html('<p>caf\xe9</p>'),'latin1')),'Content-Transfer-Encoding: base64\r\n')]));assert.match(legacy.html,/café/);assert.equal(legacy.url,'');
   const parsed=parseHTML(result.html);parsed.metadata.annotations=[{id:'saved',type:'note',text:'보관 주석',color:'#334155',width:3,opacity:1,points:[{x:10,y:20}]}];const exported=serializeHTML(documentFor(parsed.html),parsed.metadata);assert.equal(parseHTML(exported).metadata.annotations[0].text,'보관 주석');assert.match(exported,/한글 본문/);
 });
-test('MHTML preserves existing embedded HTMLMemo notes while disabling archived scripts',async()=>{
+test('MHTML preserves existing embedded LibreMemo notes while disabling archived scripts',async()=>{
   const parsed=parseHTML(html('<p>주석이 있는 본문</p><script>window.unwanted=true</script>'),{}, {allowScripts:true});parsed.metadata.annotations=[{id:'embedded',type:'note',text:'원래 주석',color:'#334155',width:3,opacity:1,points:[{x:10,y:20}]}];
   const saved=serializeHTML(documentFor(parsed.html),parsed.metadata),result=await read(archive([part('text/html',base64(saved),'Content-Transfer-Encoding: base64\r\n')])),reopened=parseHTML(result.html,{}, {allowScripts:result.allowScripts});
   assert.equal(reopened.metadata.annotations[0].text,'원래 주석');assert.equal(reopened.metadata.execution.allowScripts,false);assert.ok(!reopened.html.includes('window.unwanted'));

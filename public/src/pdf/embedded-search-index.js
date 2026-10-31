@@ -1,4 +1,4 @@
-// Adapted from PDFMemo overrides/pdfEmbeddedSearchIndex.ts; presentation remains HTMLMemo-owned.
+// Adapted from PDFMemo overrides/pdfEmbeddedSearchIndex.ts; presentation remains LibreMemo-owned.
 /** Portable, optional search text. The PDF remains an ordinary readable PDF.
  * v1: magic + uint32 BE JSON header length + header + independently gzipped
  * page-text chunks. No scripts, URLs, queries or device-specific geometry. */

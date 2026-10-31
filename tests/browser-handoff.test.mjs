@@ -44,7 +44,7 @@ test('browser handoff status omits redundant messages and preserves actionable r
  assert.doesNotMatch(tab.host.textContent,/돌아오면 읽던 문서에서 계속 작업할 수 있습니다\./);
  tab.returned=true;a.context.renderBrowserState(tab);
  assert.equal(status.textContent,'복사한 글을 붙여넣거나 저장한 HTML을 가져오세요.');
- assert.doesNotMatch(tab.host.textContent,/HTMLMemo로 돌아왔습니다\./);
+ assert.doesNotMatch(tab.host.textContent,/LibreMemo로 돌아왔습니다\./);
  for(const state of ['blocked','unavailable']){tab.browserState=state;a.context.renderBrowserState(tab);assert.equal(status.textContent,'탭 열기 또는 전환이 제한됐습니다. 아래 「보낸 주소」의 링크를 눌러 직접 여세요.');}
 });
 test('blocked browser opening retains actionable fallback, text import and original URL without repeated automatic attempts',async()=>{

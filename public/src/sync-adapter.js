@@ -108,7 +108,7 @@ export function validateStreamManifest(data){
   if(used.size!==files.size)throw Error('전송 목록에 사용하지 않는 파일이 있습니다.');return files;
 }
 
-/** MemoSuite SyncAdapter, backed by HTMLMemo's IndexedDB. Roots are intentionally absent. */
+/** MemoSuite SyncAdapter, backed by LibreMemo's IndexedDB. Roots are intentionally absent. */
 export class DeviceSyncAdapter {
   constructor({storage=localStorage,includeSources=true,includeSettings=true,isHost=()=>true,isActive=()=>true,afterCommit=async()=>{},onStage=()=>{},resolveSettings,operations={}}={}){
     this.storage=storage;this.includeSources=includeSources;this.includeSettings=includeSettings;this.isHost=isHost;this.isActive=isActive;this.afterCommit=afterCommit;
@@ -219,7 +219,7 @@ export class DeviceSyncAdapter {
   }
   async mergeBackupData(data,resolver){
     this.check();
-    if(data?.format!==DEVICE_SYNC_FORMAT||data.version!==1||!Array.isArray(data.documents)||data.documents.length>10000||new Blob([JSON.stringify(data)]).size>DEVICE_SYNC_LIMIT)throw Error('지원하지 않거나 너무 큰 HTMLMemo 동기화 데이터입니다.');
+    if(data?.format!==DEVICE_SYNC_FORMAT||data.version!==1||!Array.isArray(data.documents)||data.documents.length>10000||new Blob([JSON.stringify(data)]).size>DEVICE_SYNC_LIMIT)throw Error('지원하지 않거나 너무 큰 LibreMemo 동기화 데이터입니다.');
     const remoteFolders=validateFolders(data.folders),folderIds=new Set(remoteFolders.map(folder=>folder.id)),settings=data.settings===null?null:validateSettings(data.settings),seen=new Set(),incoming=[];
     for(const value of data.documents){
       if(!idOK(value?.record?.id)||seen.has(value.record.id)||!['html','file'].includes(value.sourceType))throw Error('받은 문서 목록이 손상되었습니다.');seen.add(value.record.id);

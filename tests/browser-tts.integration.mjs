@@ -9,7 +9,7 @@ import { root, prepareAssets } from '../scripts/assets.mjs';
 import { createServer } from '../scripts/server.mjs';
 import { launchChrome } from './chrome.mjs';
 import { FORMAT_VERSION } from '../public/src/model.js';
-test('real Chrome: MemoSuite TTS toolbar in HTMLMemo',{timeout:90000},async t=>{
+test('real Chrome: MemoSuite TTS toolbar in LibreMemo',{timeout:90000},async t=>{
   await prepareAssets();await mkdir(join(root,'test-results'),{recursive:true});const folder=await mkdtemp(join(tmpdir(),'htmlmemo-web-test-'));await cp(join(root,'public'),folder,{recursive:true});await cp(join(root,'tests/fixtures'),join(folder,'fixtures'),{recursive:true});
   const server=createServer(folder);let chrome;
   try{

@@ -17,7 +17,7 @@ export const bridgeAvailable = () => available;
 export function bridge(action, args = {}, timeout = 20000) {
   if(native)return new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('Chrome 연결이 응답하지 않습니다.')),timeout);chrome.runtime.sendMessage({action,...args}).then(response=>{clearTimeout(timer);if(response?.error)reject(new Error(response.error));else resolve(response?.result);},error=>{clearTimeout(timer);reject(error);});});
   return new Promise((resolve, reject) => {
-    const id = uid(); const timer = setTimeout(() => { pending.delete(id); if (action === 'ping') available = false; reject(new Error('Chrome 연결이 응답하지 않습니다. 확장 기능과 HTMLMemo 주소 설정을 확인해주세요.')); }, timeout);
+    const id = uid(); const timer = setTimeout(() => { pending.delete(id); if (action === 'ping') available = false; reject(new Error('Chrome 연결이 응답하지 않습니다. 확장 기능과 LibreMemo 주소 설정을 확인해주세요.')); }, timeout);
     pending.set(id, {resolve, reject, timeout:timer});
     window.postMessage({channel:'htmlmemo-app', id, action, ...args}, targetOrigin);
   });

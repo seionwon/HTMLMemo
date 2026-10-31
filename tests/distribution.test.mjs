@@ -28,7 +28,7 @@ test('private documents, settings, handles and arbitrary files never enter the p
 test('the ZIP utility retains Unicode filenames and refuses parent traversal',()=>{const files=unzip(zipFiles([{name:'앱/설정.json',data:'한글 $$'}]));assert.equal(text(files,'앱/설정.json'),'한글 $$');assert.throws(()=>zipFiles([{name:'../secret',data:'x'}]));});
 test('the PWA is published at the app root with every offline resource and no installer files',()=>{
   const files=webFiles(assets);assert.equal(files.size,APP_FILES.length+2);assert.ok(files.has('.nojekyll'));assert.ok(files.has('index.html'));
-  assert.ok(![...files.keys()].some(name=>/^(docs|pages)\//.test(name)||/HTMLMemo-(pages\.zip|install\.html|local\.zip)|HTMLMemo\.html/.test(name)));
+  assert.ok(![...files.keys()].some(name=>/^(docs|pages)\//.test(name)||/LibreMemo-(pages\.zip|install\.html|local\.zip)|LibreMemo\.html/.test(name)));
   const manifest=JSON.parse(text(files,'manifest.webmanifest'));assert.equal(manifest.start_url,'./');assert.equal(manifest.scope,'./');
   const shell=JSON.parse(text(files,'sw.js').match(/const SHELL = (\[[^;]+\]);/)[1].replaceAll("'",'"'));
   for(const path of shell)assert.ok(files.has(path==='./'?'index.html':path.slice(2)),path);
@@ -45,31 +45,31 @@ test('PWA cache versions cover app changes while retired extension input is igno
 });
 test('Pages publishes no extension transport, package, active marker or legacy extension data',()=>{
   const files=webFiles({...assets,extension:{'background.js':{text:'DO-NOT-PUBLISH-EXTENSION'}}});
-  assert.equal(files.has('src/bridge.js'),false);assert.equal(files.has('downloads/HTMLMemo-chrome.zip'),false);assert.equal(JSON.parse(text(files,'distribution.json')).extension,undefined);
+  assert.equal(files.has('src/bridge.js'),false);assert.equal(files.has('downloads/LibreMemo-chrome.zip'),false);assert.equal(JSON.parse(text(files,'distribution.json')).extension,undefined);
   assert.doesNotMatch(text(files,'index.html'),/htmlmemo-app-v1|connection-button|execution-chrome/);assert.doesNotMatch(text(files,'src/app.js'),/chrome\.runtime|bridgeAvailable|discoverBridge|htmlmemo-extension/);
   assert.ok(![...files.values()].some(bytes=>new TextDecoder().decode(bytes).includes('DO-NOT-PUBLISH-EXTENSION')));
 });
 test('asset preparation removes the retired extension download without requiring extension sources',async()=>{
-  await writeFile(new URL('../public/downloads/HTMLMemo-chrome.zip',import.meta.url),'retired');await prepareAssets();
-  await assert.rejects(access(new URL('../public/downloads/HTMLMemo-chrome.zip',import.meta.url)),{code:'ENOENT'});assert.equal(assets.extension,undefined);
+  await writeFile(new URL('../public/downloads/LibreMemo-chrome.zip',import.meta.url),'retired');await prepareAssets();
+  await assert.rejects(access(new URL('../public/downloads/LibreMemo-chrome.zip',import.meta.url)),{code:'ENOENT'});assert.equal(assets.extension,undefined);
 });
 test('a real build removes retired distribution artifacts and writes the Pages web root only',async()=>{
   await mkdir(new URL('../dist/pages/docs/',import.meta.url),{recursive:true});await mkdir(new URL('../dist/downloads/',import.meta.url),{recursive:true});
-  for(const name of ['dist/downloads/HTMLMemo-pages.zip','dist/downloads/HTMLMemo-install.html','dist/pages/docs/index.html','public/downloads/HTMLMemo-pages.zip','public/downloads/HTMLMemo-install.html'])
+  for(const name of ['dist/downloads/LibreMemo-pages.zip','dist/downloads/LibreMemo-install.html','dist/pages/docs/index.html','public/downloads/LibreMemo-pages.zip','public/downloads/LibreMemo-install.html'])
     await writeFile(new URL('../'+name,import.meta.url),'retired');
   await promisify(execFile)(process.execPath,[new URL('../scripts/build.mjs',import.meta.url).pathname]);
   const app=await readFile(new URL('../dist/src/app.js',import.meta.url),'utf8');assert.match(app,/async function copyAppURL/);
   const script=await readFile(new URL('../dist/sw.js',import.meta.url),'utf8');
   const copy=JSON.parse(await readFile(new URL('../dist/distribution.json',import.meta.url),'utf8'));assert.equal(copy.app['sw.js'].text,script);
-  for(const name of ['dist/downloads/HTMLMemo-pages.zip','dist/downloads/HTMLMemo-install.html','dist/pages','dist/HTMLMemo.html','public/downloads/HTMLMemo-pages.zip','public/downloads/HTMLMemo-install.html'])
+  for(const name of ['dist/downloads/LibreMemo-pages.zip','dist/downloads/LibreMemo-install.html','dist/pages','dist/LibreMemo.html','public/downloads/LibreMemo-pages.zip','public/downloads/LibreMemo-install.html'])
     await assert.rejects(access(new URL('../'+name,import.meta.url)),{code:'ENOENT'});
-  await assert.rejects(access(new URL('../dist/downloads/HTMLMemo-chrome.zip',import.meta.url)),{code:'ENOENT'});
+  await assert.rejects(access(new URL('../dist/downloads/LibreMemo-chrome.zip',import.meta.url)),{code:'ENOENT'});
   for(const name of APP_FILES)if(name!=='sw.js')assert.deepEqual(new Uint8Array(await readFile(new URL('../dist/'+name,import.meta.url))),assetBytes(assets.app[name]));
 });
 
 // Executes the real standalone bundle with a DOM model and local IndexedDB
 // contract. It verifies event handlers, not Chrome rendering or OS file dialogs.
-async function fileApp({address='file:///Users/beginner/HTMLMemo.html',navigator={},documents=[],localEntries=[],settings=[],firstRun=false,waitingForUpdate=false,launchQueue,directoryPicker=async()=>{throw new DOMException('Cancelled','AbortError');}}={}){
+async function fileApp({address='file:///Users/beginner/LibreMemo.html',navigator={},documents=[],localEntries=[],settings=[],firstRun=false,waitingForUpdate=false,launchQueue,directoryPicker=async()=>{throw new DOMException('Cancelled','AbortError');}}={}){
   // Model-only feature tests invoke individual handlers without native dialog modality.
   // Dedicated first-run tests and real browser tests exercise the required setup surface.
   const html=standaloneHTML(assets),doc=new DOMParser().parseFromString(html,'text/html'),blobs=[],local=new Map([...(firstRun?[]:[['htmlmemo-data-folder-welcome-v1','1']]),...localEntries]);
@@ -102,7 +102,7 @@ test('MHTML import filters, installed file handlers and offline packaging includ
   assert.deepEqual(Array.from(options.types[0].accept['multipart/related']),['.mhtml','.mht']);assert.equal(options.multiple,true);
   for(const suffix of ['.html','.htm','.mhtml','.mht'])assert.ok(app.doc.querySelector('#file-input').getAttribute('accept').split(',').includes(suffix));
   const files=webFiles(assets),manifest=JSON.parse(text(files,'manifest.webmanifest'));assert.deepEqual(manifest.file_handlers[0].accept['multipart/related'],['.mhtml','.mht']);assert.ok(files.has('src/mhtml.js'));assert.match(text(files,'sw.js'),/\.\/src\/mhtml\.js/);
-  assert.match(text(files,'src/app.js'),/외부 사이트는 이 앱을 연 브라우저의 일반 탭에서 엽니다\.<br>브라우저의 페이지 저장에서 <strong>Webpage, Single File<\/strong>/);assert.doesNotMatch(text(files,'src/app.js'),/HTMLMemo 안에 넣지 않아 연결 거부 화면이 나오지 않습니다\./);
+  assert.match(text(files,'src/app.js'),/외부 사이트는 이 앱을 연 브라우저의 일반 탭에서 엽니다\.<br>브라우저의 페이지 저장에서 <strong>Webpage, Single File<\/strong>/);assert.doesNotMatch(text(files,'src/app.js'),/LibreMemo 안에 넣지 않아 연결 거부 화면이 나오지 않습니다\./);
 });
 test('clipboard absence or denial selects the visible URL and restores the share controls',async()=>{
   for(const navigator of [{},{clipboard:{writeText:async()=>{throw new Error('Clipboard denied');}}}]){
@@ -164,7 +164,7 @@ test('the single execution installation button restores its state after dismissa
   assert.equal(button.disabled,false);assert.equal(button.textContent,'앱 설치');assert.match(doc.querySelector('#toast').textContent,/설치 창 오류/);offline();
   app.emit('beforeinstallprompt',{preventDefault(){},prompt:async()=>calls++,userChoice:Promise.resolve({outcome:'accepted'})});button.onclick();await new Promise(resolve=>setImmediate(resolve));assert.equal(calls,2);
   app.emit('appinstalled');assert.equal(button.textContent,'설치 완료');assert.equal(button.getAttribute('aria-label'),'설치 완료');assert.equal(button.hidden,false);assert.match(doc.querySelector('#install-status').textContent,/앱으로 실행 중/);offline();
-  button.onclick();await new Promise(resolve=>setImmediate(resolve));assert.match(doc.querySelector('#dialog-content').textContent,/설치된 HTMLMemo/);assert.equal(calls,2);
+  button.onclick();await new Promise(resolve=>setImmediate(resolve));assert.match(doc.querySelector('#dialog-content').textContent,/설치된 LibreMemo/);assert.equal(calls,2);
 });
 test('settings can be saved and reloaded through file input when native pickers are unavailable',async()=>{const app=await fileApp();app.doc.querySelector('#settings-button').onclick();app.doc.querySelector('#appearance').value='dark';app.doc.querySelector('#appearance').onchange({target:app.doc.querySelector('#appearance')});app.doc.querySelector('#settings-save').onclick();await new Promise(resolve=>setImmediate(resolve));assert.equal(JSON.parse(await app.blobs[0].text()).preferences.theme,'dark');const input=app.doc.querySelector('#settings-file-input');const file=new File([serializeSettings({theme:'system',librarySort:'title',annotation:{width:8}})],'settings.json');input.onchange({target:{files:[file],value:'settings.json'}});await new Promise(resolve=>setImmediate(resolve));const restored=JSON.parse(app.local.get(PREFERENCES_KEY));assert.equal(restored.theme,'system');assert.equal(restored.librarySort,'title');assert.equal(restored.annotation.width,8);assert.equal(app.doc.querySelector('#library-sort').value,'title:asc');});
 
@@ -274,7 +274,7 @@ test('the settings icon preserves library, web opening, HTML import, app deliver
   click('#settings-button');
   for(const id of ['#settings-help','#settings-execution','#settings-about'])assert.ok(doc.querySelector(id).closest('#dialog'));
   assert.equal(doc.querySelector('#settings-execution').previousElementSibling.id,'settings-help');
-  click('#settings-help');assert.equal(doc.querySelector('.help-browser h2').textContent,'HTMLMemo 도움말');
+  click('#settings-help');assert.equal(doc.querySelector('.help-browser h2').textContent,'LibreMemo 도움말');
   const helpSearch=doc.querySelector('#help-search');helpSearch.value='데이터 복원';helpSearch.oninput({isComposing:false});assert.ok(doc.querySelector('.help-results'));
   click('#help-back-settings');assert.equal(doc.activeElement.id,'settings-help');
   click('#settings-execution');
@@ -292,7 +292,7 @@ test('the settings icon preserves library, web opening, HTML import, app deliver
   await click('#hero-import');assert.equal(picked,true);
   assert.equal(doc.querySelector('#save-page').textContent,'');assert.equal(doc.querySelector('#save-page').title,'페이지 저장');
   click('#settings-button');click('#settings-about');assert.equal(doc.querySelector('#dialog').open,true);
-  assert.equal(doc.querySelector('.about-brand h3').textContent,'HTMLMemo');
+  assert.equal(doc.querySelector('.about-brand h3').textContent,'LibreMemo');
   const {version}=JSON.parse(await readFile(new URL('../package.json',import.meta.url),'utf8'));
   assert.equal(doc.querySelector('#app-version').textContent,version);
   assert.match(doc.querySelector('.about-brand img').getAttribute('src'),/^data:image\/svg\+xml;base64,/);
@@ -302,7 +302,7 @@ test('settings is a single labelled icon and help, delivery and About preserve e
   const record={id:'kept-settings',title:'기존 문서',name:'kept.html',created:1234,modified:5678,metadata:{annotations:[{id:'note',text:'보존할 주석'}],bookmarks:[{id:'mark'}]}},before=structuredClone(record),app=await fileApp({documents:[record]}),{doc}=app,trigger=doc.querySelector('#settings-button');
   assert.equal(trigger.textContent,'');assert.ok(trigger.querySelector('svg'));assert.equal(trigger.title,'설정');assert.equal(trigger.getAttribute('aria-label'),'설정');assert.equal(trigger.getAttribute('aria-haspopup'),'dialog');assert.equal(trigger.getAttribute('aria-controls'),'dialog');assert.equal(trigger.getAttribute('aria-expanded'),null);
   assert.equal(trigger.previousElementSibling.id,'save-page');assert.equal(trigger.nextElementSibling,null);
-  trigger.onclick();assert.equal(doc.querySelector('#dialog').open,true);assert.equal(doc.querySelector('#dialog h2').textContent,'HTMLMemo 설정');
+  trigger.onclick();assert.equal(doc.querySelector('#dialog').open,true);assert.equal(doc.querySelector('#dialog h2').textContent,'LibreMemo 설정');
   const group=doc.querySelector('.settings-app-actions');assert.equal(group.previousElementSibling.className,'dialog-heading');
   assert.deepEqual([...group.querySelectorAll('button')].map(button=>button.textContent.trim()),['도움말','실행과 앱 전달','About']);
   for(const button of group.querySelectorAll('button')){assert.equal(button.getAttribute('type'),'button');assert.equal(button.getAttribute('role'),null);assert.ok(button.querySelector('svg'));}
@@ -373,7 +373,7 @@ test('first run automatically explains folder creation in three steps without op
   let calls=0;const app=await fileApp({firstRun:true,directoryPicker:async()=>{calls++;return memoryFolder();}}),doc=app.doc;
   assert.equal(doc.querySelector('#dialog').open,true);assert.ok(doc.querySelector('[data-folder-welcome]'));assert.equal(doc.querySelector('#dialog').getAttribute('aria-labelledby'),'dialog-title');
   assert.match(doc.querySelector('#dialog-title').textContent,/저장 폴더/);assert.equal(doc.querySelectorAll('.folder-welcome-steps li').length,3);
-  for(const text of ['Documents','하위','원하는 이름','HTMLMemo','쓰기','허용','자동 저장','이 폴더 전체','설정'])assert.ok(doc.querySelector('[data-folder-welcome]').textContent.includes(text),text);
+  for(const text of ['Documents','하위','원하는 이름','LibreMemo','쓰기','허용','자동 저장','이 폴더 전체','설정'])assert.ok(doc.querySelector('[data-folder-welcome]').textContent.includes(text),text);
   assert.equal(doc.activeElement.id,'create-storage-folder');assert.equal(calls,0);assert.equal(app.settings.get('folder'),undefined);assert.equal(app.local.has('htmlmemo-data-folder-welcome-v1'),false);
   assert.match(doc.querySelector('.folder-welcome-existing').textContent,/전용 폴더 자체.*자동 복원/);
 });
@@ -402,7 +402,7 @@ test('a failed first folder save keeps setup required and retries the same newly
   const control={failWrite:'HTMLMemo-library.json'},parent=memoryFolder('Documents',control);
   const app=await fileApp({firstRun:true,directoryPicker:async()=>parent}),doc=app.doc;
   doc.querySelector('#create-storage-folder').onclick();await settleUntil(()=>!doc.querySelector('#create-storage-folder').disabled);
-  const child=parent.children.get('HTMLMemo');assert.ok(child);assert.equal(doc.querySelector('#dialog').open,true);assert.equal(doc.documentElement.dataset.storageSetup,'required');assert.equal(app.local.has('htmlmemo-data-folder-welcome-v1'),false);
+  const child=parent.children.get('LibreMemo');assert.ok(child);assert.equal(doc.querySelector('#dialog').open,true);assert.equal(doc.documentElement.dataset.storageSetup,'required');assert.equal(app.local.has('htmlmemo-data-folder-welcome-v1'),false);
   control.failWrite=null;doc.querySelector('#create-storage-folder').onclick();await settleUntil(()=>!doc.querySelector('#dialog').open);
   assert.equal(app.settings.get('folder'),child);assert.equal(parent.children.size,1);assert.ok(child.children.has('HTMLMemo-library.json'));assert.equal(doc.documentElement.dataset.storageSetup,'ready');
 });
@@ -546,10 +546,10 @@ test('folder setup guides users to a subfolder and saves a handle only after an 
   const app=await fileApp(),doc=app.doc,selected=memoryFolder();let options,calls=0;
   app.context.window.showDirectoryPicker=async value=>{options=value;calls++;return selected;};
   doc.querySelector('#settings-button').onclick();doc.querySelector('#settings-folder').onclick();assert.equal(calls,0);
-  assert.match(doc.querySelector('#dialog-content').textContent,/전용 하위 폴더/);assert.match(doc.querySelector('#dialog-content').textContent,/문서\/HTMLMemo/);
-  doc.querySelector('#select-storage-folder').onclick();await settleUntil(()=>doc.querySelector('#dialog h2').textContent==='HTMLMemo 설정');
+  assert.match(doc.querySelector('#dialog-content').textContent,/전용 하위 폴더/);assert.match(doc.querySelector('#dialog-content').textContent,/문서\/LibreMemo/);
+  doc.querySelector('#select-storage-folder').onclick();await settleUntil(()=>doc.querySelector('#dialog h2').textContent==='LibreMemo 설정');
   assert.equal(calls,1);assert.equal(options.mode,'readwrite');assert.equal(options.startIn,'documents');assert.equal(options.id,'htmlmemo-storage-v2');
-  assert.equal(app.settings.get('folder'),selected);assert.equal(doc.querySelector('#dialog').open,true);assert.equal(doc.querySelector('#dialog h2').textContent,'HTMLMemo 설정');assert.equal(doc.querySelector('#settings-folder').textContent,'관리');assert.match(doc.querySelector('#status-left').textContent,/HTMLMemo 자동 저장/);assert.match(doc.querySelector('#settings-folder-status').textContent,/폴더 자동 저장 완료/);
+  assert.equal(app.settings.get('folder'),selected);assert.equal(doc.querySelector('#dialog').open,true);assert.equal(doc.querySelector('#dialog h2').textContent,'LibreMemo 설정');assert.equal(doc.querySelector('#settings-folder').textContent,'관리');assert.match(doc.querySelector('#status-left').textContent,/LibreMemo 자동 저장/);assert.match(doc.querySelector('#settings-folder-status').textContent,/폴더 자동 저장 완료/);
 });
 
 test('folder setup requests browser storage protection once after saving and skips an existing grant',async()=>{
@@ -562,12 +562,12 @@ test('folder setup requests browser storage protection once after saving and ski
     assert.deepEqual(calls,{checks:0,requests:0});doc.querySelector('#settings-button').onclick();
     assert.equal(doc.querySelector('#persist-storage'),null);assert.doesNotMatch(doc.querySelector('#dialog').textContent,/기기 보관함 유지/);
     doc.querySelector('#settings-folder').onclick();assert.deepEqual(calls,{checks:0,requests:0});
-    doc.querySelector('#select-storage-folder').onclick();await settleUntil(()=>doc.querySelector('#dialog h2').textContent==='HTMLMemo 설정');
+    doc.querySelector('#select-storage-folder').onclick();await settleUntil(()=>doc.querySelector('#dialog h2').textContent==='LibreMemo 설정');
     assert.deepEqual(calls,{checks:1,requests:already?0:1});assert.deepEqual(saved,already?[true]:[true,true]);assert.equal(app.settings.get('folder'),selected);
     assert.equal(doc.querySelector('#data-folder-status').textContent,'폴더 저장 완료');
     assert.match(doc.querySelector('[data-folder-guide]').textContent,/브라우저가 허용하지 않아도 전용 폴더 자동 저장은 계속/);
     doc.querySelector('#settings-folder').onclick();doc.querySelector('#resume-data-folder').onclick();
-    await settleUntil(()=>doc.querySelector('#dialog h2').textContent==='HTMLMemo 설정');
+    await settleUntil(()=>doc.querySelector('#dialog h2').textContent==='LibreMemo 설정');
     assert.deepEqual(calls,{checks:1,requests:already?0:1},'a second connection does not repeat a prompt or a denied request');
   }
 });
@@ -607,7 +607,7 @@ test('browser protection is not requested on startup, picker cancellation, denie
 });
 
 test('folder cancellation, blocked access and failed persistence preserve the previous connection and allow retry',async()=>{
-  const previous=memoryFolder('Previous'),next=memoryFolder('New HTMLMemo'),app=await fileApp({settings:[['folder',previous]]}),doc=app.doc;
+  const previous=memoryFolder('Previous'),next=memoryFolder('New LibreMemo'),app=await fileApp({settings:[['folder',previous]]}),doc=app.doc;
   await settleUntil(()=>doc.querySelector('#data-folder-status').textContent==='폴더 저장 완료');
   let fail='AbortError';app.context.window.showDirectoryPicker=async()=>{if(fail){const error=new Error('Blocked or cancelled');error.name=fail;throw error;}return next;};
   doc.querySelector('#settings-button').onclick();doc.querySelector('#settings-folder').onclick();
@@ -618,8 +618,8 @@ test('folder cancellation, blocked access and failed persistence preserve the pr
   }
   fail='';const set=app.settings.set.bind(app.settings);app.settings.set=()=>{throw Error('Storage unavailable');};
   doc.querySelector('#select-storage-folder').onclick();await new Promise(resolve=>setImmediate(resolve));assert.equal(app.settings.get('folder'),previous);assert.match(doc.querySelector('#folder-connection-status').textContent,/저장하지 못했습니다/);
-  app.settings.set=set;doc.querySelector('#select-storage-folder').onclick();await settleUntil(()=>doc.querySelector('#dialog h2').textContent==='HTMLMemo 설정');
-  assert.equal(app.settings.get('folder'),next);assert.equal(doc.querySelector('#dialog').open,true);assert.equal(doc.querySelector('#dialog h2').textContent,'HTMLMemo 설정');assert.match(doc.querySelector('#status-left').textContent,/New HTMLMemo 자동 저장/);
+  app.settings.set=set;doc.querySelector('#select-storage-folder').onclick();await settleUntil(()=>doc.querySelector('#dialog h2').textContent==='LibreMemo 설정');
+  assert.equal(app.settings.get('folder'),next);assert.equal(doc.querySelector('#dialog').open,true);assert.equal(doc.querySelector('#dialog h2').textContent,'LibreMemo 설정');assert.match(doc.querySelector('#status-left').textContent,/New LibreMemo 자동 저장/);
 });
 
 test('settings and status bar expose folder setup without a duplicate library banner, with a Chrome requirement if folder support becomes unavailable',async()=>{
@@ -632,4 +632,14 @@ test('settings and status bar expose folder setup without a duplicate library ba
 
 test('a replaced library heading text node is repaired without losing the count or stored documents',async()=>{
   const app=await fileApp(),doc=app.doc,heading=doc.querySelector('.library-heading h2'),count=doc.querySelector('#document-count');heading.firstChild.remove();doc.querySelector('#library-filter').oninput();assert.match(heading.textContent,/내 서재/);assert.equal(doc.querySelector('#document-count'),count);assert.equal(count.textContent,'0');assert.equal(doc.querySelector('#toast').hidden,true);
+});
+
+test('the renamed PWA keeps its installed identity while publishing the new product name',()=>{
+  const files=webFiles(assets),manifest=JSON.parse(text(files,'manifest.webmanifest'));
+  assert.equal(manifest.name,'LibreMemo · 나만의 웹 서재');assert.equal(manifest.short_name,'LibreMemo');
+  assert.equal(new URL(manifest.id,'https://seionwon.github.io/LibreMemo/manifest.webmanifest').href,'https://seionwon.github.io/HTMLMemo/');
+  assert.match(text(files,'index.html'),/<title>LibreMemo · 나만의 웹 서재<\/title>/);
+  assert.ok(text(files,'src/storage.js').includes("const DB_NAME = 'HTMLMemo-v1'"));
+  assert.ok(text(files,'src/preferences.js').includes("SETTINGS_FORMAT = 'HTMLMemo.settings'"));
+  assert.ok(text(files,'src/pdf-document.js').includes('<!--HTMLMemo-PDF:1-->'));
 });

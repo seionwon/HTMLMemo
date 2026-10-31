@@ -195,7 +195,7 @@ test('capture reports resource failures without silently keeping network depende
 });
 test('fetched capture resolves assets and links against an explicit source base under a locked app base URI',async()=>{
   await import('../public/shared/capture.js');
-  const doc=documentFor('<html><head><title>Remote capture</title><link rel="stylesheet" href="styles/main.css"><style>p{background:url(inline.svg)}</style></head><body><img src="picture.svg"><a href="chapter">Next</a></body></html>','https://app.invalid/HTMLMemo/'),fetched=[];
+  const doc=documentFor('<html><head><title>Remote capture</title><link rel="stylesheet" href="styles/main.css"><style>p{background:url(inline.svg)}</style></head><body><img src="picture.svg"><a href="chapter">Next</a></body></html>','https://app.invalid/LibreMemo/'),fetched=[];
   const snapshot=await HTMLMemoCapture.captureDocument(doc,{url:'https://source.example/book/page',baseURL:'https://source.example/assets/',fetchResource:async url=>{fetched.push(url);return {bytes:new TextEncoder().encode(url.endsWith('.css')?'p{background:url(../nested.svg)}':'<svg/>'),type:url.endsWith('.css')?'text/css':'image/svg+xml'};}});
   assert.deepEqual(fetched.sort(),['inline.svg','nested.svg','picture.svg','styles/main.css'].map(path=>'https://source.example/assets/'+path).sort());assert.match(documentFor(snapshot.html).querySelector('img').getAttribute('src'),/^data:image\/svg\+xml;base64,/);assert.equal(documentFor(snapshot.html).querySelector('a').getAttribute('href'),'https://source.example/assets/chapter');assert.equal(snapshot.warnings.length,0);
 });

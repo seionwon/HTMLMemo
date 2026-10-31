@@ -950,7 +950,7 @@ export function createReadAloud(reader) {
     for (var k = 0; k < run.sents.length; k++) if (flat <= run.sents[k].end) { jump(k); return; }
   }, true);
 
-  // Lifecycle is owned by HTMLMemo; no listener or voice survives a tab switch/dispose.
+  // Lifecycle is owned by LibreMemo; no listener or voice survives a tab switch/dispose.
   listen(W,'pagehide',close);
   const dismissSettings = e => {if(panel && !e.target.closest?.('[data-tts-panel],[data-tts-gear],[role=listbox]'))closePanel();};
   listen(U,'pointerdown',dismissSettings,true);listen(D,'pointerdown',dismissSettings,true);

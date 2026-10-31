@@ -1,0 +1,13 @@
+{
+  "status": "local-verified-publication-pending",
+  "version": "1.3.1",
+  "recordedAt": "2026-10-31 12:46:26 +09:00",
+  "unitTests": 774,
+  "checkFiles": 166,
+  "build": "pass",
+  "browser": "browser.json",
+  "publicRepository": "seionwon/HTMLMemo",
+  "repositoryRename": "user action after the old-address release is verified",
+  "pwaID": "/HTMLMemo/",
+  "dataMigration": "existing storage and file-format identities retained"
+}

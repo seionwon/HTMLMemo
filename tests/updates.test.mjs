@@ -17,7 +17,7 @@ function fixture({available=true,accept=true,offline=false,beforeUpdate=async()=
   const old=new Worker(),worker=new Worker();service.controller=old;
   const registration={active:worker,installing:null,waiting:null,update:async()=>{calls.push('update');if(offline)throw Error('offline');}};
   service.getRegistration=async()=>registration;service.register=async()=>{calls.push('register');return registration;};
-  const controller=new UpdateController({navigator:{serviceWorker:service},location:new URL('https://app.test/HTMLMemo/'),Channel:MessageChannel,requestTimeout,checkTimeout,onOffer:async info=>{offers++;assert.equal(info.version,'1.0.1');return accept;},beforeUpdate:async()=>{calls.push('save');await beforeUpdate();},onState:(state,error)=>states.push({state,error}),reload:()=>{calls.push('reload');reloads++;}});
+  const controller=new UpdateController({navigator:{serviceWorker:service},location:new URL('https://app.test/LibreMemo/'),Channel:MessageChannel,requestTimeout,checkTimeout,onOffer:async info=>{offers++;assert.equal(info.version,'1.0.1');return accept;},beforeUpdate:async()=>{calls.push('save');await beforeUpdate();},onState:(state,error)=>states.push({state,error}),reload:()=>{calls.push('reload');reloads++;}});
   return {controller,service,registration,worker,calls,states,get reloads(){return reloads;},get offers(){return offers;}};
 }
 test('startup checks once; cancel never activates or reloads and another launch offers the update again',async()=>{
@@ -53,7 +53,7 @@ test('first registration, pending installation and unsupported locations do not 
   const f=fixture({available:false});f.service.getRegistration=async()=>undefined;f.registration.installing=f.worker;f.worker.state='installing';
   const task=f.controller.start();queueMicrotask(()=>{f.worker.state='installed';f.worker.dispatchEvent(new Event('statechange'));});await task;
   assert.deepEqual(f.calls,['register','HTMLMEMO_UPDATE_INFO']);assert.equal(f.offers,0);
-  for(const options of [{navigator:{},location:new URL('https://app.test/')},{navigator:{serviceWorker:f.service},location:new URL('file:///HTMLMemo.html')}]){
+  for(const options of [{navigator:{},location:new URL('https://app.test/')},{navigator:{serviceWorker:f.service},location:new URL('file:///LibreMemo.html')}]){
     const states=[],controller=new UpdateController({...options,onState:s=>states.push(s)});await controller.start();assert.deepEqual(states,['unavailable']);
   }
 });

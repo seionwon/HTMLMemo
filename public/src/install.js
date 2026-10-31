@@ -1,4 +1,18 @@
-export const PUBLIC_APP_URL = 'https://seionwon.github.io/HTMLMemo/';
+export const PUBLIC_APP_URL = 'https://seionwon.github.io/LibreMemo/';
+export const LEGACY_PUBLIC_APP_URL = 'https://seionwon.github.io/HTMLMemo/';
+
+// Keep sharing the address that is actually serving this copy during the
+// repository rename. Local files use the new canonical public address.
+export function publicAppURL(location = globalThis.location) {
+  try {
+    const url = new URL(location?.href);
+    if (url.origin === 'https://seionwon.github.io' &&
+        /^\/(?:HTMLMemo|LibreMemo)\/(?:index\.html)?$/.test(url.pathname)) {
+      return new URL('./', url).href;
+    }
+  } catch { /* A local or non-browser caller has no public deployment URL. */ }
+  return PUBLIC_APP_URL;
+}
 
 export function isIOS(navigator) {
   return /iPad|iPhone|iPod/.test(navigator.userAgent || '') ||
