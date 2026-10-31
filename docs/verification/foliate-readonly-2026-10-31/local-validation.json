@@ -1,8 +1,8 @@
 {
-  "completedAt": "2026-10-31 22:15:00 +09:00",
+  "completedAt": "2026-10-31 22:23:45 +09:00",
   "status": "local-verified-public-deployment-pending",
   "version": "1.6.0",
-  "unitTests": 823,
+  "unitTests": 825,
   "syntaxAndJSONChecks": 190,
   "build": "pass",
   "diffCheck": "pass",
@@ -95,5 +95,16 @@
   "limits": {
     "hardwareAndroidTested": false,
     "allRealWorldBooksGuaranteed": false
+  },
+  "firstCI": {
+    "run": 41204714577,
+    "status": "failed-before-deployment",
+    "reason": "Source body class style did not match the chapter scoping root; fixed without weakening the expected 1.8 line-height",
+    "passed": [
+      "all nine ebook format imports/common UI/original copies",
+      "fixed EPUB page and highlight scaling",
+      "CBZ pen and bookmark",
+      "existing Office and Hangul flows"
+    ]
   }
 }

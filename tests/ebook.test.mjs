@@ -6,7 +6,7 @@ import {ebookFixtures,ebookZip,epubParts,fb2Source,ebookText} from './ebook-fixt
 import {installDOM,documentFor} from './dom.mjs';
 import {renderOffice} from '../public/src/office-render.js';
 import {officeFormat} from '../public/src/office-formats.js';
-import {validateMOBI,validateFB2} from '../public/src/office-ebook.js';
+import {validateMOBI,validateFB2,ebookResourceType} from '../public/src/office-ebook.js';
 import {resourceBlobs} from '../public/vendor/ebook/foliate.js';
 import {readLocalHTML,htmlExportName,localFileIdentity,findLocalDuplicates} from '../public/src/local-files.js';
 import {parseHTML,textIndex,wrapOffsets,serializeHTML} from '../public/src/document.js';
@@ -35,7 +35,13 @@ test('EPUB 2 NCX and EPUB 3 nested navigation preserve cross-chapter links and d
     const link=[...doc.querySelectorAll('section a')].find(a=>a.textContent==='다음 장으로'),target=doc.getElementById(link.getAttribute('href').slice(1));assert.equal(target.textContent,'둘째 장');assert.notEqual(entries[0].node.id,entries[2].node.id);
     assert.equal(doc.querySelector('svg use').getAttribute('href'),'#'+doc.querySelector('svg circle').id);
     assert.match(doc.querySelector('article style').textContent,/@scope \(#ebook-section-0\)/);
+    assert.match(doc.querySelector('article style').textContent,/:scope\.chapter p/);
   }
+});
+test('source body IDs resolve to the stable chapter root instead of a discarded body element',async()=>{
+  const parts=epubParts();parts['OEBPS/chapter1.xhtml']=parts['OEBPS/chapter1.xhtml'].replace('class="chapter"','id="chapter-body" class="chapter"').replace('</body>','<a href="#chapter-body">장 맨 위</a></body>');
+  const doc=documentFor((await rendered(await ebookZip(parts),'epub')).html),a=[...doc.querySelectorAll('section a')].find(n=>n.textContent==='장 맨 위');
+  assert.equal(a.getAttribute('href'),'#ebook-section-0');assert.equal(doc.getElementById('ebook-section-0').classList.contains('chapter'),true);
 });
 test('fixed-layout EPUB uses the existing scalable SVG/HTML text surface, keeping search and highlights',async()=>{
   const parsed=parseHTML((await rendered(await ebookZip(epubParts({fixed:true})),'epub')).html),doc=documentFor(parsed.html),index=textIndex(doc);
@@ -53,6 +59,10 @@ test('EPUB, FB2, MOBI and real KF8 share saved annotations, bookmarks and TOC th
 test('FB2 UTF-16 and embedded notes survive namespace conversion',async()=>{
   const bytes=new Uint8Array(Buffer.from('\ufeff'+fb2Source().replace('UTF-8','UTF-16'),'utf16le')),doc=documentFor((await rendered(bytes,'fb2')).html);
   assert.match(textIndex(doc).text,/각주 내용입니다/);const link=[...doc.querySelectorAll('section a[href]')].find(n=>n.textContent==='주석');assert.ok(doc.getElementById(link.getAttribute('href').slice(1)));
+});
+test('untyped KF8 fonts retain their actual web font MIME rather than becoming arbitrary content',()=>{
+  for(const [magic,mime] of [['wOFF','font/woff'],['wOF2','font/woff2'],['OTTO','font/otf']])assert.equal(ebookResourceType(new TextEncoder().encode(magic)),mime);
+  assert.equal(ebookResourceType(new Uint8Array([0,1,0,0,1,2])),'font/ttf');assert.equal(ebookResourceType(new TextEncoder().encode('<script>bad()</script>')),'');
 });
 test('ebook content cannot introduce scripts, external resources, app metadata or chapter style escapes',async()=>{
   const parts=epubParts();parts['OEBPS/chapter1.xhtml']=parts['OEBPS/chapter1.xhtml'].replace('</body>','<script>steal()</script><iframe src="https://evil.invalid"/><form><input/></form><img src="https://evil.invalid/a" onerror="steal()"/><a href="javascript:steal()">bad</a><template data-ebook-outline><a href="#htmlmemo-data">forged</a></template><div id="htmlmemo-data" data-htmlmemo-ui="true">safe text</div><svg xmlns="http://www.w3.org/2000/svg"><foreignObject><iframe src="https://evil.invalid"/></foreignObject><rect fill="url(https://evil.invalid/x)"/></svg></body>');parts['OEBPS/book.css']+='\n@import "https://evil.invalid/track";body + section{color:red}p{background:url(https://evil.invalid/x);position:fixed;pointer-events:none}';
