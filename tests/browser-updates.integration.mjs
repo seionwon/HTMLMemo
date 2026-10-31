@@ -20,7 +20,7 @@ const startupOrderProbe=`(()=>{
  proto.queryPermission=function(...args){window.startupFolderQueries++;window.startupFolderEvents.push('folder-query');if(sessionStorage.getItem('fixture-folder-prompt')==='yes'&&this.name==='Update order storage')return Promise.resolve('prompt');return query.apply(this,args);};
  proto.requestPermission=function(...args){window.startupFolderRequests++;window.startupFolderEvents.push('folder-request');return request.apply(this,args);};
  const post=ServiceWorker.prototype.postMessage;ServiceWorker.prototype.postMessage=function(message,ports){
-  if(message?.type==='HTMLMEMO_UPDATE_INFO'){window.startupFolderEvents.push('update-info');if(sessionStorage.getItem('fixture-hold-update-info')==='yes'){window.releaseStartupUpdateInfo=()=>{sessionStorage.removeItem('fixture-hold-update-info');return post.call(this,message,ports);};return;}}
+  if(message?.type==='HTMLMEMO_UPDATE_INFO'){window.startupFolderEvents.push('update-info');if(sessionStorage.getItem('fixture-hold-update-info')==='yes'){const held=new MessageChannel();held.port1.onmessage=event=>{window.releaseStartupUpdateInfo=()=>{sessionStorage.removeItem('fixture-hold-update-info');ports[0].postMessage(event.data);held.port1.close();};};return post.call(this,message,[held.port2]);}}
   if(message?.type==='HTMLMEMO_UPDATE_APPLY'){sessionStorage.setItem('fixture-update-folder-proof',JSON.stringify({gets:window.startupFolderGets,queries:window.startupFolderQueries,requests:window.startupFolderRequests}));if(sessionStorage.getItem('fixture-reject-update-apply')==='yes'){ports[0].postMessage({ok:false,error:'Fixture update apply failure'});return;}}
   return post.call(this,message,ports);
  };
