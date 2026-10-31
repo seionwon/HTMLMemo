@@ -64,7 +64,9 @@ test('real Chrome: Pages-only foliate annotations, hierarchical TOC, cross-links
         await page.click('[data-sidebar-view=outline]');assert.deepEqual(await page.evaluate('[...document.querySelectorAll("#sidebar [data-heading]")].map(n=>n.textContent)'),['첫 장','첫 절','둘째 장']);
         await page.click('#sidebar [data-heading="2"]');await page.waitFor(doc+'.defaultView.scrollY>300');
         await page.click('#sidebar [data-heading="0"]');await page.waitFor(doc+'.defaultView.scrollY<200');
-        await page.evaluate(`(()=>{const d=${doc};[...d.querySelectorAll('section a')].find(n=>n.textContent==='다음 장으로').click();})()`);await page.waitFor(doc+'.defaultView.scrollY>300');
+        await page.click('#toolbar [data-action=select]');
+        const point=await page.evaluate(`(()=>{const f=${frame},d=f.contentDocument,a=[...d.querySelectorAll('section a')].find(n=>n.textContent==='다음 장으로');a.scrollIntoView({block:'center'});const b=f.getBoundingClientRect(),r=a.getBoundingClientRect(),scale=b.width/f.offsetWidth;return{x:b.left+(r.left+r.width/2)*scale,y:b.top+(r.top+r.height/2)*scale};})()`);
+        await page.send('Input.dispatchMouseEvent',{type:'mousePressed',...point,button:'left',clickCount:1});await page.send('Input.dispatchMouseEvent',{type:'mouseReleased',...point,button:'left',clickCount:1});await page.waitFor(doc+'.defaultView.scrollY>300');
         await page.click('.document-host:not([hidden]) [data-action=previous-heading]');await page.waitFor(doc+'.defaultView.scrollY<300');
         await page.click('.document-host:not([hidden]) [data-action=next-heading]');
       }
