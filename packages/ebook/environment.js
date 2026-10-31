@@ -1,6 +1,6 @@
 // A DOM that cannot execute scripts or request resources, used only by the
 // ebook import worker. Namespace additions bridge linkedom's XML subset.
-import {DOMParser as Parser,Document,Element,CustomEvent} from 'linkedom';
+import {DOMParser as Parser,Document,Element} from 'linkedom';
 const XMLNS='http://www.w3.org/2000/xmlns/';
 const originalNames=new WeakMap();
 function namespace(node,prefix){
@@ -45,10 +45,14 @@ export class InertDOMParser {
 export const resourceBlobs=new Map();let sequence=0;
 URL.createObjectURL=blob=>{const url='blob:librememo-ebook/'+(++sequence);resourceBlobs.set(url,blob);return url;};
 URL.revokeObjectURL=url=>resourceBlobs.delete(url);
-globalThis.DOMParser=InertDOMParser;
-globalThis.XMLSerializer=class{serializeToString(node){return node.toString();}};
-globalThis.ProcessingInstruction=class{};
-globalThis.CustomEvent=CustomEvent;
-globalThis.CSS={escape:value=>Array.from(String(value),c=>/[a-zA-Z0-9_-]/.test(c)?c:'\\'+c.codePointAt(0).toString(16)+' ').join('')};
-globalThis.document=new InertDOMParser().parseFromString('<html><head></head><body></body></html>','text/html');
-document.implementation={createDocument:(ns,tag)=>new InertDOMParser().parseFromString('<'+tag+' xmlns="'+ns+'"/>','application/xml')};
+globalThis.CustomEvent??=class extends Event{constructor(type,options={}){super(type,options);this.detail=options.detail;}};
+const inertDocument=new InertDOMParser().parseFromString('<html><head></head><body></body></html>','text/html');
+inertDocument.implementation={createDocument:(ns,tag)=>new InertDOMParser().parseFromString('<'+tag+' xmlns="'+ns+'"/>','application/xml')};
+export function activateEbookDOM(){
+  globalThis.DOMParser=InertDOMParser;
+  globalThis.XMLSerializer=class{serializeToString(node){return node.toString();}};
+  globalThis.ProcessingInstruction=class{};
+  globalThis.CSS={escape:value=>Array.from(String(value),c=>/[a-zA-Z0-9_-]/.test(c)?c:'\\'+c.codePointAt(0).toString(16)+' ').join('')};
+  globalThis.document=inertDocument;
+}
+activateEbookDOM();

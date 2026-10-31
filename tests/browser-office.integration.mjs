@@ -9,6 +9,7 @@ import {pwaEntries} from '../public/src/distribution.js';
 import {createServer} from '../scripts/server.mjs';
 import {launchChrome,clickLibraryImport} from './chrome.mjs';
 import {officeFixtures} from './office-fixtures.mjs';
+import {ebookFixtures,ebookZip,epubParts} from './ebook-fixtures.mjs';
 const frame='document.querySelector(".document-host:not([hidden]) iframe")',doc=frame+'.contentDocument';
 async function environment(){
   await prepareAssets();const folder=await mkdtemp(join(tmpdir(),'librememo-office-'));
@@ -23,6 +24,75 @@ async function saved(page,name,condition='true'){
   await page.waitFor(`(async()=>{const s=await import('./src/storage.js'),rows=await s.listDocuments(),summary=rows.find(r=>r.name===${JSON.stringify(name)});window.__officeRecord=summary?await s.getDocument(summary.id):null;return window.__officeRecord&&(${condition})&&!document.querySelector('.tab-dirty:not([hidden])');})()`,30000);
 }
 const controls=`(()=>{const bar=document.querySelector('.document-host:not([hidden]) [data-htmlmemo-reading-controls]');return {actions:[...bar.querySelectorAll('button')].map(b=>b.dataset.action),height:bar.getBoundingClientRect().height,floating:[...document.querySelectorAll('#toolbar button[data-action]')].map(b=>b.dataset.action),sidebar:[...document.querySelectorAll('#sidebar [data-sidebar-view]')].map(b=>b.dataset.sidebarView)};})()`;
+async function exportEbook(page){
+  await page.evaluate(`(async()=>{const root=await navigator.storage.getDirectory();window.__ebookExport=await root.getFileHandle('전자책 주석.html',{create:true});window.showSaveFilePicker=async()=>window.__ebookExport;})()`);await page.click('#save-page');await page.waitFor("document.querySelector('#toast').textContent.includes('내보냈습니다')");
+  return Buffer.from(await page.evaluate(`(async()=>{const bytes=new Uint8Array(await(await window.__ebookExport.getFile()).arrayBuffer());let s='';for(let i=0;i<bytes.length;i+=16384)s+=String.fromCharCode(...bytes.subarray(i,i+16384));return btoa(s);})()`),'base64');
+}
+
+test('real Chrome: Pages-only foliate opens all ebook formats with shared HTML controls and original folder copies',{timeout:210000},async()=>{
+  const env=await environment();let chrome;
+  try{
+    chrome=await launchChrome();const page=chrome.page;await page.navigate(env.url);await chooseFile(page,Buffer.from('<!doctype html><h1>Baseline</h1><p>본문</p>'),'ebook-baseline.html');await saved(page,'ebook-baseline.html');const baseline=await page.evaluate(controls),results=[],seen=new Set();
+    for(const [format,bytes] of Object.entries(await ebookFixtures())){
+      const name='전자책.'+format,key=Buffer.from(bytes).toString('base64');await chooseFile(page,bytes,name);if(seen.has(key)){await page.waitFor('document.querySelector("[data-duplicate-import]")');await page.click('[data-duplicate-import] [value=new]');}seen.add(key);
+      await saved(page,name);await page.waitFor(frame+'?.style.visibility==="visible"&&'+doc+'?.querySelector("article[data-ebook]")');assert.deepEqual(await page.evaluate(controls),baseline,format);
+      const info=await page.evaluate(`(async()=>{const r=window.__officeRecord,d=${doc},{textIndex}=await import('./src/document.js');return {text:textIndex(d).text,original:Array.from(new Uint8Array(await r.originalFile.arrayBuffer())),toc:[...document.querySelectorAll('#sidebar [data-heading]')].map(n=>n.textContent),unsafe:d.querySelectorAll('script,iframe,object,embed,[contenteditable]').length,execution:r.metadata.execution.allowScripts,images:[...d.querySelectorAll('img')].every(n=>n.complete&&n.naturalWidth>0)};})()`);
+      assert.deepEqual(info.original,[...bytes]);assert.ok(info.toc.length>=2);assert.equal(info.unsafe,0);assert.equal(info.execution,false);assert.equal(info.images,true,format+' local images decoded');
+      if(format==='cbz')assert.deepEqual(info.toc,['page2.png','page10.png']);else assert.match(info.text,format==='azw3'?/Alice|ALICE/:/검색하는 한국어/);
+      results.push({format,originalBytes:bytes.length,outlineItems:info.toc.length,readOnly:true,sharedUI:true,images:true});
+    }
+    await page.waitFor('document.querySelector("#data-folder-status").textContent==="폴더 저장 완료"',30000);
+    const copies=await page.evaluate(`(async()=>{const s=await import('./src/storage.js'),folder=await s.getSetting('folder'),manifest=JSON.parse(await(await(await folder.getFileHandle('HTMLMemo-library.json')).getFile()).text());return manifest.documents.map(e=>({original:e.original.name,copy:e.copy.name,source:e.source.name}));})()`);
+    for(const format of Object.keys(await ebookFixtures()))assert.ok(copies.some(c=>c.original.endsWith('.'+format)&&c.copy.endsWith('.'+format)&&c.source.endsWith('.html')),format);
+    assert.deepEqual(chrome.errors,[]);await writeFile(join(root,'test-results/pages-only-ebook-formats.json'),JSON.stringify({status:'pass',results,controls:baseline,folderCopies:copies.length,errors:[]},null,2));
+  }catch(error){if(chrome){await writeFile(join(root,'test-results/pages-only-ebook-formats-failure.png'),await chrome.page.screenshot());console.error('Ebook format diagnostic',await chrome.page.evaluate('({toast:document.querySelector("#toast")?.textContent,sidebar:document.querySelector("#sidebar")?.textContent})'));}throw error;}finally{await chrome?.close();await env.close();}
+});
+
+test('real Chrome: Pages-only foliate annotations, hierarchical TOC, cross-links, search, export, mobile and offline',{timeout:240000},async()=>{
+  const env=await environment(),fixtures=await ebookFixtures();let chrome,receiver;
+  try{
+    chrome=await launchChrome();receiver=await launchChrome();const page=chrome.page;await page.navigate(env.url);await receiver.page.navigate(env.url);const results=[];
+    // Extra paragraphs make navigation visibly measurable in the shared scroller.
+    const parts=epubParts();parts['OEBPS/chapter1.xhtml']=parts['OEBPS/chapter1.xhtml'].replace('</body>','<p>'+'첫 장의 긴 본문입니다. '.repeat(500)+'</p></body>');const epub=await ebookZip(parts);
+    for(const [format,bytes] of [['epub',epub],['mobi',fixtures.mobi],['fb2',fixtures.fb2],['azw3',fixtures.azw3]]){
+      const name='전자책 주석.'+format;await chooseFile(page,bytes,name);await saved(page,name);await page.waitFor(frame+'?.style.visibility==="visible"&&'+doc+'?.querySelector("article[data-ebook]")');
+      const quote=format==='azw3'?'Alice':'한국어',selected=await page.evaluate(`(()=>{const d=${doc},{body}=d;const walk=d.createTreeWalker(body,NodeFilter.SHOW_TEXT);let n;while(n=walk.nextNode()){if(n.parentElement.closest('style,template')||!n.textContent.includes(${JSON.stringify(quote)}))continue;const start=n.textContent.indexOf(${JSON.stringify(quote)}),range=d.createRange();range.setStart(n,start);range.setEnd(n,start+${quote.length});n.parentElement.scrollIntoView({block:'center'});d.getSelection().removeAllRanges();d.getSelection().addRange(range);d.dispatchEvent(new Event('selectionchange'));return d.getSelection().toString();}})()`);assert.equal(selected,quote);
+      await page.click('#toolbar [data-action=highlight]');await saved(page,name,'window.__officeRecord.metadata.annotations.length===1');assert.equal(await page.evaluate(doc+'.querySelectorAll("[data-htmlmemo-mark]").length>0'),true);
+      if(format==='epub'){
+        // @scope retains body class styling while confining sibling selectors.
+        assert.equal(await page.evaluate('getComputedStyle('+doc+'.querySelector("#ebook-0-2")).lineHeight'),'28.8px');
+        await page.click('[data-sidebar-view=outline]');assert.deepEqual(await page.evaluate('[...document.querySelectorAll("#sidebar [data-heading]")].map(n=>n.textContent)'),['첫 장','첫 절','둘째 장']);
+        await page.click('#sidebar [data-heading="2"]');await page.waitFor(doc+'.defaultView.scrollY>300');
+        await page.click('#sidebar [data-heading="0"]');await page.waitFor(doc+'.defaultView.scrollY<200');
+        await page.evaluate(`(()=>{const d=${doc};[...d.querySelectorAll('section a')].find(n=>n.textContent==='다음 장으로').click();})()`);await page.waitFor(doc+'.defaultView.scrollY>300');
+        await page.click('.document-host:not([hidden]) [data-action=previous-heading]');await page.waitFor(doc+'.defaultView.scrollY<300');
+        await page.click('.document-host:not([hidden]) [data-action=next-heading]');
+      }
+      await page.click('[data-sidebar-view=bookmarks]');await page.click('#add-bookmark');await page.evaluate("document.querySelector('#note-text').value='전자책 돌아올 곳'");await page.click('.note-form button[value=save]');await saved(page,name,'window.__officeRecord.metadata.bookmarks.length===1');
+      await page.click('[data-sidebar-view=search]');await page.evaluate(`(()=>{const input=document.querySelector('#book-search');input.value=${JSON.stringify(quote)};input.dispatchEvent(new Event('input',{bubbles:true}));})()`);await page.waitFor('document.querySelector("[data-whole-search-index]")');await page.click('[data-whole-search-index="0"]');
+      const exported=await exportEbook(page);await chooseFile(receiver.page,exported,format+'-ebook-shared.html');await saved(receiver.page,format+'-ebook-shared.html','window.__officeRecord.metadata.annotations.length===1&&window.__officeRecord.metadata.bookmarks.length===1');await receiver.page.click('[data-sidebar-view=outline]');assert.ok(await receiver.page.evaluate('document.querySelectorAll("#sidebar [data-heading]").length>=2'));
+      results.push({format,selected,annotations:true,bookmarks:true,search:true,exportBytes:exported.length});
+    }
+    await page.send('Emulation.setDeviceMetricsOverride',{width:320,height:640,deviceScaleFactor:1,mobile:true});await page.click('#close-sidebar');await page.evaluate(doc+'.defaultView.scrollTo(0,0)');assert.equal(await page.evaluate('document.documentElement.scrollWidth>innerWidth'),false);await writeFile(join(root,'test-results/pages-only-ebook-320.png'),await page.screenshot());
+    await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:800,deviceScaleFactor:1,mobile:false});await page.evaluate(doc+'.defaultView.scrollTo(0,0)');await writeFile(join(root,'test-results/pages-only-ebook-1280.png'),await page.screenshot());
+    await page.evaluate('navigator.serviceWorker.ready');await page.waitFor('!!navigator.serviceWorker.controller',45000);await page.send('Network.enable');await page.send('Network.emulateNetworkConditions',{offline:true,latency:0,downloadThroughput:0,uploadThroughput:0});await chooseFile(page,fixtures.epub,'offline.epub');await saved(page,'offline.epub');
+    await chooseFile(page,Buffer.from('invalid'),'damaged.epub');await page.waitFor('document.querySelector("#toast").textContent.includes("손상")');assert.equal(await page.evaluate('(async()=>{const s=await import("./src/storage.js");return(await s.listDocuments()).some(r=>r.name==="damaged.epub");})()'),false);
+    assert.deepEqual(chrome.errors,[]);assert.deepEqual(receiver.errors,[]);await writeFile(join(root,'test-results/pages-only-ebook-annotations.json'),JSON.stringify({status:'pass',results,outline:true,crossLinks:true,mobile:320,offline:true,errors:[]},null,2));
+  }catch(error){if(chrome){await writeFile(join(root,'test-results/pages-only-ebook-annotations-failure.png'),await chrome.page.screenshot());console.error('Ebook annotation diagnostic',await chrome.page.evaluate('({toast:document.querySelector("#toast")?.textContent,sidebar:document.querySelector("#sidebar")?.textContent})'));}throw error;}finally{await receiver?.close();await chrome?.close();await env.close();}
+});
+
+test('real Chrome: Pages-only foliate fixed EPUB scales annotations and CBZ supports pen and bookmarks',{timeout:150000},async()=>{
+  const env=await environment(),fixtures=await ebookFixtures();let chrome;
+  try{
+    chrome=await launchChrome();const page=chrome.page;await page.navigate(env.url);await chooseFile(page,await ebookZip(epubParts({fixed:true})),'fixed.epub');await saved(page,'fixed.epub');await page.waitFor(doc+'?.querySelector(".ebook-fixed-page")');
+    await page.evaluate(`(()=>{const d=${doc},p=d.querySelector('#ebook-0-2'),range=d.createRange();range.selectNodeContents(p);d.getSelection().removeAllRanges();d.getSelection().addRange(range);d.dispatchEvent(new Event('selectionchange'));})()`);await page.click('#toolbar [data-action=highlight]');await saved(page,'fixed.epub','window.__officeRecord.metadata.annotations.length===1');
+    const bounds=`(()=>{const d=${doc};return {page:d.querySelector('.ebook-fixed-page>svg').getBoundingClientRect().width,mark:d.querySelector('[data-htmlmemo-mark]').getBoundingClientRect().width};})()`,before=await page.evaluate(bounds);await page.click('.document-host:not([hidden]) [data-action=font-larger]');await saved(page,'fixed.epub','window.__officeRecord.metadata.view.fontScale===1.1');const after=await page.evaluate(bounds);assert.ok(Math.abs(after.page/before.page-1.1)<.03);assert.ok(Math.abs(after.mark/before.mark-1.1)<.03);
+    await chooseFile(page,fixtures.cbz,'comic.cbz');await saved(page,'comic.cbz');await page.waitFor(doc+'?.querySelector(".ebook-comic-page img")?.naturalWidth>0');await page.click('#toolbar [data-action=pen]');
+    const start=await page.evaluate(`(()=>{const f=${frame},image=f.contentDocument.querySelector('img').getBoundingClientRect(),r=f.getBoundingClientRect(),s=r.width/f.offsetWidth;return{x:r.left+(image.left+60)*s,y:r.top+(image.top+60)*s};})()`);await page.send('Input.dispatchMouseEvent',{type:'mousePressed',...start,button:'left',buttons:1,clickCount:1});await page.send('Input.dispatchMouseEvent',{type:'mouseMoved',x:start.x+70,y:start.y+30,button:'left',buttons:1});await page.send('Input.dispatchMouseEvent',{type:'mouseReleased',x:start.x+70,y:start.y+30,button:'left',buttons:0,clickCount:1});await saved(page,'comic.cbz','window.__officeRecord.metadata.annotations.length===1');
+    await page.click('[data-sidebar-view=bookmarks]');await page.click('#add-bookmark');await page.evaluate("document.querySelector('#note-text').value='만화 북마크'");await page.click('.note-form button[value=save]');await saved(page,'comic.cbz','window.__officeRecord.metadata.bookmarks.length===1');
+    assert.deepEqual(chrome.errors,[]);await writeFile(join(root,'test-results/pages-only-ebook-fixed-comic.json'),JSON.stringify({status:'pass',scale:{page:after.page/before.page,annotation:after.mark/before.mark},comicPen:true,comicBookmark:true,errors:[]},null,2));
+  }catch(error){if(chrome)await writeFile(join(root,'test-results/pages-only-ebook-fixed-comic-failure.png'),await chrome.page.screenshot());throw error;}finally{await chrome?.close();await env.close();}
+});
 test('real Chrome: Pages-only GenOffice opens every format read-only with the existing HTML UI',{timeout:240000},async()=>{
   const env=await environment();let chrome;
   try{

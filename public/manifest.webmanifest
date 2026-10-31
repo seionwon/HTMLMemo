@@ -105,6 +105,27 @@
         ],
         "application/x-hwpml": [
           ".hml"
+        ],
+        "application/epub+zip": [
+          ".epub",
+          ".epub3"
+        ],
+        "application/x-mobipocket-ebook": [
+          ".mobi",
+          ".azw"
+        ],
+        "application/vnd.amazon.mobi8-ebook": [
+          ".azw3"
+        ],
+        "application/x-fictionbook+xml": [
+          ".fb2"
+        ],
+        "application/x-zip-compressed-fb2": [
+          ".fbz",
+          ".fb2.zip"
+        ],
+        "application/vnd.comicbook+zip": [
+          ".cbz"
         ]
       }
     }

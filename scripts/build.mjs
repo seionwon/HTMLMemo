@@ -1,5 +1,5 @@
 import { compileDesign } from './design.mjs';
-import { mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdir, writeFile, rm, copyFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { root, prepareAssets, packageAssets } from './assets.mjs';
 import { pwaEntries } from '../public/src/distribution.js';
@@ -9,6 +9,7 @@ await compileDesign();
 await import('./build-office.mjs');
 await import('./build-rhwp.mjs');
 await import('./build-foliate.mjs');
+await copyFile(join(root,'LICENSE'),join(root,'public/LICENSE.txt'));
 await prepareAssets();
 const output=join(root,'dist');
 await rm(output,{recursive:true,force:true});

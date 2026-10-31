@@ -985,7 +985,7 @@ export class Reader {
     this.readingFontSize ||= Number.parseFloat(this.doc.defaultView?.getComputedStyle?.(this.doc.body)?.fontSize)||18;
     let style=this.doc.getElementById('htmlmemo-reading-font-style');
     if(!style){style=this.doc.createElement('style');style.id='htmlmemo-reading-font-style';style.setAttribute('data-htmlmemo-ui','');this.doc.head.append(style);}
-    const css='body{font-size:'+(this.readingFontSize*scale).toFixed(3)+'px!important}article[data-office-slides]>.office-slide,article[data-office-pages]>.office-page{max-width:'+(scale*100)+'%}';if(style.textContent!==css)style.textContent=css;
+    const css='body{font-size:'+(this.readingFontSize*scale).toFixed(3)+'px!important}article[data-office-slides]>.office-slide,article[data-office-pages]>.office-page,article[data-ebook]>.office-page,article[data-ebook]>.ebook-comic-page{max-width:'+(scale*100)+'%}';if(style.textContent!==css)style.textContent=css;
   }
   setReadingFontScale(value) {
     if(!Number.isFinite(value)||this.disposed||this.preparing||this.topbarNode?.isConnected)return false;
@@ -2960,7 +2960,12 @@ export class Reader {
     this.searchMarks=cache.mutate(index,()=>wrapOffsets(this.doc,result.start,result.end,{'data-htmlmemo-search':''},'background:#f0a85b80;outline:2px solid #df9057;border-radius:2px;color:inherit',index));
     this.callbacks?.onSearchChange?.(this);return true;
   }
-  outline() { if(this.pdf)return this.pdf.entries||[];return [...this.doc.querySelectorAll('h1,h2,h3,h4,h5,h6')].filter(n=>n.textContent.trim()&&!n.closest('[data-htmlmemo-ui]')).map(node=>({node,level:Number(node.localName[1]),title:node.textContent.trim()})); }
+  outline() {
+    if(this.pdf)return this.pdf.entries||[];
+    const entries=[...(this.doc.querySelector('template[data-ebook-outline]')?.content.querySelectorAll('a[href]')||[])].map(a=>({node:this.doc.getElementById(a.getAttribute('href').slice(1)),level:clamp(Number(a.dataset.level)||1,1,20),title:a.textContent.trim()})).filter(e=>e.node&&e.title);
+    if(entries.length)return entries;
+    return [...this.doc.querySelectorAll('h1,h2,h3,h4,h5,h6')].filter(n=>n.textContent.trim()&&!n.closest('[data-htmlmemo-ui]')).map(node=>({node,level:Number(node.localName[1]),title:node.textContent.trim()}));
+  }
   addBookmark(title) {
     if(this.pdf){this.metadata.bookmarks.push({id:uid(),title,top:this.scrollTop/this.zoom,left:this.scrollLeft/this.zoom,...this.pdf.bookmarkLocation()});this.callbacks.onChange?.();return;}
     let mark={id:uid(),title,top:this.scrollTop/this.zoom,left:this.scrollLeft/this.zoom};const section=currentSection(this.doc);

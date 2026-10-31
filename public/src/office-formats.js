@@ -27,7 +27,8 @@ export const OFFICE_MIMES={
   'text/markdown':['.md','.markdown'],'text/plain':['.txt'],'application/json':['.json'],
 };
 export const DOCUMENT_EXTENSIONS=['html','htm','mhtml','mht','pdf',...Object.keys(OFFICE_FORMATS)];
-export function documentExtension(name){const value=String(name||'').toLowerCase();return DOCUMENT_EXTENSIONS.slice().sort((a,b)=>b.length-a.length).find(ext=>value.endsWith('.'+ext))||null;}
+const extensionsByLength=[...DOCUMENT_EXTENSIONS].sort((a,b)=>b.length-a.length);
+export function documentExtension(name){const value=String(name||'').toLowerCase();return extensionsByLength.find(ext=>value.endsWith('.'+ext))||null;}
 export function officeFormat(file){
   const ext=documentExtension(file?.name)||String(file?.name||'').match(/\.([a-z0-9]+)$/i)?.[1]?.toLowerCase();
   if(ext)return Object.hasOwn(OFFICE_FORMATS,ext)?ext:null;

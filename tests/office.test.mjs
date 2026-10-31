@@ -12,7 +12,7 @@ import {documentCopyName} from '../public/src/library-folders.js';
 import {APP_FILES} from '../public/src/distribution.js';
 installDOM();
 const fixtures=await officeFixtures();
-for(const format of Object.keys(OFFICE_FORMATS))test('GenOffice read-only import: '+format,async()=>{
+for(const format of Object.keys(fixtures))test('GenOffice read-only import: '+format,async()=>{
   const source=new File([fixtures[format]],'sample.'+format),local=await readLocalHTML(source,{identify:false});
   assert.equal(local.originalFile,source);assert.equal(local.handle,null);assert.equal(local.snapshot.office,source);assert.equal(local.snapshot.html,undefined);
   assert.deepEqual(await droppedHTMLFiles({files:[source]}),[source]);assert.equal(htmlExportName(source.name,true),'sample-주석.html');

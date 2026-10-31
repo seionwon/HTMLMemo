@@ -6,7 +6,7 @@ const root=new URL('../',import.meta.url).pathname,out=resolve(root,'public/vend
 await mkdir(out,{recursive:true});
 const upstream=JSON.parse(await readFile(resolve(root,'vendor-src/foliate-js/UPSTREAM.json'),'utf8'));
 for(const file of upstream.files){const bytes=await readFile(resolve(root,'vendor-src/foliate-js',file.path));if(createHash('sha256').update(bytes).digest('hex')!==file.sha256)throw Error('Changed upstream foliate file: '+file.path);}
-const result=await build({absWorkingDir:root,entryPoints:['packages/ebook/foliate-entry.js'],outfile:'public/vendor/ebook/foliate.js',bundle:true,format:'esm',platform:'browser',target:'es2022',minify:true,legalComments:'external',metafile:true});
+const result=await build({absWorkingDir:root,entryPoints:['packages/ebook/foliate-entry.js'],outfile:'public/vendor/ebook/foliate.js',bundle:true,format:'esm',platform:'browser',target:'es2022',supported:{'template-literal':false},minify:true,legalComments:'external',metafile:true});
 const deps=new Map();
 for(const input of Object.keys(result.metafile.inputs))if(input.includes('node_modules/')){
   let dir=dirname(resolve(root,input));
@@ -25,6 +25,9 @@ for(const [dir,pkg] of [...deps].sort((a,b)=>a[1].name.localeCompare(b[1].name))
 }
 await copyFile(resolve(root,'vendor-src/foliate-js/LICENSE'),resolve(out,'FOLIATE-LICENSE.txt'));
 await writeFile(resolve(out,'THIRD-PARTY-NOTICES.txt'),notices.join('\n\n================================\n\n'));
+// Some upstream modules have no extractable /*! comments. The explicit audit
+// still ships every complete copyright/license notice beside the bundle.
+await writeFile(resolve(out,'foliate.js.LEGAL.txt'),notices.join('\n\n================================\n\n'));
 await writeFile(resolve(out,'UPSTREAM.json'),JSON.stringify({...upstream,bundledDependencies:audited,excluded:['Foliate application','foliate-js demo UI','zip.js','fflate','experimental PDF adapter'],archive:'Existing JSZip + GenOffice ZIP limits (see ../office/THIRD-PARTY-NOTICES.txt)',fonts:'Built-in DecompressionStream; no font catalogue'},null,2)+'\n');
 await mkdir(resolve(root,'test-results/foliate-build'),{recursive:true});await writeFile(resolve(root,'test-results/foliate-build/metafile.json'),JSON.stringify(result.metafile,null,2));
 console.log('foliate: '+result.metafile.outputs['public/vendor/ebook/foliate.js'].bytes+' bytes; '+audited.length+' dependency licenses verified');

@@ -43,7 +43,7 @@ const FORMAT = 'HTMLMemo.library';
 const CHECKPOINT = 'data-folder-checkpoint';
 const object = value => value && typeof value === 'object' && !Array.isArray(value);
 const validId = value => typeof value === 'string' && /^[\w-]{1,80}$/.test(value);
-const refName = /^[a-f0-9]{64}\.(?:json|html|htm|mhtml|mht|pdf|hwp|hwpx|hml|docx|odt|ott|xlsx|xlsm|xls|csv|tsv|ods|ots|pptx|odp|otp|md|markdown|txt)$/;
+const refName = /^[a-f0-9]{64}\.(?:json|html|htm|mhtml|mht|pdf|epub|epub3|mobi|azw|azw3|fb2|fbz|fb2\.zip|cbz|hwp|hwpx|hml|docx|odt|ott|xlsx|xlsm|xls|csv|tsv|ods|ots|pptx|odp|otp|md|markdown|txt)$/;
 const portableKey = key => [PREFERENCES_KEY,'htmlmemo-theme','htmlmemo-doc-toc-width-v1','htmlmemo-doc-toc-expanded-width-v1','msuite_tts_rate'].includes(key) || /^msuite_tts_voice_[\w-]{1,40}$/.test(key) || /^htmlmemo_tts_lang_[\w-]{1,80}$/.test(key);
 const jsonBlob = value => new Blob([JSON.stringify(value)], {type:'application/json'});
 const uid = () => crypto.randomUUID();
@@ -264,7 +264,7 @@ export class DataFolder {
         sourceType=content.file instanceof Blob?'file':'html';
         const body=sourceType==='file'?content.file:new Blob([content.html],{type:'text/html;charset=utf-8'});
         source=await storeObject(data,body,record.metadata?.format==='pdf'?'pdf':'html');
-        const extension=(record.name.match(/\.(html?|mhtml|mht|pdf|hwp|hwpx|hml|docx|odt|ott|xlsx|xlsm|xls|csv|tsv|ods|ots|pptx|odp|otp|md|markdown|txt|json)$/i)?.[1]||'html').toLowerCase();
+        const extension=(record.name.match(/\.(html?|mhtml|mht|pdf|epub|epub3|mobi|azw|azw3|fb2|fbz|fb2\.zip|cbz|hwp|hwpx|hml|docx|odt|ott|xlsx|xlsm|xls|csv|tsv|ods|ots|pptx|odp|otp|md|markdown|txt|json)$/i)?.[1]||'html').toLowerCase();
         original=content.originalFile instanceof Blob?await storeObject(data,content.originalFile,extension):source;
       }
       const annotationStamp=(await localFileIdentity(jsonBlob({annotations:record.metadata.annotations,bookmarks:record.metadata.bookmarks,historyVersion}))).digest;

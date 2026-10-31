@@ -1,0 +1,99 @@
+{
+  "completedAt": "2026-10-31 22:15:00 +09:00",
+  "status": "local-verified-public-deployment-pending",
+  "version": "1.6.0",
+  "unitTests": 823,
+  "syntaxAndJSONChecks": 190,
+  "build": "pass",
+  "diffCheck": "pass",
+  "npmAudit": {
+    "info": 0,
+    "low": 0,
+    "moderate": 0,
+    "high": 0,
+    "critical": 0,
+    "total": 0
+  },
+  "dependencyLicenses": [
+    {
+      "name": "boolbase",
+      "version": "1.0.0",
+      "license": "ISC"
+    },
+    {
+      "name": "css-select",
+      "version": "5.2.2",
+      "license": "BSD-2-Clause"
+    },
+    {
+      "name": "css-what",
+      "version": "6.2.2",
+      "license": "BSD-2-Clause"
+    },
+    {
+      "name": "cssom",
+      "version": "0.5.0",
+      "license": "MIT"
+    },
+    {
+      "name": "dom-serializer",
+      "version": "2.0.0",
+      "license": "MIT"
+    },
+    {
+      "name": "domelementtype",
+      "version": "2.3.0",
+      "license": "BSD-2-Clause"
+    },
+    {
+      "name": "domhandler",
+      "version": "5.0.3",
+      "license": "BSD-2-Clause"
+    },
+    {
+      "name": "domutils",
+      "version": "3.2.2",
+      "license": "BSD-2-Clause"
+    },
+    {
+      "name": "entities",
+      "version": "7.0.1",
+      "license": "BSD-2-Clause"
+    },
+    {
+      "name": "entities",
+      "version": "4.5.0",
+      "license": "BSD-2-Clause"
+    },
+    {
+      "name": "htmlparser2",
+      "version": "10.1.0",
+      "license": "MIT"
+    },
+    {
+      "name": "linkedom",
+      "version": "0.18.12",
+      "license": "ISC"
+    },
+    {
+      "name": "nth-check",
+      "version": "2.1.1",
+      "license": "BSD-2-Clause"
+    },
+    {
+      "name": "uhyphen",
+      "version": "0.2.0",
+      "license": "ISC"
+    }
+  ],
+  "foliateCommit": "78914aef4466eb960965702401634c2cb348e9b1",
+  "limitedBrowser": {
+    "epub": "HTTP 200, no errors; screenshot inspected",
+    "fixedAndApp": "not run: busy or quota reached; no retry",
+    "fullChrome": "pending CI"
+  },
+  "limits": {
+    "hardwareAndroidTested": false,
+    "allRealWorldBooksGuaranteed": false
+  }
+}

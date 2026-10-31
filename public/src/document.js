@@ -260,7 +260,7 @@ function* prepareHTML(html, defaults, {includeMetadata = false, document: loaded
   if(bookmarks.some(mark=>mark.pdfQuoteOffset!=null&&(!Number.isFinite(mark.pdfQuoteOffset)||Math.abs(mark.pdfQuoteOffset)>1)))throw Error('PDF 북마크의 본문 위치가 손상되었습니다.');
   // Fixed slide canvases can become wider than the viewport at A+; native
   // scrolling keeps their right edge reachable and survives HTML export.
-  const nativeScroll = !!allowScripts || !!loadedDocument || !!doc.querySelector('article[data-office-slides],article[data-office-pages]') || html.length >= 4 * 1024 * 1024 || n >= 20000;
+  const nativeScroll = !!allowScripts || !!loadedDocument || !!doc.querySelector('article[data-office-slides],article[data-office-pages],article[data-ebook]') || html.length >= 4 * 1024 * 1024 || n >= 20000;
   // Native-scrolling local documents retain their own viewport rules. This is
   // required for document-owned sticky navigation and sidebars to keep the
   // same layout they have when opened directly in Chrome.

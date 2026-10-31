@@ -55,10 +55,16 @@ export const HELP_TOPICS = [
     ]},
   ],related:['backup-restore','storage-folder','storage-differences','save-problems']},
   {id:'import-files',group:'features',title:'문서 가져오기와 중복 문서',summary:'지원 파일, 여러 파일 열기와 이미 보관한 파일의 선택을 설명합니다.',keywords:'열기 불러오기 import html htm mhtml mht 중복 파일 복사',sections:[
-    {title:'파일을 여는 방법',paragraphs:['내 서재의 파일 가져오기로 HTML·HTM·MHTML·MHT·PDF와 HWP·HWPX·HML·Word·Excel·PowerPoint·OpenDocument·CSV·TSV·Markdown·텍스트·JSON 파일을 선택합니다. 여러 파일을 한 번에 선택하거나 파일을 앱으로 끌어다 놓을 수 있습니다. 가져온 문서는 서재에 보관되고 위쪽 파일 탭으로 열립니다. 문서가 준비될 때까지 기다린 뒤 주석을 남기세요.']},
+    {title:'파일을 여는 방법',paragraphs:['내 서재의 파일 가져오기로 HTML·HTM·MHTML·MHT·PDF와 EPUB·MOBI·AZW·AZW3·FB2·FBZ·FB2.ZIP·CBZ 전자책, HWP·HWPX·HML·Word·Excel·PowerPoint·OpenDocument·CSV·TSV·Markdown·텍스트·JSON 파일을 선택합니다. 여러 파일을 한 번에 선택하거나 파일을 앱으로 끌어다 놓을 수 있습니다. 가져온 문서는 서재에 보관되고 위쪽 파일 탭으로 열립니다. 문서가 준비될 때까지 기다린 뒤 주석을 남기세요.']},
     {title:'이미 같은 파일이 있으면',paragraphs:['원본 내용이 같은 문서가 있으면 기존 주석을 이어서 사용할지, 새 주석으로 시작할지, 취소할지 선택하는 안내가 나옵니다. 예전 주석이 필요하다면 기존 문서를 이어서 여는 선택을 사용하세요. 같은 파일명이라도 내용이 다르면 같은 원본으로 판단하지 않습니다.']},
     {title:'그림과 자료를 함께 보관하려면',paragraphs:['단일 HTML이나 MHTML처럼 자료를 포함한 파일이 알맞습니다. MHTML에 들어 있는 이미지·스타일·글꼴 등을 풀어 보관하며, 저장 당시 포함되지 않은 자료는 되살릴 수 없습니다. 가져오기 전 파일은 자동으로 변경하거나 지우지 않습니다.']},
   ],related:['library','missing-resources','export-html']},
+  {id:'ebook-documents',group:'features',title:'EPUB·Kindle·FB2·CBZ 전자책 읽기',summary:'전자책도 같은 목차·검색·주석·북마크·TTS 도구로 읽습니다.',keywords:'전자책 ebook foliate EPUB EPUB3 MOBI AZW AZW3 KF8 FB2 FBZ FB2.ZIP CBZ 만화 Kindle 킨들 DRM 읽기 전용',sections:[
+    {title:'지원 파일과 여는 방법',paragraphs:['내 서재 → 파일 가져오기에서 EPUB·EPUB3, MOBI·AZW·AZW3(KF8), FB2·FBZ·FB2.ZIP, CBZ를 고르거나 파일을 앱으로 끌어다 놓습니다. FBZ·FB2.ZIP에는 FB2 문서가 하나 있어야 합니다. 별도 앱·서버·확장 프로그램은 필요 없으며 오프라인 준비를 마친 앱에서는 인터넷 없이 가져옵니다.']},
+    {title:'같은 도구와 목차',paragraphs:['기존 HTML과 동일한 탭·상단 읽기 도구·플로팅 주석 툴바·사이드바를 사용합니다. 책에 들어 있는 목차의 계층과 장 사이 링크를 보존하고 목차·이전 절·다음 절로 이동합니다. 검색·선택 형광펜·밑줄·메모·펜·도형·북마크·TTS를 사용하며 원본 본문은 편집하지 않습니다. 고정 배치 EPUB은 쪽과 주석을 함께 확대합니다.','CBZ는 파일명 순서(숫자 포함)로 그림을 표시하고 목차에서 해당 그림으로 이동합니다. 펜·도형·메모·북마크를 사용할 수 있지만 그림 속 글자의 선택·검색·TTS에는 OCR이 필요하며 OCR은 포함하지 않습니다.']},
+    {title:'보관과 주석 전달',paragraphs:['가져온 원본 파일은 내용과 확장자를 그대로 전용 폴더에 복사합니다. 읽기 화면·주석·북마크는 별도로 자동 저장하고 동기화·폴더 복원·휴지통에서 같은 방식으로 관리합니다. 주석까지 다른 사람에게 보내려면 HTML 내보내기로 새 .html 파일을 저장하고 그 파일을 보냅니다. 상대도 LibreMemo의 파일 가져오기로 엽니다. 전자책 원본 자체가 필요한 경우 전용 폴더의 원본 사본도 별도로 전달하세요.']},
+    {title:'표시 범위와 오류',paragraphs:['DRM·암호로 보호된 전자책과 KFX는 지원하지 않습니다. 보호되지 않은 지원 형식의 사본을 가져오세요. 책 안의 스크립트·오디오·영상은 실행하지 않고 외부 그림·글꼴·스타일을 새로 다운로드하지 않습니다. 포함되지 않은 자료나 복잡한 배치·특수 글꼴은 원래 전자책 앱과 다를 수 있습니다.','파일 100MB, FB2·개별 본문 32MiB, 최대 2,000개 부분, 읽기 화면 64MiB와 120초 처리 한도가 있습니다. 손상·외부 엔터티·압축 경로·지나친 압축 해제 크기를 검사하며 실패한 가져오기는 서재에 추가하지 않습니다. 큰 책은 나누어 가져오세요.']},
+  ],related:['import-files','reading-view','annotations','search-outline','export-html']},
   {id:'hangul-documents',group:'features',title:'한글 HWP·HWPX·HML 읽기',summary:'한글 문서도 같은 화면에서 읽고 검색하며 주석을 남깁니다.',keywords:'한글 아래한글 rhwp HWP HWPX HML HWPML 읽기 전용',sections:[
     {title:'여는 방법',paragraphs:['내 서재 → 파일 가져오기에서 HWP·HWPX·HML을 고르거나 앱으로 끌어다 놓습니다. 문서는 기기 안에서 처리하며 별도 서버·확장 프로그램·한글 앱 설치가 필요 없습니다. 앱의 오프라인 준비가 끝나면 인터넷 없이도 새 한글 파일을 가져올 수 있습니다.']},
     {title:'같은 읽기 도구',paragraphs:['원본의 쪽 모양·표·그림을 표시합니다. 목차에서 쪽을 고르거나 이전·다음 버튼으로 이동하고, 검색·글자 선택·형광펜·메모·펜·북마크·TTS를 그대로 사용합니다. A−·A+는 쪽과 주석을 함께 확대·축소합니다. 작은 화면이나 큰 확대에서는 가로로 스크롤합니다. 원본 본문·표·그림을 수정하는 편집 기능은 제공하지 않습니다.']},

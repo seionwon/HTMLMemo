@@ -10,6 +10,7 @@
 
 | 종류 | 확장자 |
 |---|---|
+| 전자책 / 만화 | EPUB, EPUB3, MOBI, AZW, AZW3(KF8), FB2, FBZ, FB2.ZIP, CBZ |
 | 한글 | HWP, HWPX, HML |
 | Word / OpenDocument Text | DOCX, ODT, OTT |
 | 스프레드시트 | XLSX, XLSM, XLS, CSV, TSV, ODS, OTS |
@@ -25,6 +26,14 @@ Office·OpenDocument·텍스트는 [GenOffice](https://github.com/genspark-ai/ge
 고급 페이지 배치·특수 글꼴·도형은 원본 앱과 다를 수 있습니다. 슬라이드의 애니메이션·동영상 재생, 시트의 차트·그림·대화형 피벗, 수식 재계산·매크로 실행은 포함하지 않습니다. 시트에는 저장된 계산 결과를 표시하고 결과가 없으면 수식 자체를 글자로 표시합니다. 외부 파일을 자동으로 내려받지 않습니다. 파일당 100MB, 압축 해제 합계 256MiB·단일 부분 64MiB, 시트당 50,000행·1,024열·250,000칸, 통합 문서 500,000칸·256시트, 슬라이드 2,000장, 텍스트 8백만 글자를 한도로 검사하며 실패한 가져오기는 서재에 추가하지 않습니다. 상세 사용법과 제한은 **설정 → 도움말 → Office·OpenDocument·텍스트를 읽기 전용으로 열기**에서 확인합니다.
 
 `npm run build:office`로 고정된 원본과 의존성에서 엔진을 재생성합니다. `npm run build`도 같은 단계를 실행합니다. `tests/office.test.mjs`와 `tests/browser-office.integration.mjs`가 형식별 가져오기·원본 보존·같은 UI·주석·공유·오프라인 경로를 검사합니다.
+
+## 전자책과 라이선스
+
+[foliate-js](https://github.com/johnfactotum/foliate-js/tree/78914aef4466eb960965702401634c2cb348e9b1)의 원본 파서 모듈을 고정해 EPUB 2/3, MOBI·AZW·AZW3(KF8), FB2와 압축 FB2, CBZ를 읽습니다. EPUB 목차·장 사이 링크·포함된 그림과 스타일을 같은 HTML 리더에 연결하며 고정 배치 EPUB은 기존 SVG/HTML 선택 층을 사용합니다. CBZ는 숫자를 고려한 파일명 순서로 표시하고 그림별 목차를 제공합니다. 원본 바이트·복합 확장자·폴더 복원·동기화·주석 HTML 공유를 공통 경로로 처리합니다. 이미지뿐인 만화에는 OCR이 없어 텍스트 선택·검색·TTS를 제공하지 않습니다. DRM·암호·KFX와 오디오·영상 재생은 지원하지 않습니다. 외부 리소스를 다운로드하거나 책의 스크립트를 실행하지 않습니다. 복잡한 레이아웃·특수 글꼴은 원본 앱과 다를 수 있습니다.
+
+브라우저의 가져오기 Worker에서 실행 가능한 inert DOM을 사용하며 XML 엔터티·압축 경로·해제 크기·DRM 헤더와 출력 용량을 검사합니다. 파일 100MB, FB2·개별 본문 32MiB, 2,000개 부분·읽기 화면 64MiB·120초 한도를 두며 실패 시 문서를 등록하지 않습니다. `npm run build:foliate`는 원본 SHA-256을 확인하고 실제 번들에 들어간 의존성 14개의 라이선스와 고지 원문을 확인합니다. ZIP 처리는 기존 JSZip/GenOffice 검사를 재사용하고 압축 글꼴은 브라우저의 DecompressionStream으로 풉니다. Foliate 앱 본체·demo UI·zip.js·fflate·실험적 PDF 어댑터는 포함하지 않습니다. PDF는 기존 PDF 리더를 사용합니다. [원본과 해시](vendor-src/foliate-js/UPSTREAM.json), [Worker 연결부](packages/ebook), [재배포 고지](public/vendor/ebook/THIRD-PARTY-NOTICES.txt)를 함께 관리합니다.
+
+**LibreMemo의 자체 코드는 [MIT 라이선스](LICENSE)입니다.** 사용·수정·재배포·상업적 이용을 허용하며 저작권·허가 고지를 유지해야 합니다. 포함된 제3자 코드·엔진·폰트·샘플의 권리는 각 원래 라이선스와 출처를 따릅니다. `public/vendor/`와 `vendor-src/`의 고지를 유지하며 LibreMemo의 MIT 고지가 이를 대체하지 않습니다. **설정 → About**에서 앱 MIT 원문과 문서·한글·전자책 엔진의 제3자 고지를 열 수 있고 오프라인 앱 자산에도 포함합니다. 실제 KF8 회귀 샘플은 Project Gutenberg의 퍼블릭 도메인 원작이며 출처·원래 고지를 시험 자료에 보존하고 배포 앱에는 넣지 않습니다.
 
 ## 설치와 URL 공유
 

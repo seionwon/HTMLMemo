@@ -115,7 +115,7 @@ export class LibraryIndex {
 /** IDs prevent identically named imports from overwriting each other or external files. */
 export function documentCopyName(record,ref) {
   if(!validId(record.id))throw Error('문서 ID가 올바르지 않습니다.');
-  const suffix=ref.name.match(/\.(html?|mhtml|mht|pdf|hwp|hwpx|hml|docx|odt|ott|xlsx|xlsm|xls|csv|tsv|ods|ots|pptx|odp|otp|md|markdown|txt|json)$/i)?.[0]||'.html';
-  const base=(typeof record.name==='string'?record.name:'문서').replace(/\.(html?|mhtml|mht|pdf|hwp|hwpx|hml|docx|odt|ott|xlsx|xlsm|xls|csv|tsv|ods|ots|pptx|odp|otp|md|markdown|txt|json)$/i,'').replace(/[\u0000-\u001f\u007f/\\<>:"|?*]/g,'_').replace(/^[. ]+|[. ]+$/g,'').slice(0,55)||'문서';
+  const suffix=ref.name.match(/\.(html?|mhtml|mht|pdf|epub|epub3|mobi|azw|azw3|fb2|fbz|fb2\.zip|cbz|hwp|hwpx|hml|docx|odt|ott|xlsx|xlsm|xls|csv|tsv|ods|ots|pptx|odp|otp|md|markdown|txt|json)$/i)?.[0]||'.html';
+  const base=(typeof record.name==='string'?record.name:'문서').replace(/\.(html?|mhtml|mht|pdf|epub|epub3|mobi|azw|azw3|fb2|fbz|fb2\.zip|cbz|hwp|hwpx|hml|docx|odt|ott|xlsx|xlsm|xls|csv|tsv|ods|ots|pptx|odp|otp|md|markdown|txt|json)$/i,'').replace(/[\u0000-\u001f\u007f/\\<>:"|?*]/g,'_').replace(/^[. ]+|[. ]+$/g,'').slice(0,55)||'문서';
   return `${base} [${record.id}]${suffix}`;
 }
