@@ -1,0 +1,81 @@
+{
+  "status": "pass",
+  "width": 390,
+  "normalRow": {
+    "width": 275,
+    "height": 52.78125,
+    "sidebarTop": 49,
+    "toolbarBottom": 49,
+    "nav": {
+      "height": 822,
+      "total": 822,
+      "width": 299
+    },
+    "tree": {
+      "height": 238,
+      "total": 238,
+      "width": 275,
+      "max": "369.9px"
+    },
+    "uiScale": "1"
+  },
+  "results": [
+    {
+      "percent": 25,
+      "width": 275,
+      "height": 52.796875,
+      "sidebarTop": 49,
+      "toolbarBottom": 49,
+      "nav": {
+        "height": 3288,
+        "total": 3288,
+        "width": 1196
+      },
+      "tree": {
+        "height": 238,
+        "total": 238,
+        "width": 275,
+        "max": "369.9px"
+      },
+      "uiScale": "4"
+    },
+    {
+      "percent": 200,
+      "width": 274,
+      "height": 52.78125,
+      "sidebarTop": 49,
+      "toolbarBottom": 49,
+      "nav": {
+        "height": 411,
+        "total": 411,
+        "width": 149
+      },
+      "tree": {
+        "height": 238,
+        "total": 238,
+        "width": 274,
+        "max": "369.9px"
+      },
+      "uiScale": "0.5"
+    },
+    {
+      "percent": 100,
+      "width": 275,
+      "height": 52.78125,
+      "sidebarTop": 49,
+      "toolbarBottom": 49,
+      "nav": {
+        "height": 822,
+        "total": 822,
+        "width": 299
+      },
+      "tree": {
+        "height": 238,
+        "total": 238,
+        "width": 275,
+        "max": "369.9px"
+      },
+      "uiScale": "1"
+    }
+  ]
+}

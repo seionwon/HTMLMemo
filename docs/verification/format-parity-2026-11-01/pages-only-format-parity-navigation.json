@@ -1,0 +1,24 @@
+{
+  "status": "pass",
+  "hierarchicalOutline": true,
+  "collapseRetained": true,
+  "headingClickKeepsGroup": true,
+  "horizontalSearch": {
+    "nativeScroll": false,
+    "scrollHost": "office-table-scroll",
+    "left": 1782,
+    "scrollWidth": 2834,
+    "clientWidth": 1052,
+    "hit": {
+      "text": "숨은열검색",
+      "left": 1003.921875,
+      "right": 1068.328125
+    },
+    "box": {
+      "left": 24,
+      "right": 1076
+    },
+    "inside": true
+  },
+  "errors": []
+}

@@ -1,0 +1,117 @@
+{
+  "version": "1.7.1",
+  "commit": "b90cfe45dbb85b56cce832d941a2d9f58d97b162",
+  "url": "https://seionwon.github.io/LibreMemo/",
+  "verifiedAt": "2026-10-31T19:52:22.942077+00:00",
+  "status": "pass",
+  "local": {
+    "unit": {
+      "total": 856,
+      "passed": 856,
+      "failed": 0,
+      "skipped": 0
+    },
+    "syntaxJSON": 205,
+    "build": "pass",
+    "diffCheck": "pass"
+  },
+  "ci": {
+    "run": 41233315353,
+    "unit": {
+      "total": 856,
+      "passed": 855,
+      "failed": 0,
+      "skipped": 1,
+      "skipReason": "macOS-only browser launch safety check, on Linux"
+    },
+    "syntaxJSON": 186,
+    "sourceChrome": {
+      "nodeTotal": 113,
+      "leafCases": 111,
+      "passed": 113,
+      "failed": 0,
+      "skipped": 0
+    },
+    "publishedChrome": {
+      "total": 79,
+      "passed": 79,
+      "failed": 0,
+      "skipped": 0
+    },
+    "build": "success",
+    "deploy": "success",
+    "verify": "success"
+  },
+  "coverage": {
+    "extensions": [
+      "html",
+      "htm",
+      "mhtml",
+      "mht",
+      "pdf",
+      "docx",
+      "pptx",
+      "odt",
+      "odp",
+      "xlsx",
+      "xlsm",
+      "xls",
+      "ods",
+      "ott",
+      "otp",
+      "ots",
+      "csv",
+      "tsv",
+      "md",
+      "markdown",
+      "txt",
+      "json",
+      "hml",
+      "hwp",
+      "hwpx",
+      "epub",
+      "epub3",
+      "mobi",
+      "azw",
+      "azw3",
+      "fb2",
+      "fbz",
+      "fb2.zip",
+      "cbz"
+    ],
+    "widths": [
+      1280,
+      390,
+      320
+    ],
+    "nativeUIZoomPercent": [
+      25,
+      50,
+      100,
+      125,
+      200
+    ],
+    "realBookSearchZoomPercent": [
+      25,
+      200,
+      100
+    ],
+    "bookSearchWidths": [
+      1280,
+      390
+    ],
+    "originalHandlersAndExportsPreserved": true
+  },
+  "publishedBytes": {
+    "verifiedAt": "2026-10-31T19:40:50.150Z",
+    "files": 294,
+    "bytes": 49681372,
+    "allHTTP200AndByteAndSHA256Match": true
+  },
+  "limits": {
+    "physicalAndroidTested": false,
+    "mobileTesting": "Fresh Chrome profiles with device metrics emulation; synthetic fixtures",
+    "localDesktopChromeLaunched": false,
+    "formatContent": "Original document layout remains format dependent. Image-only text operations require a text layer; no OCR, DRM removal or source editing added."
+  }
+}

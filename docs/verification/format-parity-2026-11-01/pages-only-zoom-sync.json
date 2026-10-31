@@ -1,0 +1,49 @@
+{
+  "status": "pass",
+  "nativeControls": true,
+  "plainControls": true,
+  "states": [
+    {
+      "action": "in",
+      "value": "164",
+      "toolbar": "164%"
+    },
+    {
+      "action": "in",
+      "value": "197",
+      "toolbar": "197%"
+    },
+    {
+      "action": "out",
+      "value": "164",
+      "toolbar": "164%"
+    },
+    {
+      "action": "out",
+      "value": "137",
+      "toolbar": "137%"
+    },
+    {
+      "typed": "950",
+      "value": "800",
+      "toolbar": "800%"
+    },
+    {
+      "typed": "5",
+      "value": "20",
+      "toolbar": "20%"
+    },
+    {
+      "typed": "137.5",
+      "value": "138",
+      "toolbar": "138%"
+    },
+    {
+      "typed": "",
+      "value": "138",
+      "toolbar": "138%"
+    }
+  ],
+  "resetAndReopen": true,
+  "errors": []
+}

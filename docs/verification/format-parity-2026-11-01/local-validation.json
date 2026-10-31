@@ -1,0 +1,29 @@
+{
+  "stage": "local verification complete",
+  "verifiedAt": "2026-11-01T04:14:06.529080+09:00",
+  "version": "1.7.1",
+  "sourceCommit": "b90cfe45dbb85b56cce832d941a2d9f58d97b162",
+  "unit": {
+    "total": 856,
+    "passed": 856,
+    "failed": 0,
+    "skipped": 0
+  },
+  "syntaxAndJSON": {
+    "javascriptCount": 205,
+    "status": "pass",
+    "note": "Includes ignored local verification helpers; CI count is recorded separately."
+  },
+  "build": "pass",
+  "diffCheck": "pass",
+  "targetedPDFRaster": {
+    "tests": 12,
+    "passed": 12,
+    "regressionBeforeFix": "failed: an undecoded replacement was published",
+    "afterFix": "pass: keep loaded raster until replacement loads; stale and disposed Blob URLs revoked"
+  },
+  "desktopChromeLaunchedInSandbox": false,
+  "physicalAndroidTested": false,
+  "browserVerification": "Existing GitHub Actions with fresh Chrome profiles and synthetic fixtures",
+  "ciResultsRecordedSeparately": true
+}

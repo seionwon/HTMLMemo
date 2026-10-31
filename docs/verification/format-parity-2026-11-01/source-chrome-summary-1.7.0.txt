@@ -1,0 +1,153 @@
+##[group]Run npm run test:browser
+npm run test:browser
+shell: /usr/bin/bash -e {0}
+env:
+  GITHUB_PAGES: true
+##[endgroup]
+
+> librememo@1.7.0 test:browser
+> node -e "require('node:fs').mkdirSync('test-results',{recursive:true})" && node --test --test-concurrency=1 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/browser-results.xml tests/browser-export.integration.mjs tests/browser-format-parity.integration.mjs tests/browser-office.integration.mjs tests/browser-pdf.integration.mjs tests/browser.integration.mjs tests/browser-tts.integration.mjs tests/browser-library-folders.integration.mjs tests/browser-annotation-jump.integration.mjs tests/browser-security.integration.mjs tests/browser-annotation-picking.integration.mjs tests/browser-device-sync.integration.mjs tests/browser-mobile.integration.mjs tests/browser-help.integration.mjs tests/browser-updates.integration.mjs tests/browser-branding.integration.mjs
+
+✔ real Chrome: Pages-only first exported import waits for annotation targets and same-section reloads (8880.484074ms)
+✔ real Chrome: Pages-only thin annotation picking keeps screen tolerance, text cursors, erasing and clean exports (24283.312928ms)
+✔ real Chrome: Pages-only selection drags drawings, notes and text marks with undo, cancellation and durable anchors (17592.598205ms)
+✔ real Chrome: Pages-only LibreMemo rename preserves old-profile documents, marks, trash and settings across both paths (5495.323928ms)
+✔ device sync streams a 64 MiB live original and propagates sender failures to the phone (13250.681495ms)
+✔ device sync reuses separately imported prepared HTML and original files across different document IDs (5360.954333ms)
+✔ device sync entry and QR stay compact on the published desktop and phone views (7696.770202ms)
+✔ device sync settings choices apply either peer to both devices or cancel before original transfer (12368.715615ms)
+PASS: No relay connection starts during ordinary use or just opening the dialog
+PASS: Two-way transfer includes live documents only; both local trash collections and their bookmarks/history remain unchanged, and an active peer cannot restore a local trash copy
+PASS: 320px dialog remains usable; closing releases relay connections
+PASS: Independent reloads preserve live synchronization and each device local trash
+PASS: The displayed connection QR and the formerly unreadable code decode with the bundled fallback scanner
+PASS: Actual conflict buttons preserve the chosen version and a safety copy of the entire prior document
+PASS: Stale writes abort the actual IndexedDB transaction without replacing the original
+PASS: A stale reader cannot overwrite a version received through device sync
+PASS: Current-document sharing is one-way and closing sync restores the previously open reader
+✔ device sync exchanges live documents while keeping each device trash local (7531.931147ms)
+✔ device sync annotation choices merge, replace or skip both devices once including current-document replies (11932.282174ms)
+✔ device sync connection recovery rebuilds failed pre-transfer peers once and preserves originals (6112.722491ms)
+✔ real Chrome: Pages-only export archive restores the exact original, edits, bookmarks and location without replacing existing documents (11480.46483ms)
+✔ real Chrome: Pages-only export native PDF has standard annotations and Unicode bookmarks; one HTML restores edits and opens offline without the app (12648.919444ms)
+✔ real Chrome: Pages-only export Office archive keeps the DOCX source and editable marks through a fresh import (10197.104709ms)
+✔ real Chrome: Pages-only every format shares MemoSuite toolbar sizes, sidebar, annotations, bookmarks and TTS (209875.787688ms)
+✔ real Chrome: Pages-only common outline folding and horizontal search match HTML reading behavior (7857.002195ms)
+✔ real Chrome: Pages-only MemoSuite book and fallback sidebar share tab, search and bookmark presentation (8533.130971ms)
+✔ real Chrome: Pages-only searchable help keeps navigation, mobile layouts and document data intact (4267.769886ms)
+✔ real Chrome: Pages-only help and search reopen offline after a complete app reload (4648.10869ms)
+✔ real Chrome: Pages-only library trash restores documents and portable notes, and purges only confirmed trash (8785.411664ms)
+✔ real Chrome: Pages-only library folders preserve real paths, annotations and a fresh-device hierarchy (8935.130724ms)
+✔ real Chrome: Pages-only optimized library batches a large restore and reuses unchanged card and folder DOM (3877.098169ms)
+✔ real Chrome: Pages-only two-finger scrolling cancels ink and annotation drags without changing saved marks (10572.680275ms)
+✔ real Chrome: cold startup waits for a streamed document before binding UI (2153.749373ms)
+✔ real Chrome: Pages-only empty library waits for folder permission and restoration on startup (5739.275838ms)
+✔ real Chrome: Pages-only Android first-run folder welcome is error-free and fits phone screens (3507.013122ms)
+✔ real Chrome: Pages-only Android saved folder resumes across launches without repeating first setup (6457.337933ms)
+✔ real Chrome: Pages-only touch and pen text marking highlights and underlines with scrolling and durable quotes (19234.664055ms)
+✔ real Chrome: Pages-only low-resolution screens keep controls reachable and the toolbar scrolls by touch (53062.509003ms)
+✔ real Chrome: Pages-only foliate opens all ebook formats with shared HTML controls and original folder copies (12735.849701ms)
+✔ real Chrome: Pages-only foliate annotations, hierarchical TOC, cross-links, search, export, mobile and offline (19233.343835ms)
+✔ real Chrome: Pages-only foliate fixed EPUB scales annotations and CBZ supports pen and bookmarks (10479.79529ms)
+✔ real Chrome: Pages-only GenOffice opens every format read-only with the existing HTML UI (17426.549787ms)
+✔ real Chrome: Pages-only Office annotations, bookmarks, slide scaling, export, mobile and offline import (16957.684258ms)
+✔ real Chrome: Pages-only rhwp Korean selection, annotations, pages, scaling, sharing and offline import (19146.590046ms)
+✔ real Chrome: Pages-only PDF uses the HTML and Markdown UI, saves page annotations and exports a portable file (15851.658646ms)
+✔ real Chrome: Pages-only PDF ignores document scripts, reports locked or damaged files and reopens offline (8151.509217ms)
+✔ real Chrome: Pages-only PDF shared gestures, annotation movement, TTS and new edition locations (7553.177947ms)
+✔ real Chrome: Pages-only long-document selection and compact undo history preserve notes, search and exports (2619.693844ms)
+✔ real Chrome: Pages-only runtime batches preserve source controls and notes across thousands of updates (2483.659985ms)
+✔ real Chrome: Pages-only security isolation denies app data, folder handles and network access while preserving source controls (3232.582259ms)
+✔ real Chrome: Pages-only saved main-frame MHTML supports selection notes, reopening and annotated export without remote frames (4370.259226ms)
+▶ real Chrome: MemoSuite TTS toolbar in LibreMemo
+  ✔ browser navigation and single-file capture (556.402811ms)
+  ✔ compact toolbar opens without speech and retains all playback controls (800.650686ms)
+✔ real Chrome: MemoSuite TTS toolbar in LibreMemo (3573.430336ms)
+✔ real Chrome: PWA startup updates preserve cancellation across complete closes, save before applying and keep other windows stable (24107.390617ms)
+✔ real Chrome: PWA startup updates install a waiting legacy release and recover a lost reply before activation (34220.784218ms)
+✔ real Chrome: Pages-only PWA updater startup is silent when current and preserves the installed app offline (4181.568289ms)
+✔ real Chrome: PWA startup updates run before folder permissions on every launch (15167.803539ms)
+✔ real Chrome: MHTML import restores a Chrome archive, saves notes and exports self-contained HTML (4723.135847ms)
+✔ real Chrome: duplicate HTML import offers cancel, fresh annotations or existing notes (5112.258853ms)
+Duplicate import 32 MiB exact-identity benchmark: {"size":33554513,"headerBytes":65536,"preflightBytes":65536,"scanBytes":33554513,"cachedReads":0,"peak":4,"compatible":true,"matches":["original"],"wrong":0,"parallelMs":77.60000000009313,"serialMs":118.5999999998603}
+✔ real Chrome: duplicate HTML import preflights sizes and preserves exact v1 identities (2612.716564ms)
+✔ real Chrome: duplicate HTML import clears embedded notes and upgrades legacy streamed books (3103.879214ms)
+✔ real Chrome: reading controls provide one app TTS, wait for Play and keep upper zoom usable (6723.069284ms)
+✔ real Chrome: TTS selection shares the main player and settings while keeping speech inside the selected range (6550.394373ms)
+✔ real Chrome: TTS paused resume follows the new reading position without autoplay or stale chapter speech (7997.871182ms)
+✔ real Chrome: TTS transport controls remain responsive to rapid pointer, keyboard and touch commands (11799.733942ms)
+✔ real Chrome: palette controls stay above palettes and retain their settings and title-drag position (6136.061778ms)
+✔ real Chrome: toolbar mode groups preserve selected text when creating notes from the floating toolbar (9421.020604ms)
+✔ real Chrome: Pages-only circles and ellipses follow rectangle fill mode across save and export (12282.787847ms)
+✔ real Chrome: toolbar mode groups remove semantic duplicates and keep area, underline and text annotations usable (10125.902756ms)
+✔ real Chrome: standalone book export keeps lazy chapters and released assets; incomplete copies stay recoverable (4140.903247ms)
+✔ real Chrome: Pages-only annotated HTML export survives a fresh recipient library (6854.960975ms)
+✔ real Chrome: Pages-only pasted reading controls default to outline and retain navigation and font settings (15787.803586ms)
+✔ real Chrome: Pages-only Markdown paste keeps formatting, annotations and offline reading (7121.221037ms)
+✔ real Chrome: Pages-only URL use, safe text import, app tabs and optional installation (4691.768827ms)
+✔ real Chrome: Chrome companion search has no iframe, preserves the reader and imports the actual article URL (2972.602574ms)
+✔ real Chrome: cross-origin CORS capture and blocked-site fallback use only the app (2640.482268ms)
+▶ real Chrome: browsing, capture, local annotation, file writes, reopen and offline
+  ✔ one address row and the settings icon preserve every action on desktop and mobile (3330.920604ms)
+  ✔ browser navigation and single-file capture (236.034907ms)
+  ✔ local annotation saves internally and exports on request (628.375096ms)
+  ✔ local file import activates annotation independent of original website URL (146.472503ms)
+  ✔ opened documents have visible tabs that switch without adding a header row (69.494962ms)
+  ✔ document fullscreen retains every compact toolbar button and saves annotations (626.74617ms)
+  ✔ library reopen and offline app shell (3052.780425ms)
+  ✔ large native File import executes local JavaScript without a full file read; tools and autosave remain usable (3048.57915ms)
+  ✔ JavaScript-generated local body becomes annotatable and its metadata survives a reopen (2475.604727ms)
+  ✔ split-pane book with inner scrollable main keeps drawing annotations locked to content during scroll (164.918405ms)
+✔ real Chrome: browsing, capture, local annotation, file writes, reopen and offline (15995.475458ms)
+✔ real Chrome: Pages-only annotation history groups idle input and continuous work without delaying autosave (7144.015254ms)
+✔ real Chrome: Pages-only history stays with the selected document across tabs, library entry and restoration (5948.574598ms)
+✔ real Chrome: Pages-only history calendar browses years months and days with indexed paging and legacy migration (7685.105293ms)
+✔ real Chrome: separate annotations, immutable source, durable history, restoration and export (6778.399536ms)
+Annotation opening: {"samples":87,"shown":81,"legacyShown":0,"first":{"visible":true,"legacy":false,"notes":1,"marks":1,"scroll":800,"scale":0.75}}
+Annotation opening: {"samples":86,"shown":80,"legacyShown":0,"first":{"visible":true,"legacy":false,"notes":1,"marks":1,"scroll":800,"scale":0.75}}
+✔ real Chrome: an annotated file is first shown with restored notes, zoom and reading position (5476.340344ms)
+Delayed annotation geometry: {"samples":116,"shown":105,"unresolvedDrawings":0,"maxHeight":96,"first":{"visible":true,"target":true,"stroke":true,"height":96,"relativeTop":12},"last":{"visible":true,"target":true,"stroke":true,"height":96,"relativeTop":12}}
+Delayed annotation geometry: {"samples":116,"shown":105,"unresolvedDrawings":0,"maxHeight":96,"first":{"visible":true,"target":true,"stroke":true,"height":96,"relativeTop":12},"last":{"visible":true,"target":true,"stroke":true,"height":96,"relativeTop":12}}
+Delayed annotation geometry: {"samples":118,"shown":109,"unresolvedDrawings":0,"maxHeight":96,"first":{"visible":true,"target":true,"stroke":true,"height":96,"relativeTop":12},"last":{"visible":true,"target":true,"stroke":true,"height":96,"relativeTop":12}}
+Delayed annotation geometry: {"samples":119,"shown":72,"unresolvedDrawings":0,"maxHeight":96,"first":{"visible":true,"target":true,"stroke":true,"height":96,"relativeTop":12},"last":{"visible":true,"target":true,"stroke":true,"height":96,"relativeTop":12}}
+Delayed annotation geometry: {"samples":118,"shown":109,"unresolvedDrawings":0,"maxHeight":96,"first":{"visible":true,"target":true,"stroke":true,"height":96,"relativeTop":12},"last":{"visible":true,"target":true,"stroke":true,"height":96,"relativeTop":12}}
+✔ real Chrome: delayed annotation anchors never paint drawings stretched over the whole document (12868.801787ms)
+Layout measurement: {"first":{"width":1000,"height":824.987548828125,"scroll":300},"last":{"width":1000,"height":824.987548828125,"scroll":300},"replaced":0}
+✔ real Chrome: self-observing HTML settles without overlay resize feedback or scroll jitter (4924.19134ms)
+✔ real Chrome: compact library shares titles and sources, keeps dense views usable and preserves notes (7758.857194ms)
+Large-library measurement: {"noBodies":true,"reads":0,"elapsed":41.5999999998603,"headers":50,"older":7,"unique":57,"fullHeader":false,"versionBookmarks":1}
+✔ real Chrome: large library and annotation autosave never deserialize book bodies (4788.937093ms)
+✔ real Chrome: saved date, modified date and title sort in both directions and persist across reloads (5369.795735ms)
+✔ real Chrome: adaptive file tabs shrink evenly before scrolling and preserve controls and document instances (6780.763384ms)
+✔ real Chrome: visible file tabs keep one header row and preserve documents through switching and closing (6751.933873ms)
+✔ real Chrome: scrolling saves quietly in batches, preserves annotation history and flushes the last position on close (11905.997403ms)
+✔ real Chrome: font-scaled pen glyph alignment, padding, wrapping, thickness, legacy baselines, reopen and export (7432.062381ms)
+✔ real Chrome: annotation tree follows book TOC, prunes empty branches, remembers disclosure and navigates unopened chapters (6501.7616ms)
+✔ real Chrome: Pages-only bookmark tree follows TOC positions, navigates chapters and folds on reselection (11114.944404ms)
+✔ real Chrome: Pages-only native TOC links move the visible reader after bookmark views and repeated source hashes (5738.997829ms)
+✔ real Chrome: Pages-only script-driven TOC, history navigation and scroll targets reach the visible reader (11485.464596ms)
+✔ real Chrome: Pages-only body links and previous-next source controls navigate the visible reader without disturbing bookmarks (11900.506304ms)
+✔ real Chrome: annotation tree keeps the confirmed opening and the deepest known partial location without rewriting notes (5671.858102ms)
+✔ real Chrome: whole-book search shows live results and jumps to highlighted keywords in unopened chapters (8396.333938ms)
+✔ real Chrome: sidebar view choices collapse the TOC only when reselecting the active outline (4879.718478ms)
+✔ real Chrome: native sidebar view choices are visible on open and preserve the original book tree and export (10314.239042ms)
+✔ real Chrome: long-document search index is lazy, reused, mutation-aware and responsive (11976.414737ms)
+✔ real Chrome: sidebar view choices stay available for HTML without a TOC or headings (5775.920053ms)
+✔ real Chrome: sidebar view choices preserve search drafts, navigate saved notes and keep bookmarks editable (8726.436254ms)
+✔ real Chrome: sidebar view choices preserve word and sentence selection with blank-only fullscreen (6071.302774ms)
+✔ real Chrome: Pages-only first-run folder welcome is automatic, readable and recoverable (6731.4816ms)
+✔ real Chrome: Pages-only data folder copies imported originals and restores all data on a fresh device (9640.842802ms)
+✔ real Chrome: folder setup explains subfolders and preserves connections through cancellation and retry (4505.666283ms)
+✔ real Chrome: Pages-only annotations and bookmarks move to a new edition without changing the old book (5202.43523ms)
+✔ real Chrome: Pages-only precise bookmarks retain the saved text point across editions and reflow (8408.771239ms)
+✔ real Chrome: Pages-only shared sidebar opens on the left, resizes and restores its portable width (7737.273229ms)
+✔ real Chrome: Pages-only TTS diagram paint stays thin and leaves SVG glyphs intact (7794.382677ms)
+ℹ tests 113
+ℹ suites 0
+ℹ pass 113
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1216464.707947
+
