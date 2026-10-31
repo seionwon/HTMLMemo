@@ -2802,7 +2802,7 @@ test('real Chrome: Pages-only data folder copies imported originals and restores
     for(const width of [1280,320]){
       await next.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});await next.click('#data-folder-status');await next.click('[data-folder-guide] summary');
       const help=await next.evaluate(`(()=>{const d=document.querySelector('#dialog'),r=d.getBoundingClientRect();return {text:d.textContent,open:d.querySelector('[data-folder-guide]').open,fits:r.left>=0&&r.right<=innerWidth&&d.scrollWidth<=d.clientWidth+1,status:document.querySelector('#data-folder-status').getBoundingClientRect().width};})()`);
-      assert.equal(help.open,true);assert.equal(help.fits,true);assert.ok(help.status>0);for(const text of ['폴더 전체','원본 포함 보관 파일','설정 JSON을 별도로 저장할 필요가 없습니다','쓰기 권한'])assert.ok(help.text.includes(text));await writeFile(join(root,`test-results/pages-only-data-folder-guide-${width}.png`),await next.screenshot());await next.click('#dialog [data-dialog-close]');
+      assert.equal(help.open,true);assert.equal(help.fits,true);assert.ok(help.status>0);for(const text of ['폴더 전체','원본 포함 보관 파일','읽기용 HTML 사본','주석 포함 PDF','설정 JSON을 별도로 저장할 필요가 없습니다','쓰기 권한'])assert.ok(help.text.includes(text),'missing folder guide: '+text);await writeFile(join(root,`test-results/pages-only-data-folder-guide-${width}.png`),await next.screenshot());await next.click('#dialog [data-dialog-close]');
     }
     assert.deepEqual(sender.errors,[]);assert.deepEqual(recipient.errors,[]);
   }catch(error){

@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+<testsuites>
+	<testcase name="real Chrome: Pages-only first exported import waits for annotation targets and same-section reloads" time="8.880484" classname="test"/>
+	<testcase name="real Chrome: Pages-only thin annotation picking keeps screen tolerance, text cursors, erasing and clean exports" time="24.283313" classname="test"/>
+	<testcase name="real Chrome: Pages-only selection drags drawings, notes and text marks with undo, cancellation and durable anchors" time="17.592598" classname="test"/>
+	<testcase name="real Chrome: Pages-only LibreMemo rename preserves old-profile documents, marks, trash and settings across both paths" time="5.495324" classname="test"/>
+	<testcase name="device sync streams a 64 MiB live original and propagates sender failures to the phone" time="13.250681" classname="test"/>
+	<testcase name="device sync reuses separately imported prepared HTML and original files across different document IDs" time="5.360954" classname="test"/>
+	<testcase name="device sync entry and QR stay compact on the published desktop and phone views" time="7.696770" classname="test"/>
+	<testcase name="device sync settings choices apply either peer to both devices or cancel before original transfer" time="12.368716" classname="test"/>
+	<testcase name="device sync exchanges live documents while keeping each device trash local" time="7.531931" classname="test"/>
+	<testcase name="device sync annotation choices merge, replace or skip both devices once including current-document replies" time="11.932282" classname="test"/>
+	<testcase name="device sync connection recovery rebuilds failed pre-transfer peers once and preserves originals" time="6.112722" classname="test"/>
+	<testcase name="real Chrome: Pages-only export archive restores the exact original, edits, bookmarks and location without replacing existing documents" time="11.480465" classname="test"/>
+	<testcase name="real Chrome: Pages-only export native PDF has standard annotations and Unicode bookmarks; one HTML restores edits and opens offline without the app" time="12.648919" classname="test"/>
+	<testcase name="real Chrome: Pages-only export Office archive keeps the DOCX source and editable marks through a fresh import" time="10.197105" classname="test"/>
+	<testcase name="real Chrome: Pages-only every format shares MemoSuite toolbar sizes, sidebar, annotations, bookmarks and TTS" time="209.875788" classname="test"/>
+	<testcase name="real Chrome: Pages-only common outline folding and horizontal search match HTML reading behavior" time="7.857002" classname="test"/>
+	<testcase name="real Chrome: Pages-only MemoSuite book and fallback sidebar share tab, search and bookmark presentation" time="8.533131" classname="test"/>
+	<testcase name="real Chrome: Pages-only searchable help keeps navigation, mobile layouts and document data intact" time="4.267770" classname="test"/>
+	<testcase name="real Chrome: Pages-only help and search reopen offline after a complete app reload" time="4.648109" classname="test"/>
+	<testcase name="real Chrome: Pages-only library trash restores documents and portable notes, and purges only confirmed trash" time="8.785412" classname="test"/>
+	<testcase name="real Chrome: Pages-only library folders preserve real paths, annotations and a fresh-device hierarchy" time="8.935131" classname="test"/>
+	<testcase name="real Chrome: Pages-only optimized library batches a large restore and reuses unchanged card and folder DOM" time="3.877098" classname="test"/>
+	<testcase name="real Chrome: Pages-only two-finger scrolling cancels ink and annotation drags without changing saved marks" time="10.572680" classname="test"/>
+	<testcase name="real Chrome: cold startup waits for a streamed document before binding UI" time="2.153749" classname="test"/>
+	<testcase name="real Chrome: Pages-only empty library waits for folder permission and restoration on startup" time="5.739276" classname="test"/>
+	<testcase name="real Chrome: Pages-only Android first-run folder welcome is error-free and fits phone screens" time="3.507013" classname="test"/>
+	<testcase name="real Chrome: Pages-only Android saved folder resumes across launches without repeating first setup" time="6.457338" classname="test"/>
+	<testcase name="real Chrome: Pages-only touch and pen text marking highlights and underlines with scrolling and durable quotes" time="19.234664" classname="test"/>
+	<testcase name="real Chrome: Pages-only low-resolution screens keep controls reachable and the toolbar scrolls by touch" time="53.062509" classname="test"/>
+	<testcase name="real Chrome: Pages-only foliate opens all ebook formats with shared HTML controls and original folder copies" time="12.735850" classname="test"/>
+	<testcase name="real Chrome: Pages-only foliate annotations, hierarchical TOC, cross-links, search, export, mobile and offline" time="19.233344" classname="test"/>
+	<testcase name="real Chrome: Pages-only foliate fixed EPUB scales annotations and CBZ supports pen and bookmarks" time="10.479795" classname="test"/>
+	<testcase name="real Chrome: Pages-only GenOffice opens every format read-only with the existing HTML UI" time="17.426550" classname="test"/>
+	<testcase name="real Chrome: Pages-only Office annotations, bookmarks, slide scaling, export, mobile and offline import" time="16.957684" classname="test"/>
+	<testcase name="real Chrome: Pages-only rhwp Korean selection, annotations, pages, scaling, sharing and offline import" time="19.146590" classname="test"/>
+	<testcase name="real Chrome: Pages-only PDF uses the HTML and Markdown UI, saves page annotations and exports a portable file" time="15.851659" classname="test"/>
+	<testcase name="real Chrome: Pages-only PDF ignores document scripts, reports locked or damaged files and reopens offline" time="8.151509" classname="test"/>
+	<testcase name="real Chrome: Pages-only PDF shared gestures, annotation movement, TTS and new edition locations" time="7.553178" classname="test"/>
+	<testcase name="real Chrome: Pages-only long-document selection and compact undo history preserve notes, search and exports" time="2.619694" classname="test"/>
+	<testcase name="real Chrome: Pages-only runtime batches preserve source controls and notes across thousands of updates" time="2.483660" classname="test"/>
+	<testcase name="real Chrome: Pages-only security isolation denies app data, folder handles and network access while preserving source controls" time="3.232582" classname="test"/>
+	<testcase name="real Chrome: Pages-only saved main-frame MHTML supports selection notes, reopening and annotated export without remote frames" time="4.370259" classname="test"/>
+	<testsuite name="real Chrome: MemoSuite TTS toolbar in LibreMemo" time="3.573430" disabled="0" errors="0" tests="2" failures="0" skipped="0" hostname="runnervmnwato">
+		<testcase name="browser navigation and single-file capture" time="0.556403" classname="test"/>
+		<testcase name="compact toolbar opens without speech and retains all playback controls" time="0.800651" classname="test"/>
+	</testsuite>
+	<testcase name="real Chrome: PWA startup updates preserve cancellation across complete closes, save before applying and keep other windows stable" time="24.107391" classname="test"/>
+	<testcase name="real Chrome: PWA startup updates install a waiting legacy release and recover a lost reply before activation" time="34.220784" classname="test"/>
+	<testcase name="real Chrome: Pages-only PWA updater startup is silent when current and preserves the installed app offline" time="4.181568" classname="test"/>
+	<testcase name="real Chrome: PWA startup updates run before folder permissions on every launch" time="15.167804" classname="test"/>
+	<testcase name="real Chrome: MHTML import restores a Chrome archive, saves notes and exports self-contained HTML" time="4.723136" classname="test"/>
+	<testcase name="real Chrome: duplicate HTML import offers cancel, fresh annotations or existing notes" time="5.112259" classname="test"/>
+	<testcase name="real Chrome: duplicate HTML import preflights sizes and preserves exact v1 identities" time="2.612717" classname="test"/>
+	<testcase name="real Chrome: duplicate HTML import clears embedded notes and upgrades legacy streamed books" time="3.103879" classname="test"/>
+	<testcase name="real Chrome: reading controls provide one app TTS, wait for Play and keep upper zoom usable" time="6.723069" classname="test"/>
+	<testcase name="real Chrome: TTS selection shares the main player and settings while keeping speech inside the selected range" time="6.550394" classname="test"/>
+	<testcase name="real Chrome: TTS paused resume follows the new reading position without autoplay or stale chapter speech" time="7.997871" classname="test"/>
+	<testcase name="real Chrome: TTS transport controls remain responsive to rapid pointer, keyboard and touch commands" time="11.799734" classname="test"/>
+	<testcase name="real Chrome: palette controls stay above palettes and retain their settings and title-drag position" time="6.136062" classname="test"/>
+	<testcase name="real Chrome: toolbar mode groups preserve selected text when creating notes from the floating toolbar" time="9.421021" classname="test"/>
+	<testcase name="real Chrome: Pages-only circles and ellipses follow rectangle fill mode across save and export" time="12.282788" classname="test"/>
+	<testcase name="real Chrome: toolbar mode groups remove semantic duplicates and keep area, underline and text annotations usable" time="10.125903" classname="test"/>
+	<testcase name="real Chrome: standalone book export keeps lazy chapters and released assets; incomplete copies stay recoverable" time="4.140903" classname="test"/>
+	<testcase name="real Chrome: Pages-only annotated HTML export survives a fresh recipient library" time="6.854961" classname="test"/>
+	<testcase name="real Chrome: Pages-only pasted reading controls default to outline and retain navigation and font settings" time="15.787804" classname="test"/>
+	<testcase name="real Chrome: Pages-only Markdown paste keeps formatting, annotations and offline reading" time="7.121221" classname="test"/>
+	<testcase name="real Chrome: Pages-only URL use, safe text import, app tabs and optional installation" time="4.691769" classname="test"/>
+	<testcase name="real Chrome: Chrome companion search has no iframe, preserves the reader and imports the actual article URL" time="2.972603" classname="test"/>
+	<testcase name="real Chrome: cross-origin CORS capture and blocked-site fallback use only the app" time="2.640482" classname="test"/>
+	<testsuite name="real Chrome: browsing, capture, local annotation, file writes, reopen and offline" time="15.995475" disabled="0" errors="0" tests="10" failures="0" skipped="0" hostname="runnervmnwato">
+		<testcase name="one address row and the settings icon preserve every action on desktop and mobile" time="3.330921" classname="test"/>
+		<testcase name="browser navigation and single-file capture" time="0.236035" classname="test"/>
+		<testcase name="local annotation saves internally and exports on request" time="0.628375" classname="test"/>
+		<testcase name="local file import activates annotation independent of original website URL" time="0.146473" classname="test"/>
+		<testcase name="opened documents have visible tabs that switch without adding a header row" time="0.069495" classname="test"/>
+		<testcase name="document fullscreen retains every compact toolbar button and saves annotations" time="0.626746" classname="test"/>
+		<testcase name="library reopen and offline app shell" time="3.052780" classname="test"/>
+		<testcase name="large native File import executes local JavaScript without a full file read; tools and autosave remain usable" time="3.048579" classname="test"/>
+		<testcase name="JavaScript-generated local body becomes annotatable and its metadata survives a reopen" time="2.475605" classname="test"/>
+		<testcase name="split-pane book with inner scrollable main keeps drawing annotations locked to content during scroll" time="0.164918" classname="test"/>
+	</testsuite>
+	<testcase name="real Chrome: Pages-only annotation history groups idle input and continuous work without delaying autosave" time="7.144015" classname="test"/>
+	<testcase name="real Chrome: Pages-only history stays with the selected document across tabs, library entry and restoration" time="5.948575" classname="test"/>
+	<testcase name="real Chrome: Pages-only history calendar browses years months and days with indexed paging and legacy migration" time="7.685105" classname="test"/>
+	<testcase name="real Chrome: separate annotations, immutable source, durable history, restoration and export" time="6.778400" classname="test"/>
+	<testcase name="real Chrome: an annotated file is first shown with restored notes, zoom and reading position" time="5.476340" classname="test"/>
+	<testcase name="real Chrome: delayed annotation anchors never paint drawings stretched over the whole document" time="12.868802" classname="test"/>
+	<testcase name="real Chrome: self-observing HTML settles without overlay resize feedback or scroll jitter" time="4.924191" classname="test"/>
+	<testcase name="real Chrome: compact library shares titles and sources, keeps dense views usable and preserves notes" time="7.758857" classname="test"/>
+	<testcase name="real Chrome: large library and annotation autosave never deserialize book bodies" time="4.788937" classname="test"/>
+	<testcase name="real Chrome: saved date, modified date and title sort in both directions and persist across reloads" time="5.369796" classname="test"/>
+	<testcase name="real Chrome: adaptive file tabs shrink evenly before scrolling and preserve controls and document instances" time="6.780763" classname="test"/>
+	<testcase name="real Chrome: visible file tabs keep one header row and preserve documents through switching and closing" time="6.751934" classname="test"/>
+	<testcase name="real Chrome: scrolling saves quietly in batches, preserves annotation history and flushes the last position on close" time="11.905997" classname="test"/>
+	<testcase name="real Chrome: font-scaled pen glyph alignment, padding, wrapping, thickness, legacy baselines, reopen and export" time="7.432062" classname="test"/>
+	<testcase name="real Chrome: annotation tree follows book TOC, prunes empty branches, remembers disclosure and navigates unopened chapters" time="6.501762" classname="test"/>
+	<testcase name="real Chrome: Pages-only bookmark tree follows TOC positions, navigates chapters and folds on reselection" time="11.114944" classname="test"/>
+	<testcase name="real Chrome: Pages-only native TOC links move the visible reader after bookmark views and repeated source hashes" time="5.738998" classname="test"/>
+	<testcase name="real Chrome: Pages-only script-driven TOC, history navigation and scroll targets reach the visible reader" time="11.485465" classname="test"/>
+	<testcase name="real Chrome: Pages-only body links and previous-next source controls navigate the visible reader without disturbing bookmarks" time="11.900506" classname="test"/>
+	<testcase name="real Chrome: annotation tree keeps the confirmed opening and the deepest known partial location without rewriting notes" time="5.671858" classname="test"/>
+	<testcase name="real Chrome: whole-book search shows live results and jumps to highlighted keywords in unopened chapters" time="8.396334" classname="test"/>
+	<testcase name="real Chrome: sidebar view choices collapse the TOC only when reselecting the active outline" time="4.879718" classname="test"/>
+	<testcase name="real Chrome: native sidebar view choices are visible on open and preserve the original book tree and export" time="10.314239" classname="test"/>
+	<testcase name="real Chrome: long-document search index is lazy, reused, mutation-aware and responsive" time="11.976415" classname="test"/>
+	<testcase name="real Chrome: sidebar view choices stay available for HTML without a TOC or headings" time="5.775920" classname="test"/>
+	<testcase name="real Chrome: sidebar view choices preserve search drafts, navigate saved notes and keep bookmarks editable" time="8.726436" classname="test"/>
+	<testcase name="real Chrome: sidebar view choices preserve word and sentence selection with blank-only fullscreen" time="6.071303" classname="test"/>
+	<testcase name="real Chrome: Pages-only first-run folder welcome is automatic, readable and recoverable" time="6.731482" classname="test"/>
+	<testcase name="real Chrome: Pages-only data folder copies imported originals and restores all data on a fresh device" time="9.640843" classname="test"/>
+	<testcase name="real Chrome: folder setup explains subfolders and preserves connections through cancellation and retry" time="4.505666" classname="test"/>
+	<testcase name="real Chrome: Pages-only annotations and bookmarks move to a new edition without changing the old book" time="5.202435" classname="test"/>
+	<testcase name="real Chrome: Pages-only precise bookmarks retain the saved text point across editions and reflow" time="8.408771" classname="test"/>
+	<testcase name="real Chrome: Pages-only shared sidebar opens on the left, resizes and restores its portable width" time="7.737273" classname="test"/>
+	<testcase name="real Chrome: Pages-only TTS diagram paint stays thin and leaves SVG glyphs intact" time="7.794383" classname="test"/>
+	<!-- tests 113 -->
+	<!-- suites 0 -->
+	<!-- pass 113 -->
+	<!-- fail 0 -->
+	<!-- cancelled 0 -->
+	<!-- skipped 0 -->
+	<!-- todo 0 -->
+	<!-- duration_ms 1216464.707947 -->
+</testsuites>

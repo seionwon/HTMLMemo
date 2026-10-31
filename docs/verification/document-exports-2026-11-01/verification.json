@@ -1,0 +1,101 @@
+{
+  "version": "1.7.0",
+  "deployedCommit": "3601e77cc14955ec01b974f63a2557fe98c22391",
+  "workflow": "https://github.com/seionwon/LibreMemo/actions/runs/41225571073",
+  "url": "https://seionwon.github.io/LibreMemo/",
+  "status": "pass",
+  "localUnitTests": {
+    "tests": 856,
+    "passed": 856,
+    "failed": 0,
+    "skipped": 0
+  },
+  "sourceBrowser": {
+    "junitLeafCases": 111,
+    "parentSuites": 2,
+    "failures": 0,
+    "errors": 0,
+    "tests": 113,
+    "passed": 113,
+    "failed": 0,
+    "skipped": 0
+  },
+  "publicAssets": {
+    "files": 294,
+    "bytes": 49678838,
+    "mismatches": []
+  },
+  "publicFolderGuide": {
+    "tests": 1,
+    "passed": 1,
+    "widths": [
+      1280,
+      320
+    ],
+    "guideFormats": [
+      "librememo",
+      "html",
+      "pdf"
+    ],
+    "freshDeviceRestore": true
+  },
+  "visualReview": {
+    "syntheticLocalPDFPages": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+    ],
+    "sourceCIPDFPages": [
+      1
+    ],
+    "sourceCIPDFKoreanNotes": true,
+    "localExportDialogWidth": 320,
+    "publicExportDialogWidth": 320,
+    "publicPDFPages": [
+      1
+    ],
+    "publicPDFKoreanNotes": true,
+    "realAndroidDeviceTested": false
+  },
+  "fixtures": "Synthetic documents only; fresh temporary browser profiles; no personal library or credentials.",
+  "completedAt": "2026-11-01T03:18:02+09:00",
+  "workflowJobs": {
+    "build": "success",
+    "deploy": "success",
+    "verify": "success"
+  },
+  "ciUnitTests": {
+    "tests": 856,
+    "passed": 855,
+    "failed": 0,
+    "skipped": 1,
+    "skipReason": "macOS-only restricted Chrome launch guard on Linux; all 856 passed locally on macOS."
+  },
+  "publishedBrowser": {
+    "tests": 79,
+    "passed": 79,
+    "failed": 0,
+    "skipped": 0,
+    "junitLeafCases": 79,
+    "parentSuites": 0
+  },
+  "previousRuns": [
+    {
+      "run": 41221975770,
+      "conclusion": "failure",
+      "correction": "Publish decoded PDF replacement atomically, retaining the loaded preview."
+    },
+    {
+      "run": 41223286906,
+      "conclusion": "failure",
+      "passedBrowserTests": 112,
+      "totalBrowserTests": 113,
+      "correction": "Update the remaining HTML-only folder-sharing instructions to all three formats."
+    }
+  ]
+}
