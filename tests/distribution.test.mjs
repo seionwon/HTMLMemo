@@ -636,9 +636,9 @@ test('a replaced library heading text node is repaired without losing the count 
 
 test('the renamed PWA keeps its installed identity while publishing the new product name',()=>{
   const files=webFiles(assets),manifest=JSON.parse(text(files,'manifest.webmanifest'));
-  assert.equal(manifest.name,'LibreMemo · 나만의 웹 서재');assert.equal(manifest.short_name,'LibreMemo');
+  assert.equal(manifest.name,'LibreMemo · 나만의 앱 서재');assert.equal(manifest.short_name,'LibreMemo');
   assert.equal(new URL(manifest.id,'https://seionwon.github.io/LibreMemo/manifest.webmanifest').href,'https://seionwon.github.io/HTMLMemo/');
-  assert.match(text(files,'index.html'),/<title>LibreMemo · 나만의 웹 서재<\/title>/);
+  assert.match(text(files,'index.html'),/<title>LibreMemo · 나만의 앱 서재<\/title>/);
   assert.ok(text(files,'src/storage.js').includes("const DB_NAME = 'HTMLMemo-v1'"));
   assert.ok(text(files,'src/preferences.js').includes("SETTINGS_FORMAT = 'HTMLMemo.settings'"));
   assert.ok(text(files,'src/pdf-document.js').includes('<!--HTMLMemo-PDF:1-->'));

@@ -427,7 +427,7 @@ function updateChrome() {
   else $('#save-page').removeAttribute('aria-description');
   $('#save-page').disabled=execution?sharingApp:!tab||!!tab.capturing;
   if(local)saveStatus(tab); else if(tab)$('#status-left').textContent=tab.external?'웹 탐색은 브라우저 탭 · 복사한 글과 저장한 HTML은 여기서 주석 달기':tab.capturing?'읽기용 사본을 준비하는 중…':tab.readable?'페이지 저장 → 주석 달기 · 추가 설치 없음':'앱 문서를 준비하는 중…';
-  document.title=tab?tab.title+' · LibreMemo':'LibreMemo · 나만의 웹 서재';
+  document.title=tab?tab.title+' · LibreMemo':'LibreMemo · 나만의 앱 서재';
 }
 function createHost(id,type) { const host=document.createElement('div');host.id='workspace-'+id;host.className='workspace-host '+type+'-host';host.hidden=true;$('#workspaces').append(host);return host; }
 async function openRecord(record, prepared = null, {deferReady = false, sourceIdentity = null} = {}) {

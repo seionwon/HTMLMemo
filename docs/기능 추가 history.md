@@ -4885,3 +4885,17 @@ Chrome 검사는 실제 OPFS 폴더 핸들과 IndexedDB, Android 사용자 에�
 실제 [기존 공개 주소](https://seionwon.github.io/HTMLMemo/)에서 **LibreMemo 1.3.1**을 제공한다. CI Pages 아티팩트의 앱 자산 **258개·13,868,223바이트**가 공개 파일과 모두 일치했다. `upload-pages-artifact`가 제외하는 `.nojekyll` 제어 파일은 필수 앱 자산과 구분했다. 허용된 앱 파일 목록 이외의 파일이 배포물에 없는 것도 확인했다. 공개 UI를 별도 임시 Chrome 프로필로 열어 1280·320px에서 새 문서 제목·LibreMemo 설정·가로 넘침 없음·기존 실제 공유 URL·JavaScript 오류 0개를 확인하고 화면을 직접 검토했다. [CI 결과](verification/librememo-rename-2026-10-31/ci.json), [공개 파일 전체 대조](verification/librememo-rename-2026-10-31/public-files.json), [공개 브라우저](verification/librememo-rename-2026-10-31/public-browser.json), [공개 휴대폰 크기 화면](verification/librememo-rename-2026-10-31/public-320.png).
 
 MemoSuite의 CodeMemo 연결도 정식 배포·공개 자산 대조와 실제 열기·복사 검사를 통과했다. User ID 1의 프로젝트 49는 표시 이름만 LibreMemo로 바꿨고 경로·대화·실행 설정 JSON은 바꾸지 않았다. 이제 사용자가 저장소 이름을 **LibreMemo**로 바꾼 뒤 이름 변경 안내의 **Run workflow → 새 주소 확인 → 로컬 origin 갱신**을 수행하면 된다. 새 저장소 주소에 이미 게시했다고 표현하지 않는다. 현재 소스 폴더 `.../CodeMemo/HTMLMemo`와 자료 호환 식별자는 의도적으로 유지한다. 이번 후속 기록 커밋은 배포 앱 파일을 바꾸지 않는 문서·검증 결과 보존이며 `[skip ci]`로 불필요한 재게시를 하지 않는다.
+
+
+<a id="hist-20261031-005"></a>
+### 2026-10-31 17:00:26 +09:00 — 소개 문구를 “나만의 앱 서재”로 변경
+
+| ID | 변경 종류 | 상태 |
+|---|---|---|
+| hist-20261031-005 | 화면 문구·PWA 표시 이름 | 구현·로컬 검증 완료 · GitHub Pages 게시 확인 대기 |
+
+**목적·사용법:** “나만의 웹 서재”를 “나만의 앱 서재”로 바꿨다. 브라우저 탭 제목, 내 서재로 돌아왔을 때의 제목, **설정 → About**, 페이지 설명, PWA 설치 이름과 기존 디자인 비교 화면의 문구에 반영했다. 사용자가 별도로 설정할 것은 없다. 설치된 앱에는 기존 새 버전 확인 절차로 전달되도록 버전을 **1.3.2**로 올렸다. 설치 이름 갱신 시점은 브라우저에 따르며 앱 식별자와 사용자 자료는 변경하지 않는다.
+
+**검증:** `npm run check` 166개 JavaScript·JSON 검사, `npm test` 774개, `npm run build`, `git diff --check`를 통과했다. 빌드된 HTML의 제목·About, 동적 제목과 manifest 이름이 새 문구로 일치하고 이전 문구가 남지 않음을 확인했다. 기존 이름 검사 기대값을 갱신했으며 단순 문구 변경에 별도 테스트를 추가하지 않았다. 과거 검증 기록과 생성된 디자인 카탈로그는 보존했다.
+
+**게시 상태:** 현재 GitHub API에서 실제 저장소가 `seionwon/LibreMemo`, 새 공개 주소가 `https://seionwon.github.io/LibreMemo/`이며 기존 버전 1.3.1이 제공되는 것을 확인했다. 이번 1.3.2의 Pages 게시·공개 확인 결과는 완료 후 같은 항목에 보충한다.
