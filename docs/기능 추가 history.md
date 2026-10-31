@@ -4982,7 +4982,7 @@ MemoSuite의 CodeMemo 연결도 정식 배포·공개 자산 대조와 실제 �
 |---|---|
 | ID | hist-20261031-008 |
 | 변경 종류 | 라이선스 명시 · 전자책 형식 추가 · 기존 리더 연결 · 도움말 |
-| 상태 | 구현·로컬 검증 완료 · GitHub Pages 게시 검증 대기 |
+| 상태 | 완료 · LibreMemo 1.6.0 GitHub Pages 게시·공개 검증 완료 |
 
 **목적·사용법:** LibreMemo 자체 코드를 MIT로 배포한다. 저장소의 `LICENSE`·package 정보와 **설정 → About → LibreMemo · MIT 라이선스**에서 원문을 확인한다. 사용·수정·재배포·상업적 이용을 허용하고 저작권·허가 고지를 유지한다. 제3자 코드·엔진·폰트·샘플에는 각 원래 라이선스가 적용되며 앱의 MIT 고지로 대체하지 않는다.
 
@@ -5005,3 +5005,14 @@ CodeMemo의 별도 임시 Chrome 검사는 EPUB 본문·스타일 표시와 내�
 
 
 **2026-10-31 22:29:50 +09:00 Chrome 링크 검사 절차 보완:** [Actions 41205373599](https://github.com/seionwon/LibreMemo/actions/runs/41205373599)에서 본문 클래스의 줄 높이 1.8과 사이드바 목차 왕복 이동이 통과했다. 이어지는 본문 링크 검사는 형광펜 도구를 켠 상태에서 링크를 눌러 대기 시간을 초과했다. 기존 앱은 주석 도구 사용 중 실수로 링크를 열지 않도록 막으므로, 검사를 **선택 도구 → 본문 링크를 실제 마우스로 클릭 → 이동 확인** 순서로 보완했다. 제품의 주석 모드나 링크 정책을 바꾸지 않고 링크 이동 기대값도 유지한다. 검사 코드 문법·diff 검사를 확인했다. 9개 확장자·고정 EPUB 확대·CBZ 펜/북마크·기존 Office·한글 검사는 이 실행에서도 통과했고, 실패 실행은 게시되지 않았다.
+
+
+**2026-10-31 23:11:57 +09:00 최종 게시·검증 완료:** 커밋 `bd43619581696116ebfcfafd9fcdf5267b6b7318`의 [Actions 41205814115](https://github.com/seionwon/LibreMemo/actions/runs/41205814115)에서 **build · deploy · verify 모두 성공**했다. 로컬 단위 검사 **825개**, 문법·JSON **190개**, 빌드·diff 검사와 전체 Chrome **107개**, 공개 URL Chrome **73개**가 통과했다. Linux 단위 검사는 825개 중 824개 통과·macOS 전용 안전 검사 1개를 플랫폼 조건으로 건너뛰었으며 실패는 없다. 전체·공개 Chrome에는 실패·취소·건너뛰기가 없다. Node 전체 검사 수에는 JUnit에서 suite로 기록되는 부모 검사 2개가 포함되며, leaf case 105개와 별도로 구분해 검증 요약에 기록했다. 앞선 실패와 보완 기록을 유지하며 검사 기대값을 낮추거나 제외하지 않았다.
+
+[공개 LibreMemo](https://seionwon.github.io/LibreMemo/)에서 **1.6.0**을 제공한다. 실제 CI Pages 산출물과 공개 앱 자산·전달용 패키지 **287개·48,643,001바이트**가 HTTP 200·바이트·SHA-256까지 모두 일치했다. 생성 PNG의 운영체제별 압축 차이에 영향을 받지 않도록 실제 Linux CI 산출물과 대조했다. 이 전체 크기에는 기존 자산과 `distribution.json`의 복제분도 포함된다. GitHub도 저장소 라이선스를 MIT로 인식하며 앱 MIT·전자책 고지를 게시 자산과 오프라인 캐시에 함께 제공한다.
+
+공개 주소에서 전자책 **9개 확장자**의 같은 도구·사이드바·목차·그림·읽기 전용·원본 바이트·확장자와 전용 폴더 사본을 확인했다. EPUB·MOBI·FB2·실제 KF8(AZW3)의 한국어/영어 선택·형광펜·검색·북마크·HTML 공유 재열기, EPUB의 계층 목차·장 사이 링크·이전/다음 이동을 확인했다. 고정 EPUB의 쪽 확대 **1.1배**, 주석 확대 **약 1.10034배**로 정렬되었고, CBZ 펜·북마크와 오프라인 EPUB 가져오기·손상 파일 미등록도 통과했다. 전자책 검사 JavaScript 오류는 0개였다. 공개 1280px·320px 스크린샷을 직접 검토해 실제 KF8 표지와 기존 공통 툴바·탭·작은 화면 표시를 확인했다. 기존 Office·한글 20종의 공통 UI 검사도 통과했다. 임시 검증 서버는 종료했다. 기존 사용자는 앱을 다시 실행하고 새 버전 안내에서 업데이트를 승인하면 된다.
+
+**검증 범위·제한:** 합성 전자책과 독립된 Project Gutenberg KF8 표본, Chrome의 데스크톱·휴대폰 크기 에뮬레이션으로 검사했다. 실물 Android 기기나 모든 실제 전자책의 복잡한 배치를 보장한 검사는 아니다. DRM·암호·KFX, CBZ OCR과 미디어 실행 제한 및 원본 앱과의 배치·글꼴 차이는 위 안내와 도움말에 유지한다. 별도 서버·확장·앱 설치를 요구하지 않으며 기존 GitHub Pages URL과 설치한 PWA를 사용한다.
+
+[검증 요약](verification/foliate-readonly-2026-10-31/validation.json), [CI 결과](verification/foliate-readonly-2026-10-31/ci.json), [공개 파일 대조](verification/foliate-readonly-2026-10-31/public-files.json), [전자책 형식별 결과](verification/foliate-readonly-2026-10-31/pages-only-ebook-formats.json), [주석·공유·오프라인 결과](verification/foliate-readonly-2026-10-31/pages-only-ebook-annotations.json), [고정 EPUB·CBZ 결과](verification/foliate-readonly-2026-10-31/pages-only-ebook-fixed-comic.json), [공개 데스크톱 화면](verification/foliate-readonly-2026-10-31/pages-only-ebook-1280.png), [공개 320px 화면](verification/foliate-readonly-2026-10-31/pages-only-ebook-320.png). 원본 로그·실패 화면·실제 CI 산출물은 `test-results/ebook/`에 보관했다. 이 최종 기록은 문서·검증 자료만 보충하며 `[skip ci]`로 게시 앱을 다시 바꾸지 않는다.

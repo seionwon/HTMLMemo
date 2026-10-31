@@ -1,0 +1,190 @@
+{
+  "status": "complete",
+  "recordedAt": "2026-10-31T23:11:57+09:00",
+  "version": "1.6.0",
+  "url": "https://seionwon.github.io/LibreMemo/",
+  "sourceCommit": "bd43619581696116ebfcfafd9fcdf5267b6b7318",
+  "ci": {
+    "run": 41205814115,
+    "url": "https://github.com/seionwon/LibreMemo/actions/runs/41205814115",
+    "sourceCommit": "bd43619581696116ebfcfafd9fcdf5267b6b7318",
+    "status": "completed",
+    "conclusion": "success",
+    "finishedAt": "2026-10-31T14:09:16Z",
+    "jobs": [
+      {
+        "name": "build",
+        "conclusion": "success",
+        "startedAt": "2026-10-31T13:29:56Z",
+        "completedAt": "2026-10-31T13:58:10Z",
+        "url": "https://github.com/seionwon/LibreMemo/actions/runs/41205814115/job/124550563182"
+      },
+      {
+        "name": "deploy",
+        "conclusion": "success",
+        "startedAt": "2026-10-31T13:58:13Z",
+        "completedAt": "2026-10-31T13:58:42Z",
+        "url": "https://github.com/seionwon/LibreMemo/actions/runs/41205814115/job/124556763434"
+      },
+      {
+        "name": "verify",
+        "conclusion": "success",
+        "startedAt": "2026-10-31T13:58:44Z",
+        "completedAt": "2026-10-31T14:09:15Z",
+        "url": "https://github.com/seionwon/LibreMemo/actions/runs/41205814115/job/124556879944"
+      }
+    ],
+    "artifacts": {
+      "pages": 13045730944,
+      "sourceBrowser": 13045092223,
+      "publishedBrowser": 13044719749
+    }
+  },
+  "local": {
+    "unitTests": 825,
+    "failed": 0,
+    "skipped": 0,
+    "syntaxAndJSONChecks": 190,
+    "build": "pass",
+    "diffCheck": "pass",
+    "npmAuditVulnerabilities": 0
+  },
+  "ciUnitTests": {
+    "total": 825,
+    "passed": 824,
+    "failed": 0,
+    "skipped": 1,
+    "skipReason": "macOS-only sandbox safety check on Linux"
+  },
+  "chrome": {
+    "source": {
+      "nodeRunnerTotal": 107,
+      "junitLeafCases": 105,
+      "parentTestsRepresentedAsSuites": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "public": {
+      "total": 73,
+      "failed": 0,
+      "skipped": 0
+    },
+    "hardwareAndroidTested": false,
+    "publicDesktopAnd320pxScreenshotsInspected": true
+  },
+  "ebookFormats": [
+    "epub",
+    "epub3",
+    "mobi",
+    "azw",
+    "azw3",
+    "fb2",
+    "fbz",
+    "fb2.zip",
+    "cbz"
+  ],
+  "commonUI": {
+    "actions": [
+      "toggle-sidebar",
+      "reading-back",
+      "previous-heading",
+      "next-heading",
+      "speak",
+      "font-smaller",
+      "font-larger",
+      "zoom"
+    ],
+    "height": 24,
+    "floating": [
+      "select",
+      "pen",
+      "highlight",
+      "underline",
+      "rect",
+      "eraser",
+      "note",
+      "palette",
+      "undo",
+      "redo",
+      "more"
+    ],
+    "sidebar": [
+      "outline",
+      "search",
+      "annotations",
+      "bookmarks"
+    ]
+  },
+  "annotationsAndSharing": {
+    "status": "pass",
+    "results": [
+      {
+        "format": "epub",
+        "selected": "한국어",
+        "annotations": true,
+        "bookmarks": true,
+        "search": true,
+        "exportBytes": 23801
+      },
+      {
+        "format": "mobi",
+        "selected": "한국어",
+        "annotations": true,
+        "bookmarks": true,
+        "search": true,
+        "exportBytes": 5423
+      },
+      {
+        "format": "fb2",
+        "selected": "한국어",
+        "annotations": true,
+        "bookmarks": true,
+        "search": true,
+        "exportBytes": 9323
+      },
+      {
+        "format": "azw3",
+        "selected": "Alice",
+        "annotations": true,
+        "bookmarks": true,
+        "search": true,
+        "exportBytes": 495180
+      }
+    ],
+    "outline": true,
+    "crossLinks": true,
+    "mobile": 320,
+    "offline": true,
+    "errors": []
+  },
+  "fixedAndComic": {
+    "status": "pass",
+    "scale": {
+      "page": 1.1,
+      "annotation": 1.1003350408644976
+    },
+    "comicPen": true,
+    "comicBookmark": true,
+    "errors": []
+  },
+  "publicAssets": {
+    "count": 287,
+    "totalBytes": 48643001,
+    "status": "pass",
+    "baseline": "GitHub Actions Pages artifact from this commit (Linux build)",
+    "verifiedAt": "2026-10-31T14:00:41.380Z"
+  },
+  "licenses": {
+    "project": "MIT",
+    "foliate": "MIT",
+    "bundledDependencies": 14,
+    "retained": "Original copyright and full licenses in public/vendor/ebook/THIRD-PARTY-NOTICES.txt"
+  },
+  "limits": [
+    "DRM, encrypted ebooks and KFX are unsupported",
+    "CBZ text selection/search/TTS requires OCR; OCR is not included",
+    "Complex layouts and special fonts can differ from the original reader",
+    "Synthetic fixtures plus one independently sourced KF8 book; not every real-world book or physical Android device is covered"
+  ],
+  "temporaryServer": "stopped"
+}

@@ -1,0 +1,42 @@
+{
+  "status": "pass",
+  "results": [
+    {
+      "format": "epub",
+      "selected": "한국어",
+      "annotations": true,
+      "bookmarks": true,
+      "search": true,
+      "exportBytes": 23801
+    },
+    {
+      "format": "mobi",
+      "selected": "한국어",
+      "annotations": true,
+      "bookmarks": true,
+      "search": true,
+      "exportBytes": 5423
+    },
+    {
+      "format": "fb2",
+      "selected": "한국어",
+      "annotations": true,
+      "bookmarks": true,
+      "search": true,
+      "exportBytes": 9323
+    },
+    {
+      "format": "azw3",
+      "selected": "Alice",
+      "annotations": true,
+      "bookmarks": true,
+      "search": true,
+      "exportBytes": 495180
+    }
+  ],
+  "outline": true,
+  "crossLinks": true,
+  "mobile": 320,
+  "offline": true,
+  "errors": []
+}

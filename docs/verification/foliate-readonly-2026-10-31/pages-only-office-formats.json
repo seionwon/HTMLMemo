@@ -1,0 +1,159 @@
+{
+  "status": "pass",
+  "results": [
+    {
+      "format": "docx",
+      "originalBytes": 1950,
+      "searchable": true,
+      "readOnly": true
+    },
+    {
+      "format": "pptx",
+      "originalBytes": 2508,
+      "searchable": true,
+      "readOnly": true
+    },
+    {
+      "format": "odt",
+      "originalBytes": 520,
+      "searchable": true,
+      "readOnly": true
+    },
+    {
+      "format": "odp",
+      "originalBytes": 545,
+      "searchable": true,
+      "readOnly": true
+    },
+    {
+      "format": "xlsx",
+      "originalBytes": 17412,
+      "searchable": true,
+      "readOnly": true
+    },
+    {
+      "format": "xlsm",
+      "originalBytes": 17390,
+      "searchable": true,
+      "readOnly": true
+    },
+    {
+      "format": "xls",
+      "originalBytes": 4608,
+      "searchable": true,
+      "readOnly": true
+    },
+    {
+      "format": "ods",
+      "originalBytes": 9136,
+      "searchable": true,
+      "readOnly": true
+    },
+    {
+      "format": "ott",
+      "originalBytes": 526,
+      "searchable": true,
+      "readOnly": true
+    },
+    {
+      "format": "otp",
+      "originalBytes": 554,
+      "searchable": true,
+      "readOnly": true
+    },
+    {
+      "format": "ots",
+      "originalBytes": 2954,
+      "searchable": true,
+      "readOnly": true
+    },
+    {
+      "format": "csv",
+      "originalBytes": 68,
+      "searchable": true,
+      "readOnly": true
+    },
+    {
+      "format": "tsv",
+      "originalBytes": 40,
+      "searchable": true,
+      "readOnly": true
+    },
+    {
+      "format": "md",
+      "originalBytes": 103,
+      "searchable": true,
+      "readOnly": true
+    },
+    {
+      "format": "markdown",
+      "originalBytes": 103,
+      "searchable": true,
+      "readOnly": true
+    },
+    {
+      "format": "txt",
+      "originalBytes": 44,
+      "searchable": true,
+      "readOnly": true
+    },
+    {
+      "format": "json",
+      "originalBytes": 65,
+      "searchable": true,
+      "readOnly": true
+    },
+    {
+      "format": "hml",
+      "originalBytes": 1501,
+      "searchable": true,
+      "readOnly": true
+    },
+    {
+      "format": "hwp",
+      "originalBytes": 4608,
+      "searchable": true,
+      "readOnly": true
+    },
+    {
+      "format": "hwpx",
+      "originalBytes": 5978,
+      "searchable": true,
+      "readOnly": true
+    }
+  ],
+  "controls": {
+    "actions": [
+      "toggle-sidebar",
+      "reading-back",
+      "previous-heading",
+      "next-heading",
+      "speak",
+      "font-smaller",
+      "font-larger",
+      "zoom"
+    ],
+    "height": 24,
+    "floating": [
+      "select",
+      "pen",
+      "highlight",
+      "underline",
+      "rect",
+      "eraser",
+      "note",
+      "palette",
+      "undo",
+      "redo",
+      "more"
+    ],
+    "sidebar": [
+      "outline",
+      "search",
+      "annotations",
+      "bookmarks"
+    ]
+  },
+  "folderCopies": 21,
+  "errors": []
+}

@@ -1,0 +1,111 @@
+{
+  "status": "pass",
+  "results": [
+    {
+      "format": "epub",
+      "originalBytes": 2938,
+      "outlineItems": 3,
+      "readOnly": true,
+      "sharedUI": true,
+      "images": true
+    },
+    {
+      "format": "epub3",
+      "originalBytes": 2938,
+      "outlineItems": 3,
+      "readOnly": true,
+      "sharedUI": true,
+      "images": true
+    },
+    {
+      "format": "mobi",
+      "originalBytes": 737,
+      "outlineItems": 2,
+      "readOnly": true,
+      "sharedUI": true,
+      "images": true
+    },
+    {
+      "format": "azw",
+      "originalBytes": 737,
+      "outlineItems": 2,
+      "readOnly": true,
+      "sharedUI": true,
+      "images": true
+    },
+    {
+      "format": "azw3",
+      "originalBytes": 255506,
+      "outlineItems": 19,
+      "readOnly": true,
+      "sharedUI": true,
+      "images": true
+    },
+    {
+      "format": "fb2",
+      "originalBytes": 932,
+      "outlineItems": 3,
+      "readOnly": true,
+      "sharedUI": true,
+      "images": true
+    },
+    {
+      "format": "fbz",
+      "originalBytes": 675,
+      "outlineItems": 3,
+      "readOnly": true,
+      "sharedUI": true,
+      "images": true
+    },
+    {
+      "format": "fb2.zip",
+      "originalBytes": 675,
+      "outlineItems": 3,
+      "readOnly": true,
+      "sharedUI": true,
+      "images": true
+    },
+    {
+      "format": "cbz",
+      "originalBytes": 338,
+      "outlineItems": 2,
+      "readOnly": true,
+      "sharedUI": true,
+      "images": true
+    }
+  ],
+  "controls": {
+    "actions": [
+      "toggle-sidebar",
+      "reading-back",
+      "previous-heading",
+      "next-heading",
+      "speak",
+      "font-smaller",
+      "font-larger",
+      "zoom"
+    ],
+    "height": 24,
+    "floating": [
+      "select",
+      "pen",
+      "highlight",
+      "underline",
+      "rect",
+      "eraser",
+      "note",
+      "palette",
+      "undo",
+      "redo",
+      "more"
+    ],
+    "sidebar": [
+      "outline",
+      "search",
+      "annotations",
+      "bookmarks"
+    ]
+  },
+  "folderCopies": 10,
+  "errors": []
+}

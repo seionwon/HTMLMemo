@@ -1,6 +1,6 @@
 {
   "completedAt": "2026-10-31 22:23:45 +09:00",
-  "status": "local-verified-public-deployment-pending",
+  "status": "complete-publicly-deployed-and-verified",
   "version": "1.6.0",
   "unitTests": 825,
   "syntaxAndJSONChecks": 190,
@@ -106,5 +106,12 @@
       "CBZ pen and bookmark",
       "existing Office and Hangul flows"
     ]
+  },
+  "deployment": {
+    "run": 41205814115,
+    "sourceCommit": "bd43619581696116ebfcfafd9fcdf5267b6b7318",
+    "version": "1.6.0",
+    "conclusion": "success",
+    "validation": "validation.json"
   }
 }
