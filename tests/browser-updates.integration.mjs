@@ -131,6 +131,15 @@ test('real Chrome: PWA startup updates run before folder permissions on every la
  const server=createServer((req,res)=>{const u=new URL(req.url,'http://fixture.test'),name=u.pathname==='/HTMLMemo/'?'index.html':u.pathname.slice(10),body=releases.get(published).get(name);if(!u.pathname.startsWith('/HTMLMemo/')||!body){res.writeHead(404);res.end();return;}res.writeHead(200,{'Content-Type':types[name.split('.').at(-1)]||'text/plain','Cache-Control':'no-store'});res.end(body);});
  try{
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));chrome=await launchChrome({firstRun:true});const{page}=chrome,url=`http://127.0.0.1:${server.address().port}/HTMLMemo/`;foreground(page);
+  // A blocked beforeunload prevents both navigation and later Runtime.evaluate
+  // diagnostics. Inspect the ordinary listener before each explicit restart;
+  // never dismiss an unsaved-data dialog to make this test pass.
+  const navigate=page.navigate.bind(page);report.restarts=[];
+  page.on('Page.javascriptDialogOpening',event=>{report.unexpectedDialog={type:event.type,message:event.message};});
+  page.navigate=async target=>{
+   const state=await page.evaluate(`(()=>{const event=new Event('beforeunload',{cancelable:true});window.dispatchEvent(event);return {blocked:event.defaultPrevented,release:document.documentElement.dataset.testRelease,update:document.documentElement.dataset.appUpdate,storage:document.documentElement.dataset.storageSetup,folder:document.querySelector('#data-folder-status')?.textContent,events:window.startupFolderEvents};})()`);
+   report.restarts.push(state);assert.equal(state.blocked,false,'A completed or canceled folder setup must allow restarting without unsaved data: '+JSON.stringify(state));return navigate(target);
+  };
   await page.send('Page.addScriptToEvaluateOnNewDocument',{source:startupOrderProbe});await page.navigate(url);await page.waitFor('document.documentElement.dataset.appUpdate==="current"&&!!document.querySelector("[data-folder-welcome]")');
   const counts=()=>page.evaluate('({gets:startupFolderGets,queries:startupFolderQueries,requests:startupFolderRequests})');
   const ordered=async()=>assert.ok(await page.evaluate('startupFolderEvents.indexOf("update-info")>=0&&startupFolderEvents.indexOf("update-info")<startupFolderEvents.indexOf("folder-get")'));

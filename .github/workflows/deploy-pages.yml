@@ -32,6 +32,8 @@ jobs:
       - run: npm test
       - run: npm run check
       - run: mkdir -p test-results
+      - name: Verify startup ordering and restart safety with the expanded offline assets
+        run: node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/browser-results.xml --test-name-pattern='PWA startup updates run before folder permissions' tests/browser-updates.integration.mjs
       - name: Verify unified PDF reading, annotations, export, safety and offline use first
         run: node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/browser-results.xml tests/browser-pdf.integration.mjs
       - name: Verify Markdown paste, precise bookmarks and compact library first
