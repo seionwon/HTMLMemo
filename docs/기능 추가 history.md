@@ -4912,7 +4912,7 @@ MemoSuite의 CodeMemo 연결도 정식 배포·공개 자산 대조와 실제 �
 
 | ID | 변경 종류 | 상태 |
 |---|---|---|
-| hist-20261031-006 | 파일 가져오기·읽기·원본 보관·도움말 | LibreMemo 1.4.0 구현·로컬 검사 완료 · 실제 Chrome·Pages 게시 검증 진행 |
+| hist-20261031-006 | 파일 가져오기·읽기·원본 보관·도움말 | 완료 · LibreMemo 1.4.0 GitHub Pages 게시·공개 검증 완료 |
 
 **목적·사용법:** **내 서재 → 파일 가져오기**, 드래그 앤 드롭, 설치 앱의 파일 연결에서 DOCX·ODT·OTT, XLSX·XLSM·XLS·CSV·TSV·ODS·OTS, PPTX·ODP·OTP, MD·MARKDOWN·TXT·JSON을 받는다. 기존 HTML·HTM·MHTML·MHT·PDF도 유지한다. GenOffice 커밋 `36a509e8fc16ace85ed7afa3c37acb7b9c441ad1`의 실제 파일 열기 경로 전체를 기준으로 새 확장자 17종을 추가했다. Word·PowerPoint 해석, 슬라이드 배치, OpenDocument 변환, CSV 해석·압축 검사 코드를 가져왔으며 데스크톱 전용 시트 프로세스는 브라우저용 SheetJS CE 0.20.3으로 연결했다. 이전 DOC·PPT는 GenOffice의 실제 열기 경로에서도 지원하지 않으므로 DOCX·PPTX 사본으로 가져오도록 안내한다.
 
@@ -4925,3 +4925,11 @@ MemoSuite의 CodeMemo 연결도 정식 배포·공개 자산 대조와 실제 �
 **게시 상태:** 아직 이 항목의 버전을 게시 완료로 기록하지 않는다. 기존 GitHub Actions의 게시 전 검사에 17종 가져오기·같은 UI·주석·북마크·HTML 공유·휴대폰 320px·오프라인 가져오기 검사를 추가했으며, 해당 커밋의 실제 Chrome·Pages·공개 파일·화면 확인 결과를 아래에 보충한다. 기존 PWA 새 버전 안내를 통해 1.4.0을 전달한다.
 
 **2026-10-31 18:29:50 +09:00 게시 전 Chrome 결과·보완:** [Actions 41188625046](https://github.com/seionwon/LibreMemo/actions/runs/41188625046)은 게시 전 새 포맷 검사에서 중단되어 공개 버전을 바꾸지 않았다. `.md`와 `.markdown` 샘플의 내용이 같아 앱이 정상적으로 중복 선택을 띄웠는데 검사 코드가 선택하지 않고 저장을 기다린 것이 원인이었다. 검사를 중복 안내 → 새롭게 열기까지 수행하도록 고쳤다. 별도의 실제 Chrome 검사는 DOCX·XLSX·PPTX 주석·북마크·슬라이드 1.1배 확대·검색·HTML 공유 재열기·320px·오프라인 ODT 가져오기를 모두 통과했다. 확인 과정에서 큰 슬라이드 확대도 오른쪽 끝까지 가로 스크롤할 수 있게 원래 브라우저 스크롤을 유지하고, 이를 확인하는 Chrome 검사를 추가했다. 실패 기록을 지우거나 검사를 제외하지 않는다.
+
+**2026-10-31 19:04:36 +09:00 최종 게시·검증 완료:** 수정 커밋 `e37873da2c6e7b828e6679f39466eab51fd92a07`의 [Actions 41188988262](https://github.com/seionwon/LibreMemo/actions/runs/41188988262)에서 **build · deploy · verify 모두 성공**했다. 단위 검사 **798개**, 문법·JSON 검사 **180개**, 전체 Chrome **103개**, 게시 후 공개 URL의 Chrome 검사 묶음 **69개**가 통과했다. 검사 제외로 실패를 숨기지 않았으며 앞선 실패·보완 기록은 유지한다.
+
+[공개 LibreMemo](https://seionwon.github.io/LibreMemo/)에서 **1.4.0**을 제공한다. 실제 CI Pages 산출물과 공개 앱 자산·전달용 패키지 **274개·19,287,307바이트**가 HTTP 200·바이트·SHA-256까지 모두 일치했다. 로컬 macOS와 CI Linux의 생성 PNG 두 개는 압축 바이트가 달랐으나 해제한 픽셀이 동일했고, 이에 따른 서비스 워커 해시 차이도 실제 CI 산출물을 기준으로 확인했다. `.nojekyll`은 앱 자산이 아닌 배포 제어 파일로 구분했다. 새 실행 모듈·엔진·라이선스 16개의 합은 약 2.6MB이며 위 전체 크기에는 기존 자산과 전달용 `distribution.json`의 복제분도 포함한다.
+
+공개 주소에서 새 확장자 **17종**을 실제로 가져와 기존 HTML과 동일한 도구·사이드바, 본문 검색, 읽기 전용, 원본 바이트·파일 확장자·전용 폴더 사본을 확인했다. DOCX·XLSX·PPTX 주석과 북마크, 슬라이드 1.1배 확대와 더 큰 확대의 가로 이동, HTML 공유 파일 재열기, 320px 툴바 가로 스크롤, 오프라인 ODT 가져오기, 손상 파일의 미등록을 확인했고 해당 검사에서 JavaScript 오류는 없었다. 공개 1280·320px 화면을 직접 검토했다. 이는 합성 파일과 Chrome 화면 크기 에뮬레이션이며 모든 실제 Office 문서의 복잡한 배치나 실물 Android 기기까지 검사했다는 뜻은 아니다. CodeMemo의 별도 공개 URL 요청은 로컬 URL만 허용하는 검증 서비스 제한으로 실행하지 못했고, 공개 Chrome 검사는 위 Pages workflow에서 수행했다. 임시 검증 서버는 종료했다.
+
+[검증 요약](verification/genoffice-readonly-2026-10-31/validation.json), [공개 파일 대조](verification/genoffice-readonly-2026-10-31/public-files.json), [공개 형식별 결과](verification/genoffice-readonly-2026-10-31/pages-only-office-formats.json), [주석·공유·오프라인 결과](verification/genoffice-readonly-2026-10-31/pages-only-office-annotations.json), [공개 데스크톱 화면](verification/genoffice-readonly-2026-10-31/pages-only-office-1280.png), [공개 320px 화면](verification/genoffice-readonly-2026-10-31/pages-only-office-320.png). 원본 로그·실패 화면은 `test-results/genoffice-20261031/`에 보관했다. 기존 사용자는 앱을 다시 실행해 새 버전 안내에서 업데이트를 승인하면 된다. 이 최종 기록 커밋은 문서·검증 자료만 갱신하며 `[skip ci]`로 게시 앱을 다시 바꾸지 않는다.
