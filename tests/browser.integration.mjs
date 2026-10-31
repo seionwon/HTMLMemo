@@ -1,4 +1,4 @@
-import {revealDocumentControl} from './document-controls.mjs';
+import {revealDocumentControl,toggleDocumentSidebarFromToolbar} from './document-controls.mjs';
 import {chooseDocumentExport} from './export-flow.mjs';
 import {publicAppURL} from '../public/src/install.js';
 // Requires permission to bind localhost and launch a dedicated Chrome process.
@@ -2486,7 +2486,9 @@ test('real Chrome: native sidebar view choices are visible on open and preserve 
     await writeFile(join(root,'test-results/sidebar-views-controls-narrow.png'),await page.screenshot());
     await clickNative('#htmlmemo-native-close-sidebar');await page.waitFor(`${doc}.defaultView.getComputedStyle(${doc}.querySelector('#reader-nav')).display==='none'`);
     await clickNative('#reader-menu');await page.waitFor(`${doc}.querySelector('#reader-menu').getAttribute('aria-expanded')==='true'`);
-    await clickNative('#reader-menu');await page.waitFor(`${doc}.defaultView.getComputedStyle(${doc}.querySelector('#reader-nav')).display==='none'`);
+    // A header with only the book's legacy menu uses the complete app row.
+    // Once its drawer covers that source header, close from the visible row.
+    await toggleDocumentSidebarFromToolbar(page);await page.waitFor(`${doc}.defaultView.getComputedStyle(${doc}.querySelector('#reader-nav')).display==='none'`);
     assert.deepEqual(chrome.errors,[]);
   }finally{if(chrome)await chrome.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
 });
@@ -2660,7 +2662,8 @@ test('real Chrome: sidebar view choices preserve word and sentence selection wit
     await page.waitFor(`${doc}?.querySelector('[data-htmlmemo-doc-sidebar-ui]')&&${doc}.querySelector('#english')&&!${frame}.hasAttribute('aria-hidden')`);
     const clickAt=async(selector,count,{word='',corner=false}={})=>{await revealDocumentControl(page,selector);
       await page.evaluate('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
-      const point=await page.evaluate(`(()=>{const f=${frame},d=f.contentDocument,e=d.querySelector(${JSON.stringify(selector)});e.scrollIntoView({block:'nearest'});let r=e.getBoundingClientRect(),x=r.left+r.width/2,y=r.top+r.height/2;const word=${JSON.stringify(word)};if(word){const w=d.createTreeWalker(e,NodeFilter.SHOW_TEXT);let found=false;while(w.nextNode()){const n=w.currentNode,at=n.textContent.indexOf(word);if(at<0)continue;const range=d.createRange();range.setStart(n,at);range.setEnd(n,at+word.length);r=range.getClientRects()[0];x=r.left+r.width/2;y=r.top+r.height/2;found=true;break;}if(!found)throw Error('Missing text point: '+word);}else if(${corner}){x=r.right-3;y=r.bottom-2;}const b=f.getBoundingClientRect(),z=b.width/f.clientWidth;return {x:b.left+x*z,y:b.top+y*z};})()`);
+      const point=await page.evaluate(`(async()=>{const f=${frame},d=f.contentDocument,e=d.querySelector(${JSON.stringify(selector)});e.scrollIntoView({block:'nearest'});await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));let r=e.getBoundingClientRect(),x=r.left+r.width/2,y=r.top+r.height/2;const word=${JSON.stringify(word)};if(word){const w=d.createTreeWalker(e,NodeFilter.SHOW_TEXT);let found=false;while(w.nextNode()){const n=w.currentNode,at=n.textContent.indexOf(word);if(at<0)continue;const range=d.createRange();range.setStart(n,at);range.setEnd(n,at+word.length);r=range.getClientRects()[0];x=r.left+r.width/2;y=r.top+r.height/2;found=true;break;}if(!found)throw Error('Missing text point: '+word);}else if(${corner}){x=r.right-3;y=r.bottom-2;}const b=f.getBoundingClientRect(),z=b.width/f.clientWidth,xx=b.left+x*z,yy=b.top+y*z,inner=d.elementFromPoint(x,y),outer=document.elementFromPoint(xx,yy);return {x:xx,y:yy,hit:e.contains(inner)&&outer===f,width:innerWidth,focused:document.querySelector('#app').classList.contains('reader-focus'),inner:inner?.outerHTML.slice(0,220),outer:outer?.outerHTML.slice(0,220)};})()`);
+      if(word&&!point.hit){await writeFile(join(root,'test-results/sidebar-views-text-clicks-hit-failure.png'),await page.screenshot());assert.equal(point.hit,true,JSON.stringify({selector,word,...point}));}
       for(let clickCount=1;clickCount<=count;clickCount++){await page.send('Input.dispatchMouseEvent',{type:'mousePressed',x:point.x,y:point.y,button:'left',clickCount});await page.send('Input.dispatchMouseEvent',{type:'mouseReleased',x:point.x,y:point.y,button:'left',clickCount});}
     };
     const focused=()=>page.evaluate('document.querySelector("#app").classList.contains("reader-focus")');
