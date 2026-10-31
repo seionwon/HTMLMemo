@@ -10,12 +10,15 @@
 
 | 종류 | 확장자 |
 |---|---|
+| 한글 | HWP, HWPX, HML |
 | Word / OpenDocument Text | DOCX, ODT, OTT |
 | 스프레드시트 | XLSX, XLSM, XLS, CSV, TSV, ODS, OTS |
 | 슬라이드 | PPTX, ODP, OTP |
 | Markdown / 텍스트 | MD, MARKDOWN, TXT, JSON |
 
-[GenOffice](https://github.com/genspark-ai/genoffice/tree/36a509e8fc16ace85ed7afa3c37acb7b9c441ad1)의 실제 파일 열기 경로에 등록된 형식입니다. DOC·PPT는 해당 경로에서도 직접 지원하지 않습니다. Word·PowerPoint 해석, 슬라이드 배치, ODF 변환, CSV 해석과 압축 검사 코드를 재사용했습니다. GenOffice의 데스크톱 전용 스프레드시트 프로세스 대신 SheetJS CE 0.20.3을 브라우저 안에서 사용합니다. 출처·원본 SHA-256은 [UPSTREAM.json](vendor-src/genoffice/UPSTREAM.json), 변형한 브라우저 연결부는 [packages/office](packages/office), 재배포 라이선스는 [THIRD-PARTY-NOTICES.txt](public/vendor/office/THIRD-PARTY-NOTICES.txt)에 있습니다. GenOffice의 Electron·AI·편집 UI는 포함하지 않습니다.
+Office·OpenDocument·텍스트는 [GenOffice](https://github.com/genspark-ai/genoffice/tree/36a509e8fc16ace85ed7afa3c37acb7b9c441ad1)의 실제 파일 열기 경로에 등록된 형식입니다. DOC·PPT는 해당 경로에서도 직접 지원하지 않습니다. Word·PowerPoint 해석, 슬라이드 배치, ODF 변환, CSV 해석과 압축 검사 코드를 재사용했습니다. GenOffice의 데스크톱 전용 스프레드시트 프로세스 대신 SheetJS CE 0.20.3을 브라우저 안에서 사용합니다. 출처·원본 SHA-256은 [UPSTREAM.json](vendor-src/genoffice/UPSTREAM.json), 변형한 브라우저 연결부는 [packages/office](packages/office), 재배포 라이선스는 [THIRD-PARTY-NOTICES.txt](public/vendor/office/THIRD-PARTY-NOTICES.txt)에 있습니다. GenOffice의 Electron·AI·편집 UI는 포함하지 않습니다.
+
+[rhwp 0.8.7](https://github.com/edwardkim/rhwp/tree/v0.8.7)의 MIT 라이선스 WASM으로 HWP·HWPX·HML을 브라우저 안에서 해석합니다. 원래 페이지의 글자·표·그림을 벡터 화면으로 표시하고 HTML 선택 층을 겹쳐 같은 검색·주석·북마크·TTS를 사용합니다. 사이드바 목차는 쪽별로 이동합니다. 원본 내용 편집·HWP 저장은 제공하지 않습니다. 특수 글꼴은 기기의 대체 글꼴로 표시되어 원본 앱과 다를 수 있고, HML은 HWPML 2.9/2.91 지원 범위로 그림·외부 리소스·일부 개체가 생략될 수 있습니다. 생략 정보가 있으면 본문 위에 안내합니다. 암호 문서는 암호 없이 저장한 사본으로 엽니다. 파일 100MB(HML 16MB), 2,000쪽, 쪽별 SVG 16MiB·전체 읽기 화면 64MiB, 120초 처리 한도를 둡니다. WASM을 포함한 앱 자산은 로컬에 캐시하며 별도 설치·업로드가 필요 없습니다. `npm run build:rhwp`는 고정된 npm 패키지에서 원본 바이트를 그대로 복사하고 SHA-256 출처와 라이선스를 기록합니다.
 
 원본 바이트와 확장자는 전용 폴더에 그대로 보관하며 읽기 화면·주석·북마크는 별도로 자동 저장합니다. Office 문서의 **HTML 내보내기**는 읽기 화면과 주석·북마크를 하나로 보냅니다. Office 원본 자체가 필요한 상대에게는 전용 폴더의 원본 사본도 별도로 전달합니다. 가져오기 워커와 엔진은 앱에 포함되며 런타임 서버·외부 CDN·확장이 필요하지 않습니다. 설치 후 오프라인 캐시가 준비되면 오프라인 가져오기도 가능합니다.
 

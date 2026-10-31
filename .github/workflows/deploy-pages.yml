@@ -32,7 +32,7 @@ jobs:
       - run: npm test
       - run: npm run check
       - run: mkdir -p test-results
-      - name: Verify all GenOffice formats and common read-only annotation flows
+      - name: Verify all GenOffice and rhwp formats and common read-only annotation flows
         run: node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/browser-results.xml tests/browser-office.integration.mjs
       - name: Verify shared sidebar search selection, index reuse and portable resizing
         run: node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/browser-results.xml --test-name-pattern='long-document search index|Pages-only shared sidebar opens' tests/browser.integration.mjs

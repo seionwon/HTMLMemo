@@ -1,11 +1,13 @@
 // Opening formats from GenOffice 36a509e8 (app-routing.ts), plus LibreMemo HTML/MHTML/PDF.
 export const OFFICE_FORMATS={
+  hwp:'hangul',hwpx:'hangul',hml:'hangul',
   docx:'word',odt:'word',ott:'word',
   xlsx:'sheet',xlsm:'sheet',xls:'sheet',csv:'sheet',tsv:'sheet',ods:'sheet',ots:'sheet',
   pptx:'slides',odp:'slides',otp:'slides',
   md:'markdown',markdown:'markdown',txt:'text',json:'text',
 };
 export const OFFICE_MIMES={
+  'application/x-hwp':['.hwp'],'application/hwp+zip':['.hwpx'],'application/x-hwpml':['.hml'],
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document':['.docx'],
   'application/vnd.oasis.opendocument.text':['.odt'],
   'application/vnd.oasis.opendocument.text-template':['.ott'],
@@ -35,6 +37,10 @@ export async function verifyOffice(file,format){
   const b=new Uint8Array(await file.slice(0,8).arrayBuffer());
   const zip=b[0]===0x50&&b[1]===0x4b&&b[2]===3&&b[3]===4;
   const ole=[0xd0,0xcf,0x11,0xe0,0xa1,0xb1,0x1a,0xe1].every((n,i)=>b[i]===n);
+  if(format==='hml')return; // XML encoding/root/DTD validation runs in the bounded worker.
+  if(format==='hwp'&&(ole||new TextDecoder().decode(b)==='HWP Docu'))return;
+  if(format==='hwpx'&&zip)return;
+  if(OFFICE_FORMATS[format]==='hangul')throw Error('파일 확장자와 실제 한글 문서 형식이 다르거나 파일이 손상되었습니다. 원본을 확인해주세요.');
   if(ole&&format!=='xls')throw Error('암호로 보호된 Office 문서는 열 수 없습니다. 원래 앱에서 암호 없이 저장한 사본을 가져와 주세요.');
   if(format==='xls'?(ole||zip||b[0]===9):zip)return;
   throw Error('파일 확장자와 실제 문서 형식이 다르거나 파일이 손상되었습니다. 원본 파일을 확인해주세요.');

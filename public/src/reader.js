@@ -985,7 +985,7 @@ export class Reader {
     this.readingFontSize ||= Number.parseFloat(this.doc.defaultView?.getComputedStyle?.(this.doc.body)?.fontSize)||18;
     let style=this.doc.getElementById('htmlmemo-reading-font-style');
     if(!style){style=this.doc.createElement('style');style.id='htmlmemo-reading-font-style';style.setAttribute('data-htmlmemo-ui','');this.doc.head.append(style);}
-    const css='body{font-size:'+(this.readingFontSize*scale).toFixed(3)+'px!important}article[data-office-slides]>.office-slide{max-width:'+(scale*100)+'%}';if(style.textContent!==css)style.textContent=css;
+    const css='body{font-size:'+(this.readingFontSize*scale).toFixed(3)+'px!important}article[data-office-slides]>.office-slide,article[data-office-pages]>.office-page{max-width:'+(scale*100)+'%}';if(style.textContent!==css)style.textContent=css;
   }
   setReadingFontScale(value) {
     if(!Number.isFinite(value)||this.disposed||this.preparing||this.topbarNode?.isConnected)return false;

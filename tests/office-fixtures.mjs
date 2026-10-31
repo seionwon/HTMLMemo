@@ -1,5 +1,6 @@
 import JSZip from 'jszip';
 import {utils,write} from 'xlsx';
+import {hangulFixtures} from './hangul-fixtures.mjs';
 const officeRel='http://schemas.openxmlformats.org/officeDocument/2006/relationships/';
 const rels=items=>'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+items.map(([id,type,target])=>'<Relationship Id="'+id+'" Type="'+officeRel+type+'" Target="'+target+'"/>').join('')+'</Relationships>';
 async function zipFile(parts){const zip=new JSZip();for(const [name,value] of Object.entries(parts))zip.file(name,value);return new Uint8Array(await zip.generateAsync({type:'uint8array',compression:'DEFLATE'}));}
@@ -28,5 +29,5 @@ export async function officeFixtures(){
   all.ott=await template(odt,'text');all.otp=await template(odp,'presentation');all.ots=await template(all.ods,'spreadsheet');
   const encode=text=>new TextEncoder().encode(text);
   all.csv=encode('이름,숫자\r\n"검색하는 한국어",001\r\n"두 줄\n본문","=1+1"');all.tsv=encode('이름\t숫자\n검색하는 한국어\t001');all.md=encode('# Markdown 첫 장\n\n검색하는 **한국어** 본문입니다.\n\n## 두 번째 절\nBookmark destination');all.markdown=all.md;all.txt=encode('텍스트 본문\n<script>doNotRun()</script>');all.json=encode('{"이름":"검색하는 한국어", "html":"<img onerror=bad()>"}');
-  return all;
+  return {...all,...await hangulFixtures()};
 }

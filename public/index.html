@@ -59,11 +59,11 @@
     <div id="toast" class="toast" role="status" hidden></div>
     <dialog id="dialog"><div id="dialog-content"></div></dialog>
     <template id="library-folder-help-content"><ol class="setup-steps"><li><strong>전용 데이터 폴더가 최상위(root)입니다.</strong> 위쪽 경로와 왼쪽 폴더 트리로 이동합니다. 카드·목록 모두 하위 폴더를 열 수 있습니다.</li><li><strong>새 폴더</strong>를 누르면 현재 위치에 만듭니다. HTML 가져오기·텍스트 붙여넣기도 현재 폴더에 저장합니다. 데이터 폴더 연결 전에는 브라우저 안에만 보관하며, 연결하면 실제 하위 폴더도 만듭니다.</li><li>문서의 <strong>··· → 폴더로 이동</strong>, 폴더의 <strong>··· → 이름 변경 / 다른 폴더로 이동 / 빈 폴더 삭제</strong>를 사용하세요. 문서·폴더를 다른 폴더나 경로 위로 끌어 옮길 수도 있습니다. 비어 있는 폴더만 삭제할 수 있고 root는 이동·삭제할 수 없습니다.</li><li>원본 복사본의 파일명에는 충돌 방지용 ID가 붙습니다. <strong>주석·이력·설정은 관리 파일에 따로 보관</strong>하므로, 주석을 전달할 때는 문서를 열어 <strong>HTML 내보내기</strong>를 하세요. 새 기기로는 <strong>전용 폴더 전체</strong>를 옮기세요.</li></ol><p class="dialog-description small">서재에서 만든 폴더를 관리합니다. 앱 밖에서 넣은 폴더·파일은 자동으로 가져오거나 이동·삭제하지 않습니다. 기존 파일·폴더와 충돌하면 덮어쓰지 않고 저장 오류를 알립니다. 관리 파일은 직접 바꾸거나 삭제하지 마세요.</p></template>
-    <template id="about-content"><div class="about-brand"><img src="./icons/icon.svg" alt="" width="48" height="48"><div><h3>LibreMemo</h3><p>나만의 앱 서재</p></div></div><p class="about-version">버전 <strong id="app-version"></strong></p><p class="dialog-description">웹 페이지를 한 파일로 보관하고, 읽고, 주석을 남깁니다.</p><p class="local-only-note">문서·주석·설정은 이 기기에 저장됩니다.</p><p class="dialog-description"><a href="./vendor/office/THIRD-PARTY-NOTICES.txt" target="_blank" rel="noopener noreferrer">문서 읽기 도구의 오픈소스 라이선스</a></p></template>
+    <template id="about-content"><div class="about-brand"><img src="./icons/icon.svg" alt="" width="48" height="48"><div><h3>LibreMemo</h3><p>나만의 앱 서재</p></div></div><p class="about-version">버전 <strong id="app-version"></strong></p><p class="dialog-description">웹 페이지를 한 파일로 보관하고, 읽고, 주석을 남깁니다.</p><p class="local-only-note">문서·주석·설정은 이 기기에 저장됩니다.</p><p class="dialog-description"><a href="./vendor/office/THIRD-PARTY-NOTICES.txt" target="_blank" rel="noopener noreferrer">문서 읽기 도구의 오픈소스 라이선스</a> · <a href="./vendor/office/rhwp/THIRD-PARTY-NOTICES.txt" target="_blank" rel="noopener noreferrer">한글 문서 읽기 도구</a></p></template>
     <template id="export-guide-content">
       <p>평소에는 문서 원본 복사본과 주석을 <strong>분리해 자동 저장</strong>하며 원본 HTML에 새 주석을 합치지 않습니다. <strong>다른 사람에게 주석까지 보내려면 HTML 내보내기로 새 .html 파일을 저장하는 작업이 반드시 필요합니다.</strong></p>
       <p>PDF 문서도 같은 버튼으로 내보냅니다. PDF 원본과 현재 주석·북마크를 .html 파일 하나에 담으며, 받는 분은 LibreMemo의 파일 가져오기로 엽니다.</p>
-      <p>Office·OpenDocument 문서는 읽기 화면과 주석·북마크를 HTML 하나로 내보냅니다. Office 원본 자체도 필요하면 전용 폴더에 보관한 원본 사본을 따로 전달하세요.</p>
+      <p>Office·OpenDocument·한글 문서는 읽기 화면과 주석·북마크를 HTML 하나로 내보냅니다. 원본 파일 자체도 필요하면 전용 폴더에 보관한 원본 사본을 따로 전달하세요.</p>
       <p>HTML 내보내기는 본문과 현재 주석(펜·형광펜·밑줄·메모 등), 북마크를 <strong>HTML 파일 하나</strong>에 함께 저장합니다. 별도의 주석 파일은 필요하지 않습니다.</p>
       <ol><li>문서를 열고 상단 첫째 줄의 <strong>HTML 내보내기</strong> 버튼을 눌러 <strong>.html 파일</strong>로 저장합니다. 저장 창을 지원하지 않는 브라우저에서는 다운로드됩니다.</li><li>원래 가져왔던 파일이 아니라 <strong>방금 내보낸 .html 파일</strong>을 이메일·메신저 등에 첨부해 보냅니다.</li><li>받는 분은 <a href="https://seionwon.github.io/LibreMemo/" target="_blank" rel="noopener noreferrer">LibreMemo</a>의 <strong>내 서재 → 파일 가져오기</strong>로 파일을 열면 주석을 확인하고 계속 작업할 수 있습니다. 이미 불러온 파일 안내가 나오면 <strong>기존의 주석 파일로 가기</strong>를 선택하세요. <strong>새롭게 열기</strong>는 주석 없는 사본을 만듭니다.</li></ol>
       <p>자동 저장과 <kbd>Ctrl/⌘ S</kbd>는 이 기기의 보관함에 저장하며 데이터 폴더를 연결했다면 폴더에도 자동 보관합니다. 원본이나 이미 내보낸 파일은 자동 갱신되지 않으므로 <strong>주석을 더 수정했다면 다시 내보내세요.</strong></p>
@@ -71,7 +71,7 @@
       <p>앱 URL만 보내면 문서·주석은 전달되지 않습니다. 브라우저의 페이지 저장 대신 <strong>LibreMemo의 HTML 내보내기</strong>를 사용하세요. 파일을 브라우저에서 직접 열면 문서에 따라 일부 주석이 보이지 않을 수 있으므로 받는 분도 LibreMemo에서 가져오세요.</p>
       <p>파일에는 현재 주석이 포함되며 이전 주석 저장 이력과 앱 설정은 포함되지 않습니다. 외부 이미지·스타일을 새로 수집하지는 않으므로 웹페이지는 처음 가져올 때 단일 파일로 저장하세요.</p>
     </template>
-    <input type="file" id="file-input" accept=".docx,.odt,.ott,.xlsx,.xlsm,.xls,.csv,.tsv,.ods,.ots,.pptx,.odp,.otp,.md,.markdown,.txt,.json,.html,.htm,.mhtml,.mht,.pdf,application/pdf,text/html,multipart/related,application/x-mimearchive" multiple hidden>
+    <input type="file" id="file-input" accept=".hwp,.hwpx,.hml,.docx,.odt,.ott,.xlsx,.xlsm,.xls,.csv,.tsv,.ods,.ots,.pptx,.odp,.otp,.md,.markdown,.txt,.json,.html,.htm,.mhtml,.mht,.pdf,application/pdf,text/html,multipart/related,application/x-mimearchive" multiple hidden>
     <input type="file" id="settings-file-input" accept=".json,application/json" hidden>
   </div>
   <main id="folder-reconnect" class="folder-setup-paused folder-reconnect" hidden aria-labelledby="folder-reconnect-title"></main>

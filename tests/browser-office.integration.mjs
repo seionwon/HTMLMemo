@@ -70,3 +70,35 @@ test('real Chrome: Pages-only Office annotations, bookmarks, slide scaling, expo
     assert.deepEqual(chrome.errors,[]);assert.deepEqual(receiver.errors,[]);await writeFile(join(root,'test-results/pages-only-office-annotations.json'),JSON.stringify({status:'pass',annotated:['docx','xlsx','pptx'],bookmarks:true,slideScale:ratio,exportBytes:exported.length,mobile,offline:true,errors:[]},null,2));
   }catch(error){if(chrome){await writeFile(join(root,'test-results/pages-only-office-annotations-failure.png'),await chrome.page.screenshot());console.error('Office annotation diagnostic',await chrome.page.evaluate('({toast:document.querySelector("#toast")?.textContent,sidebar:document.querySelector("#sidebar")?.textContent})'));}throw error;}finally{await receiver?.close();await chrome?.close();await env.close();}
 });
+
+test('real Chrome: Pages-only rhwp Korean selection, annotations, pages, scaling, sharing and offline import',{timeout:210000},async()=>{
+  const env=await environment(),fixtures=await officeFixtures();let chrome,receiver;
+  try{
+    chrome=await launchChrome();receiver=await launchChrome();const page=chrome.page;await page.navigate(env.url);await receiver.page.navigate(env.url);const results=[];
+    for(const format of ['hml','hwpx','hwp']){
+      const name='한글 주석.'+format;await chooseFile(page,fixtures[format],name);await saved(page,name);await page.waitFor(frame+'?.style.visibility==="visible"');
+      const before=await page.evaluate(`(()=>{const d=${doc},p=d.querySelector('[data-office-text]'),range=d.createRange();range.selectNodeContents(p);d.getSelection().removeAllRanges();d.getSelection().addRange(range);d.dispatchEvent(new Event('selectionchange'));return {text:d.getSelection().toString(),pages:d.querySelectorAll('.office-page').length};})()`);
+      assert.match(before.text,/검색하는 한국어 본문입니다/);assert.equal(before.pages,2);
+      await page.click('#toolbar [data-action=highlight]');await saved(page,name,'window.__officeRecord.metadata.annotations.length===1');
+      assert.match(await page.evaluate(doc+'.querySelector("[data-htmlmemo-mark]").textContent'),/검색|색|한|국|어/);
+      await page.click('[data-sidebar-view=bookmarks]');await page.click('#add-bookmark');await page.evaluate("document.querySelector('#note-text').value='한글 돌아올 곳'");await page.click('.note-form button[value=save]');await saved(page,name,'window.__officeRecord.metadata.bookmarks.length===1');
+      await page.click('[data-sidebar-view=search]');await page.evaluate("const input=document.querySelector('#book-search');input.value='한국어';input.dispatchEvent(new Event('input',{bubbles:true}));");await page.waitFor('document.querySelector("[data-whole-search-index]")');await page.click('[data-whole-search-index="0"]');
+      await page.evaluate(`(async()=>{const root=await navigator.storage.getDirectory();window.__hangulExport=await root.getFileHandle('한글 주석.html',{create:true});window.showSaveFilePicker=async()=>window.__hangulExport;})()`);await page.click('#save-page');await page.waitFor("document.querySelector('#toast').textContent.includes('내보냈습니다')");
+      const exported=Buffer.from(await page.evaluate(`(async()=>{const f=await window.__hangulExport.getFile(),bytes=new Uint8Array(await f.arrayBuffer());let s='';for(let i=0;i<bytes.length;i+=16384)s+=String.fromCharCode(...bytes.subarray(i,i+16384));return btoa(s);})()`),'base64');
+      await chooseFile(receiver.page,exported,format+'-shared.html');await saved(receiver.page,format+'-shared.html','window.__officeRecord.metadata.annotations.length===1&&window.__officeRecord.metadata.bookmarks.length===1');
+      results.push({format,selected:before.text,pages:before.pages,annotations:true,bookmarks:true,exportBytes:exported.length});
+    }
+    // Same scale governs original glyphs, HTML selection rectangles and annotations.
+    const bounds=`(()=>{const d=${doc};return {page:d.querySelector('.office-page>svg').getBoundingClientRect().width,mark:d.querySelector('[data-htmlmemo-mark]').getBoundingClientRect().width};})()`;
+    const first=await page.evaluate(bounds);await page.click('.document-host:not([hidden]) [data-action=font-larger]');await saved(page,'한글 주석.hwp','window.__officeRecord.metadata.view.fontScale===1.1');const enlarged=await page.evaluate(bounds);
+    assert.ok(Math.abs(enlarged.page/first.page-1.1)<.03);assert.ok(Math.abs(enlarged.mark/first.mark-1.1)<.03);
+    await page.click('.document-host:not([hidden]) [data-action=next-heading]');await page.waitFor(doc+'.defaultView.scrollY>100');
+    await page.click('.document-host:not([hidden]) [data-action=previous-heading]');
+    await page.send('Emulation.setDeviceMetricsOverride',{width:320,height:640,deviceScaleFactor:1,mobile:true});await writeFile(join(root,'test-results/pages-only-hangul-320.png'),await page.screenshot());assert.equal(await page.evaluate('document.documentElement.scrollWidth>innerWidth'),false);
+    await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:800,deviceScaleFactor:1,mobile:false});await page.evaluate(doc+'.defaultView.scrollTo(0,0)');await writeFile(join(root,'test-results/pages-only-hangul-1280.png'),await page.screenshot());
+    await page.evaluate('navigator.serviceWorker.ready');await page.waitFor('!!navigator.serviceWorker.controller',45000);await page.send('Network.enable');await page.send('Network.emulateNetworkConditions',{offline:true,latency:0,downloadThroughput:0,uploadThroughput:0});
+    await chooseFile(page,fixtures.hwpx,'offline.hwpx');await page.waitFor('document.querySelector("[data-duplicate-import]")');await page.click('[data-duplicate-import] [value=new]');await saved(page,'offline.hwpx');
+    await chooseFile(page,Buffer.from('<html>not HML</html>'),'damaged.hml');await page.waitFor('document.querySelector("#toast").textContent.includes("HWPML")');assert.equal(await page.evaluate('(async()=>{const s=await import("./src/storage.js");return(await s.listDocuments()).some(r=>r.name==="damaged.hml");})()'),false);
+    assert.deepEqual(chrome.errors,[]);assert.deepEqual(receiver.errors,[]);await writeFile(join(root,'test-results/pages-only-hangul.json'),JSON.stringify({status:'pass',results,scale:{page:enlarged.page/first.page,annotation:enlarged.mark/first.mark},navigation:true,mobile:320,offline:true,errors:[]},null,2));
+  }catch(error){if(chrome){await writeFile(join(root,'test-results/pages-only-hangul-failure.png'),await chrome.page.screenshot());console.error('Hangul diagnostic',await chrome.page.evaluate('({toast:document.querySelector("#toast")?.textContent,sidebar:document.querySelector("#sidebar")?.textContent})'));}throw error;}finally{await receiver?.close();await chrome?.close();await env.close();}
+});

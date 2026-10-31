@@ -12,7 +12,7 @@ export const HELP_TOPICS = [
     {title:'먼저 준비하세요',paragraphs:['전용 저장 폴더를 선택할 수 있는 Google Chrome에서 LibreMemo를 엽니다. 앱은 새 버전을 먼저 확인하고, 업데이트 안내에서 설치하거나 취소한 뒤 저장 폴더를 확인합니다. 처음 사용하는 기기에서는 전용 폴더를 연결하고 첫 저장을 마쳐야 서재를 사용할 수 있습니다. 로그인이나 API 키는 필요하지 않습니다.']},
     {title:'차례대로 해보세요',steps:[
       {title:'전용 폴더를 만드세요.',text:'이름은 기본값 LibreMemo로 두거나 원하는 이름을 적습니다. 새 저장 폴더 만들기를 누르고 Documents 또는 문서 폴더를 선택해 하위에 전용 폴더를 만듭니다. 기기에 문서 폴더가 없다면 원하는 상위 위치를 선택합니다. 폴더 사용과 쓰기를 허용하고 첫 저장이 끝날 때까지 기다립니다.'},
-      {title:'문서를 하나 여세요.',text:'서재의 파일 가져오기를 눌러 가지고 있는 HTML·PDF·Office·OpenDocument·CSV·TSV·Markdown·텍스트·JSON 파일을 선택합니다. 서재가 비어 있다면 예제 문서로 연습할 수도 있습니다. 파일을 앱 안으로 끌어다 놓아도 됩니다.'},
+      {title:'문서를 하나 여세요.',text:'서재의 파일 가져오기를 눌러 가지고 있는 HTML·PDF·한글·Office·OpenDocument·CSV·TSV·Markdown·텍스트·JSON 파일을 선택합니다. 서재가 비어 있다면 예제 문서로 연습할 수도 있습니다. 파일을 앱 안으로 끌어다 놓아도 됩니다.'},
       {title:'한 문장에 형광펜을 칠하세요.',text:'플로팅 툴바의 형광펜에서 글자 형광펜 방식을 고르고 문장을 드래그합니다. 폰에서도 손가락이나 펜으로 글자를 따라 드래그한 뒤 떼면 표시됩니다. 이미 글을 선택했다면 플로팅 툴바의 형광펜을 누릅니다. 도구를 고른 채 문서를 움직이려면 두 손가락으로 스크롤합니다.'},
       {title:'생각을 메모로 남기세요.',text:'다른 문장을 선택한 채 플로팅 툴바의 메모를 누르고 짧은 생각을 적습니다. 선택한 문장에 대한 메모로 저장됩니다. 글을 선택하지 않았다면 메모 도구로 원하는 자리에 상자를 그릴 수도 있습니다.'},
       {title:'저장을 확인하세요.',text:'주석은 자동 저장됩니다. 화면 아래 저장 표시와 폴더 저장 상태를 확인합니다. 문서 탭의 ×를 눌러 닫으면 남은 저장을 마친 뒤 닫힙니다.'},
@@ -55,10 +55,16 @@ export const HELP_TOPICS = [
     ]},
   ],related:['backup-restore','storage-folder','storage-differences','save-problems']},
   {id:'import-files',group:'features',title:'문서 가져오기와 중복 문서',summary:'지원 파일, 여러 파일 열기와 이미 보관한 파일의 선택을 설명합니다.',keywords:'열기 불러오기 import html htm mhtml mht 중복 파일 복사',sections:[
-    {title:'파일을 여는 방법',paragraphs:['내 서재의 파일 가져오기로 HTML·HTM·MHTML·MHT·PDF와 Word·Excel·PowerPoint·OpenDocument·CSV·TSV·Markdown·텍스트·JSON 파일을 선택합니다. 여러 파일을 한 번에 선택하거나 파일을 앱으로 끌어다 놓을 수 있습니다. 가져온 문서는 서재에 보관되고 위쪽 파일 탭으로 열립니다. 문서가 준비될 때까지 기다린 뒤 주석을 남기세요.']},
+    {title:'파일을 여는 방법',paragraphs:['내 서재의 파일 가져오기로 HTML·HTM·MHTML·MHT·PDF와 HWP·HWPX·HML·Word·Excel·PowerPoint·OpenDocument·CSV·TSV·Markdown·텍스트·JSON 파일을 선택합니다. 여러 파일을 한 번에 선택하거나 파일을 앱으로 끌어다 놓을 수 있습니다. 가져온 문서는 서재에 보관되고 위쪽 파일 탭으로 열립니다. 문서가 준비될 때까지 기다린 뒤 주석을 남기세요.']},
     {title:'이미 같은 파일이 있으면',paragraphs:['원본 내용이 같은 문서가 있으면 기존 주석을 이어서 사용할지, 새 주석으로 시작할지, 취소할지 선택하는 안내가 나옵니다. 예전 주석이 필요하다면 기존 문서를 이어서 여는 선택을 사용하세요. 같은 파일명이라도 내용이 다르면 같은 원본으로 판단하지 않습니다.']},
     {title:'그림과 자료를 함께 보관하려면',paragraphs:['단일 HTML이나 MHTML처럼 자료를 포함한 파일이 알맞습니다. MHTML에 들어 있는 이미지·스타일·글꼴 등을 풀어 보관하며, 저장 당시 포함되지 않은 자료는 되살릴 수 없습니다. 가져오기 전 파일은 자동으로 변경하거나 지우지 않습니다.']},
   ],related:['library','missing-resources','export-html']},
+  {id:'hangul-documents',group:'features',title:'한글 HWP·HWPX·HML 읽기',summary:'한글 문서도 같은 화면에서 읽고 검색하며 주석을 남깁니다.',keywords:'한글 아래한글 rhwp HWP HWPX HML HWPML 읽기 전용',sections:[
+    {title:'여는 방법',paragraphs:['내 서재 → 파일 가져오기에서 HWP·HWPX·HML을 고르거나 앱으로 끌어다 놓습니다. 문서는 기기 안에서 처리하며 별도 서버·확장 프로그램·한글 앱 설치가 필요 없습니다. 앱의 오프라인 준비가 끝나면 인터넷 없이도 새 한글 파일을 가져올 수 있습니다.']},
+    {title:'같은 읽기 도구',paragraphs:['원본의 쪽 모양·표·그림을 표시합니다. 목차에서 쪽을 고르거나 이전·다음 버튼으로 이동하고, 검색·글자 선택·형광펜·메모·펜·북마크·TTS를 그대로 사용합니다. A−·A+는 쪽과 주석을 함께 확대·축소합니다. 작은 화면이나 큰 확대에서는 가로로 스크롤합니다. 원본 본문·표·그림을 수정하는 편집 기능은 제공하지 않습니다.']},
+    {title:'원본 보관과 전달',paragraphs:['원본 파일을 확장자와 내용 그대로 전용 폴더에 보관하고 읽기 화면·주석·북마크는 별도로 저장합니다. 주석까지 전달하려면 HTML 내보내기를 사용하세요. 한글 원본 자체가 필요하면 전용 폴더의 HWP·HWPX·HML 사본도 따로 보냅니다.']},
+    {title:'지원 범위와 오류',paragraphs:['rhwp 0.8.7의 지원 범위를 따릅니다. HML은 HWPML 2.9/2.91의 지원 요소를 표시하며 그림·외부 리소스·일부 개체가 빠질 수 있습니다. 생략 정보가 있으면 본문 위에 안내합니다. 기기에 없는 특수 글꼴과 복잡한 배치는 원본 앱과 다를 수 있습니다.','암호·DRM이 걸린 파일은 원래 앱에서 보호되지 않은 사본으로 저장한 뒤 가져옵니다. 손상된 파일·외부 엔터티 선언·잘못된 압축 경로는 거부하며 외부 자료나 매크로를 실행하지 않습니다. 파일은 100MB 이하(HML은 16MB), 2,000쪽 이하이며 복잡한 문서는 더 일찍 표시 용량·120초 처리 한도에 도달할 수 있습니다. 이때 문서를 나누어 가져오세요. 실패한 문서는 서재에 추가하지 않습니다.']},
+  ],related:['import-files','office-documents','export-html']},
   {id:'office-documents',group:'features',title:'Office·OpenDocument·텍스트를 읽기 전용으로 열기',summary:'GenOffice의 지원 포맷을 같은 서재·검색·주석 도구로 읽습니다.',keywords:'GenOffice Word 워드 DOCX ODT OTT Excel 엑셀 XLSX XLSM XLS CSV TSV ODS OTS PowerPoint 파워포인트 PPTX ODP OTP Markdown MD TXT JSON 읽기 전용',sections:[
     {title:'지원 파일과 여는 방법',paragraphs:['내 서재 → 파일 가져오기를 누르거나 앱으로 파일을 끌어다 놓습니다. Word: DOCX·ODT·OTT, 스프레드시트: XLSX·XLSM·XLS·CSV·TSV·ODS·OTS, 슬라이드: PPTX·ODP·OTP, 텍스트: MD·MARKDOWN·TXT·JSON을 지원합니다. 기존 HTML·HTM·MHTML·MHT·PDF도 그대로 사용할 수 있습니다. 오래된 DOC·PPT는 GenOffice에서도 직접 여는 형식에 포함하지 않으며, DOCX·PPTX로 저장한 사본을 가져옵니다.']},
     {title:'같은 읽기·주석 도구',paragraphs:['파일 종류마다 별도 편집 화면으로 전환하지 않습니다. 동일한 탭, 상단 읽기 도구, 플로팅 주석 툴바, 목차·검색·주석·북마크 사이드바를 사용합니다. Word의 제목, 시트 이름, 슬라이드 번호가 목차에 나타납니다. 시트가 넓으면 표 안에서 가로로 스크롤합니다. 글자를 선택해 형광펜·밑줄·메모를 남기고 펜·도형, TTS와 북마크도 사용할 수 있습니다. 원본 내용이나 셀·수식·슬라이드를 편집하지는 않습니다.']},

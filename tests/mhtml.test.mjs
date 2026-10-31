@@ -100,5 +100,5 @@ test('HTML and MHTML pick/drop names and HTML export extensions stay consistent'
   const files=['a.html','b.HTM','c.mhtml','d.MHT','x.exe'].map(name=>file('',name,''));assert.deepEqual(files.map(isLocalHTMLFile),[true,true,true,true,false]);assert.deepEqual(await droppedHTMLFiles({files}),files.slice(0,4));
   const handle={kind:'file',name:'from-picker.MHT'};assert.deepEqual(await droppedHTMLFiles({items:[{kind:'file',getAsFileSystemHandle:async()=>handle}]}),[handle]);
   for(const name of ['book.html','book.htm','book.mhtml','book.MHT']){assert.equal(htmlExportName(name),'book.html');assert.equal(htmlExportName(name,true),'book-주석.html');}
-  assert.equal(htmlExportName('renamed'),'renamed.html');await assert.rejects(readLocalHTML(files[4]),/HTML, PDF, Office/);
+  assert.equal(htmlExportName('renamed'),'renamed.html');await assert.rejects(readLocalHTML(files[4]),/HTML, PDF, HWP·HWPX·HML, Office/);
 });

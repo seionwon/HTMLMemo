@@ -96,6 +96,15 @@
         ],
         "application/json": [
           ".json"
+        ],
+        "application/x-hwp": [
+          ".hwp"
+        ],
+        "application/hwp+zip": [
+          ".hwpx"
+        ],
+        "application/x-hwpml": [
+          ".hml"
         ]
       }
     }

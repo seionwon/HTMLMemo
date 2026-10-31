@@ -102,7 +102,7 @@ export async function findLocalDuplicates(local, records, loadRecord) {
 export async function readLocalHTML(input, {native = false, allowScripts = false, identify = true} = {}) {
   const originalHandle = input?.kind === 'file' && typeof input.getFile === 'function' ? input : null;
   const file = originalHandle ? await originalHandle.getFile() : input;
-  if (!isLocalHTMLFile(file) || typeof file.text !== 'function') throw new Error('HTML, PDF, Office, OpenDocument, CSV·TSV, Markdown 또는 텍스트·JSON 파일을 선택해주세요.');
+  if (!isLocalHTMLFile(file) || typeof file.text !== 'function') throw new Error('HTML, PDF, HWP·HWPX·HML, Office, OpenDocument, CSV·TSV, Markdown 또는 텍스트·JSON 파일을 선택해주세요.');
   const format=officeFormat(file);
   if(format){
     await verifyOffice(file,format);

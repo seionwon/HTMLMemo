@@ -1,0 +1,13 @@
+{
+  "name": "@rhwp/core",
+  "version": "0.8.7",
+  "repository": "https://github.com/edwardkim/rhwp",
+  "release": "https://github.com/edwardkim/rhwp/tree/v0.8.7",
+  "license": "MIT",
+  "files": {
+    "rhwp.js": "70cde06a369fa7fd4fc8bc8f3d6acaee158596ba1a116a2c72159002b0b5654e",
+    "rhwp_bg.wasm": "54cf95014312e605c51b98eb9021247ea79ef2bbd0a7080e11c011d0246e3989",
+    "LICENSE": "1c3a7d5643b163a3ead4965e1bea33b832caee5bfca265efe42afcd7bc696b5b"
+  },
+  "changes": "Unmodified npm WASM and JavaScript. LibreMemo supplies a read-only adapter; no rhwp editor UI."
+}
