@@ -230,7 +230,7 @@ html[data-app-sidebar-resizing] iframe{pointer-events:none!important}
 [data-htmlmemo-doc-sidebar-ui] .sidebar-book-search>[data-htmlmemo-book-search-part]:not(input){margin:0!important;padding:0!important;border:0!important}
 [data-htmlmemo-doc-sidebar-ui] .sidebar-book-results{min-width:0;margin:8px 0 0}
 [data-htmlmemo-doc-sidebar-ui] .sidebar-book-search-hint{margin:0 0 6px;color:var(--muted);font-size:10px;line-height:1.6}
-[data-htmlmemo-doc-sidebar-ui] .sidebar-book-results>#reader-tree{display:block!important;min-width:0;max-height:45vh;overflow:auto;margin:0;padding:0}
+[data-htmlmemo-doc-sidebar-ui] .sidebar-book-results>#reader-tree{display:block!important;min-width:0;max-height:calc(45vh / var(--htmlmemo-reader-ui-scale,1));overflow:auto;margin:0;padding:0}
 [data-htmlmemo-doc-sidebar-ui] .sidebar-book-results a{display:block;overflow-wrap:anywhere;color:inherit;padding:6px 3px;text-decoration:none;border-radius:4px}
 [data-htmlmemo-doc-sidebar-ui] .sidebar-book-results a:hover,[data-htmlmemo-doc-sidebar-ui] .sidebar-book-results a:focus-visible{background:var(--green-light);color:var(--green)}
 [data-htmlmemo-doc-sidebar-ui] .sidebar-book-results .search-navigation{flex-wrap:wrap}
