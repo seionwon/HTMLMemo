@@ -28,12 +28,16 @@ async function pin(id,value){if(id)await write('client/'+id,value);return value;
 async function chosen(id){return id&&await read('client/'+id)||await read('selected')||identity;}
 async function prune(){
   const live=(await self.clients.matchAll({type:'window',includeUncontrolled:true})).filter(client=>application(client.url));
+  const liveIds=new Set(live.map(client=>client.id));
   const selected=await read('selected')||identity,keep=new Set([CONTROL,STORE,selected.cache]);
   for(const client of live){const value=await chosen(client.id);keep.add(value.cache);await pin(client.id,value);}
   const control=await caches.open(CONTROL);
   for(const request of await control.keys())if(request.url.startsWith(key('client/'))){
-    if(await self.clients.get(request.url.slice(key('client/').length)))keep.add((await(await control.match(request)).json()).cache);
-    else await control.delete(request);
+    // clients.get() can wait for a navigating window to become execution-ready.
+    // That navigation needs this same update lock to select its cached shell.
+    // Use the completed client snapshot instead; selected/new caches are kept
+    // above, and every live old window already retains its own pinned cache.
+    if(!liveIds.has(request.url.slice(key('client/').length)))await control.delete(request);
   }
   for(const name of await caches.keys())if(name.startsWith('htmlmemo-')&&name.endsWith(':'+BASE.pathname)&&!keep.has(name))await caches.delete(name);
 }

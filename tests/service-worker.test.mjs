@@ -13,7 +13,7 @@ class Cache{
   async keys(){return[...this.rows.keys()].map(url=>new Request(url));}
   async delete(input){return this.rows.delete(this.url(input));}
 }
-function fixture(){
+function fixture({getClient=(id,clients)=>clients.get(id)}={}){
   const stores=new Map(),clients=new Map(),network=new Map(),requests=[];
   const caches={async open(name){if(!stores.has(name))stores.set(name,new Cache());return stores.get(name);},async keys(){return[...stores.keys()];},async delete(name){return stores.delete(name);}};
   function worker(version,{bad=false,networkFailure=false,activation=async()=>{}}={}){
@@ -21,7 +21,7 @@ function fixture(){
     for(const[name,body]of Object.entries(files))network.set(new URL(name,base).href,body);network.set(base,files['index.html']);
     const digests=Object.fromEntries(Object.entries(files).map(([name,body])=>[name,crc32(new TextEncoder().encode(body))]));
     if(bad)network.set(new URL('styles.css',base).href,'Wrong deployed file');if(networkFailure)network.delete(new URL('styles.css',base).href);
-    const self={location:new URL('sw.js',base),addEventListener:(type,fn)=>events.set(type,fn),clients:{async matchAll(){return[...clients.values()];},async get(id){return clients.get(id);},async claim(){}},skipWaiting:async()=>{w.skips++;await activation();}};
+    const self={location:new URL('sw.js',base),addEventListener:(type,fn)=>events.set(type,fn),clients:{async matchAll(){return[...clients.values()];},async get(id){return getClient(id,clients);},async claim(){}},skipWaiting:async()=>{w.skips++;await activation();}};
     const context=vm.createContext({self,caches,URL,Request,Response,Uint8Array,fetch:async request=>{requests.push(request.url);const body=network.get(request.url);return new Response(body??'Unavailable',{status:body===undefined?503:200});}});
     const script=source.replace(/const CACHE = '[^']+';/,`const CACHE = 'htmlmemo-${version}';`).replace(/const VERSION = [^;]+;/,`const VERSION = ${JSON.stringify(version)};`).replace(/const DIGESTS = [^;]+;/,`const DIGESTS = ${JSON.stringify(digests)};`).replace(/const SHELL = [^;]+;/,`const SHELL = ['./','./index.html','./styles.css','./src/version.js'];`);
     vm.runInContext(script,context);
@@ -44,6 +44,18 @@ test('cancel survives worker activation and a complete app close; accepting swit
   assert.match(await(await two.fetch('',{navigation:true,next:'updated'})).text(),/two/);
   assert.match(await(await two.fetch('styles.css',{id:'other'})).text(),/one/);
   await two.event('activate');assert.ok([...f.stores.keys()].some(key=>key==='htmlmemo-one:/HTMLMemo/'));
+});
+test('cache pruning never waits for a navigating client and preserves live old windows',async()=>{
+  let navigating=false;
+  const f=fixture({getClient:(id,clients)=>navigating&&id==='leaving'?new Promise(()=>{}):clients.get(id)});
+  f.client('leaving');f.client('other');const one=f.worker('one');await one.event('install');await one.event('activate');
+  await one.fetch('',{navigation:true,next:'leaving'});await one.fetch('',{navigation:true,next:'other'});
+  const two=f.worker('two');await two.event('install');await two.message('leaving',{type:'HTMLMEMO_UPDATE_APPLY',build:'htmlmemo-two'});
+  f.clients.delete('leaving');navigating=true;let timer;
+  try{await Promise.race([two.event('activate'),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Cache cleanup waited for the unfinished navigation')),500);})]);}finally{clearTimeout(timer);}
+  assert.match(await(await two.fetch('',{navigation:true,next:'replacement'})).text(),/two/);
+  assert.match(await(await two.fetch('styles.css',{id:'other'})).text(),/one/);
+  assert.ok(f.stores.has('htmlmemo-one:/HTMLMemo/'));
 });
 test('incomplete or mixed releases never replace the selected app or offer an install',async()=>{
   for(const failure of ['bad','networkFailure']){
