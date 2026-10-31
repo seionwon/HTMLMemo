@@ -5016,3 +5016,21 @@ CodeMemo의 별도 임시 Chrome 검사는 EPUB 본문·스타일 표시와 내�
 **검증 범위·제한:** 합성 전자책과 독립된 Project Gutenberg KF8 표본, Chrome의 데스크톱·휴대폰 크기 에뮬레이션으로 검사했다. 실물 Android 기기나 모든 실제 전자책의 복잡한 배치를 보장한 검사는 아니다. DRM·암호·KFX, CBZ OCR과 미디어 실행 제한 및 원본 앱과의 배치·글꼴 차이는 위 안내와 도움말에 유지한다. 별도 서버·확장·앱 설치를 요구하지 않으며 기존 GitHub Pages URL과 설치한 PWA를 사용한다.
 
 [검증 요약](verification/foliate-readonly-2026-10-31/validation.json), [CI 결과](verification/foliate-readonly-2026-10-31/ci.json), [공개 파일 대조](verification/foliate-readonly-2026-10-31/public-files.json), [전자책 형식별 결과](verification/foliate-readonly-2026-10-31/pages-only-ebook-formats.json), [주석·공유·오프라인 결과](verification/foliate-readonly-2026-10-31/pages-only-ebook-annotations.json), [고정 EPUB·CBZ 결과](verification/foliate-readonly-2026-10-31/pages-only-ebook-fixed-comic.json), [공개 데스크톱 화면](verification/foliate-readonly-2026-10-31/pages-only-ebook-1280.png), [공개 320px 화면](verification/foliate-readonly-2026-10-31/pages-only-ebook-320.png). 원본 로그·실패 화면·실제 CI 산출물은 `test-results/ebook/`에 보관했다. 이 최종 기록은 문서·검증 자료만 보충하며 `[skip ci]`로 게시 앱을 다시 바꾸지 않는다.
+
+
+<a id="hist-20261031-009"></a>
+### 2026-10-31 23:32:01 +09:00 — 확대·축소 창의 숫자를 실제 배율과 동기화
+
+| 항목 | 내용 |
+|---|---|
+| ID | hist-20261031-009 |
+| 변경 종류 | 읽기 도구 오류 수정 |
+| 상태 | 구현·로컬 검증 완료 · GitHub Pages 게시 검증 대기 |
+
+**문제·사용법:** 문서 상단의 퍼센트 버튼으로 **확대 · 축소** 창을 열고 `+`·`−`를 누르면 본문과 상단 퍼센트는 바뀌지만 창 안 숫자는 처음 열었을 때 값으로 남아 있었다. 적용한 실제 `zoom`을 기준으로 같은 클릭 안에서 숫자도 다시 표시하도록 수정했다. 예를 들어 137%에서 `+`를 누르면 164%, 한 번 더 누르면 197%로 표시하고, `−`를 누르면 같은 실제 배율을 따라간다. 창을 닫았다 열지 않아도 숫자가 갱신된다.
+
+직접 입력한 값은 적용 후 상단과 같은 정수 퍼센트로 표시한다. 허용 범위를 벗어난 950%·5%는 실제 적용되는 800%·20%로 표시하고 빈 값·숫자가 아닌 입력은 현재 배율로 복원해 잘못된 배율을 적용하지 않는다. 기존 배율 계산·주석 좌표·화면 너비 맞추기·100% 원래 크기 동작은 유지한다. HTML의 자체 상단바와 공통 읽기 도구가 같은 확대 창을 사용하므로 같은 수정이 적용된다. 새 저장 형식이나 데이터 이전은 필요 없다.
+
+**검증:** 실제 앱의 버튼 이벤트 코드를 실행하는 회귀 검사에서 수정 전 `137 → +`의 입력값이 137로 남는 오류와 범위 밖 숫자가 그대로 남는 오류를 재현했다. 수정 후 `npm test` **827개**, `npm run check` **190개 JavaScript·JSON**, `npm run build`, `git diff --check`를 통과했다. 연속 확대·축소, 직접 입력, 상·하한, 소수 입력, 빈 값·잘못된 값과 100% 복원을 검사했다. 기존 Chrome 읽기 도구 검사에 입력 숫자·상단 퍼센트의 일치, 창 재열기와 작은 화면 확인을 추가했으며 게시 전 선행 검사와 전체·공개 URL 검사에서 실행한다. 샌드박스 안에서 데스크톱 Chrome을 직접 실행하지 않았다.
+
+**게시 상태:** 이 기록 시점에는 1.6.1을 게시 완료로 기록하지 않는다. 기존 GitHub Actions의 실제 Chrome·Pages 게시·공개 URL 검증 결과를 아래에 보충한다. 기존 PWA 새 버전 안내로 전달하며 별도 서버·확장·추가 설치는 요구하지 않는다.

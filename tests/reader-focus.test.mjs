@@ -94,6 +94,21 @@ test('upper reading controls preserve the open popover until their click can tog
  controls.firstElementChild.dispatchEvent(new a.doc.defaultView.Event('pointerdown',{bubbles:true}));assert.equal(pop.hidden,false);
  a.doc.body.dispatchEvent(new a.doc.defaultView.Event('pointerdown',{bubbles:true}));assert.equal(pop.hidden,true,'outside clicks still dismiss the popover');
 });
+function zoomApp(){
+ const a=app();a.r.zoom=1.37;a.r.setZoom=value=>{a.r.zoom=Math.min(8,Math.max(.2,value));};
+ Object.assign(a.context,{icon,showPopover(name,html,bind){const pop=a.doc.querySelector('#tool-popover');pop.innerHTML=html;pop.hidden=false;bind();}});
+ vm.runInContext(appSource.slice(appSource.indexOf('function toolAction('),appSource.indexOf('function bindToolbarDrag(')),a.context);a.context.toolAction('zoom');return a;
+}
+test('zoom popover plus and minus keep the numeric field in sync with the applied scale',()=>{
+ const a=zoomApp(),input=a.doc.querySelector('#zoom-value'),pop=a.doc.querySelector('#tool-popover');assert.equal(input.value,'137');
+ for(const [button,value] of [['in','164'],['in','197'],['out','164'],['out','137']]){a.doc.querySelector('#zoom-'+button).onclick();assert.equal(input.value,value);assert.equal(input.value,String(Math.round(a.r.zoom*100)));assert.equal(pop.hidden,false);}
+ assert.ok(Math.abs(a.r.zoom-1.37)<1e-12);assert.equal(a.r.metadata.annotations[0].text,'Keep my note');
+});
+test('zoom numeric commits show the applied range limit and invalid edits retain the current scale',()=>{
+ const a=zoomApp(),input=a.doc.querySelector('#zoom-value');
+ for(const [typed,value,scale] of [['950','800',8],['5','20',.2],['137.5','138',1.375],['','138',1.375],['not a number','138',1.375]]){input.value=typed;input.onchange({target:input});assert.equal(input.value,value);assert.equal(a.r.zoom,scale);}
+ a.doc.querySelector('#zoom-in').onclick();assert.equal(input.value,'165');a.doc.querySelector('#zoom-reset').onclick();assert.equal(a.r.zoom,1);assert.equal(a.doc.querySelector('#tool-popover').hidden,true);
+});
 test('more tools contain no duplicated toolbar, sidebar, bookmark or export actions and preserve drawing tools',()=>{
  const a=app(),selected=[];a.r.setTool=tool=>selected.push(tool);
  Object.assign(a.context,{icon,$$:(selector,root)=>[...root.querySelectorAll(selector)],safely:fn=>fn,updateToolbarState(){},

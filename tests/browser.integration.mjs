@@ -247,8 +247,8 @@ test('real Chrome: reading controls provide one app TTS, wait for Play and keep 
       const button=await point(nativeZoom),pop=await page.evaluate(`(()=>{const r=document.querySelector('#tool-popover').getBoundingClientRect();return {top:r.top,bottom:r.bottom};})()`);assert.ok(Math.abs(pop.top-button.y)<35,'zoom opens below the upper button, not by the floating toolbar');
       await writeFile(join(root,`test-results/reading-controls-native-${width}.png`),await page.screenshot());
       await page.evaluate(`(()=>{const input=document.querySelector('#zoom-value');input.value='125';input.dispatchEvent(new Event('change',{bubbles:true}));})()`);await page.waitFor(`${nativeZoom}.textContent==='125%'&&${frame}.style.transform==='scale(1.25)'`);
-      await page.click('#zoom-out');await page.waitFor(`${nativeZoom}.textContent==='104%'`);
-      await page.click('#zoom-in');await page.waitFor(`${nativeZoom}.textContent==='125%'`);
+      await page.click('#zoom-out');await page.waitFor(`${nativeZoom}.textContent==='104%'&&document.querySelector('#zoom-value').value==='104'`);
+      await page.click('#zoom-in');await page.waitFor(`${nativeZoom}.textContent==='125%'&&document.querySelector('#zoom-value').value==='125'`);
       await page.click('#zoom-reset');await page.waitFor(`${nativeZoom}.textContent==='100%'&&document.querySelector('#tool-popover').hidden`);
       await clickNative(nativeZoom);await page.waitFor('!document.querySelector("#tool-popover").hidden');await page.click('#zoom-fit');await page.waitFor(`document.querySelector('#tool-popover').hidden`);
       const fitted=await page.evaluate(`Math.round(document.querySelector('.document-host:not([hidden]) .reader-viewport').clientWidth/${frame}.offsetWidth*100)+'%'`);assert.equal(await page.evaluate(`${nativeZoom}.textContent`),fitted);
@@ -263,9 +263,21 @@ test('real Chrome: reading controls provide one app TTS, wait for Play and keep 
     const upper='.document-host:not([hidden]) > [data-htmlmemo-reading-controls]';
     assert.equal(await page.evaluate(`document.querySelectorAll('${upper} [data-action=speak]').length`),1);
     assert.equal(await page.evaluate(`!!document.querySelector('${upper} [data-action=speak] svg')`),true);
-    await page.click(upper+' [data-action=zoom]');await page.waitFor('!document.querySelector("#tool-popover").hidden');assert.equal(await contained(),true);await writeFile(join(root,'test-results/reading-controls-plain-390.png'),await page.screenshot());await page.click(upper+' [data-action=zoom]');await page.waitFor('document.querySelector("#tool-popover").hidden');
+    await page.click(upper+' [data-action=zoom]');await page.waitFor('!document.querySelector("#tool-popover").hidden');assert.equal(await contained(),true);await writeFile(join(root,'test-results/reading-controls-plain-390.png'),await page.screenshot());
+    const setZoomInput=async value=>page.evaluate(`(()=>{const input=document.querySelector('#zoom-value');input.value=${JSON.stringify(value)};input.dispatchEvent(new Event('change',{bubbles:true}));})()`),zoomStates=[];
+    await setZoomInput('137');
+    for(const [action,value] of [['in','164'],['in','197'],['out','164'],['out','137']]){
+      await page.click('#zoom-'+action);await page.waitFor(`document.querySelector('#zoom-value').value===${JSON.stringify(value)}&&document.querySelector('${upper} [data-action=zoom]').textContent===${JSON.stringify(value+'%')}`);
+      zoomStates.push({action,value,toolbar:value+'%'});
+    }
+    for(const [typed,value] of [['950','800'],['5','20'],['137.5','138'],['','138']]){
+      await setZoomInput(typed);await page.waitFor(`document.querySelector('#zoom-value').value===${JSON.stringify(value)}&&document.querySelector('${upper} [data-action=zoom]').textContent===${JSON.stringify(value+'%')}`);zoomStates.push({typed,value,toolbar:value+'%'});
+    }
+    await page.click('#zoom-in');await page.waitFor(`document.querySelector('#zoom-value').value==='165'&&document.querySelector('${upper} [data-action=zoom]').textContent==='165%'`);
+    await writeFile(join(root,'test-results/reading-controls-zoom-sync-390.png'),await page.screenshot());await page.click('#zoom-reset');await page.waitFor(`document.querySelector('${upper} [data-action=zoom]').textContent==='100%'&&document.querySelector('#tool-popover').hidden`);
+    await page.click(upper+' [data-action=zoom]');await page.waitFor(`document.querySelector('#zoom-value').value==='100'&&!document.querySelector('#tool-popover').hidden`);await page.click(upper+' [data-action=zoom]');await page.waitFor('document.querySelector("#tool-popover").hidden');
     const before=await page.evaluate('window.__ttsUtterances.length');await page.click(upper+' [data-action=speak]');await page.waitFor('document.querySelector("[data-memo-readaloud]")');assert.equal(await page.evaluate('window.__ttsUtterances.length'),before);await page.click('.mstts-player [aria-label="소리내어 읽기"]');await page.waitFor(`window.__ttsUtterances.length===${before+1}`);await page.click('.mstts-player [aria-label="플레이어 닫기"]');
-    assert.deepEqual(chrome.errors,[]);
+    assert.deepEqual(chrome.errors,[]);await writeFile(join(root,'test-results/pages-only-zoom-sync.json'),JSON.stringify({status:'pass',nativeControls:true,plainControls:true,states:zoomStates,resetAndReopen:true,errors:[]},null,2));
   }finally{await chrome?.close();await new Promise(resolve=>server.close(resolve));await rm(folder,{recursive:true,force:true});}
 });
 test('real Chrome: TTS selection shares the main player and settings while keeping speech inside the selected range',{timeout:180000},async()=>{

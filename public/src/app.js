@@ -1193,7 +1193,11 @@ function toolAction(action,button=null) {
     return;
   }
   if(action==='zoom') {showPopover('zoom',`<div class="popover-heading"><h3>확대 · 축소</h3><button type="button" class="icon-button popover-close" data-popover-close aria-label="확대 · 축소 닫기" title="닫기">${icon('close',16)}</button></div><div class="zoom-controls"><button class="secondary-button" id="zoom-out">${icon('minus')}</button><input id="zoom-value" type="number" min="20" max="800" value="${Math.round(r.zoom*100)}" aria-label="확대 비율"><span>%</span><button class="secondary-button" id="zoom-in">${icon('plus')}</button></div><button id="zoom-fit" class="menu-button">화면 너비에 맞추기</button><button id="zoom-reset" class="menu-button">100% 원래 크기</button>`,()=>{
-    $('#zoom-out').onclick=()=>r.setZoom(r.zoom/1.2);$('#zoom-in').onclick=()=>r.setZoom(r.zoom*1.2);$('#zoom-value').onchange=e=>r.setZoom(Number(e.target.value)/100);$('#zoom-fit').onclick=()=>{r.setZoom(1,true);closePopover();};$('#zoom-reset').onclick=()=>{r.setZoom(1);closePopover();};
+    const input=$('#zoom-value');
+    const setZoom=value=>{if(Number.isFinite(value))r.setZoom(value);input.value=String(Math.round(r.zoom*100));};
+    $('#zoom-out').onclick=()=>setZoom(r.zoom/1.2);$('#zoom-in').onclick=()=>setZoom(r.zoom*1.2);
+    input.onchange=e=>setZoom(e.target.value.trim()?Number(e.target.value)/100:NaN);
+    $('#zoom-fit').onclick=()=>{r.setZoom(1,true);closePopover();};$('#zoom-reset').onclick=()=>{r.setZoom(1);closePopover();};
   },button||r.zoomControl);return;}
   if(action==='more') {
     const items=[['circle','circle','원'],['ellipse','ellipse','타원'],['arrow','arrow','화살표'],['strike','strike','취소선'],['history','history','주석 저장 이력'],['migrate','file-transfer','새 판으로 주석/북마크 옮기기'],['info','info','문서 정보']];
