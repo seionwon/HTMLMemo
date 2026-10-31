@@ -2974,7 +2974,7 @@ export class Reader {
     // Sheets and HTML tables scroll inside the document. Moving only the page
     // leaves a hit in an off-screen column, even though its result was selected.
     for(let node=(target.startContainer?.nodeType===1?target.startContainer:target.startContainer?.parentElement)||target.parentElement;node&&node!==this.doc.body&&node!==this.doc.documentElement;node=node.parentElement){
-      if(node===this.scrollHostEl)continue;
+      if(this.nativeScroll&&node===this.scrollHostEl)continue;
       const style=this.doc.defaultView?.getComputedStyle?.(node);if(!style)continue;
       const x=/auto|scroll/.test(style.overflowX)&&node.scrollWidth>node.clientWidth,y=/auto|scroll/.test(style.overflowY)&&node.scrollHeight>node.clientHeight;
       if(!x&&!y)continue;

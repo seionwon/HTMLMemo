@@ -1,4 +1,4 @@
-import { $, $$, icon, escapeHTML as esc, uid, filename, normalizeURL, displayHost, formatDate, formatBytes, download, sidebarWidthAction } from './utils.js';
+import { $, $$, icon, escapeHTML as esc, uid, filename, normalizeURL, displayHost, formatDate, formatBytes, download, sidebarWidthAction, readerSidebarCSS } from './utils.js';
 import { parseHTML, SCRIPT_CSP, serializeBookSource } from './document.js';
 import { SaveQueue, AnnotationCheckpoints, ANNOTATION_LABELS } from './model.js';
 import { openEditionProbe, migrateAnnotations } from './migrate.js';
@@ -1324,7 +1324,7 @@ function styleNativeSidebar(panel) {
   if(!doc.getElementById('htmlmemo-doc-sidebar-style')){
     // Reuse only the namespaced rules from the locally compiled Tailwind asset.
     const rules=[];
-    for(const sheet of document.styleSheets||[]){try{for(const rule of sheet.cssRules||[]){if(!rule.selectorText)continue;if(rule.selectorText.includes('[data-htmlmemo-doc-sidebar-ui]')||rule.selectorText.includes('[data-htmlmemo-native-sidebar]'))rules.push(rule.selectorText+'{'+rule.style.cssText+'}');}}catch{/* App-owned same-origin stylesheets provide these rules. */}}
+    for(const sheet of document.styleSheets||[]){try{rules.push(readerSidebarCSS(sheet.cssRules||[]));}catch{/* App-owned same-origin stylesheets provide these rules. */}}
     const style=doc.createElement('style');style.id='htmlmemo-doc-sidebar-style';style.setAttribute('data-htmlmemo-ui','');style.textContent=rules.join('\n')+'\n::highlight(htmlmemo-book-search){background:#f0a85b80;color:inherit}';doc.head.append(style);
   }
   const theme=getComputedStyle(document.documentElement);

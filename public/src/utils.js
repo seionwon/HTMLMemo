@@ -76,3 +76,14 @@ export function sidebarWidthAction(key,current,{max=640,defaultWidth=300,expande
   const value=key==='ArrowLeft'?current-step:key==='ArrowRight'?(current<=8?expanded:current+step):key==='Home'?8:key==='End'?max:key==='Enter'?defaultWidth:key===' '?(current<=8?expanded:8):null;
   return value===null?null:Math.round(clamp(value,8,key==='Enter'?640:Math.max(8,max)));
 }
+
+// Keep the compiled asset's feature/media conditions when applying app-owned
+// sidebar styles inside a document. Flattening drops color-mix enhancements.
+export function readerSidebarCSS(rules){
+  return Array.from(rules,rule=>{
+    if(rule.selectorText)return /\[data-htmlmemo-(?:doc-sidebar-ui|native-sidebar)\]/.test(rule.selectorText)?rule.cssText:'';
+    if(!rule.cssRules?.length)return '';
+    const content=readerSidebarCSS(rule.cssRules),brace=rule.cssText.indexOf('{');
+    return content&&brace>=0?rule.cssText.slice(0,brace+1)+content+'}':'';
+  }).filter(Boolean).join('\n');
+}

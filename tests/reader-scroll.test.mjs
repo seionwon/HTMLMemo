@@ -9,7 +9,7 @@ test('text and annotation navigation reveals a nested scrolling table without ch
   container.scrollLeft=0;container.scrollTop=0;container.getBoundingClientRect=()=>({left:20,right:220,top:10,bottom:110});
   const rect=()=>({left:1300-container.scrollLeft,right:1340-container.scrollLeft,width:40,top:300-container.scrollTop,bottom:320-container.scrollTop,height:20});p.getBoundingClientRect=rect;
   Object.defineProperty(doc,'defaultView',{value:{getComputedStyle:node=>({overflowX:node===container?'auto':'visible',overflowY:node===container?'auto':'visible'})}});
-  const r=Object.create(Reader.prototype);r.doc=doc;
+  const r=Object.create(Reader.prototype);Object.assign(r,{doc,scrollHostEl:container,nativeScroll:false});
   const range={startContainer:p.firstChild,getBoundingClientRect:rect};r.revealNestedScroll(range);
   assert.equal(container.scrollLeft,1200);assert.equal(container.scrollTop,250);
   r.revealNestedScroll(range);assert.equal(container.scrollLeft,1200);assert.equal(container.scrollTop,250);assert.equal(p.textContent,text);
