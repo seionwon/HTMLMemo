@@ -886,6 +886,7 @@ export function createReadAloud(reader) {
   var pdfPlayGeneration=0;
   function pauseResume() {
     closePanel();
+    if(reader.pdf&&!selectionScope&&state==='paused'&&samePosition(pausedAt,readingPosition())){resumeReading();return;}
     if(reader.pdf&&!selectionScope&&state!=='playing'){
       const generation=++pdfPlayGeneration,expected=state;
       reader.pdf.prepareSpeech().then(hasText=>{if(generation!==pdfPlayGeneration||state!==expected||reader.disposed)return;if(!hasText){reader.callbacks?.onNotice?.('이 쪽에는 읽을 수 있는 텍스트가 없습니다.');return;}if(state==='ready')startReading();else if(state==='paused')resumeReading();}).catch(()=>failSpeech());return;
@@ -958,6 +959,7 @@ export function createReadAloud(reader) {
     toggle() { if(state !== 'idle') {close();return;} buildBar();state='ready';render(); },
     openSelection,
     isPlaying:()=>state==='playing',
+    isPaused:()=>state==='paused',
     refreshPaint:refreshDiagramPaint,
     close,
     escape() {if(state==='idle')return false;if(panel)closePanel();else close();return true;},

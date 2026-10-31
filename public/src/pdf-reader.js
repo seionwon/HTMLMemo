@@ -142,7 +142,7 @@ export class PdfReader{
     const selection=this.doc.getSelection();
     const retained=[...this.slots.values()].sort((a,b)=>b.used-a.used);
     for(const slot of retained.slice(12)){if(wanted.has(slot.page)||slot.node.contains(selection?.anchorNode)||slot.node.contains(selection?.focusNode)||slot.node.contains(this.speechRoot))continue;slot.controller.abort();slot.textLayer?.cancel();slot.image.dispose();slot.node.remove();this.slots.delete(slot.page);}
-    if(!this.reader.readAloud?.isPlaying?.())this.setSpeechRoot(page);
+    if(!this.reader.readAloud?.isPlaying?.()&&!this.reader.readAloud?.isPaused?.())this.setSpeechRoot(page);
     if(!this.reader.annotationDrag&&!this.reader.gesture&&!this.reader.textMarkGesture)this.reader.renderDrawingLayer();this.reader.updateReadingControls();
   }
   seek(page,y=0,remember=true){

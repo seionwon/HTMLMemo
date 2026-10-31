@@ -49,7 +49,7 @@ test('real Chrome: Pages-only PDF uses the HTML and Markdown UI, saves page anno
     assert.equal(await page.evaluate('document.querySelector("#book-search-prev").disabled'),true);
     await page.click('[data-sidebar-view=bookmarks]');await page.click('#add-bookmark');await page.evaluate("document.querySelector('#note-text').value='PDF 여덟째 쪽'");await page.click('.note-form button[value=save]');await saved(page,'window.__pdfRecords[0].metadata.bookmarks.length===1');
     const stored=await page.evaluate('window.__pdfRecords[0]&&({format:window.__pdfRecords[0].metadata.format,notes:window.__pdfRecords[0].metadata.annotations,bookmarks:window.__pdfRecords[0].metadata.bookmarks,view:window.__pdfRecords[0].metadata.view,size:window.__pdfRecords[0].file.size})');assert.equal(stored.bookmarks[0].pdfPosition.page,8);assert.equal(stored.size,original.length);assert.equal(stored.notes[0].pdfPage,1);
-    await page.waitFor('document.querySelector("#data-folder-status").textContent==="폴더 자동 저장 완료"',30000);
+    await page.waitFor('document.querySelector("#data-folder-status").textContent==="폴더 저장 완료"',30000);
     assert.equal(await page.evaluate(`(async()=>{const s=await import('./src/storage.js'),folder=await s.getSetting('folder'),manifest=JSON.parse(await(await(await folder.getFileHandle('HTMLMemo-library.json')).getFile()).text());return manifest.documents.some(e=>e.source.name.endsWith('.pdf')&&e.copy.name.endsWith('.pdf'));})()`),true);
     await mkdir(join(root,'test-results'),{recursive:true});await writeFile(join(root,'test-results/pages-only-pdf-1280.png'),await page.screenshot());
     // Same actual app UI for Markdown and ordinary HTML, including both search
